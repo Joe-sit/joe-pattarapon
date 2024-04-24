@@ -116,7 +116,7 @@ const copyEmail = () => {
                 <div class="grid grid-cols-12 gap-6 mt-6 mx-6 ">
 
                     <!-- Projects -->
-                    <a href="" class="col-span-12 md:col-span-6 rounded-xl bg-[#272727]
+                    <a href="./portfolio" class="col-span-12 md:col-span-6 rounded-xl bg-[#272727]
           border border-[#ffffff]/5 max-h-full transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]">
                         <h1 class="font-medium text-lg text-[#8A949C] mx-6 mt-6">PROJECTS</h1>
                         <div class="flex mt-4 mx-6">
