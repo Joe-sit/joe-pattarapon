@@ -116,8 +116,9 @@ const copyEmail = () => {
                 <div class="grid grid-cols-12 gap-6 mt-6 mx-6 ">
 
                     <!-- Projects -->
-                    <a href="./portfolio" class="col-span-12 md:col-span-6 rounded-xl bg-[#272727]
-          border border-[#ffffff]/5 max-h-full transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]">
+                    <a href="./portfolio"
+                        class="col-span-12 md:col-span-6 rounded-xl bg-[#272727]
+                        border border-[#ffffff]/5 max-h-full transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]">
                         <h1 class="font-medium text-lg text-[#8A949C] mx-6 mt-6">PROJECTS</h1>
                         <div class="flex mt-4 mx-6">
                             <h1 class="font-medium text-2xl text-white break-words">Explore all of my projects</h1>
@@ -140,11 +141,16 @@ const copyEmail = () => {
                     <div class="col-span-12 md:col-span-6 rounded-xl bg-[#272727] border border-[#ffffff]/5">
                         <h1 class="font-medium text-lg text-[#8A949C] mx-6 mt-6">CONTACTS</h1>
                         <!-- Email -->
-                        <div class="flex mt-4 mx-6">
-                            <EmailSVG class="my-auto mr-4" />
-                            <a href="mailto:pattarapon.mak@gmail.com"
-                                class="font-medium text-2xl text-white break-words">pattarapon.mak@gmail.com</a>
+                        <div class="flex flex-col mt-4 mx-6 ">
+                            <div class="flex items-center">
+                                <EmailSVG class="my-auto mr-4" />
+                                <a href="mailto:pattarapon.mak@gmail.com" class="email-address font-medium text-lg 
+                                    text-white break-words sm:text-base md:text-2xl">
+                                    pattarapon.mak@gmail.com
+                                </a>
+                            </div>
                         </div>
+
 
                         <!-- Phone -->
                         <div class="flex mt-4 mx-6 ">
@@ -155,13 +161,13 @@ const copyEmail = () => {
                         <!-- Copy email button -->
                         <div class="flex justify-end mx-6 my-6 ">
                             <button v-if="!isCopied" @click="copyEmail" class="flex text-white bg-[#2E2E2E] my-4 rounded-xl px-4 py-4 
-                transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]">
+                            transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]">
                                 Copy email<span class="mx-2">
                                     <ClipBoardSVG />
                                 </span>
                             </button>
                             <button v-else class="flex text-white bg-[#2E2E2E] my-4 rounded-xl px-4 py-4 
-                transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]">
+                            transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]">
                                 Copied<span class="mx-2">
                                     <CheckSVG />
                                 </span>
@@ -175,29 +181,29 @@ const copyEmail = () => {
 
                     <!-- LinkIn -->
                     <button @click="goToLinkedIn" class="col-span-12 md:col-span-6 lg:col-span-3 
-          rounded-xl bg-[#272727] border border-[#ffffff]/5 
-          transition-colors duration-300 ease-in-out hover:bg-[#0A66C2]">
+                    rounded-xl bg-[#272727] border border-[#ffffff]/5 
+                    transition-colors duration-300 ease-in-out hover:bg-[#0A66C2]">
                         <LinkedInSVG class="mx-auto my-6 " />
                     </button>
 
                     <!-- Instagram -->
                     <button @click="goToInstagram" class="col-span-12 md:col-span-6 lg:col-span-3 
-          rounded-xl bg-[#272727] border border-[#ffffff]/5
-          transition-colors duration-300 ease-in-out hover:bg-[#8C3AAA]">
+                    rounded-xl bg-[#272727] border border-[#ffffff]/5
+                    transition-colors duration-300 ease-in-out hover:bg-[#8C3AAA]">
                         <InstagramSVG class="mx-auto my-6 " />
                     </button>
 
                     <!-- Resume -->
                     <button class="col-span-12 md:col-span-6 lg:col-span-3 
-          rounded-xl bg-[#272727] border border-[#ffffff]/5
-          transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] ">
+                    rounded-xl bg-[#272727] border border-[#ffffff]/5
+                    transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] ">
                         <ResumeSVG class="mx-auto  " />
                     </button>
 
                     <!-- Transcript -->
                     <button class="col-span-12 md:col-span-6 lg:col-span-3 
-          rounded-xl bg-[#272727]  border border-[#ffffff]/5
-          transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] ">
+                    rounded-xl bg-[#272727]  border border-[#ffffff]/5
+                    transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] ">
                         <TranscriptSVG class="mx-auto " />
                     </button>
 
