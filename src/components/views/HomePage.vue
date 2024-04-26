@@ -9,6 +9,16 @@ import InstagramSVG from '../../assets/instagram_svgrepo.com.svg'
 import ResumeSVG from '../../assets/resume.svg'
 import TranscriptSVG from '../../assets/transcript.svg'
 import GoSVG from '../../assets/bubble.svg'
+import GreenSVG from '../../assets/open-status.svg'
+import MapSVG from '../../assets/map-pin-fill.svg'
+import GlobeSVG from '../../assets/globe-fill.svg'
+import CertSVG from '../../assets/certificate-fill.svg'
+import GraduateSVG from '../../assets/graduation-cap-fill.svg'
+
+
+
+
+
 
 const goToLinkedIn = () => {
     window.open('https://www.linkedin.com/in/joe-pattarapon-a06011214/', '_blank')
@@ -41,38 +51,85 @@ const copyEmail = () => {
 
 <template>
     <div class="">
-
         <div class="fade-in-up mx-auto max-w-screen-lg min-h-screen mb-6">
-            <div class="w-full  ">
-                <div class="mx-6 my-6 bg-[#272727] border border-[#ffffff]/5 rounded-xl">
-                    <div class="my-10 mx-6">
-                        <h1 class="text-white text-4xl mb-6">
-                            <span class="">Hi, I’m </span><span class="font-medium">Joe Pattarapon</span>
-                        </h1>
-                        <p class="text-2xl text-[#E9EAEB] break-words">Passionate about design and enjoy making ideas
-                            for better
-                            solution. Passionate about design and enjoy making ideas for better solution.</p>
-                    </div>
-                </div>
-            </div>
-
             <!--About Section---->
             <div class="">
-                <div class="grid grid-cols-12 gap-6 mx-6">
-                    <!-- Column -->
-                    <div class="col-span-12 md:col-span-4">
-                        <img src="../../assets/me-white-bg.png" class=" object-cover object-center ">
+                <div class="grid grid-cols-12 gap-4 mx-6 mt-6">
+                    <!-- Profile -->
+                    <div class="col-span-12 md:col-span-7 bg-[#1C1C1C] 
+                    border border-[#ffffff]/5 rounded-xl ">
+                        <!-- Profile Details -->
+                        <div class="flex flex-cols-1 md:flex-cols-2 mt-6 mx-6 gap-x-6">
+                            <!-- Left Details -->
+                            <img src="../../assets/joe-picture.png"
+                                class="object-cover object-center max-w-[140px] md:max-w-full md:w-[140px] rounded-xl" />
+                            <!-- Right Details -->
+                            <div class="w-full">
+                                <h1
+                                    class="flex text-[#F2F2F2] px-3 py-1 border border-[#ffffff]/5 bg-[#1E1E1E] rounded-full w-fit mb-2 md:mb-4 text-xs sm:text-sm md:text-base lg:text-lg">
+                                    <span>
+                                        <GreenSVG class="inline-block align-middle mr-1 sm:mr-2" />
+                                    </span>Open to Work
+                                </h1>
+                                <h1 class="text-[#F2F2F2] text-2xl sm:text-3xl md:text-4xl mb-2 md:mb-4 font-bold">Joe
+                                    Pattarapon
+                                </h1>
+                                <h1 class="text-[#F2F2F2] text-sm sm:text-base md:text-base lg:text-lg mb-2 md:mb-4">I'm
+                                    a <span
+                                        class="font-bold bg-gradient-to-r from-[#2F80ED] to-[#BB6BD9] inline-block text-transparent bg-clip-text">Designer/Developer</span>
+                                </h1>
+                            </div>
+                        </div>
+
+                        <!-- FYI Details -->
+                        <div class="w-full mt-4 mb-4">
+                            <div class="border mx-6 p-4 border-[#ffffff]/5 rounded-xl bg-[#1E1E1E] 
+                                flex flex-wrap gap-2">
+                                <!-- Location -->
+                                <div
+                                    class="flex items-center px-2 py-1 bg-[#202020] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
+                                    <span class="inline-block align-middle mr-2">
+                                        <MapSVG class="h-4 w-4" />
+                                    </span>
+                                    <span class="text-xs sm:text-sm text-white whitespace-nowrap">Thailand</span>
+                                </div>
+                                <!-- Language -->
+                                <div
+                                    class="flex items-center px-2 py-1 bg-[#202020] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
+                                    <span class="inline-block align-middle mr-2">
+                                        <GlobeSVG class="h-4 w-4" />
+                                    </span>
+                                    <span class="text-xs sm:text-sm text-white whitespace-nowrap">Thai & English</span>
+                                </div>
+                                <!-- University -->
+                                <div
+                                    class="flex items-center px-2 py-1 bg-[#202020] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
+                                    <span class="inline-block align-middle mr-2">
+                                        <CertSVG class="h-4 w-4" />
+                                    </span>
+                                    <span class="text-xs sm:text-sm text-white whitespace-nowrap">KMUTT
+                                        University</span>
+                                </div>
+                                <!-- Major -->
+                                <div
+                                    class="flex items-center px-2 py-1 bg-[#202020] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
+                                    <span class="inline-block align-middle mr-2">
+                                        <GraduateSVG class="h-4 w-4" />
+                                    </span>
+                                    <span class="text-xs sm:text-sm text-white whitespace-nowrap">Information
+                                        Technology</span>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                     <!-- Column -->
-                    <a href="" class="col-span-12 md:col-span-8 bg-[#272727] border border-[#ffffff]/5 rounded-xl 
-            w-full transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]">
+                    <a href="" class="col-span-12 md:col-span-5 bg-[#1C1C1C] border border-[#ffffff]/5 rounded-xl 
+                        w-full transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]">
                         <h1 class="font-medium text-lg text-[#8A949C] mx-6 mt-6">ABOUT</h1>
-                        <p class="mt-4 font-medium mx-6 text-2xl text-white break-words">
-                            Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has
-                            been the
-                            industry's standard dummy text ever since the 1500s, when an unknown printer took a galley
-                            of type and
-                            scrambled it to make a type specimen book.
+                        <p class="mt-4 mx-6 text-xl text-white break-words">
+                            A senior IT student who passionate about digital product design and
+                            web app development.
                         </p>
                         <!-- Read more button -->
                         <div class="flex justify-end my-8">
@@ -226,7 +283,7 @@ body {
 }
 
 body {
-    background-color: #1C1C1C;
+    background-color: #141414;
 }
 
 @keyframes fade-in-up {

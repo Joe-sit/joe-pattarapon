@@ -77,7 +77,7 @@ body {
 }
 
 body {
-  background-color: #1C1C1C;
+  background-color: #141414;
 }
 
 @keyframes fade-in-up {

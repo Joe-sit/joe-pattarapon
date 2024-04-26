@@ -19,35 +19,35 @@ const portfolios = ref([
         portName: 'MOD RIDE - Ride Sharing in KMUTT',
         category: 'UX/UI',
         imgSrc: mrImg,
-        subTitle: 'Experiential Learning Project 2023 - 2024'
+        subTitle: 'Capstone Project 2023 - 2024'
     },
     {
         portId: 2,
         portName: 'eKYC Web Application',
         category: 'UX/UI',
         imgSrc: ekycImg,
-        subTitle: 'Work Integreated Learning Jan. - Jun. 2023 (6 months)'
+        subTitle: 'UX/UI Design Internship Jan. - Jun. 2023 (6 months)'
     },
     {
         portId: 3,
-        portName: 'Case-Keeper Dashboard',
+        portName: 'User Management Dashboard',
         category: 'UX/UI',
         imgSrc: caseKeeperImg,
-        subTitle: 'Work Integreated Learning Jan. - Jun. 2023 (6 months)'
+        subTitle: 'UX/UI Design Internship Jan. - Jun. 2023 (6 months)'
     },
     {
         portId: 4,
         portName: 'Dip Chip Rider',
         category: 'UX/UI',
         imgSrc: dipChipImg,
-        subTitle: 'Work Integreated Learning Jan. - Jun. 2023 (6 months)'
+        subTitle: 'UX/UI Design Internship Jan. - Jun. 2023 (6 months)'
     },
     {
         portId: 5,
         portName: 'Hotel Check-in Kiosk',
         category: 'UX/UI',
         imgSrc: hotelKioskImg,
-        subTitle: 'Work Integreated Learning Jan. - Jun. 2023 (6 months)'
+        subTitle: 'UX/UI Design Internship Jan. - Jun. 2023 (6 months)'
     },
     {
         portId: 6,
