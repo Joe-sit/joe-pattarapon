@@ -8,12 +8,12 @@ const history = createWebHistory()
 const routes = [
     
     {
-        path: '/',
+        path: '/joe-pattarapon/home',
         name: 'HomePage',
         component: HomePage
     },
     {
-        path: '/portfolio',
+        path: '/joe-pattarapon/portfolio',
         name: 'Portfolio',
         component: PortfolioPage
 

@@ -33,7 +33,7 @@ const closeMenuOnClickOutside = (event) => {
   <div class="">
     <nav class="flex w-full bg-white/5 backdrop-blur-[4px] sticky top-0">
       <div class="flex flex-col-2 justify-between mx-auto w-[1024px] my-5 relative">
-        <a href="/" class="flex my-auto">
+        <a href="/joe-pattarapon/home" class="flex my-auto">
           <LogoSVG class="mx-6 mr-2" />
           <h1 class="text-white font-bold text-xl ">Joe Pattarapon</h1>
         </a>
@@ -45,10 +45,11 @@ const closeMenuOnClickOutside = (event) => {
         <div v-if="isMenuOpen" class="menu-box absolute top-full mx-6 right-0 mt-2 w-32 bg-[#272727] border-[.5px]
            border-[#B5B5B5] rounded-xl bg-opacity-100 fade-in-up">
           <ul class="text-white text-lg">
-            <li><a href="/"
-                class="block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl">Home</a>
+            <li><a
+                class="block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl">
+                <router-link :to="{ name: 'HomePage' }">Home</router-link> </a>
             </li>
-            <li><a href="#"
+            <li><a 
                 class="block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl">About</a>
             </li>
             <li><a href="#" class="block py-2 px-4 hover:bg-[#2E2E2E] rounded-xl">
