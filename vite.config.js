@@ -4,6 +4,6 @@ import svgLoader from 'vite-svg-loader'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: '/joe-pattarapon',
+  // base: '/',
   plugins: [vue(), svgLoader()],
 })

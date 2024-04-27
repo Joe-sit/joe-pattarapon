@@ -6,14 +6,14 @@ import HomePage from '../components/views/HomePage.vue'
 const history = createWebHistory()
 
 const routes = [
-    
+
     {
-        path: '/joe-pattarapon/home',
+        path: '/',
         name: 'HomePage',
         component: HomePage
     },
     {
-        path: '/joe-pattarapon/portfolio',
+        path: '/portfolio',
         name: 'Portfolio',
         component: PortfolioPage
 

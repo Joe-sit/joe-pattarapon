@@ -33,7 +33,7 @@ const closeMenuOnClickOutside = (event) => {
   <div class="">
     <nav class="flex w-full bg-white/5 backdrop-blur-[4px] sticky top-0">
       <div class="flex flex-col-2 justify-between mx-auto w-[1024px] my-5 relative">
-        <a href="/joe-pattarapon/home" class="flex my-auto">
+        <a href="/" class="flex my-auto">
           <LogoSVG class="mx-6 mr-2" />
           <h1 class="text-white font-bold text-xl ">Joe Pattarapon</h1>
         </a>
