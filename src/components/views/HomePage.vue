@@ -6,19 +6,14 @@ import ClipBoardSVG from '../../assets/select_window_2.svg'
 import CheckSVG from '../../assets/check.svg'
 import LinkedInSVG from '../../assets/linkedin_svgrepo.com.svg'
 import InstagramSVG from '../../assets/instagram_svgrepo.com.svg'
-import ResumeSVG from '../../assets/resume.svg'
-import TranscriptSVG from '../../assets/transcript.svg'
+import ResumeSVG from '../../assets/read-cv-logo-fill.svg'
+import TranscriptSVG from '../../assets/transcript-fill.svg'
 import GoSVG from '../../assets/bubble.svg'
 import GreenSVG from '../../assets/open-status.svg'
 import MapSVG from '../../assets/map-pin-fill.svg'
 import GlobeSVG from '../../assets/globe-fill.svg'
 import CertSVG from '../../assets/certificate-fill.svg'
 import GraduateSVG from '../../assets/graduation-cap-fill.svg'
-
-
-
-
-
 
 const goToLinkedIn = () => {
     window.open('https://www.linkedin.com/in/joe-pattarapon-a06011214/', '_blank')
@@ -28,6 +23,8 @@ const goToInstagram = () => {
     window.open('https://www.instagram.com/joe_autismxd/', '_blank')
 
 }
+
+
 
 const email = ref('pattarapon.mak@gmail.com');
 const isCopied = ref(false);
@@ -51,6 +48,7 @@ const copyEmail = () => {
 
 <template>
     <div class="">
+
         <div class="fade-in-up mx-auto max-w-screen-lg min-h-screen mb-6">
             <!--About Section---->
             <div class="">
@@ -61,8 +59,8 @@ const copyEmail = () => {
                         <!-- Profile Details -->
                         <div class="flex flex-cols-1 md:flex-cols-2 mt-6 mx-6 gap-x-6">
                             <!-- Left Details -->
-                            <img src="../../assets/joe-picture.png"
-                                class="object-cover object-center max-w-[140px] md:max-w-full md:w-[140px] rounded-xl" />
+                            <img src="../../assets/joe-picture.png" class="object-cover object-center max-w-[120px] 
+                                md:max-w-full md:w-[140px] lg:w-[200px] rounded-xl" />
                             <!-- Right Details -->
                             <div class="w-full">
                                 <h1
@@ -82,7 +80,7 @@ const copyEmail = () => {
                         </div>
 
                         <!-- FYI Details -->
-                        <div class="w-full mt-4 mb-4">
+                        <div class="w-full mt-6 mb-4">
                             <div class="border mx-6 p-4 border-[#ffffff]/5 rounded-xl bg-[#1E1E1E] 
                                 flex flex-wrap gap-2">
                                 <!-- Location -->
@@ -124,42 +122,68 @@ const copyEmail = () => {
 
                     </div>
                     <!-- Column -->
-                    <a href="" class="col-span-12 md:col-span-5 bg-[#1C1C1C] border border-[#ffffff]/5 rounded-xl 
-                        w-full transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]">
+                    <div class="col-span-12 md:col-span-5 bg-[#1C1C1C] border border-[#ffffff]/5 rounded-xl 
+                        w-full ">
                         <h1 class="font-medium text-lg text-[#8A949C] mx-6 mt-6">ABOUT</h1>
                         <p class="mt-4 mx-6 text-xl text-white break-words">
                             A senior IT student who passionate about digital product design and
                             web app development.
+                            <a href="" class="text-xs inline-block align-middle font-medium underline">Read more</a>
                         </p>
-                        <!-- Read more button -->
-                        <div class="flex justify-end my-8">
-                            <button class="text-white border rounded-xl px-4 py-4 justify-end mx-6
-              transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] ">Read more</button>
+
+
+                        <!-- Basic Contacts Info. -->
+                        <div class="grid text-[#F3F3F3] mt-4 mx-6">
+                            <button class="border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]
+                            border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#1E1E1E] font-medium text-base mb-4">
+                                <ResumeSVG class="mr-2" />Resume
+                            </button>
+                            <button class="border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]
+                            border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#1E1E1E] font-medium text-base mb-4">
+                                <TranscriptSVG class="mr-2" />Transcript
+                            </button>
                         </div>
 
-                    </a>
+                        <div class="flex mx-6 gap-x-4 justify-center text-[#F3F3F3] mb-6">
+                            <button @click="goToLinkedIn" class="border transition-colors mx-auto 
+                            duration-300 ease-in-out hover:bg-[#0A66C2]
+                            border-[#ffffff]/5 w-full px-2 py-2 rounded-xl 
+                            align-middle bg-[#1E1E1E] font-medium text-sm">
+                                <LinkedInSVG class="inline-block align-middle mr-2" /><span
+                                    class="inline-block align-middle">LinkedIn</span>
+                            </button>
+
+                            <button @click="goToInstagram" class="border transition-colors mx-auto 
+                            duration-300 ease-in-out hover:bg-[#8C3AAA]
+                            border-[#ffffff]/5 w-full px-2 py-2 rounded-xl 
+                            align-middle bg-[#1E1E1E] font-medium text-sm">
+                                <InstagramSVG class="inline-block align-middle mr-2" /><span
+                                    class="inline-block align-middle">Instagram</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Showcases #1 -->
-                <div class="grid grid-cols-12 gap-6 mt-6 mx-6">
+                <div class="grid grid-cols-12 gap-4 mt-4 mx-6">
                     <!-- Column -->
                     <div class="col-span-12 md:col-span-6 rounded-xl">
                         <div class="image-container">
                             <img src="../../assets/mod-ride-showcase-home.png" alt="mod-ride-showcase"
-                                class="showcase-image object-cover object-center   ">
+                                class="showcase-image object-cover object-center">
                         </div>
                     </div>
                     <!-- Column -->
                     <div class="col-span-12 md:col-span-6 rounded-xl">
                         <div class="image-container">
                             <img src="../../assets/ekyc-showcase.png" alt="mod-ride-showcase"
-                                class="showcase-image object-cover object-center ">
+                                class="showcase-image object-cover object-center">
                         </div>
                     </div>
                 </div>
 
                 <!-- Showcases #2 -->
-                <div class="grid grid-col mt-6 mx-6">
+                <div class="grid grid-col mt-4 mx-6">
                     <!-- Column -->
                     <div class="col-span-12 md:col-span-6 rounded-xl">
                         <div class="image-container">
@@ -170,7 +194,7 @@ const copyEmail = () => {
                 </div>
 
                 <!-- Projects and Contact-->
-                <div class="grid grid-cols-12 gap-6 mt-6 mx-6 ">
+                <div class="grid grid-cols-12 gap-4 mt-4 mx-6 ">
 
                     <!-- Projects -->
                     <a href="./portfolio"
@@ -182,7 +206,7 @@ const copyEmail = () => {
                         </div>
 
                         <!-- Hidden content -->
-                        <div class="opacity-0 flex mt-4 mx-6  ">
+                        <div class="opacity-0 flex mt-4 mx-6">
                             <PhoneSVG class="my-auto mr-4" />
                             <p class="font-medium text-2xl text-white break-words">lorem</p>
                         </div>
@@ -207,7 +231,6 @@ const copyEmail = () => {
                                 </a>
                             </div>
                         </div>
-
 
                         <!-- Phone -->
                         <div class="flex mt-4 mx-6 ">
@@ -234,42 +257,41 @@ const copyEmail = () => {
                 </div>
 
                 <!-- Other Contacts -->
-                <div class="grid grid-cols-12 gap-6 text-white mx-6 mt-6 ">
+                <!-- <div class="grid grid-cols-12 gap-6 text-white mx-6 mt-6 "> -->
 
-                    <!-- LinkIn -->
-                    <button @click="goToLinkedIn" class="col-span-12 md:col-span-6 lg:col-span-3 
+                <!-- LinkIn -->
+                <!-- <button @click="goToLinkedIn" class="col-span-12 md:col-span-6 lg:col-span-3 
                     rounded-xl bg-[#272727] border border-[#ffffff]/5 
                     transition-colors duration-300 ease-in-out hover:bg-[#0A66C2]">
                         <LinkedInSVG class="mx-auto my-6 " />
-                    </button>
+                    </button> -->
 
-                    <!-- Instagram -->
-                    <button @click="goToInstagram" class="col-span-12 md:col-span-6 lg:col-span-3 
+                <!-- Instagram -->
+                <!-- <button @click="goToInstagram" class="col-span-12 md:col-span-6 lg:col-span-3 
                     rounded-xl bg-[#272727] border border-[#ffffff]/5
                     transition-colors duration-300 ease-in-out hover:bg-[#8C3AAA]">
                         <InstagramSVG class="mx-auto my-6 " />
-                    </button>
+                    </button> -->
 
-                    <!-- Resume -->
-                    <button class="col-span-12 md:col-span-6 lg:col-span-3 
+                <!-- Resume -->
+                <!-- <button class="col-span-12 md:col-span-6 lg:col-span-3 
                     rounded-xl bg-[#272727] border border-[#ffffff]/5
                     transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] ">
                         <ResumeSVG class="mx-auto  " />
-                    </button>
+                    </button> -->
 
-                    <!-- Transcript -->
-                    <button class="col-span-12 md:col-span-6 lg:col-span-3 
+                <!-- Transcript -->
+                <!-- <button class="col-span-12 md:col-span-6 lg:col-span-3 
                     rounded-xl bg-[#272727]  border border-[#ffffff]/5
                     transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] ">
                         <TranscriptSVG class="mx-auto " />
-                    </button>
+                    </button> -->
 
-                </div>
             </div>
+        </div>
 
-            <div class="flex text-white font-light text-sm mt-6">
-                <span class="mx-auto">All Right Reserved 2024</span>
-            </div>
+        <div class="flex text-white font-light text-sm my-6">
+            <span class="mx-auto">All Right Reserved 2024</span>
         </div>
     </div>
 </template>
