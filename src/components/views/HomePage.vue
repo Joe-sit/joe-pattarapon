@@ -198,7 +198,7 @@ const copyEmail = () => {
 
                     <!-- Projects -->
                     <a href="./portfolio"
-                        class="col-span-12 md:col-span-6 rounded-xl bg-[#272727]
+                        class="col-span-12 md:col-span-6 rounded-xl bg-[#1C1C1C]
                         border border-[#ffffff]/5 max-h-full transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]">
                         <h1 class="font-medium text-lg text-[#8A949C] mx-6 mt-6">PROJECTS</h1>
                         <div class="flex mt-4 mx-6">
@@ -219,7 +219,7 @@ const copyEmail = () => {
                     </a>
 
                     <!-- Contact -->
-                    <div class="col-span-12 md:col-span-6 rounded-xl bg-[#272727] border border-[#ffffff]/5">
+                    <div class="col-span-12 md:col-span-6 rounded-xl bg-[#1C1C1C] border border-[#ffffff]/5">
                         <h1 class="font-medium text-lg text-[#8A949C] mx-6 mt-6">CONTACTS</h1>
                         <!-- Email -->
                         <div class="flex flex-col mt-4 mx-6 ">
