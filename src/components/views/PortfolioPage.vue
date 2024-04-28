@@ -13,6 +13,11 @@ import waterMapImg from '../../assets/portfolios/water-map.png'
 import portWebImg from '../../assets/portfolios/first-portfolio-web.png'
 import ricardoImg from '../../assets/portfolios/ricardo-game.png'
 
+onMounted(() => {
+    window.scrollTo(0, 0);
+});
+
+
 const portfolios = ref([
     {
         portId: 1,
@@ -118,6 +123,8 @@ const filterPortfolios = (category) => {
     }
 }
 console.log(portfolios.value[5].imgSrc);
+
+
 </script>
 
 <template>

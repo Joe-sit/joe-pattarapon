@@ -24,6 +24,12 @@ const goToInstagram = () => {
 
 }
 
+onMounted(() => {
+    window.scrollTo(0, 0);
+
+
+});
+
 
 
 const email = ref('pattarapon.mak@gmail.com');
