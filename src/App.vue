@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import LogoSVG from './assets/banner.svg'
 import Menu from './assets/menu.svg'
-import { inject } from "@vercel/analytics"
+
 
 const isMenuOpen = ref(false);
 const router = useRouter();

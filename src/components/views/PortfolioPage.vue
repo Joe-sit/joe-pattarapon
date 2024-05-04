@@ -12,6 +12,7 @@ import customerImg from '../../assets/portfolios/customer-personality-analysis.p
 import waterMapImg from '../../assets/portfolios/water-map.png'
 import portWebImg from '../../assets/portfolios/first-portfolio-web.png'
 import ricardoImg from '../../assets/portfolios/ricardo-game.png'
+import PortfolioDetails from './PortfolioDetails.vue'
 
 onMounted(() => {
     window.scrollTo(0, 0);
@@ -121,6 +122,12 @@ const filterPortfolios = (category) => {
         // Otherwise, filter portfolios based on the selected category
         filteredPortfolios.value = portfolios.value.filter(portfolio => portfolio.category === category)
     }
+
+    // Trigger the fade-up animation
+    const container = document.querySelector('.fade-in-up');
+    container.classList.remove('fade-in-up');
+    void container.offsetWidth; // Trigger reflow
+    container.classList.add('fade-in-up');
 }
 console.log(portfolios.value[5].imgSrc);
 
@@ -129,7 +136,7 @@ console.log(portfolios.value[5].imgSrc);
 
 <template>
     <div class="">
-        <div class="fade-in-up mx-auto max-w-screen-lg min-h-screen mb-6">
+        <div class="mx-auto max-w-screen-lg min-h-screen mb-6">
             <div class="w-full mt-10 flex ">
                 <h1 class="mx-auto font-bold text-4xl text-white">Portfolio</h1>
             </div>
@@ -162,15 +169,18 @@ console.log(portfolios.value[5].imgSrc);
             </div>
 
             <!-- Portfolio Grid -->
-            <div class="grid grid-cols-12 gap-6 mt-8 mx-6 ">
-                <div v-for="portfolio in filteredPortfolios" :key="portfolio.portId"
-                    class="col-span-12 md:col-span-6 rounded-xl mb-4 ">
-                    <div class="image-container">
-                        <img :src="portfolio.imgSrc" :alt="portfolio.portName"
-                            class="object-cover object-center rounded-xl mb-4" />
-                        <p class="text-white font-medium text-xl">{{ portfolio.portName }}</p>
-                        <p class="text-[#8A949C] mt-2 text-base">{{ portfolio.subTitle }}</p>
-                    </div>
+            <div class="fade-in-up grid grid-cols-12 gap-6 mt-8 mx-6 ">
+                <div v-for="portfolio in filteredPortfolios" :key="portfolio.portId" class="col-span-12 md:col-span-6 rounded-xl mb-4 
+                    transition-colors duration-300 ease-in-out hover:bg-[#202020] px-1 py-1 ">
+                    <router-link :to="{ name: 'PortfolioDetails', params: { portId: portfolio.portId } }">
+
+                        <div class="image-container">
+                            <img :src="portfolio.imgSrc" :alt="portfolio.portName"
+                                class="object-cover object-center rounded-xl mb-4" />
+                            <p class="text-white font-medium text-xl">{{ portfolio.portName }}</p>
+                            <p class="text-[#8A949C] mt-2 text-base">{{ portfolio.subTitle }}</p>
+                        </div>
+                    </router-link>
                 </div>
             </div>
         </div>
