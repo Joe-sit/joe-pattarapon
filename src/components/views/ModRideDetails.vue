@@ -1,6 +1,10 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router';
+
 import mrImg from '../../assets/portfolios/MODRIDE.png'
+import backSVG from '../../assets/arrow-left.svg'
+
 
 
 const data = ref([
@@ -18,13 +22,22 @@ const subTitle = ref(data.value[0].subTitle)
 
 console.log(subTitle.value);
 
+const router = useRouter();
+
+const goToPortfolioPage = () => {
+    router.push({ name: 'Portfolio' });
+}
+
 </script>
 
 <template>
 
     <div>
+        <backSVG @click="goToPortfolioPage" class="cursor-pointer mb-4" /> 
         <!--Title-->
-        <h1 class="mx-auto font-bold text-4xl text-[#F2F2F2]">{{ portName }}</h1>
+        <h1 class="flex mx-auto font-bold text-4xl text-[#F2F2F2]">
+            {{ portName }}
+        </h1>
         <!--Sub Title-->
         <p class="text-[#8A949C] mt-2 text-2xl">{{ subTitle }}</p>
 

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRoute, useRouter, } from 'vue-router';
 import mrImg from '../../assets/portfolios/MODRIDE.png'
 import ekycImg from '../../assets/portfolios/eKyc.png'
 import caseKeeperImg from '../../assets/portfolios/case-keeper.png'
@@ -14,6 +15,7 @@ import portWebImg from '../../assets/portfolios/first-portfolio-web.png'
 import ricardoImg from '../../assets/portfolios/ricardo-game.png'
 import PortfolioDetails from './PortfolioDetails.vue'
 import externalSVG from '../../assets/arrow-square-out.svg'
+import backSVG from '../../assets/arrow-left.svg'
 
 const data = ref([
     {
@@ -28,6 +30,13 @@ const data = ref([
 const portName = ref(data.value[0].portName)
 const subTitle = ref(data.value[0].subTitle)
 
+
+const router = useRouter();
+
+const goToPortfolioPage = () => {
+    router.push({ name: 'Portfolio' });
+}
+
 console.log(subTitle.value);
 
 </script>
@@ -35,8 +44,11 @@ console.log(subTitle.value);
 <template>
 
     <div>
+        <backSVG @click="goToPortfolioPage" class="cursor-pointer mb-4" /> 
         <!--Title-->
-        <h1 class="mx-auto font-bold text-4xl text-[#F2F2F2]">{{ portName }}</h1>
+        <h1 class="flex mx-auto font-bold text-4xl text-[#F2F2F2]">
+            {{ portName }}
+        </h1>
         <!--Sub Title-->
         <p class="text-[#8A949C] mt-2 text-2xl">{{ subTitle }}</p>
 
