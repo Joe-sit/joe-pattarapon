@@ -138,40 +138,35 @@ console.log(portfolios.value[5].imgSrc);
     <div class="">
         <div class="mx-auto max-w-screen-lg min-h-screen mb-6">
             <div class="w-full mt-10 flex ">
-                <h1 class="mx-auto font-bold text-4xl text-white">Portfolio</h1>
+                <h1 class="mx-auto font-bold text-4xl text-white">Projects</h1>
             </div>
 
-            <!--Filter Menu-->
-            <div class="mx-6 mt-6">
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    <button @click="filterPortfolios('All')" :class="{
-                        'bg-white text-black': activeFilter === 'All',
-                        'text-white transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]':
-                            activeFilter !== 'All'
-                    }" class="font-bold text-base text-[#272727] border rounded-3xl px-6 py-2 border-[#ffffff]/5 ">All
-                        Categories</button>
-                    <button @click="filterPortfolios('UX/UI')" :class="{
-                        'bg-white text-black': activeFilter === 'UX/UI',
-                        'text-white transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]': activeFilter !== 'UX/UI'
-                    }"
-                        class="font-bold text-base text-[#E9EAEB] border rounded-3xl px-6 py-2 border-[#ffffff]/5 ">UX/UI</button>
-                    <button @click="filterPortfolios('Web Dev')" :class="{
-                        'bg-white text-black': activeFilter === 'Web Dev',
-                        'text-white transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]': activeFilter !== 'Web Dev'
-                    }" class="font-bold text-base text-[#E9EAEB] border rounded-3xl px-6 py-2 border-[#ffffff]/5">Web
-                        Dev</button>
-                    <button @click="filterPortfolios('Other')" :class="{
-                        'bg-white text-black': activeFilter === 'Other',
-                        'text-white transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]': activeFilter !== 'Other'
-                    }"
-                        class="font-bold text-base text-[#E9EAEB] border rounded-3xl px-6 py-2 border-[#ffffff]/5">Other</button>
+            <!-- Filter Menu -->
+            <div class="flex justify-center mt-4">
+                <div class="p-2 rounded-full flex space-x-4">
+                    <button @click="filterPortfolios('All')"
+                        :class="['px-4 py-2 rounded-xl font-bold text-base transition-colors', { 'bg-white text-[#141414]': activeFilter === 'All', 'text-white bg-[#191919] hover:bg-[#272727]': activeFilter !== 'All' }]">
+                        All
+                    </button>
+                    <button @click="filterPortfolios('UX/UI')"
+                        :class="['px-4 py-2 rounded-xl font-bold text-base transition-colors', { 'bg-white text-[#141414]': activeFilter === 'UX/UI', 'text-white bg-[#191919] hover:bg-[#272727]': activeFilter !== 'UX/UI' }]">
+                        UX/UI
+                    </button>
+                    <button @click="filterPortfolios('Web Dev')"
+                        :class="['px-4 py-2 rounded-xl font-bold text-base transition-colors', { 'bg-white text-[#141414]': activeFilter === 'Web Dev', 'text-white bg-[#191919] hover:bg-[#272727]': activeFilter !== 'Web Dev' }]">
+                        Web Dev
+                    </button>
+                    <button @click="filterPortfolios('Other')"
+                        :class="['px-4 py-2 rounded-xl font-bold text-base transition-colors', { 'bg-white text-[#141414]': activeFilter === 'Other', 'text-white bg-[#191919] hover:bg-[#272727]': activeFilter !== 'Other' }]">
+                        Other
+                    </button>
                 </div>
             </div>
 
             <!-- Portfolio Grid -->
             <div class="fade-in-up grid grid-cols-12 gap-6 mt-8 mx-6 ">
                 <div v-for="portfolio in filteredPortfolios" :key="portfolio.portId" class="col-span-12 md:col-span-6 rounded-xl mb-4 
-                    transition-colors duration-300 ease-in-out hover:bg-[#202020] px-1 py-1 ">
+                    transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F] px-1 py-1 ">
                     <router-link :to="{ name: 'PortfolioDetails', params: { portId: portfolio.portId } }">
 
                         <div class="image-container">

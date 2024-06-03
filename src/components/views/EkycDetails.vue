@@ -56,7 +56,7 @@ console.log(subTitle.value);
             <div class="w-full grid grid-cols-12 gap-4 mt-6">
 
                 <!-- Column -->
-                <div class="col-span-12 md:col-span-6 bg-[#1C1C1C] 
+                <div class="col-span-12 md:col-span-6 bg-[#101010] 
                     border border-[#ffffff]/5 rounded-xl ">
 
                     <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">COMPANY</h1>
@@ -79,9 +79,20 @@ console.log(subTitle.value);
                 </div>
 
                 <!-- Column -->
-                <div class="col-span-12 md:col-span-6 bg-[#1C1C1C] 
-                    border border-[#ffffff]/5 rounded-xl px-6 py-6 ">
-                    <h1 class="text-white">Coming soon jaaaa...</h1>
+                <div class="col-span-12 md:col-span-6 bg-[#101010] 
+                    border border-[#ffffff]/5 rounded-xl px-2 py-2 ">
+                    <h1 class="text-[#8A949C] text-base font-medium mt-4 mx-4 ">DESCRIPTION</h1>
+
+                    <p class="text-[#F2F2F2] text-base font-medium mt-4 mx-4 ">An app that matches job seekers with
+                        relevant postings.</p>
+
+                    <h1 class="text-[#8A949C] text-base font-medium mt-4 mx-4 ">CONTEXT</h1>
+
+                    <p class="text-[#F2F2F2] text-base font-medium mt-4 mx-4 ">Providing job seekers with the ability to
+                        search, explore, and discover
+                        suitable job postings based on their individual preferences and criteria,
+                        the job portal app enables job seekers to take a more proactive and
+                        informed approach to their job search process.</p>
                 </div>
 
             </div>

@@ -39,10 +39,10 @@ const closeMenuOnClickOutside = (event) => {
           <h1 class="text-white font-bold text-xl ">Joe Pattarapon</h1>
         </a>
         <button @click="toggleMenu" class="hamburger-button w-10 h-10 transition-colors border rounded-xl mx-6
-        duration-300 ease-in-out hover:bg-[#3a3a3a] border-[#ffffff]/5 bg-[#1E1E1E]">
+        duration-300 ease-in-out hover:bg-[#3a3a3a] border-[#ffffff]/5 bg-[#141414]">
           <Menu class="mx-auto" />
         </button>
-        <div v-if="isMenuOpen" class="menu-box absolute top-full mx-6 right-0 mt-2 w-32 bg-[#1E1E1E] border-[.5px]
+        <div v-if="isMenuOpen" class="menu-box absolute top-full mx-6 right-0 mt-2 w-32 bg-[#141414] border-[.5px]
         border-[#ffffff]/5 rounded-xl bg-opacity-100 fade-in-up shadow-2xl">
           <ul class="text-white text-lg">
             <li><a class="block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl">

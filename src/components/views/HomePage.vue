@@ -24,6 +24,10 @@ const goToInstagram = () => {
 
 }
 
+const goToTranscript = () => {
+    window.open('https://drive.google.com/file/d/1Y050T_mqrkQ86p7JJax8Cx5qH5_pwRsB/view?usp=sharing', '_blank')
+}
+
 onMounted(() => {
     window.scrollTo(0, 0);
 });
@@ -56,7 +60,7 @@ const copyEmail = () => {
             <div class="">
                 <div class="grid grid-cols-12 gap-4 mx-6 mt-6">
                     <!-- Profile -->
-                    <div class="col-span-12 md:col-span-7 bg-[#1C1C1C] 
+                    <div class="col-span-12 md:col-span-7 bg-[#101010] 
                     border border-[#ffffff]/5 rounded-xl ">
                         <!-- Profile Details -->
                         <div class="flex flex-cols-1 md:flex-cols-2 mt-6 mx-6 gap-x-6">
@@ -66,7 +70,7 @@ const copyEmail = () => {
                             <!-- Right Details -->
                             <div class="w-full">
                                 <h1
-                                    class="flex text-[#F2F2F2] px-3 py-1 border border-[#ffffff]/5 bg-[#1E1E1E] rounded-full w-fit mb-2 md:mb-4 text-xs sm:text-sm md:text-base lg:text-lg">
+                                    class="flex text-[#F2F2F2] px-3 py-1 border border-[#ffffff]/5 bg-[#141414] rounded-full w-fit mb-2 md:mb-4 text-xs sm:text-sm md:text-base lg:text-lg">
                                     <span>
                                         <GreenSVG class="inline-block align-middle mr-1 sm:mr-2" />
                                     </span>Open to Work
@@ -83,11 +87,11 @@ const copyEmail = () => {
 
                         <!-- FYI Details -->
                         <div class="w-full mt-6 mb-4">
-                            <div class="border mx-6 p-4 border-[#ffffff]/5 rounded-xl bg-[#1E1E1E] 
+                            <div class="border mx-6 p-4 border-[#ffffff]/5 rounded-xl bg-[#141414] 
                                 flex flex-wrap gap-2">
                                 <!-- Location -->
                                 <div
-                                    class="flex items-center px-2 py-1 bg-[#202020] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
+                                    class="flex items-center px-2 py-1 bg-[#191919] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
                                     <span class="inline-block align-middle mr-2">
                                         <MapSVG class="h-4 w-4" />
                                     </span>
@@ -95,7 +99,7 @@ const copyEmail = () => {
                                 </div>
                                 <!-- Language -->
                                 <div
-                                    class="flex items-center px-2 py-1 bg-[#202020] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
+                                    class="flex items-center px-2 py-1 bg-[#191919] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
                                     <span class="inline-block align-middle mr-2">
                                         <GlobeSVG class="h-4 w-4" />
                                     </span>
@@ -103,7 +107,7 @@ const copyEmail = () => {
                                 </div>
                                 <!-- University -->
                                 <div
-                                    class="flex items-center px-2 py-1 bg-[#202020] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
+                                    class="flex items-center px-2 py-1 bg-[#191919] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
                                     <span class="inline-block align-middle mr-2">
                                         <CertSVG class="h-4 w-4" />
                                     </span>
@@ -112,7 +116,7 @@ const copyEmail = () => {
                                 </div>
                                 <!-- Major -->
                                 <div
-                                    class="flex items-center px-2 py-1 bg-[#202020] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
+                                    class="flex items-center px-2 py-1 bg-[#191919] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
                                     <span class="inline-block align-middle mr-2">
                                         <GraduateSVG class="h-4 w-4" />
                                     </span>
@@ -124,10 +128,10 @@ const copyEmail = () => {
 
                     </div>
                     <!-- Column -->
-                    <div class="col-span-12 md:col-span-5 bg-[#1C1C1C] border border-[#ffffff]/5 rounded-xl 
+                    <div class="col-span-12 md:col-span-5 bg-[#101010] border border-[#ffffff]/5 rounded-xl 
                         w-full ">
-                        <h1 class="font-medium text-lg text-[#8A949C] mx-6 mt-6">ABOUT</h1>
-                        <p class="mt-4 mx-6 text-xl text-white break-words">
+                        <h1 class="font-medium text-base sm:text-xl text-[#8A949C] mx-6 mt-6">ABOUT</h1>
+                        <p class="mt-4 mx-6 text-base sm:text-xl text-white break-words">
                             A senior IT student who passionate about digital product design and
                             web app development.
                             <a href="" class="text-xs inline-block align-middle font-medium underline">Read more</a>
@@ -136,12 +140,12 @@ const copyEmail = () => {
 
                         <!-- Basic Contacts Info. -->
                         <div class="grid text-[#F3F3F3] mt-4 mx-6">
-                            <button class="border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]
-                            border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#1E1E1E] font-medium text-base mb-4">
+                            <button class="border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
+                            border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">
                                 <ResumeSVG class="mr-2" />Resume
                             </button>
-                            <button class="border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]
-                            border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#1E1E1E] font-medium text-base mb-4">
+                            <button @click="goToTranscript" class="border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
+                            border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">
                                 <TranscriptSVG class="mr-2" />Transcript
                             </button>
                         </div>
@@ -150,7 +154,7 @@ const copyEmail = () => {
                             <button @click="goToLinkedIn" class="border transition-colors mx-auto 
                             duration-300 ease-in-out hover:bg-[#0A66C2]
                             border-[#ffffff]/5 w-full px-2 py-2 rounded-xl 
-                            align-middle bg-[#1E1E1E] font-medium text-sm">
+                            align-middle bg-[#141414] font-medium text-base">
                                 <LinkedInSVG class="inline-block align-middle mr-2" /><span
                                     class="inline-block align-middle">LinkedIn</span>
                             </button>
@@ -158,7 +162,7 @@ const copyEmail = () => {
                             <button @click="goToInstagram" class="border transition-colors mx-auto 
                             duration-300 ease-in-out hover:bg-[#8C3AAA]
                             border-[#ffffff]/5 w-full px-2 py-2 rounded-xl 
-                            align-middle bg-[#1E1E1E] font-medium text-sm">
+                            align-middle bg-[#141414] font-medium text-base">
                                 <InstagramSVG class="inline-block align-middle mr-2" /><span
                                     class="inline-block align-middle">Instagram</span>
                             </button>
@@ -200,13 +204,13 @@ const copyEmail = () => {
 
                     <!-- Projects -->
                     <router-link :to="{ name: 'Portfolio' }"
-                        class="col-span-12 md:col-span-6 rounded-xl bg-[#1C1C1C]
-                        border border-[#ffffff]/5 max-h-full transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]">
+                        class="col-span-12 md:col-span-6 rounded-xl bg-[#101010]
+                        border border-[#ffffff]/5 max-h-full transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]">
 
 
-                        <h1 class="font-medium text-lg text-[#8A949C] mx-6 mt-6">PROJECTS</h1>
+                        <h1 class="font-medium text-base sm:text-xl text-[#8A949C] mx-6 mt-6">PROJECTS</h1>
                         <div class="flex mt-4 mx-6">
-                            <h1 class="font-medium text-2xl text-white break-words">Explore all of my projects</h1>
+                            <h1 class="font-medium text-xl sm:text-2xl text-white break-words">Explore all of my projects</h1>
                         </div>
 
                         <!-- Hidden content -->
@@ -224,8 +228,8 @@ const copyEmail = () => {
                     </router-link>
 
                     <!-- Contact -->
-                    <div class="col-span-12 md:col-span-6 rounded-xl bg-[#1C1C1C] border border-[#ffffff]/5">
-                        <h1 class="font-medium text-lg text-[#8A949C] mx-6 mt-6">CONTACTS</h1>
+                    <div class="col-span-12 md:col-span-6 rounded-xl bg-[#101010] border border-[#ffffff]/5">
+                        <h1 class="font-medium text-base sm:text-xl text-[#8A949C] mx-6 mt-6">CONTACTS</h1>
                         <!-- Email -->
                         <div class="flex flex-col mt-4 mx-6 ">
                             <div class="flex items-center">
@@ -240,19 +244,19 @@ const copyEmail = () => {
                         <!-- Phone -->
                         <div class="flex mt-4 mx-6 ">
                             <PhoneSVG class="my-auto mr-4" />
-                            <p class="font-medium text-2xl text-white break-words ">(+66) 61 786 1777</p>
+                            <p class="font-medium sm:text-base md:text-2xl text-white break-words ">(+66) 61 786 1777</p>
                         </div>
 
                         <!-- Copy email button -->
                         <div class="flex justify-end mx-6 my-6 ">
-                            <button v-if="!isCopied" @click="copyEmail" class="flex text-white bg-[#2E2E2E] my-4 rounded-xl px-4 py-4 
-                            transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]">
+                            <button v-if="!isCopied" @click="copyEmail" class="flex text-white bg-[#141414] my-4 rounded-xl px-4 py-4 
+                            transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]">
                                 Copy email<span class="mx-2">
                                     <ClipBoardSVG />
                                 </span>
                             </button>
-                            <button v-else class="flex text-white bg-[#2E2E2E] my-4 rounded-xl px-4 py-4 
-                            transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a]">
+                            <button v-else class="flex text-white bg-[#141414] my-4 rounded-xl px-4 py-4 
+                            transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]">
                                 Copied<span class="mx-2">
                                     <CheckSVG />
                                 </span>
@@ -310,7 +314,7 @@ body {
 }
 
 body {
-    background-color: #141414;
+    background-color: #050505;
 }
 
 @keyframes fade-in-up {
