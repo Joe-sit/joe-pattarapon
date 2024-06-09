@@ -134,15 +134,15 @@ const copyEmail = () => {
                         <p class="mt-4 mx-6 text-base sm:text-xl text-white break-words">
                             A senior IT student who passionate about digital product design and
                             web app development.
-                            <a href="" class="text-xs inline-block align-middle font-medium underline">Read more</a>
+                            <!-- <a href="" class="text-xs inline-block align-middle font-medium underline">Read more</a> -->
                         </p>
 
 
                         <!-- Basic Contacts Info. -->
                         <div class="grid text-[#F3F3F3] mt-4 mx-6">
-                            <button class="border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
+                            <button class="cursor-not-allowed opacity-50 border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
                             border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">
-                                <ResumeSVG class="mr-2" />Resume
+                                <ResumeSVG class="mr-2" />Resume (Comming soon)
                             </button>
                             <button @click="goToTranscript" class="border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
                             border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">
