@@ -16,7 +16,7 @@ import CertSVG from '../../assets/certificate-fill.svg'
 import GraduateSVG from '../../assets/graduation-cap-fill.svg'
 
 const goToLinkedIn = () => {
-    window.open('https://www.linkedin.com/in/joe-pattarapon-a06011214/', '_blank')
+    window.open('https://www.linkedin.com/in/pattarapon-makhirun-a06011214/', '_blank')
 }
 
 const goToInstagram = () => {
