@@ -1,8 +1,10 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import LogoSVG from './assets/banner.svg'
+import LogoSVG from './assets/JoeRebrand.svg'
 import Menu from './assets/menu.svg'
+import FooterSVG from './assets/Footer-JoeRebrand.svg'
+
 
 
 const isMenuOpen = ref(false);
@@ -32,11 +34,12 @@ const closeMenuOnClickOutside = (event) => {
 
 <template>
   <div class="">
-    <nav class="flex w-full bg-white/5 backdrop-blur-[4px] sticky top-0 ">
+    <nav class="flex  mx-auto bg-white/5 backdrop-blur-[4px] sticky top-0 rounded-xl  ">
       <div class="flex flex-col-2 justify-between mx-auto w-[1024px] my-5 relative">
         <a href="/" class="flex my-auto">
-          <LogoSVG class="mx-6 mr-2" />
-          <h1 class="text-white font-bold text-xl ">Joe Pattarapon</h1>
+          <LogoSVG class="mx-6 mr-4" />
+          <h1 class="bg-gradient-to-r from-slate-50 to-zinc-400 bg-clip-text text-transparent font-bold text-2xl ">Joe
+            Pattarapon</h1>
         </a>
         <button @click="toggleMenu" class="hamburger-button w-10 h-10 transition-colors border rounded-xl mx-6
         duration-300 ease-in-out hover:bg-[#3a3a3a] border-[#ffffff]/5 bg-[#141414]">
@@ -67,6 +70,17 @@ const closeMenuOnClickOutside = (event) => {
       </div>
     </nav>
     <router-view></router-view>
+
+
+
+    <footer class="text-white text-center w-full bg-white/5 h-auto py-6">
+      <div class="grid grid-row gap-y-2">
+        <FooterSVG class="mx-auto  inline-block" />
+        <h1 class="font-light">@2024 All Right Reserved</h1>
+        <h1 class="font-light">Built & Designed by Pattarapon Makhirun</h1>
+      </div>
+
+    </footer>
   </div>
 </template>
 

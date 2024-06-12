@@ -14,6 +14,8 @@ import MapSVG from '../../assets/map-pin-fill.svg'
 import GlobeSVG from '../../assets/globe-fill.svg'
 import CertSVG from '../../assets/certificate-fill.svg'
 import GraduateSVG from '../../assets/graduation-cap-fill.svg'
+import StackSVG from '../../assets/stack.svg'
+
 
 const goToLinkedIn = () => {
     window.open('https://www.linkedin.com/in/pattarapon-makhirun-a06011214/', '_blank')
@@ -51,185 +53,172 @@ const copyEmail = () => {
 
 </script>
 
-
 <template>
-    <div class="">
-
-        <div class="fade-in-up mx-auto max-w-screen-lg min-h-screen mb-6">
-            <!--About Section---->
-            <div class="">
-                <div class="grid grid-cols-12 gap-4 mx-6 mt-6">
-                    <!-- Profile -->
-                    <div class="col-span-12 md:col-span-7 bg-[#101010] 
-                    border border-[#ffffff]/5 rounded-xl ">
-                        <!-- Profile Details -->
-                        <div class="flex flex-cols-1 md:flex-cols-2 mt-6 mx-6 gap-x-6">
-                            <!-- Left Details -->
-                            <img src="../../assets/joe-picture.png" class="object-cover object-center max-w-[120px] 
-                                md:max-w-full md:w-[140px] lg:w-[200px] rounded-xl" />
-                            <!-- Right Details -->
-                            <div class="w-full">
-                                <h1
-                                    class="flex text-[#F2F2F2] px-3 py-1 border border-[#ffffff]/5 bg-[#141414] rounded-full w-fit mb-2 md:mb-4 text-xs sm:text-sm md:text-base lg:text-lg">
-                                    <span>
-                                        <GreenSVG class="inline-block align-middle mr-1 sm:mr-2" />
-                                    </span>Open to Work
-                                </h1>
-                                <h1 class="text-[#F2F2F2] text-2xl sm:text-3xl md:text-4xl mb-2 md:mb-4 font-bold">Joe
-                                    Pattarapon
-                                </h1>
-                                <h1 class="text-[#F2F2F2] text-sm sm:text-base md:text-base lg:text-lg mb-2 md:mb-4">I'm
-                                    a <span
-                                        class="font-bold bg-gradient-to-r from-[#2F80ED] to-[#BB6BD9] inline-block text-transparent bg-clip-text">Designer/Developer</span>
-                                </h1>
-                            </div>
-                        </div>
-
-                        <!-- FYI Details -->
-                        <div class="w-full mt-6 mb-4">
-                            <div class="border mx-6 p-4 border-[#ffffff]/5 rounded-xl bg-[#141414] 
-                                flex flex-wrap gap-2">
-                                <!-- Location -->
+    <div class="fade-in-up mx-auto max-w-screen-lg min-h-screen mb-6  ">
+        <!-- About Section (NEW) -->
+        <div class="text-white min-h-screen flex flex-col items-center py-10 ">
+            <div class="max-w-screen-lg w-full px-4">
+                <!-- Grid Layout -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4 mx-2">
+                    <!-- Image Section -->
+                    <div class="col-span-1 md:col-span-6 flex justify-center items-center">
+                        <img src="../../assets/joe-picture.png" class="object-cover w-full h-full rounded-xl"
+                            alt="Profile Picture" />
+                    </div>
+                    <!-- Profile Info Section -->
+                    <div class="col-span-1 md:col-span-6 flex flex-col">
+                        <div class="w-full bg-[#101010] border border-[#ffffff]/5 rounded-xl">
+                            <h1
+                                class="mx-4 mt-4 mb-6 flex text-[#F2F2F2] px-3 py-1 border border-[#ffffff]/5 bg-[#141414] rounded-full w-fit md:mb-4 text-xs sm:text-sm md:text-base lg:text-lg">
+                                <span>
+                                    <GreenSVG class="inline-block align-middle mr-1 sm:mr-2" />
+                                </span>Open to Work
+                            </h1>
+                            <h1
+                                class="mx-4 mt-4 text-[#F2F2F2] text-2xl sm:text-3xl md:text-4xl mb-2 md:mb-4 font-bold">
+                                Pattarapon Makhirun
+                            </h1>
+                            <h1
+                                class="mx-4 mt-4 text-[#F2F2F2] text-sm sm:text-base md:text-base lg:text-lg mb-2 md:mb-4">
+                                I'm a
+                                <span
+                                    class="font-bold bg-gradient-to-r from-[#2F80ED] to-[#BB6BD9] inline-block text-transparent bg-clip-text">Designer/Developer</span>
+                            </h1>
+                            <div class="w-full mt-6">
                                 <div
-                                    class="flex items-center px-2 py-1 bg-[#191919] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
-                                    <span class="inline-block align-middle mr-2">
-                                        <MapSVG class="h-4 w-4" />
-                                    </span>
-                                    <span class="text-xs sm:text-sm text-white whitespace-nowrap">Thailand</span>
-                                </div>
-                                <!-- Language -->
-                                <div
-                                    class="flex items-center px-2 py-1 bg-[#191919] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
-                                    <span class="inline-block align-middle mr-2">
-                                        <GlobeSVG class="h-4 w-4" />
-                                    </span>
-                                    <span class="text-xs sm:text-sm text-white whitespace-nowrap">Thai & English</span>
-                                </div>
-                                <!-- University -->
-                                <div
-                                    class="flex items-center px-2 py-1 bg-[#191919] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
-                                    <span class="inline-block align-middle mr-2">
-                                        <CertSVG class="h-4 w-4" />
-                                    </span>
-                                    <span class="text-xs sm:text-sm text-white whitespace-nowrap">KMUTT
-                                        University</span>
-                                </div>
-                                <!-- Major -->
-                                <div
-                                    class="flex items-center px-2 py-1 bg-[#191919] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
-                                    <span class="inline-block align-middle mr-2">
-                                        <GraduateSVG class="h-4 w-4" />
-                                    </span>
-                                    <span class="text-xs sm:text-sm text-white whitespace-nowrap">Information
-                                        Technology</span>
+                                    class="border mx-4 mb-4 p-2 border-[#ffffff]/5 rounded-xl bg-[#141414] flex flex-wrap gap-2">
+                                    <!-- Location -->
+                                    <div
+                                        class="flex items-center px-2 py-1 bg-[#191919] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
+                                        <span class="inline-block align-middle mr-2">
+                                            <MapSVG class="h-4 w-4" />
+                                        </span>
+                                        <span class="text-xs sm:text-sm text-white whitespace-nowrap">Thailand</span>
+                                    </div>
+                                    <!-- Language -->
+                                    <div
+                                        class="flex items-center px-2 py-1 bg-[#191919] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
+                                        <span class="inline-block align-middle mr-2">
+                                            <GlobeSVG class="h-4 w-4" />
+                                        </span>
+                                        <span class="text-xs sm:text-sm text-white whitespace-nowrap">Thai &
+                                            English</span>
+                                    </div>
+                                    <!-- University -->
+                                    <div
+                                        class="flex items-center px-2 py-1 bg-[#191919] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
+                                        <span class="inline-block align-middle mr-2">
+                                            <CertSVG class="h-4 w-4" />
+                                        </span>
+                                        <span class="text-xs sm:text-sm text-white whitespace-nowrap">KMUTT</span>
+                                    </div>
+                                    <!-- Major -->
+                                    <div
+                                        class="flex items-center px-2 py-1 bg-[#191919] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
+                                        <span class="inline-block align-middle mr-2">
+                                            <GraduateSVG class="h-4 w-4" />
+                                        </span>
+                                        <span class="text-xs sm:text-sm text-white whitespace-nowrap">Information
+                                            Technology</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
+                        <!-- About Section -->
+                        <div class="bg-[#101010]  border border-[#ffffff]/5 rounded-xl p-4 mt-4 md:mt-4 h-full">
+                            <h1 class="font-medium text-base sm:text-xl text-[#8A949C] mb-4 ">About me</h1>
+                            <p class="text-xl font-normal ">
+                                A senior IT student passionate about digital product design and web app development.
+                            </p>
 
-                    </div>
-                    <!-- Column -->
-                    <div class="col-span-12 md:col-span-5 bg-[#101010] border border-[#ffffff]/5 rounded-xl 
-                        w-full ">
-                        <h1 class="font-medium text-base sm:text-xl text-[#8A949C] mx-6 mt-6">ABOUT</h1>
-                        <p class="mt-4 mx-6 text-base sm:text-xl text-white break-words">
-                            A senior IT student who passionate about digital product design and
-                            web app development.
-                            <!-- <a href="" class="text-xs inline-block align-middle font-medium underline">Read more</a> -->
-                        </p>
+                            <!-- Go to About Page (Coming Soon) -->
+                            <!-- <div class="grid justify-end my-2 mx-2 ">
+                                <GoSVG class="w-6 md:w-10" viewBox="0 0 40 40" />
+                            </div> -->
 
-
-                        <!-- Basic Contacts Info. -->
-                        <div class="grid text-[#F3F3F3] mt-4 mx-6">
-                            <button class="cursor-not-allowed opacity-50 border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
-                            border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">
-                                <ResumeSVG class="mr-2" />Resume (Comming soon)
-                            </button>
-                            <button @click="goToTranscript" class="border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
-                            border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">
-                                <TranscriptSVG class="mr-2" />Transcript
-                            </button>
-                        </div>
-
-                        <div class="flex mx-6 gap-x-4 justify-center text-[#F3F3F3] mb-6">
-                            <button @click="goToLinkedIn" class="border transition-colors mx-auto 
-                            duration-300 ease-in-out hover:bg-[#0A66C2]
-                            border-[#ffffff]/5 w-full px-2 py-2 rounded-xl 
-                            align-middle bg-[#141414] font-medium text-base">
-                                <LinkedInSVG class="inline-block align-middle mr-2" /><span
-                                    class="inline-block align-middle">LinkedIn</span>
-                            </button>
-
-                            <button @click="goToInstagram" class="border transition-colors mx-auto 
-                            duration-300 ease-in-out hover:bg-[#8C3AAA]
-                            border-[#ffffff]/5 w-full px-2 py-2 rounded-xl 
-                            align-middle bg-[#141414] font-medium text-base">
-                                <InstagramSVG class="inline-block align-middle mr-2" /><span
-                                    class="inline-block align-middle">Instagram</span>
-                            </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Showcases #1 -->
-                <div class="grid grid-cols-12 gap-4 mt-4 mx-6">
-                    <!-- Column -->
-                    <div class="col-span-12 md:col-span-6 rounded-xl">
-                        <div class="image-container">
-                            <img src="../../assets/mod-ride-showcase-home.png" alt="mod-ride-showcase"
-                                class="showcase-image object-cover object-center">
+                <!-- Explore Section -->
+                <div class="grid grid-cols-12 gap-4 mt-4 mx-2">
+
+                    <!-- Explore wording -->
+                    <router-link :to="{ name: 'Portfolio' }" class="bg-[#101010] border border-[#ffffff]/5 rounded-xl
+                        col-span-8 md:col-span-10 flex justify-center items-center
+                        transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]">
+                        <div
+                            class="flex items-center gap-x-2 justify-center text-base md:text-4xl font-bold py-12 text-center">
+                            <h1 class=" py-2">Explore my interesting works</h1>
+
+
+                            <GoSVG class="w-6 md:w-10 " viewBox="0 0 40 40" />
+
                         </div>
-                    </div>
-                    <!-- Column -->
-                    <div class="col-span-12 md:col-span-6 rounded-xl">
-                        <div class="image-container">
-                            <img src="../../assets/ekyc-showcase.png" alt="mod-ride-showcase"
-                                class="showcase-image object-cover object-center">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Showcases #2 -->
-                <div class="grid grid-col mt-4 mx-6">
-                    <!-- Column -->
-                    <div class="col-span-12 md:col-span-6 rounded-xl">
-                        <div class="image-container">
-                            <img src="../../assets/user-management-showcase.png" alt="mod-ride-showcase"
-                                class="showcase-image object-cover object-center ">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Projects and Contact-->
-                <div class="grid grid-cols-12 gap-4 mt-4 mx-6 ">
-
-                    <!-- Projects -->
-                    <router-link :to="{ name: 'Portfolio' }"
-                        class="col-span-12 md:col-span-6 rounded-xl bg-[#101010]
-                        border border-[#ffffff]/5 max-h-full transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]">
-
-
-                        <h1 class="font-medium text-base sm:text-xl text-[#8A949C] mx-6 mt-6">PROJECTS</h1>
-                        <div class="flex mt-4 mx-6">
-                            <h1 class="font-medium text-xl sm:text-2xl text-white break-words">Explore all of my projects</h1>
-                        </div>
-
-                        <!-- Hidden content -->
-                        <div class="opacity-0 flex mt-4 mx-6">
-                            <PhoneSVG class="my-auto mr-4" />
-                            <p class="font-medium text-2xl text-white break-words">lorem</p>
-                        </div>
-
-                        <div class="flex justify-end mx-6  ">
-                            <button class="text-white my-11 rounded-xl">
-                                <GoSVG class="" />
-                            </button>
-                        </div>
-
                     </router-link>
 
+
+                    <!-- Count Works -->
+                    <div class="bg-[#101010] border border-[#ffffff]/5 rounded-xl 
+                        col-span-4 md:col-span-2 flex flex-col justify-center items-center">
+                        <h1 class="text-4xl md:text-6xl py-2
+                            font-bold bg-gradient-to-b from-slate-50 to-gray-700 bg-clip-text text-transparent">
+                            10+
+                        </h1>
+                        <div
+                            class="flex items-center px-2 py-1 bg-[#191919] border border-[#ffffff]/5 rounded-full mb-2 sm:mb-0">
+                            <span class="inline-block align-middle mr-2">
+                                <StackSVG class="h-4 w-4" />
+                            </span>
+                            <span class="text-xs sm:text-sm text-white whitespace-nowrap">
+                                Works
+                            </span>
+                        </div>
+                    </div>
+
+                </div>
+
+
+            </div>
+
+
+            <!-- Showcases #1 -->
+            <div class="grid grid-cols-12 gap-4 mt-4 mx-6">
+                <!-- Column -->
+                <div class="col-span-12 md:col-span-6 rounded-xl">
+                    <div class="image-container">
+                        <img src="../../assets/mod-ride-showcase-home.png" alt="mod-ride-showcase"
+                            class="showcase-image object-cover object-center">
+                    </div>
+                </div>
+                <!-- Column -->
+                <div class="col-span-12 md:col-span-6 rounded-xl">
+                    <div class="image-container">
+                        <img src="../../assets/ekyc-showcase.png" alt="mod-ride-showcase"
+                            class="showcase-image object-cover object-center">
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- Showcases #2 -->
+            <div class="grid grid-col mt-4 mx-6">
+                <!-- Column -->
+                <div class="col-span-12 md:col-span-6 rounded-xl">
+                    <div class="image-container">
+                        <img src="../../assets/user-management-showcase.png" alt="mod-ride-showcase"
+                            class="showcase-image object-cover object-center ">
+                    </div>
+                </div>
+            </div>
+
+            <div class="max-w-screen-lg w-full px-4">
+                <!-- Projects and Contact Section -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 mx-2 ">
+
                     <!-- Contact -->
-                    <div class="col-span-12 md:col-span-6 rounded-xl bg-[#101010] border border-[#ffffff]/5">
-                        <h1 class="font-medium text-base sm:text-xl text-[#8A949C] mx-6 mt-6">CONTACTS</h1>
+                    <div class="col-span-1 rounded-xl bg-[#101010] border border-[#ffffff]/5">
+                        <h1 class="font-medium text-base sm:text-xl text-[#8A949C] mx-6 mt-6">Contacts</h1>
                         <!-- Email -->
                         <div class="flex flex-col mt-4 mx-6 ">
                             <div class="flex items-center">
@@ -244,11 +233,12 @@ const copyEmail = () => {
                         <!-- Phone -->
                         <div class="flex mt-4 mx-6 ">
                             <PhoneSVG class="my-auto mr-4" />
-                            <p class="font-medium sm:text-base md:text-2xl text-white break-words ">(+66) 61 786 1777</p>
+                            <p class="font-medium sm:text-base md:text-2xl text-white break-words ">(+66) 61 786 1777
+                            </p>
                         </div>
 
                         <!-- Copy email button -->
-                        <div class="flex justify-end mx-6 my-6 ">
+                        <div class="flex justify-end mx-6 mt-10 ">
                             <button v-if="!isCopied" @click="copyEmail" class="flex text-white bg-[#141414] my-4 rounded-xl px-4 py-4 
                             transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]">
                                 Copy email<span class="mx-2">
@@ -262,47 +252,52 @@ const copyEmail = () => {
                                 </span>
                             </button>
                         </div>
+
+                    </div>
+
+                    <!-- Projects -->
+                    <div class="col-span-1 rounded-xl bg-[#101010]
+                        border border-[#ffffff]/5 max-h-full ">
+                        <div>
+                            <h1 class="font-medium text-base sm:text-xl text-[#8A949C] mx-6 mt-6">Docs & Socials</h1>
+
+                            <!-- Basic Contacts Info. -->
+                            <div class="grid text-[#F3F3F3] mt-4 mx-6">
+                                <button class="cursor-not-allowed opacity-50 border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
+                            border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">
+                                    <ResumeSVG class="mr-2" />Resume (Comming soon)
+                                </button>
+                                <button @click="goToTranscript" class="border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
+                            border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">
+                                    <TranscriptSVG class="mr-2" />Transcript
+                                </button>
+                            </div>
+
+                            <div class="flex mx-6 gap-x-4 justify-center text-[#F3F3F3] mb-6">
+                                <button @click="goToLinkedIn" class="border transition-colors mx-auto 
+                            duration-300 ease-in-out hover:bg-[#0A66C2]
+                            border-[#ffffff]/5 w-full px-2 py-2 rounded-xl 
+                            align-middle bg-[#141414] font-medium text-base">
+                                    <LinkedInSVG class="inline-block align-middle mr-2" /><span
+                                        class="inline-block align-middle">LinkedIn</span>
+                                </button>
+
+                                <button @click="goToInstagram" class="border transition-colors mx-auto 
+                            duration-300 ease-in-out hover:bg-[#8C3AAA]
+                            border-[#ffffff]/5 w-full px-2 py-2 rounded-xl 
+                            align-middle bg-[#141414] font-medium text-base">
+                                    <InstagramSVG class="inline-block align-middle mr-2" /><span
+                                        class="inline-block align-middle">Instagram</span>
+                                </button>
+                            </div>
+
+                        </div>
                     </div>
                 </div>
-
-                <!-- Other Contacts -->
-                <!-- <div class="grid grid-cols-12 gap-6 text-white mx-6 mt-6 "> -->
-
-                <!-- LinkIn -->
-                <!-- <button @click="goToLinkedIn" class="col-span-12 md:col-span-6 lg:col-span-3 
-                    rounded-xl bg-[#272727] border border-[#ffffff]/5 
-                    transition-colors duration-300 ease-in-out hover:bg-[#0A66C2]">
-                        <LinkedInSVG class="mx-auto my-6 " />
-                    </button> -->
-
-                <!-- Instagram -->
-                <!-- <button @click="goToInstagram" class="col-span-12 md:col-span-6 lg:col-span-3 
-                    rounded-xl bg-[#272727] border border-[#ffffff]/5
-                    transition-colors duration-300 ease-in-out hover:bg-[#8C3AAA]">
-                        <InstagramSVG class="mx-auto my-6 " />
-                    </button> -->
-
-                <!-- Resume -->
-                <!-- <button class="col-span-12 md:col-span-6 lg:col-span-3 
-                    rounded-xl bg-[#272727] border border-[#ffffff]/5
-                    transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] ">
-                        <ResumeSVG class="mx-auto  " />
-                    </button> -->
-
-                <!-- Transcript -->
-                <!-- <button class="col-span-12 md:col-span-6 lg:col-span-3 
-                    rounded-xl bg-[#272727]  border border-[#ffffff]/5
-                    transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] ">
-                        <TranscriptSVG class="mx-auto " />
-                    </button> -->
-
             </div>
         </div>
-
-        <div class="flex text-white font-light text-sm my-6">
-            <span class="mx-auto">All Right Reserved 2024</span>
-        </div>
     </div>
+
 </template>
 
 <style>
