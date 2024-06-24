@@ -7,12 +7,44 @@ import externalSVG from '../../assets/arrow-square-out.svg'
 import backSVG from '../../assets/arrow-left.svg'
 import problemStateImg from '../../assets/portfolios/water-map-problem.jpg'
 import structureImg from '../../assets/portfolios/water-map-structure.png'
+import empathyMapImg1 from '../../assets/portfolios/water-map-emp-1.jpg'
+import empathyMapImg2 from '../../assets/portfolios/water-map-emp-2.jpg'
+
+
+import ideateImg1 from '../../assets/portfolios/water-map-ideate-1.jpg'
+import ideateImg2 from '../../assets/portfolios/water-map-ideate-2.jpg'
+import ideateImg3 from '../../assets/portfolios/water-map-ideate-3.jpg'
+
+import lofiWiImg1 from '../../assets/portfolios/water-map-lofi-1.jpg'
+import lofiWiImg2 from '../../assets/portfolios/water-map-lofi-2.jpg'
+import lofiWiImg3 from '../../assets/portfolios/water-map-lofi-3.jpg'
+import lofiWiImg4 from '../../assets/portfolios/water-map-lofi-4.jpg'
+import lofiWiImg5 from '../../assets/portfolios/water-map-lofi-5.jpg'
+
+
+
+
+
 import GoSVG from '../../assets/bubble.svg'
 import figmaIcon from '../../assets/figma-icon.svg'
 import lightIcon from '../../assets/light-blub-icon.svg'
 
 
 
+import { Swiper, SwiperSlide } from 'swiper/vue';
+import { Pagination, Navigation } from 'swiper/modules'
+
+
+// import { EffectCube } from "swiper/vue"
+
+
+import 'swiper/swiper-bundle.css';
+import 'swiper/css/pagination';
+import 'swiper/css/navigation';
+
+
+
+// import "swiper/css/effect-cube"
 
 const data = ref([
     {
@@ -22,7 +54,17 @@ const data = ref([
         imgSrc: waterMapImg,
         subTitle: 'User Experience Design Project 2020',
         problemStateImg: problemStateImg,
-        structureImg: structureImg
+        structureImg: structureImg,
+        ideateImg1: ideateImg1,
+        ideateImg2: ideateImg2,
+        ideateImg3: ideateImg3,
+        empathyMapImg1: empathyMapImg1,
+        empathyMapImg2: empathyMapImg2,
+        lofiWiImg1: lofiWiImg1,
+        lofiWiImg2: lofiWiImg2,
+        lofiWiImg3: lofiWiImg3,
+        lofiWiImg4: lofiWiImg4,
+        lofiWiImg5: lofiWiImg5
     }
 ])
 
@@ -31,6 +73,22 @@ const subTitle = ref(data.value[0].subTitle)
 const imgSrc = ref(data.value[0].imgSrc)
 const problemImg = ref(data.value[0].problemStateImg)
 const strucImg = ref(data.value[0].structureImg)
+const IdeImg1 = ref(data.value[0].ideateImg1)
+const IdeImg2 = ref(data.value[0].ideateImg2)
+const IdeImg3 = ref(data.value[0].ideateImg3)
+const empMap1 = ref(data.value[0].empathyMapImg1)
+const empMap2 = ref(data.value[0].empathyMapImg2)
+const lofi1 = ref(data.value[0].lofiWiImg1)
+const lofi2 = ref(data.value[0].lofiWiImg2)
+const lofi3 = ref(data.value[0].lofiWiImg3)
+const lofi4 = ref(data.value[0].lofiWiImg4)
+const lofi5 = ref(data.value[0].lofiWiImg5)
+
+
+
+
+
+
 
 
 
@@ -57,8 +115,15 @@ console.log(subTitle.value);
 
         <div>
 
+
+
             <!--Project banner-->
             <img :src="imgSrc" alt="project image" class="w-auto mt-10 mb-6">
+
+
+
+
+
 
             <!--Project Overview section-->
             <div class="w-full grid grid-cols-12 gap-4 mt-6">
@@ -154,7 +219,15 @@ console.log(subTitle.value);
                     <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Empathy Map</h1>
                     <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">The analysis of empathy maps for both
                         mainstream and extreme users is shown in the images below.</p>
-                    <img :src="problemImg" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
+
+                    <!--Pagination-->
+
+                    <swiper class=" text-white w-auto mt-6 mb-6 rounded-xl" :modules="[Pagination, Navigation]"
+                        :pagination="{ type: 'fraction', }" :navigation="true">
+                        <swiper-slide><img :src="empMap1" alt="project image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="empMap2" alt="problem image" class="w-auto" /></swiper-slide>
+
+                    </swiper>
                 </div>
 
                 <!--Ideate-->
@@ -163,7 +236,16 @@ console.log(subTitle.value);
                     <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Our team conducted several problem case
                         analyses to generate as many ideas as possible, which we can then measure against cool and
                         feasible factors.</p>
-                    <img :src="problemImg" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
+
+
+                    <!--Pagination-->
+
+                    <swiper class=" text-white w-auto mt-6 mb-6 rounded-xl" :modules="[Pagination, Navigation]"
+                        :pagination="{ type: 'fraction', }" :navigation="true">
+                        <swiper-slide><img :src="IdeImg1" alt="project image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="IdeImg2" alt="problem image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="IdeImg3" alt="structure image" class="w-auto" /></swiper-slide>
+                    </swiper>
                 </div>
 
                 <!--Structure Design-->
@@ -190,7 +272,17 @@ console.log(subTitle.value);
                     <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Lo-Fi Wireframes & Flows</h1>
                     <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">The images below represent the draft design
                         of WaterMap, showing the application's flow from the beginning through its various features.</p>
-                    <img :src="problemImg" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
+                    
+                        <!--Pagination-->
+
+                    <swiper class=" text-white w-auto mt-6 mb-6 rounded-xl" :modules="[Pagination, Navigation]"
+                        :pagination="{ type: 'fraction', }" :navigation="true">
+                        <swiper-slide><img :src="lofi1" alt="project image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="lofi2" alt="problem image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="lofi3" alt="structure image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="lofi4" alt="structure image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="lofi5" alt="structure image" class="w-auto" /></swiper-slide>
+                    </swiper>
                 </div>
 
                 <!--Final Design-->
@@ -220,4 +312,18 @@ console.log(subTitle.value);
 </template>
 
 
-<style></style>
+<style>
+.swiper-button-next {}
+
+.swiper-pagination-fraction {
+    background-color: rgba(0, 0, 0, 0.5);
+    width: auto;
+    margin: 0 auto;
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 5px 10px;
+    border-radius: 5px;
+}
+</style>
