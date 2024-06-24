@@ -53,7 +53,13 @@ console.log(subTitle.value);
         <p class="text-[#8A949C] mt-2 text-2xl">{{ subTitle }}</p>
 
         <div>
+            <!-- <div class="border"> <iframe class="w-[800px] h-[500px]" src="https://www.figma.com/embed?embed_host=share&url=https%3A%2F%2Fwww.figma.com%2Fproto%2FKBpJsZi23Yn08yZkwe0zGd%2FWaterMap%3Fpage-id%3D0%253A1%26node-id%3D424-0%26viewport%3D1549%252C787%252C0.22%26t%3DzaCY9nn9z0gLT11w-1%26scaling%3Dmin-zoom%26content-scaling%3Dfixed%26starting-point-node-id%3D424%253A0" allowfullscreen></iframe></div> -->
+
+            
+           
             <div class="w-full grid grid-cols-12 gap-4 mt-6">
+
+                
 
                 <!-- Column -->
                 <div class="col-span-12 md:col-span-6 bg-[#101010] 

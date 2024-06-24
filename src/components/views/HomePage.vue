@@ -118,8 +118,7 @@ const copyEmail = () => {
                                         <span class="inline-block align-middle mr-2">
                                             <GraduateSVG class="h-4 w-4" />
                                         </span>
-                                        <span class="text-xs sm:text-sm text-white whitespace-nowrap">Information
-                                            Technology</span>
+                                        <span class="text-xs sm:text-sm text-white whitespace-nowrap"> B.Sc. (Information Technology)</span>
                                     </div>
                                 </div>
                             </div>

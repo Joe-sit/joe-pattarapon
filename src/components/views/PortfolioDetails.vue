@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router';
 import ModRideDetails from './ModRideDetails.vue';
 import EkycDetails from './EkycDetails.vue';
+import WaterMapDetails from './WaterMapDetails.vue';
 
 onMounted(() => {
     window.scrollTo(0, 0);
@@ -40,6 +41,16 @@ console.log("portID", portId);
             <div v-else-if="portId == 2" class="w-full">
                 <EkycDetails />
             </div>
+
+
+            <div v-else-if="portId == 10" class="w-full">
+                <WaterMapDetails />
+            </div>
+            
+            
+            
+            
+            
             <div v-else class="w-full">
                 <p class="text-white mt-10 flex justify-center">Coming Soon Jaa...</p>
                 <img src="https://media1.tenor.com/m/LJ8is9KE6C0AAAAd/pedro-racoon.gif" alt="Racoob Dance"
