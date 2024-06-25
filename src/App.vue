@@ -38,7 +38,7 @@ const closeMenuOnClickOutside = (event) => {
           <LogoSVG class="mx-6 mr-4" />
           <h1 class="bg-gradient-to-r from-slate-50 to-zinc-400 bg-clip-text text-transparent font-bold text-2xl">Joe Pattarapon</h1>
         </a>
-        <div class="hidden md:flex space-x-6 my-auto">
+        <div class="hidden md:flex space-x-6 my-auto mx-4">
           <router-link to="/" class="text-white hover:text-gray-400" active-class="font-bold">Home</router-link>
           <router-link to="/" class="text-white opacity-50 cursor-not-allowed">About</router-link>
           <router-link to="/portfolio" class="text-white hover:text-gray-400" active-class="font-bold">Works</router-link>
