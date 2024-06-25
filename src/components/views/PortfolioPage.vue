@@ -76,13 +76,7 @@ const portfolios = ref([
         imgSrc: abcImg,
         subTitle: 'Client-side Web Programming Project 2022'
     },
-    {
-        portId: 9,
-        portName: 'Customer Personality Analytics',
-        category: 'Other',
-        imgSrc: customerImg,
-        subTitle: 'Statistics for IT Project 2021'
-    },
+
     {
         portId: 10,
         portName: 'WaterMap',
@@ -138,7 +132,7 @@ console.log(portfolios.value[5].imgSrc);
     <div class="">
         <div class="mx-auto max-w-screen-lg min-h-screen mb-6">
             <div class="w-full mt-10 flex ">
-                <h1 class="mx-auto font-bold text-4xl text-white">Projects</h1>
+                <h1 class="mx-auto font-bold text-4xl text-white">Works</h1>
             </div>
 
             <!-- Filter Menu -->

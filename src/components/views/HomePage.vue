@@ -217,12 +217,12 @@ const copyEmail = () => {
 
                     <!-- Contact -->
                     <div class="col-span-1 rounded-xl bg-[#101010] border border-[#ffffff]/5">
-                        <h1 class="font-medium text-base sm:text-xl text-[#8A949C] mx-6 mt-6">Contacts</h1>
+                        <h1 class=" text-base sm:text-xl text-[#8A949C] mx-6 mt-6">Contacts</h1>
                         <!-- Email -->
                         <div class="flex flex-col mt-4 mx-6 ">
                             <div class="flex items-center">
                                 <EmailSVG class="my-auto mr-4" />
-                                <a href="mailto:pattarapon.mak@gmail.com" class="email-address font-medium text-lg 
+                                <a href="mailto:pattarapon.mak@gmail.com" class="email-address  text-lg 
                                     text-white break-words sm:text-base md:text-2xl">
                                     pattarapon.mak@gmail.com
                                 </a>
@@ -232,7 +232,7 @@ const copyEmail = () => {
                         <!-- Phone -->
                         <div class="flex mt-4 mx-6 ">
                             <PhoneSVG class="my-auto mr-4" />
-                            <p class="font-medium sm:text-base md:text-2xl text-white break-words ">(+66) 61 786 1777
+                            <p class=" sm:text-base md:text-2xl text-white break-words ">(+66) 61 786 1777
                             </p>
                         </div>
 
@@ -264,7 +264,7 @@ const copyEmail = () => {
                             <div class="grid text-[#F3F3F3] mt-4 mx-6">
                                 <button class="cursor-not-allowed opacity-50 border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
                             border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">
-                                    <ResumeSVG class="mr-2" />Resume (Comming soon)
+                                    <ResumeSVG class="mr-2" />Resume (Coming soon)
                                 </button>
                                 <button @click="goToTranscript" class="border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
                             border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">

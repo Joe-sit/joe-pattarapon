@@ -21,6 +21,13 @@ import hifiWire2 from '../../assets/portfolios/modride-hifi-2.jpg'
 
 import designSys from '../../assets/portfolios/modride-desys-1.jpg'
 
+import ddayImg1 from '../../assets/portfolios/modride-dday-1.jpg'
+import ddayImg2 from '../../assets/portfolios/modride-dday-2.jpg'
+import ddayImg3 from '../../assets/portfolios/modride-dday-3.jpg'
+import ddayImg4 from '../../assets/portfolios/modride-dday-4.jpg'
+
+
+
 
 
 
@@ -75,7 +82,11 @@ const data = ref([
         userFlow4: userFlow4,
         hifiWire1:hifiWire1,
         hifiWire2:hifiWire2,
-        designSys:designSys
+        designSys:designSys,
+        ddayImg1:ddayImg1,
+        ddayImg2:ddayImg2,
+        ddayImg3:ddayImg3,
+        ddayImg4:ddayImg4
 
     }
 ])
@@ -98,6 +109,13 @@ const hifi1 = ref(data.value[0].hifiWire1)
 const hifi2 = ref(data.value[0].hifiWire2)
 
 const desys1 = ref(data.value[0].designSys)
+
+const dday1 = ref(data.value[0].ddayImg1)
+const dday2 = ref(data.value[0].ddayImg2)
+const dday3 = ref(data.value[0].ddayImg3)
+const dday4 = ref(data.value[0].ddayImg4)
+
+
 
 
 
@@ -185,7 +203,7 @@ console.log(subTitle.value);
                                 <span class="inline-block align-middle mr-2">
                                     <figmaIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Figma & FigJam</span>
+                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Figma + FigJam</span>
                             </div>
                         </div>
                     </div>
@@ -373,8 +391,30 @@ console.log(subTitle.value);
                         
 
 
-                        <iframe class="flex mx-auto w-full h-[400px]" src="https://www.youtube.com/embed/CABxUrGL_MM?si=UmySYW7AHCPPVSma" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+                        <iframe class="flex mx-auto w-full h-[550px]" src="https://www.youtube.com/embed/CABxUrGL_MM?si=UmySYW7AHCPPVSma" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
                     </div>
+                </div>
+
+                <!--D Day 2024-->
+                <div class="mt-10">
+                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">SIT D-Day Exhibition 2024 </h1>
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light mb-4">Here are some photos of our project showcase at the SIT D-Day Exhibition 2024.</p>
+
+
+                    <!--Pagination-->
+
+                <swiper class=" text-white w-auto mt-6 mb-6 rounded-xl" :modules="[Pagination, Navigation]"
+                    :pagination="{ type: 'fraction', }" :navigation="true">
+                    <swiper-slide><img :src="dday1" alt="project image" class="w-auto" /></swiper-slide>
+                    <swiper-slide><img :src="dday2" alt="problem image" class="w-auto" /></swiper-slide>
+                    <swiper-slide><img :src="dday3" alt="problem image" class="w-auto" /></swiper-slide>
+                    <swiper-slide><img :src="dday4" alt="problem image" class="w-auto" /></swiper-slide>
+
+
+                </swiper>
+
+                    
+
                 </div>
 
                 <!--Go next-->

@@ -70,7 +70,6 @@ console.log("portID", portId);
                 <OASIPDetails />
             </div>
 
-
             <div v-else-if="portId == 8" class="w-full">
                 <AbcDetails />
             </div>
@@ -79,24 +78,18 @@ console.log("portID", portId);
                 <WaterMapDetails />
             </div>
 
-
-
-
-            <!-- 
-            
-            <div v-else-if="portId == 7" class="w-full">
-                <OASIPDetails />
-            </div>
-            <div v-else-if="portId == 8" class="w-full">
-                <AbcDetails />
-            </div>
-           
             <div v-else-if="portId == 11" class="w-full">
                 <PortWebDetails />
             </div>
+
             <div v-else-if="portId == 12" class="w-full">
                 <RicardoDetails />
-            </div> -->
+            </div>
+
+
+
+
+           
 
 
 

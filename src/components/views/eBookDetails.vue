@@ -265,7 +265,7 @@ console.log(subTitle.value);
                 <div class="mt-6 rounded-xl">
 
 
-                    <iframe class="flex mx-auto w-full h-[400px]" src="https://www.youtube.com/embed/NqiicbW3gVs?si=g1qIa6fCoLkiG5pv" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+                    <iframe class="flex mx-auto w-full h-[550px]" src="https://www.youtube.com/embed/NqiicbW3gVs?si=g1qIa6fCoLkiG5pv" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 
 
 
