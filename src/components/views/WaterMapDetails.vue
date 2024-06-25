@@ -23,8 +23,6 @@ import lofiWiImg5 from '../../assets/portfolios/water-map-lofi-5.jpg'
 
 
 
-
-
 import GoSVG from '../../assets/bubble.svg'
 import figmaIcon from '../../assets/figma-icon.svg'
 import lightIcon from '../../assets/light-blub-icon.svg'
@@ -41,8 +39,6 @@ import { Pagination, Navigation } from 'swiper/modules'
 import 'swiper/swiper-bundle.css';
 import 'swiper/css/pagination';
 import 'swiper/css/navigation';
-
-
 
 // import "swiper/css/effect-cube"
 
@@ -83,15 +79,6 @@ const lofi2 = ref(data.value[0].lofiWiImg2)
 const lofi3 = ref(data.value[0].lofiWiImg3)
 const lofi4 = ref(data.value[0].lofiWiImg4)
 const lofi5 = ref(data.value[0].lofiWiImg5)
-
-
-
-
-
-
-
-
-
 
 const router = useRouter();
 
@@ -139,7 +126,8 @@ console.log(subTitle.value);
                     </p>
 
                     <div class="flex justify-end mx-6 mb-6 mt-4">
-                        <a href="https://www.appman.co.th/" target="_blank" class="flex text-white bg-[#141414] my-2 rounded-xl px-3 py-3 
+                        <a href="https://www.figma.com/proto/KBpJsZi23Yn08yZkwe0zGd/WaterMap?page-id=&node-id=424-0&viewport=1466%2C955%2C0.28&t=dqIprcsnGJsUPvBt-1&scaling=min-zoom&content-scaling=fixed&starting-point-node-id=424%3A0&show-proto-sidebar=1"
+                            target="_blank" class="flex text-white bg-[#141414] my-2 rounded-xl px-3 py-3 
                             transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F] border border-[#ffffff]/5">
                             Check the prototype
                             <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
@@ -272,8 +260,8 @@ console.log(subTitle.value);
                     <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Lo-Fi Wireframes & Flows</h1>
                     <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">The images below represent the draft design
                         of WaterMap, showing the application's flow from the beginning through its various features.</p>
-                    
-                        <!--Pagination-->
+
+                    <!--Pagination-->
 
                     <swiper class=" text-white w-auto mt-6 mb-6 rounded-xl" :modules="[Pagination, Navigation]"
                         :pagination="{ type: 'fraction', }" :navigation="true">
