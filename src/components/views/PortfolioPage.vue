@@ -32,28 +32,28 @@ const portfolios = ref([
         portName: 'eKYC Web Application',
         category: 'UX/UI',
         imgSrc: ekycImg,
-        subTitle: 'UX/UI Design Internship Jan. - Jun. 2023 (6 months)'
+        subTitle: 'UX/UI Design Internship 2023'
     },
     {
         portId: 3,
-        portName: 'User Management Dashboard',
+        portName: 'Case Keeper Dashboard',
         category: 'UX/UI',
         imgSrc: caseKeeperImg,
-        subTitle: 'UX/UI Design Internship Jan. - Jun. 2023 (6 months)'
+        subTitle: 'UX/UI Design Internship 2023'
     },
     {
         portId: 4,
         portName: 'Dip Chip Rider',
         category: 'UX/UI',
         imgSrc: dipChipImg,
-        subTitle: 'UX/UI Design Internship Jan. - Jun. 2023 (6 months)'
+        subTitle: 'UX/UI Design Internship 2023'
     },
     {
         portId: 5,
         portName: 'Hotel Check-in Kiosk',
         category: 'UX/UI',
         imgSrc: hotelKioskImg,
-        subTitle: 'UX/UI Design Internship Jan. - Jun. 2023 (6 months)'
+        subTitle: 'UX/UI Design Internship 2023'
     },
     {
         portId: 6,

@@ -2,14 +2,17 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter, } from 'vue-router';
 
-import ekycImg from '../../assets/portfolios/eKyc.png'
+import ekycImg from '../../assets/portfolios/dip-chip.png'
 
 import backSVG from '../../assets/arrow-left.svg'
 
-import hiLightImg1 from '../../assets/portfolios/ekyc-hi-1.jpg'
-import hiLightImg2 from '../../assets/portfolios/ekyc-hi-2.jpg'
-import hiLightImg3 from '../../assets/portfolios/ekyc-hi-3.jpg'
-import hiLightImg4 from '../../assets/portfolios/ekyc-hi-4.jpg'
+import hiLightImg1 from '../../assets/portfolios/dc-bj-1.jpg'
+import hiLightImg2 from '../../assets/portfolios/dipchiproto.gif'
+import hiLightImg3 from '../../assets/portfolios/dc-rs-1.jpg'
+import hiLightImg4 from '../../assets/portfolios/dc-rs-2.jpg'
+
+
+
 
 
 
@@ -41,8 +44,8 @@ import 'swiper/css/navigation';
 
 const data = ref([
     {
-        portId: 2,
-        portName: 'eKYC Web Application',
+        portId: 3,
+        portName: 'Dip Chip Rider',
         category: 'UX/UI',
         imgSrc: ekycImg,
         subTitle: 'UX/UI Design Internship 2023',
@@ -50,6 +53,8 @@ const data = ref([
         hiLightImg2: hiLightImg2,
         hiLightImg3: hiLightImg3,
         hiLightImg4: hiLightImg4,
+
+
 
     }
 ])
@@ -61,6 +66,9 @@ const hiImg1 = ref(data.value[0].hiLightImg1)
 const hiImg2 = ref(data.value[0].hiLightImg2)
 const hiImg3 = ref(data.value[0].hiLightImg3)
 const hiImg4 = ref(data.value[0].hiLightImg4)
+const hiImg5 = ref(data.value[0].hiLightImg5)
+
+
 
 
 
@@ -113,8 +121,9 @@ console.log(subTitle.value);
 
                     <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
                     <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
-                        A comprehensive eKYC solution with OCR scanning to read ID cards and Face Recognition integrated
-                        with Facetech to verify identities of the person.
+                        Dip Chip Rider is a mobile application for agents to perform dip chip identity verification for
+                        end users. Results are sent to the Case Keeper Dashboard, allowing admins to keep in touch with
+                        the customer verification status.
                     </p>
 
                     <div class="flex justify-end mx-6 mb-6 mt-4 opacity-0 ">
@@ -187,20 +196,22 @@ console.log(subTitle.value);
                 <!--Product Overview-->
                 <div class="mt-10">
                     <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Product Overview</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">The Electronic Know Your Customer (E-KYC)
-                        solution is a highlight SaaS product of AppMan. It offers comprehensive features for secure
-                        identity verification.</p>
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Dip Chip Rider is a KYC method using ID
+                        cards to verify customer identities. Riders visit customers to gather data from ID chips,
+                        capturing details like face, name, and ID number. This service benefits financial services by
+                        providing accurate customer data, reducing risks like fraud and money laundering.</p>
                 </div>
 
                 <!--Responsibilities as Intern-->
                 <div class="mt-10">
                     <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Responsibilities as Intern</h1>
                     <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">
-                        <span class="ml-4 mt-4 block">• Assisted in the design and development of the identity
-                            verification processes.</span>
-                        <span class="ml-4 mt-4 block">• Created Hi-Fi wireframes for new features of the identity
-                            verification process.</span>
-                        <span class="ml-4 mt-4 block">• Improved UX/UI for specific feature from the old version.</span>
+                        <span class="ml-4 mt-4 block">• Assisted in the design and development of the Dip Chip Rider
+                            application..</span>
+                        <span class="ml-4 mt-4 block">• Conducted business research and A/B testing to improve the
+                            design.</span>
+                        <span class="ml-4 mt-4 block">• Collaborated with the UX/UI Designer and Business Team to create
+                            wireframes, prototypes, and visual designs.</span>
                     </p>
                 </div>
 
@@ -208,34 +219,55 @@ console.log(subTitle.value);
                 <!--Highlight Works-->
                 <div class="mt-10">
                     <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Highlight Works</h1>
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Liveness Instruction Page</h1>
+                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Dip Chip Branch Journey</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">We received feedback that some users
-                        struggled with positioning their face correctly during liveness verification, even with existing
-                        guidelines. To address this, we created a liveness instruction page with clear guidelines and
-                        helpful tips, including examples, to ensure users can complete the verification process easily
-                        and accurately.</p>
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">The business requirement wants users to
+                        choose the identity verification channel, either by performing dip chip with a rider or
+                        selecting a nearby branch. The screen above shows the existing flow, while the one below
+                        presents the new branch journey flow.</p>
 
                     <img :src="hiImg1" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Select Verification Document Flow</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">We designed this flow to help foreign users who want to proceed with eKYC but don't have a Thai ID card. This page allows users to select their nationality and proceed with the appropriate identity verification method that suits them best.</p>
 
-                    <img :src="hiImg2" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
+                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Testing Card Reader</h1>
 
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Additional Document Flow</h1>
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">"As a user of the Rider App, I want a
+                        simple and easy way to test the card reader feature, so that I can ensure that it is working
+                        properly and use the app to be ready for the dip-chip process."</p>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">When users run out of OCR scanning attempts, we don’t want to leave them stuck on a failed page. We created this additional document flow so users can upload other documents to continue the identity verification process and still get verified.</p>
+                    <img :src="hiImg2" alt="project image" class="w-auto mt-6 mb-6 rounded-xl flex mx-auto">
 
-                    <img :src="hiImg3" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">OTP Authentication Before Proceeding E-KYC</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">To enhance security, we designed OTP authentication before users can proceed with the E-KYC process. This ensures only authorized users can continue with identity verification.</p>
 
-                    <img :src="hiImg4" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
-                    
+
+                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Rider’s Script </h1>
+
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Rider’s Script
+
+                        A pain point identified from the business requirement was that riders struggled to remember what
+                        to say during the dip chip process with end users. To solve this,
+                        we created rider's script pages, providing instructions and guidelines. These scripts are also
+                        displayed during the identity verification flow.
+                    </p>
+
+                    <!--Pagination-->
+
+                    <swiper class=" text-white w-auto mt-6 mb-6 rounded-xl" :modules="[Pagination, Navigation]"
+                        :pagination="{ type: 'fraction', }" :navigation="true">
+                        <swiper-slide><img :src="hiImg3" alt="project image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="hiImg4" alt="problem image" class="w-auto" /></swiper-slide>
+
+
+                    </swiper>
+
+
+
+
+
+
+
 
                 </div>
 
@@ -245,11 +277,11 @@ console.log(subTitle.value);
 
 
 
-                
 
-               
 
-                
+
+
+
 
                 <!--Go next-->
                 <div class="mt-10">

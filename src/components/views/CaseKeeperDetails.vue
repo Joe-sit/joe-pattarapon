@@ -2,14 +2,23 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter, } from 'vue-router';
 
-import ekycImg from '../../assets/portfolios/eKyc.png'
+import ekycImg from '../../assets/portfolios/case-keeper.png'
 
 import backSVG from '../../assets/arrow-left.svg'
 
-import hiLightImg1 from '../../assets/portfolios/ekyc-hi-1.jpg'
-import hiLightImg2 from '../../assets/portfolios/ekyc-hi-2.jpg'
-import hiLightImg3 from '../../assets/portfolios/ekyc-hi-3.jpg'
-import hiLightImg4 from '../../assets/portfolios/ekyc-hi-4.jpg'
+import hiLightImg1 from '../../assets/portfolios/ck-um-1.jpg'
+import hiLightImg2 from '../../assets/portfolios/ck-um-2.jpg'
+import hiLightImg3 from '../../assets/portfolios/ck-um-3.jpg'
+import hiLightImg4 from '../../assets/portfolios/ck-um-4.jpg'
+import hiLightImg5 from '../../assets/portfolios/ck-sm-1.jpg'
+import hiLightImg6 from '../../assets/portfolios/ck-sm-2.jpg'
+import hiLightImg7 from '../../assets/portfolios/ck-sm-3.jpg'
+import hiLightImg8 from '../../assets/portfolios/ck-sm-4.jpg'
+import hiLightImg9 from '../../assets/portfolios/ck-re-1.jpg'
+import hiLightImg10 from '../../assets/portfolios/ck-wn-1.jpg'
+import hiLightImg11 from '../../assets/portfolios/ck-wn-2.jpg'
+
+
 
 
 
@@ -41,8 +50,8 @@ import 'swiper/css/navigation';
 
 const data = ref([
     {
-        portId: 2,
-        portName: 'eKYC Web Application',
+        portId: 3,
+        portName: 'Case Keeper Dashboard',
         category: 'UX/UI',
         imgSrc: ekycImg,
         subTitle: 'UX/UI Design Internship 2023',
@@ -50,6 +59,13 @@ const data = ref([
         hiLightImg2: hiLightImg2,
         hiLightImg3: hiLightImg3,
         hiLightImg4: hiLightImg4,
+        hiLightImg5: hiLightImg5,
+        hiLightImg6: hiLightImg6,
+        hiLightImg7: hiLightImg7,
+        hiLightImg8: hiLightImg8,
+        hiLightImg9: hiLightImg9,
+        hiLightImg10: hiLightImg10,
+        hiLightImg11: hiLightImg11,
 
     }
 ])
@@ -61,6 +77,14 @@ const hiImg1 = ref(data.value[0].hiLightImg1)
 const hiImg2 = ref(data.value[0].hiLightImg2)
 const hiImg3 = ref(data.value[0].hiLightImg3)
 const hiImg4 = ref(data.value[0].hiLightImg4)
+const hiImg5 = ref(data.value[0].hiLightImg5)
+const hiImg6 = ref(data.value[0].hiLightImg6)
+const hiImg7 = ref(data.value[0].hiLightImg7)
+const hiImg8 = ref(data.value[0].hiLightImg8)
+const hiImg9 = ref(data.value[0].hiLightImg9)
+const hiImg10 = ref(data.value[0].hiLightImg10)
+const hiImg11 = ref(data.value[0].hiLightImg11)
+
 
 
 
@@ -113,8 +137,8 @@ console.log(subTitle.value);
 
                     <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
                     <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
-                        A comprehensive eKYC solution with OCR scanning to read ID cards and Face Recognition integrated
-                        with Facetech to verify identities of the person.
+                        Case Keeper Dashboard is a web application that collects all identity verification data,
+                        including e-KYC, dip chip, criminal check, and more.
                     </p>
 
                     <div class="flex justify-end mx-6 mb-6 mt-4 opacity-0 ">
@@ -187,19 +211,19 @@ console.log(subTitle.value);
                 <!--Product Overview-->
                 <div class="mt-10">
                     <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Product Overview</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">The Electronic Know Your Customer (E-KYC)
-                        solution is a highlight SaaS product of AppMan. It offers comprehensive features for secure
-                        identity verification.</p>
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Case Keeper Dashboard is the main system
+                        for collecting all identity verification data from end users. This web app is a SaaS product,
+                        allowing clients to customize their logo, theme colors, fonts, features, and more.</p>
                 </div>
 
                 <!--Responsibilities as Intern-->
                 <div class="mt-10">
                     <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Responsibilities as Intern</h1>
                     <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">
-                        <span class="ml-4 mt-4 block">• Assisted in the design and development of the identity
-                            verification processes.</span>
-                        <span class="ml-4 mt-4 block">• Created Hi-Fi wireframes for new features of the identity
-                            verification process.</span>
+                        <span class="ml-4 mt-4 block">• Assisted in the design and development of the Case Keeper
+                            Dashboard.</span>
+                        <span class="ml-4 mt-4 block">• Created Hi-Fi wireframes for new features of the
+                            dashboard.</span>
                         <span class="ml-4 mt-4 block">• Improved UX/UI for specific feature from the old version.</span>
                     </p>
                 </div>
@@ -208,34 +232,77 @@ console.log(subTitle.value);
                 <!--Highlight Works-->
                 <div class="mt-10">
                     <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Highlight Works</h1>
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Liveness Instruction Page</h1>
+                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">User Management Dashboard</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">We received feedback that some users
-                        struggled with positioning their face correctly during liveness verification, even with existing
-                        guidelines. To address this, we created a liveness instruction page with clear guidelines and
-                        helpful tips, including examples, to ensure users can complete the verification process easily
-                        and accurately.</p>
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">This dashboard migrates Keycloak user
+                        management into the Case Keeper Dashboard. The new User Management Dashboard includes features
+                        to view, create, update, and delete user accounts, helping admins manage user accounts more
+                        easily within a single web app.</p>
 
-                    <img :src="hiImg1" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Select Verification Document Flow</h1>
+                    <!--Pagination-->
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">We designed this flow to help foreign users who want to proceed with eKYC but don't have a Thai ID card. This page allows users to select their nationality and proceed with the appropriate identity verification method that suits them best.</p>
+                    <swiper class=" text-white w-auto mt-6 mb-6 rounded-xl" :modules="[Pagination, Navigation]"
+                        :pagination="{ type: 'fraction', }" :navigation="true">
+                        <swiper-slide><img :src="hiImg1" alt="project image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="hiImg2" alt="problem image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="hiImg3" alt="problem image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="hiImg4" alt="problem image" class="w-auto" /></swiper-slide>
 
-                    <img :src="hiImg2" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Additional Document Flow</h1>
+                    </swiper>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">When users run out of OCR scanning attempts, we don’t want to leave them stuck on a failed page. We created this additional document flow so users can upload other documents to continue the identity verification process and still get verified.</p>
 
-                    <img :src="hiImg3" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
+                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Dashboard Sandbox Mode</h1>
 
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">OTP Authentication Before Proceeding E-KYC</h1>
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Sandbox mode is designed for developers to
+                        test mock data and see live verification results without using credits. This mode also enables
+                        developers to integrate their API with AppMan’s e-KYC API.</p>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">To enhance security, we designed OTP authentication before users can proceed with the E-KYC process. This ensures only authorized users can continue with identity verification.</p>
+                    <!--Pagination-->
 
-                    <img :src="hiImg4" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
+                    <swiper class=" text-white w-auto mt-6 mb-6 rounded-xl" :modules="[Pagination, Navigation]"
+                        :pagination="{ type: 'fraction', }" :navigation="true">
+                        <swiper-slide><img :src="hiImg5" alt="project image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="hiImg6" alt="problem image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="hiImg7" alt="problem image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="hiImg8" alt="problem image" class="w-auto" /></swiper-slide>
+
+
+                    </swiper>
+
                     
+                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Redesigned Image Comparison in Case
+                        Details</h1>
+
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">A pain point from admin users was the
+                        difficulty in identifying differences between images due to unformatted image ratios, causing a
+                        disorganized display.
+
+                        <span class="ml-4 mt-4 block">• Old Version: Images had inconsistent ratios, making it hard to
+                            compare them accurately.</span>
+                        <span class="ml-4 mt-4 block">• Redesigned Version: Images now have a consistent ratio, and each
+                            image is accompanied by relevant information, ensuring a more organized and clear
+                            comparison.</span>
+                    </p>
+
+                    <img :src="hiImg9" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
+
+                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Announcement for Case Keeper Dashboard</h1>
+
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Announcement modal for informing about new features and bug fixes on Case Keeper Dashboard.</p>
+
+
+                    <!--Pagination-->
+
+                    <swiper class=" text-white w-auto mt-6 mb-6 rounded-xl" :modules="[Pagination, Navigation]"
+                        :pagination="{ type: 'fraction', }" :navigation="true">
+                        <swiper-slide><img :src="hiImg10" alt="project image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="hiImg11" alt="problem image" class="w-auto" /></swiper-slide>
+                       
+
+                    </swiper>
+
 
                 </div>
 
@@ -245,11 +312,11 @@ console.log(subTitle.value);
 
 
 
-                
 
-               
 
-                
+
+
+
 
                 <!--Go next-->
                 <div class="mt-10">

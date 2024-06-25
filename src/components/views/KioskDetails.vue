@@ -2,14 +2,18 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter, } from 'vue-router';
 
-import ekycImg from '../../assets/portfolios/eKyc.png'
+import ekycImg from '../../assets/portfolios/hotel-kiosk.png'
 
 import backSVG from '../../assets/arrow-left.svg'
 
-import hiLightImg1 from '../../assets/portfolios/ekyc-hi-1.jpg'
-import hiLightImg2 from '../../assets/portfolios/ekyc-hi-2.jpg'
-import hiLightImg3 from '../../assets/portfolios/ekyc-hi-3.jpg'
-import hiLightImg4 from '../../assets/portfolios/ekyc-hi-4.jpg'
+import hiLightImg1 from '../../assets/portfolios/hc-1.jpg'
+import hiLightImg2 from '../../assets/portfolios/hc-2.jpg'
+import hiLightImg3 from '../../assets/portfolios/hc-3.jpg'
+import hiLightImg4 from '../../assets/portfolios/hc-4.jpg'
+
+
+
+
 
 
 
@@ -41,8 +45,8 @@ import 'swiper/css/navigation';
 
 const data = ref([
     {
-        portId: 2,
-        portName: 'eKYC Web Application',
+        portId: 5,
+        portName: 'Hotel Check-in Kiosk',
         category: 'UX/UI',
         imgSrc: ekycImg,
         subTitle: 'UX/UI Design Internship 2023',
@@ -50,6 +54,7 @@ const data = ref([
         hiLightImg2: hiLightImg2,
         hiLightImg3: hiLightImg3,
         hiLightImg4: hiLightImg4,
+
 
     }
 ])
@@ -61,6 +66,8 @@ const hiImg1 = ref(data.value[0].hiLightImg1)
 const hiImg2 = ref(data.value[0].hiLightImg2)
 const hiImg3 = ref(data.value[0].hiLightImg3)
 const hiImg4 = ref(data.value[0].hiLightImg4)
+
+
 
 
 
@@ -113,8 +120,8 @@ console.log(subTitle.value);
 
                     <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
                     <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
-                        A comprehensive eKYC solution with OCR scanning to read ID cards and Face Recognition integrated
-                        with Facetech to verify identities of the person.
+                        This project presents UI concepts for a hotel check-in kiosk integrated with AppMan's E-KYC
+                        (Electronic Know Your Customer) solution.
                     </p>
 
                     <div class="flex justify-end mx-6 mb-6 mt-4 opacity-0 ">
@@ -186,70 +193,47 @@ console.log(subTitle.value);
 
                 <!--Product Overview-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Product Overview</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">The Electronic Know Your Customer (E-KYC)
-                        solution is a highlight SaaS product of AppMan. It offers comprehensive features for secure
-                        identity verification.</p>
-                </div>
+                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Work Flows</h1>
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light mb-4">I collaborated with the Product Owner (PO)
+                        of the E-KYC product to create this concept for the hotel check-in kiosk, which they will use to
+                        present to customers.
 
-                <!--Responsibilities as Intern-->
-                <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Responsibilities as Intern</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">
-                        <span class="ml-4 mt-4 block">• Assisted in the design and development of the identity
-                            verification processes.</span>
-                        <span class="ml-4 mt-4 block">• Created Hi-Fi wireframes for new features of the identity
-                            verification process.</span>
-                        <span class="ml-4 mt-4 block">• Improved UX/UI for specific feature from the old version.</span>
                     </p>
-                </div>
+
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">I was a member of the MAC team, which focuses on SaaS (Software as a Service) products, with E-KYC being one of the highlights. E-KYC is typically used on mobile and desktop devices, but the business team wants to expand the potential of e-kyc solution. So, we created this hotel check-in kiosk to show how E-KYC can make the check-in process faster and more secure.
+
+                    </p>
+
+                    <!--Pagination-->
+
+                    <swiper class=" text-white w-auto mt-6 mb-6 rounded-xl" :modules="[Pagination, Navigation]"
+                        :pagination="{ type: 'fraction', }" :navigation="true">
+                        <swiper-slide><img :src="hiImg1" alt="project image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="hiImg2" alt="problem image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="hiImg3" alt="problem image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="hiImg4" alt="problem image" class="w-auto" /></swiper-slide>
 
 
-                <!--Highlight Works-->
-                <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Highlight Works</h1>
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Liveness Instruction Page</h1>
+                    </swiper>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">We received feedback that some users
-                        struggled with positioning their face correctly during liveness verification, even with existing
-                        guidelines. To address this, we created a liveness instruction page with clear guidelines and
-                        helpful tips, including examples, to ensure users can complete the verification process easily
-                        and accurately.</p>
 
-                    <img :src="hiImg1" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
-
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Select Verification Document Flow</h1>
-
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">We designed this flow to help foreign users who want to proceed with eKYC but don't have a Thai ID card. This page allows users to select their nationality and proceed with the appropriate identity verification method that suits them best.</p>
-
-                    <img :src="hiImg2" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
-
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Additional Document Flow</h1>
-
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">When users run out of OCR scanning attempts, we don’t want to leave them stuck on a failed page. We created this additional document flow so users can upload other documents to continue the identity verification process and still get verified.</p>
-
-                    <img :src="hiImg3" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
-
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">OTP Authentication Before Proceeding E-KYC</h1>
-
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">To enhance security, we designed OTP authentication before users can proceed with the E-KYC process. This ensures only authorized users can continue with identity verification.</p>
-
-                    <img :src="hiImg4" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
-                    
 
                 </div>
 
-
-
-
-
+                
 
 
                 
 
-               
 
-                
+
+
+
+
+
+
+
+
 
                 <!--Go next-->
                 <div class="mt-10">
