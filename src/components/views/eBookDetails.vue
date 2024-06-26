@@ -141,23 +141,25 @@ console.log(subTitle.value);
 
 
 
-            <!--Project Overview section-->
             <div class="w-full grid grid-cols-12 gap-4 mt-6">
 
                 <!-- Overview -->
                 <div class="col-span-12 md:col-span-8 bg-[#101010] 
-                    border border-[#ffffff]/5 rounded-xl ">
+    border border-[#ffffff]/5 rounded-xl flex flex-col justify-between">
 
-                    <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
-                    <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
-                        Goal of this project is to educate children on waste seperating through an interactive
-                        Scratch-based game and an informative e-book, which also promotes environmental awareness and
-                        responsibility.
-                    </p>
+                    <div>
+                        <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6">Overview</h1>
+                        <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light">
+                            Goal of this project is to educate children on waste separating through an interactive
+                            Scratch-based game and an informative e-book, which also promotes environmental awareness
+                            and
+                            responsibility.
+                        </p>
+                    </div>
 
-                    <div class="flex justify-end mx-6 mb-6 mt-4 ">
+                    <div class="flex justify-end mx-6 mb-6 mt-4">
                         <a href="https://heyzine.com/flip-book/eac3a74d44.html" target="_blank" class="flex text-white bg-[#141414] my-2 rounded-xl px-3 py-3 
-                            transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F] border border-[#ffffff]/5">
+            transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F] border border-[#ffffff]/5">
                             Read e-Book
                             <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
                         </a>
@@ -166,44 +168,42 @@ console.log(subTitle.value);
 
                 <!-- Right column -->
                 <div class="col-span-12 md:col-span-4 bg-[#101010] mt-2 sm:mt-0
-                    border border-[#ffffff]/5 rounded-xl px-2 py-2 ">
+    border border-[#ffffff]/5 rounded-xl px-2 py-2">
 
                     <!-- Tools -->
-                    <h1 class="text-[#8A949C] text-base font-medium mt-4 mx-4 ">Tools</h1>
+                    <h1 class="text-[#8A949C] text-base font-medium mt-4 mx-4">Tools</h1>
                     <div class="w-full mt-4 mx-4">
-                        <div class=" flex flex-wrap gap-2">
-                            <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
+                        <div class="flex flex-wrap gap-2">
+                            <div class="flex items-center px-3 py-2 border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <figmaIcon class="h-6 w-6 fill-white" />
                                 </span>
                                 <span class="text-base sm:text-sm text-white whitespace-nowrap">Figma + FigJam</span>
                             </div>
 
-                            <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
+                            <div class="flex items-center px-3 py-2 border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <scratchIcon class="h-6 w-6 fill-white" />
                                 </span>
                                 <span class="text-base sm:text-sm text-white whitespace-nowrap">Scratch</span>
                             </div>
 
-                            <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
+                            <div class="flex items-center px-3 py-2 border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <heyzineIcon class="h-6 w-6 fill-white" />
                                 </span>
                                 <span class="text-base sm:text-sm text-white whitespace-nowrap">Heyzine</span>
                             </div>
                         </div>
-
-
                     </div>
 
                     <div class="mt-6">
                         <!-- More/Method -->
-                        <h1 class="text-[#8A949C] text-base font-medium  mx-4 ">More</h1>
-                        <div class="w-full mt-4 mx-4 mb-6 ">
-                            <div class=" flex flex-wrap gap-2">
+                        <h1 class="text-[#8A949C] text-base font-medium mx-4">More</h1>
+                        <div class="w-full mt-4 mx-4 mb-6">
+                            <div class="flex flex-wrap gap-2">
                                 <div @click="goToYouTube()" class="flex items-center px-3 py-2 cursor-pointer transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
-                                  border border-[#ffffff]/5 rounded-full">
+                    border border-[#ffffff]/5 rounded-full">
                                     <span class="inline-block align-middle mr-2">
                                         <youtubeIcon class="h-6 w-6 fill-white" />
                                     </span>
@@ -211,7 +211,7 @@ console.log(subTitle.value);
                                     <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
                                 </div>
                                 <div @click="goToEBook()" class="flex items-center px-3 py-2 cursor-pointer transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
-                                  border border-[#ffffff]/5 rounded-full">
+                    border border-[#ffffff]/5 rounded-full">
                                     <span class="inline-block align-middle mr-2">
                                         <bookIcon class="h-6 w-6 fill-white" />
                                     </span>
@@ -223,6 +223,7 @@ console.log(subTitle.value);
                     </div>
                 </div>
             </div>
+
 
             <!--Description-->
 
@@ -265,29 +266,13 @@ console.log(subTitle.value);
                 <div class="mt-6 rounded-xl">
 
 
-                    <iframe class="flex mx-auto w-full h-[550px]" src="https://www.youtube.com/embed/NqiicbW3gVs?si=g1qIa6fCoLkiG5pv" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+                    <iframe class="flex mx-auto w-full h-[550px]"
+                        src="https://www.youtube.com/embed/NqiicbW3gVs?si=g1qIa6fCoLkiG5pv" title="YouTube video player"
+                        frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 
-
-
-                    
                 </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
                 <!--Go next-->
                 <div class="mt-10">

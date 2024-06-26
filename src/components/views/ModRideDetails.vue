@@ -80,13 +80,13 @@ const data = ref([
         userFlow2: userFlow2,
         userFlow3: userFlow3,
         userFlow4: userFlow4,
-        hifiWire1:hifiWire1,
-        hifiWire2:hifiWire2,
-        designSys:designSys,
-        ddayImg1:ddayImg1,
-        ddayImg2:ddayImg2,
-        ddayImg3:ddayImg3,
-        ddayImg4:ddayImg4
+        hifiWire1: hifiWire1,
+        hifiWire2: hifiWire2,
+        designSys: designSys,
+        ddayImg1: ddayImg1,
+        ddayImg2: ddayImg2,
+        ddayImg3: ddayImg3,
+        ddayImg4: ddayImg4
 
     }
 ])
@@ -171,19 +171,25 @@ console.log(subTitle.value);
 
                 <!-- Overview -->
                 <div class="col-span-12 md:col-span-8 bg-[#101010] 
-                    border border-[#ffffff]/5 rounded-xl ">
+    border border-[#ffffff]/5 rounded-xl flex flex-col justify-between">
+                    <!-- Added flex, flex-col, and justify-between -->
 
-                    <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
-                    <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
-                        MOD RIDE is a ride-sharing web application that focuses on users from the KMUTT who want to find
-                        friends to travel to similar destinations. Users can share their trip event and ask other to
-                        join them, helping to split costs and lessen traffic both in and around campus. Additionally, it
-                        encourages people from difference faculties to meet and get to know each other better.
-                    </p>
+                    <div> <!-- Wrapped the content in an additional div -->
+                        <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
+                        <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
+                            MOD RIDE is a ride-sharing web application that focuses on users from the KMUTT who want to
+                            find
+                            friends to travel to similar destinations. Users can share their trip event and ask other to
+                            join them, helping to split costs and lessen traffic both in and around campus.
+                            Additionally, it
+                            encourages people from different faculties to meet and get to know each other better.
+                        </p>
+                    </div>
 
                     <div class="flex justify-end mx-6 mb-6 mt-4 disabled opacity-25">
-                        <a href="https://capstone23.sit.kmutt.ac.th/un2/" target="_blank" class="flex text-white bg-[#141414] my-2 rounded-xl px-3 py-3 
-                            transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F] border border-[#ffffff]/5 cursor-not-allowed  ">
+                        <a href="https://capstone23.sit.kmutt.ac.th/un2/" target="_blank"
+                            class="flex text-white bg-[#141414] my-2 rounded-xl px-3 py-3 
+            transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F] border border-[#ffffff]/5 cursor-not-allowed  ">
                             Check the web app
                             <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
                         </a>
@@ -192,14 +198,14 @@ console.log(subTitle.value);
 
                 <!-- Right column -->
                 <div class="col-span-12 md:col-span-4 bg-[#101010] mt-2 sm:mt-0
-                    border border-[#ffffff]/5 rounded-xl px-2 py-2 ">
+    border border-[#ffffff]/5 rounded-xl px-2 py-2 ">
 
                     <!-- Tools -->
                     <h1 class="text-[#8A949C] text-base font-medium mt-4 mx-4 ">Tools</h1>
 
                     <div class="w-full mt-4 mx-4">
-                        <div class=" flex flex-wrap gap-2">
-                            <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
+                        <div class="flex flex-wrap gap-2">
+                            <div class="flex items-center px-3 py-2 border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <figmaIcon class="h-6 w-6 fill-white" />
                                 </span>
@@ -209,8 +215,8 @@ console.log(subTitle.value);
                     </div>
 
                     <div class="w-full mt-4 mx-4">
-                        <div class=" flex flex-wrap gap-2">
-                            <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
+                        <div class="flex flex-wrap gap-2">
+                            <div class="flex items-center px-3 py-2 border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <vsCodeIcon class="h-6 w-6 fill-white" />
                                 </span>
@@ -222,12 +228,12 @@ console.log(subTitle.value);
 
                     <div class="mt-6">
                         <!-- More/Method -->
-                        <h1 class="text-[#8A949C] text-base font-medium  mx-4 ">More</h1>
+                        <h1 class="text-[#8A949C] text-base font-medium mx-4 ">More</h1>
 
-                        <div @click="goToReportDoc()" class="w-full mt-4 mx-4 mb-6 ">
-                            <div class=" flex flex-wrap gap-2">
+                        <div @click="goToReportDoc()" class="w-full mt-4 mx-4 mb-6">
+                            <div class="flex flex-wrap gap-2">
                                 <div class="flex items-center px-3 py-2 cursor-pointer transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
-                                  border border-[#ffffff]/5 rounded-full">
+                  border border-[#ffffff]/5 rounded-full">
                                     <span class="inline-block align-middle mr-2">
                                         <documentIcon class="h-6 w-6 fill-white" />
                                     </span>
@@ -239,9 +245,9 @@ console.log(subTitle.value);
                         </div>
 
                         <div @click="goToSitPort()" class="w-full mt-4 mx-4 mb-6">
-                            <div class=" flex flex-wrap gap-2">
+                            <div class="flex flex-wrap gap-2">
                                 <div class="flex items-center px-3 py-2 cursor-pointer transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
-                                  border border-[#ffffff]/5 rounded-full">
+                  border border-[#ffffff]/5 rounded-full">
                                     <span class="inline-block align-middle mr-2">
                                         <externalIcon class="h-6 w-6 fill-white" />
                                     </span>
@@ -250,11 +256,10 @@ console.log(subTitle.value);
                                 </div>
                             </div>
                         </div>
-
-
                     </div>
                 </div>
             </div>
+
 
             <!--Description-->
 
@@ -353,11 +358,13 @@ console.log(subTitle.value);
 
                     <img :src="hifi1" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light flex justify-center italic">Mobile Screen for Normal Users</p>
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light flex justify-center italic">Mobile Screen
+                        for Normal Users</p>
 
                     <img :src="hifi2" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light flex justify-center italic">Desktop Screen for Admin Users</p>
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light flex justify-center italic">Desktop Screen
+                        for Admin Users</p>
 
                 </div>
 
@@ -365,11 +372,13 @@ console.log(subTitle.value);
                 <!--Design System-->
                 <div class="mt-10">
                     <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Design System</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">MOD RIDE design system is designed to reflect the identity of King Mongkut's University of Technology Thonburi (KMUTT) and provide a familiar experience for its users. </p>
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">MOD RIDE design system is designed to
+                        reflect the identity of King Mongkut's University of Technology Thonburi (KMUTT) and provide a
+                        familiar experience for its users. </p>
 
                     <img :src="desys1" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                  
+
 
                 </div>
 
@@ -386,34 +395,40 @@ console.log(subTitle.value);
                 <!--Core Features-->
                 <div class="mt-10">
                     <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Core Features</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Watch the video below for an overall features of MOD RIDE - Ride Sharing in KMUTT.</p>
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Watch the video below for an overall
+                        features of MOD RIDE - Ride Sharing in KMUTT.</p>
                     <div class="mt-6 rounded-xl">
-                        
 
 
-                        <iframe class="flex mx-auto w-full h-[550px]" src="https://www.youtube.com/embed/CABxUrGL_MM?si=UmySYW7AHCPPVSma" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+                        <iframe class="flex mx-auto w-full h-[550px]"
+                            src="https://www.youtube.com/embed/CABxUrGL_MM?si=UmySYW7AHCPPVSma"
+                            title="YouTube video player" frameborder="0"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
                     </div>
                 </div>
 
                 <!--D Day 2024-->
                 <div class="mt-10">
                     <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">SIT D-Day Exhibition 2024 </h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light mb-4">Here are some photos of our project showcase at the SIT D-Day Exhibition 2024.</p>
+                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light mb-4">Here are some photos of our project
+                        showcase at the SIT D-Day Exhibition 2024.</p>
 
 
                     <!--Pagination-->
 
-                <swiper class=" text-white w-auto mt-6 mb-6 rounded-xl" :modules="[Pagination, Navigation]"
-                    :pagination="{ type: 'fraction', }" :navigation="true">
-                    <swiper-slide><img :src="dday1" alt="project image" class="w-auto" /></swiper-slide>
-                    <swiper-slide><img :src="dday2" alt="problem image" class="w-auto" /></swiper-slide>
-                    <swiper-slide><img :src="dday3" alt="problem image" class="w-auto" /></swiper-slide>
-                    <swiper-slide><img :src="dday4" alt="problem image" class="w-auto" /></swiper-slide>
+                    <swiper class=" text-white w-auto mt-6 mb-6 rounded-xl" :modules="[Pagination, Navigation]"
+                        :pagination="{ type: 'fraction', }" :navigation="true">
+                        <swiper-slide><img :src="dday1" alt="project image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="dday2" alt="problem image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="dday3" alt="problem image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="dday4" alt="problem image" class="w-auto" /></swiper-slide>
 
 
-                </swiper>
+                    </swiper>
 
-                    
+
 
                 </div>
 

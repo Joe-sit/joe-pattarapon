@@ -117,18 +117,22 @@ console.log(subTitle.value);
 
                 <!-- Overview -->
                 <div class="col-span-12 md:col-span-8 bg-[#101010] 
-                    border border-[#ffffff]/5 rounded-xl ">
+    border border-[#ffffff]/5 rounded-xl flex flex-col justify-between">
+                    <!-- Added flex, flex-col, and justify-between -->
 
-                    <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
-                    <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
-                        WaterMap is the prototype for navigating location of drinking water in KMUTT. The prototype is
-                        designed by design thinking approach.
-                    </p>
+                    <div> <!-- Wrapped the content in an additional div -->
+                        <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
+                        <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
+                            WaterMap is the prototype for navigating location of drinking water in KMUTT. The prototype
+                            is
+                            designed by design thinking approach.
+                        </p>
+                    </div>
 
                     <div class="flex justify-end mx-6 mb-6 mt-4">
                         <a href="https://www.figma.com/proto/KBpJsZi23Yn08yZkwe0zGd/WaterMap?page-id=&node-id=424-0&viewport=1466%2C955%2C0.28&t=dqIprcsnGJsUPvBt-1&scaling=min-zoom&content-scaling=fixed&starting-point-node-id=424%3A0&show-proto-sidebar=1"
                             target="_blank" class="flex text-white bg-[#141414] my-2 rounded-xl px-3 py-3 
-                            transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F] border border-[#ffffff]/5">
+            transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F] border border-[#ffffff]/5">
                             Check the prototype
                             <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
                         </a>
@@ -137,13 +141,13 @@ console.log(subTitle.value);
 
                 <!-- Right column -->
                 <div class="col-span-12 md:col-span-4 bg-[#101010] mt-2 sm:mt-0
-                    border border-[#ffffff]/5 rounded-xl px-2 py-2 ">
+    border border-[#ffffff]/5 rounded-xl px-2 py-2 ">
 
                     <!-- Tools -->
                     <h1 class="text-[#8A949C] text-base font-medium mt-4 mx-4 ">Tools</h1>
                     <div class="w-full mt-4 mx-4">
                         <div class=" flex flex-wrap gap-2">
-                            <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
+                            <div class="flex items-center px-3 py-2 border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <figmaIcon class="h-6 w-6 fill-white" />
                                 </span>
@@ -153,10 +157,10 @@ console.log(subTitle.value);
                     </div>
                     <div class="mt-6">
                         <!-- More/Method -->
-                        <h1 class="text-[#8A949C] text-base font-medium  mx-4 ">Method</h1>
+                        <h1 class="text-[#8A949C] text-base font-medium mx-4 ">Method</h1>
                         <div class="w-full mt-4 mx-4 mb-6">
                             <div class=" flex flex-wrap gap-2">
-                                <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
+                                <div class="flex items-center px-3 py-2 border border-[#ffffff]/5 rounded-full">
                                     <span class="inline-block align-middle mr-2">
                                         <lightIcon class="h-6 w-6 fill-white" />
                                     </span>
@@ -168,6 +172,7 @@ console.log(subTitle.value);
                     </div>
                 </div>
             </div>
+
 
             <!--Description-->
 
