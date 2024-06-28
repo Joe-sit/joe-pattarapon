@@ -94,11 +94,11 @@ console.log(subTitle.value);
     <div>
         <backSVG @click="goToPortfolioPage" class="cursor-pointer mb-4" />
         <!--Title-->
-        <h1 class="flex mx-auto font-bold text-4xl sm:text-3xl text-[#F2F2F2]">
+        <h1 class="flex mx-auto font-bold text-2xl sm:text-3xl text-[#F2F2F2]">
             {{ portName }}
         </h1>
         <!--Sub Title-->
-        <p class="text-[#8A949C] mt-2 text-2xl sm:text-xl">{{ subTitle }}</p>
+        <p class="text-[#8A949C] mt-2 text-lg sm:text-xl">{{ subTitle }}</p>
 
         <div>
 
@@ -122,7 +122,7 @@ console.log(subTitle.value);
 
                     <div> <!-- Wrapped the content in an additional div -->
                         <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
-                        <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
+                        <p class="text-[#F2F2F2] text-lg sm:text-xl mt-4 mx-6 break-words font-light  ">
                             WaterMap is the prototype for navigating location of drinking water in KMUTT. The prototype
                             is
                             designed by design thinking approach.
@@ -151,7 +151,7 @@ console.log(subTitle.value);
                                 <span class="inline-block align-middle mr-2">
                                     <figmaIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Figma</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Figma</span>
                             </div>
                         </div>
                     </div>
@@ -164,7 +164,7 @@ console.log(subTitle.value);
                                     <span class="inline-block align-middle mr-2">
                                         <lightIcon class="h-6 w-6 fill-white" />
                                     </span>
-                                    <span class="text-base sm:text-sm text-white whitespace-nowrap">Design
+                                    <span class="text-sm sm:text-base text-white whitespace-nowrap">Design
                                         Thinking</span>
                                 </div>
                             </div>
@@ -180,8 +180,8 @@ console.log(subTitle.value);
 
                 <!--Problem Statement-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Problem Statement</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Water dispensers and water vending machines
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Problem Statement</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">Water dispensers and water vending machines
                         are hard to find within KMUTT, and there is uncertainty about the availability of those water
                         service points.</p>
                     <img :src="problemImg" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
@@ -189,15 +189,15 @@ console.log(subTitle.value);
 
                 <!--Solution-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Solution</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">We designed an application to locate water
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Solution</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">We designed an application to locate water
                         dispensers and provide essential details for users.</p>
                 </div>
 
                 <!--Target User-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Target User</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">End users of this application would be
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Target User</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">End users of this application would be
                         general users of water service points, segmented into three groups
                         <span class="ml-4 mt-4 block">• Mainstream users: Students, and staff in KMUTT.</span>
                         <span class="ml-4 mt-4 block">• Extreme users: First-time visitors to the campus, people
@@ -209,8 +209,8 @@ console.log(subTitle.value);
 
                 <!--Empathy Map-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Empathy Map</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">The analysis of empathy maps for both
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Empathy Map</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">The analysis of empathy maps for both
                         mainstream and extreme users is shown in the images below.</p>
 
                     <!--Pagination-->
@@ -225,8 +225,8 @@ console.log(subTitle.value);
 
                 <!--Ideate-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Ideate</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Our team conducted several problem case
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Ideate</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">Our team conducted several problem case
                         analyses to generate as many ideas as possible, which we can then measure against cool and
                         feasible factors.</p>
 
@@ -243,8 +243,8 @@ console.log(subTitle.value);
 
                 <!--Structure Design-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Structure Design</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">WaterMap application consists of 5 main
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Structure Design</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">WaterMap application consists of 5 main
                         components
                         <span class="ml-4 mt-4 block">• Discover: This page allows users to explore all of drinking
                             water points in KMUTT.</span>
@@ -262,8 +262,8 @@ console.log(subTitle.value);
 
                 <!--Lo-Fi Wireframes & Flows-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Lo-Fi Wireframes & Flows</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">The images below represent the draft design
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Lo-Fi Wireframes & Flows</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">The images below represent the draft design
                         of WaterMap, showing the application's flow from the beginning through its various features.</p>
 
                     <!--Pagination-->
@@ -280,8 +280,8 @@ console.log(subTitle.value);
 
                 <!--Final Design-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Final Design</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Experience the prototype of WaterMap from
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Final Design</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">Experience the prototype of WaterMap from
                         the link below. Explore the application's features and flow.</p>
                     <div class="mt-6 rounded-xl">
                         <iframe class="flex mx-auto w-full h-screen"
@@ -293,7 +293,7 @@ console.log(subTitle.value);
 
                 <!--Go next-->
                 <div class="mt-10">
-                    <h1 class="text-white text-2xl sm:text-xl font-medium mb-6">Where should I go next?</h1>
+                    <h1 class="text-white text-lg sm:text-xl font-medium mb-6">Where should I go next?</h1>
                     <router-link :to="{ name: 'Portfolio' }"
                         class="text-[#2F80ED] text-lg sm:text-base font-light hover:underline ">
                         Explore all of my projects

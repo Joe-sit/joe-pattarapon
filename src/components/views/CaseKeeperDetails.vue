@@ -110,11 +110,11 @@ console.log(subTitle.value);
     <div>
         <backSVG @click="goToPortfolioPage" class="cursor-pointer mb-4" />
         <!--Title-->
-        <h1 class="flex mx-auto font-bold text-4xl sm:text-3xl text-[#F2F2F2]">
+        <h1 class="flex mx-auto font-bold text-2xl sm:text-3xl text-[#F2F2F2]">
             {{ portName }}
         </h1>
         <!--Sub Title-->
-        <p class="text-[#8A949C] mt-2 text-2xl sm:text-xl">{{ subTitle }}</p>
+        <p class="text-[#8A949C] mt-2 text-lg sm:text-xl">{{ subTitle }}</p>
 
         <div>
 
@@ -136,7 +136,7 @@ console.log(subTitle.value);
                     border border-[#ffffff]/5 rounded-xl ">
 
                     <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
-                    <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
+                    <p class="text-[#F2F2F2] text-lg sm:text-xl mt-4 mx-6 break-words font-light  ">
                         Case Keeper Dashboard is a web application that collects all identity verification data,
                         including e-KYC, dip chip, criminal check, and more.
                     </p>
@@ -163,21 +163,21 @@ console.log(subTitle.value);
                                 <span class="inline-block align-middle mr-2">
                                     <figmaIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Figma + FigJam</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Figma + FigJam</span>
                             </div>
 
                             <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <jiraIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Jira</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Jira</span>
                             </div>
 
                             <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <mondayIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">monday</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">monday</span>
                             </div>
                         </div>
 
@@ -194,7 +194,7 @@ console.log(subTitle.value);
                                     <span class="inline-block align-middle mr-2">
                                         <documentIcon class="h-6 w-6 fill-white" />
                                     </span>
-                                    <span class="text-base sm:text-sm text-white whitespace-nowrap">AppMan Co.,
+                                    <span class="text-sm sm:text-base text-white whitespace-nowrap">AppMan Co.,
                                         Ltd.</span>
                                     <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
                                 </div>
@@ -210,16 +210,16 @@ console.log(subTitle.value);
 
                 <!--Product Overview-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Product Overview</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Case Keeper Dashboard is the main system
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Product Overview</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">Case Keeper Dashboard is the main system
                         for collecting all identity verification data from end users. This web app is a SaaS product,
                         allowing clients to customize their logo, theme colors, fonts, features, and more.</p>
                 </div>
 
                 <!--Responsibilities as Intern-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Responsibilities as Intern</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Responsibilities as Intern</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">
                         <span class="ml-4 mt-4 block">• Assisted in the design and development of the Case Keeper
                             Dashboard.</span>
                         <span class="ml-4 mt-4 block">• Created Hi-Fi wireframes for new features of the
@@ -231,10 +231,10 @@ console.log(subTitle.value);
 
                 <!--Highlight Works-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Highlight Works</h1>
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">User Management Dashboard</h1>
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Highlight Works</h1>
+                    <h1 class="font-medium text-white text-lg sm:text-xl mb-4">User Management Dashboard</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">This dashboard migrates Keycloak user
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">This dashboard migrates Keycloak user
                         management into the Case Keeper Dashboard. The new User Management Dashboard includes features
                         to view, create, update, and delete user accounts, helping admins manage user accounts more
                         easily within a single web app.</p>
@@ -253,9 +253,9 @@ console.log(subTitle.value);
                     </swiper>
 
 
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Dashboard Sandbox Mode</h1>
+                    <h1 class="font-medium text-white text-lg sm:text-xl mb-4">Dashboard Sandbox Mode</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Sandbox mode is designed for developers to
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">Sandbox mode is designed for developers to
                         test mock data and see live verification results without using credits. This mode also enables
                         developers to integrate their API with AppMan’s e-KYC API.</p>
 
@@ -272,10 +272,10 @@ console.log(subTitle.value);
                     </swiper>
 
                     
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Redesigned Image Comparison in Case
+                    <h1 class="font-medium text-white text-lg sm:text-xl mb-4">Redesigned Image Comparison in Case
                         Details</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">A pain point from admin users was the
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">A pain point from admin users was the
                         difficulty in identifying differences between images due to unformatted image ratios, causing a
                         disorganized display.
 
@@ -288,9 +288,9 @@ console.log(subTitle.value);
 
                     <img :src="hiImg9" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Announcement for Case Keeper Dashboard</h1>
+                    <h1 class="font-medium text-white text-lg sm:text-xl mb-4">Announcement for Case Keeper Dashboard</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Announcement modal for informing about new features and bug fixes on Case Keeper Dashboard.</p>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">Announcement modal for informing about new features and bug fixes on Case Keeper Dashboard.</p>
 
 
                     <!--Pagination-->
@@ -320,7 +320,7 @@ console.log(subTitle.value);
 
                 <!--Go next-->
                 <div class="mt-10">
-                    <h1 class="text-white text-2xl sm:text-xl font-medium mb-6">Where should I go next?</h1>
+                    <h1 class="text-white text-lg sm:text-xl font-medium mb-6">Where should I go next?</h1>
                     <router-link :to="{ name: 'Portfolio' }"
                         class="text-[#2F80ED] text-lg sm:text-base font-light hover:underline ">
                         Explore all of my projects

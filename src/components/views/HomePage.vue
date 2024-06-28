@@ -123,7 +123,8 @@ const copyEmail = () => {
                                         <span class="inline-block align-middle mr-2">
                                             <GraduateSVG class="h-4 w-4" />
                                         </span>
-                                        <span class="text-xs sm:text-sm text-white whitespace-nowrap"> B.Sc. (Information Technology)</span>
+                                        <span class="text-xs sm:text-sm text-white whitespace-nowrap"> B.Sc.
+                                            (Information Technology)</span>
                                     </div>
                                 </div>
                             </div>
@@ -131,8 +132,11 @@ const copyEmail = () => {
                         <!-- About Section -->
                         <div class="bg-[#101010]  border border-[#ffffff]/5 rounded-xl p-4 mt-4 md:mt-4 h-full">
                             <h1 class="font-medium text-base sm:text-xl text-[#8A949C] mb-4 ">About me</h1>
-                            <p class="text-xl font-normal ">
-                                A senior IT student passionate about digital product design and web app development.
+                            <p class="text-sm sm:text-base font-normal break-keep">
+                                Hi, I’m Joe, a senior IT student who passionate about
+                                digital product design and technologies.
+                                I have a background of web app development with
+                                the understanding of agile methodology.
                             </p>
 
                             <!-- Go to About Page (Coming Soon) -->
@@ -152,11 +156,11 @@ const copyEmail = () => {
                         col-span-8 md:col-span-10 flex justify-center items-center
                         transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]">
                         <div
-                            class="flex items-center gap-x-2 justify-center text-base md:text-4xl font-bold py-12 text-center">
-                            <h1 class=" py-2">Explore my interesting works</h1>
+                            class="flex items-center gap-x-2 justify-center text-sm md:text-4xl font-bold py-12 text-center">
+                            <h1 class="py-2">Explore my interesting works</h1>
 
 
-                            <GoSVG class="w-6 md:w-10 " viewBox="0 0 40 40" />
+                            <GoSVG class="w-4 md:w-10 " viewBox="0 0 40 40" />
 
                         </div>
                     </router-link>
@@ -227,8 +231,8 @@ const copyEmail = () => {
                         <div class="flex flex-col mt-4 mx-6 ">
                             <div class="flex items-center">
                                 <EmailSVG class="my-auto mr-4" />
-                                <a href="mailto:pattarapon.mak@gmail.com" class="email-address  text-lg 
-                                    text-white break-words sm:text-base md:text-2xl">
+                                <a href="mailto:pattarapon.mak@gmail.com" class="email-address  
+                                    text-white break-words text-lg sm:text-xl">
                                     pattarapon.mak@gmail.com
                                 </a>
                             </div>
@@ -237,7 +241,7 @@ const copyEmail = () => {
                         <!-- Phone -->
                         <div class="flex mt-4 mx-6 ">
                             <PhoneSVG class="my-auto mr-4" />
-                            <p class=" sm:text-base md:text-2xl text-white break-words ">(+66) 61 786 1777
+                            <p class=" text-lg sm:text-xl text-white break-words ">(+66) 61 786 1777
                             </p>
                         </div>
 
@@ -269,7 +273,7 @@ const copyEmail = () => {
                             <div class="grid text-[#F3F3F3] mt-4 mx-6">
                                 <button @click="goToResume" class="border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
                             border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">
-                                    <ResumeSVG class="mr-2" />Resume 
+                                    <ResumeSVG class="mr-2" />Resume
                                 </button>
                                 <button @click="goToTranscript" class="border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
                             border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">

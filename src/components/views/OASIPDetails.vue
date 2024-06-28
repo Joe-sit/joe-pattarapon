@@ -112,11 +112,11 @@ console.log(subTitle.value);
     <div>
         <backSVG @click="goToPortfolioPage" class="cursor-pointer mb-4" />
         <!--Title-->
-        <h1 class="flex mx-auto font-bold text-4xl sm:text-3xl text-[#F2F2F2]">
+        <h1 class="flex mx-auto font-bold text-2xl sm:text-3xl text-[#F2F2F2]">
             {{ portName }}
         </h1>
         <!--Sub Title-->
-        <p class="text-[#8A949C] mt-2 text-2xl sm:text-xl">{{ subTitle }}</p>
+        <p class="text-[#8A949C] mt-2 text-lg sm:text-xl">{{ subTitle }}</p>
 
         <div>
 
@@ -138,7 +138,7 @@ console.log(subTitle.value);
                     border border-[#ffffff]/5 rounded-xl ">
 
                     <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
-                    <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
+                    <p class="text-[#F2F2F2] text-lg sm:text-xl mt-4 mx-6 break-words font-light  ">
                         Online Appointment Scheduling System for Integrated Project
                         Clinics (OASIP) is a web application for SIT students who want
                         to consult with lecturers, the system provides facilities for both students and lecturers about
@@ -167,21 +167,21 @@ console.log(subTitle.value);
                                 <span class="inline-block align-middle mr-2">
                                     <figmaIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Figma</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Figma</span>
                             </div>
 
                             <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <clickUpIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">ClickUp</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">ClickUp</span>
                             </div>
 
                             <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <vscodeIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Visual Studio
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Visual Studio
                                     Code</span>
                             </div>
                         </div>
@@ -196,7 +196,7 @@ console.log(subTitle.value);
                                     <span class="inline-block align-middle mr-2">
                                         <externalIcon class="h-6 w-6 fill-white" />
                                     </span>
-                                    <span class="text-base sm:text-sm text-white whitespace-nowrap">GitHub</span>
+                                    <span class="text-sm sm:text-base text-white whitespace-nowrap">GitHub</span>
                                     <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
                                 </div>
                             </div>
@@ -210,10 +210,10 @@ console.log(subTitle.value);
             <div>
 
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Key Features</h1>
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">User Authentication</h1>
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Key Features</h1>
+                    <h1 class="font-medium text-white text-lg sm:text-xl mb-4">User Authentication</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">The implementation includes 2 parts
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">The implementation includes 2 parts
 
                         <span class="ml-4 mt-4 block">• In-App login: Users can login using a username and password that
                             exists in the database.</span>
@@ -234,7 +234,7 @@ console.log(subTitle.value);
 
                     </swiper>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light ">Users can change their password. If they
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light ">Users can change their password. If they
                         forget it, the system will send an email with a reset password link.
 
                     </p>
@@ -249,9 +249,9 @@ console.log(subTitle.value);
 
                     </swiper>
 
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Appointment Scheduling</h1>
+                    <h1 class="font-medium text-white text-lg sm:text-xl mb-4">Appointment Scheduling</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">On event list page, role-based
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">On event list page, role-based
                         authorization is applied as following roles
 
                         <span class="ml-4 mt-4 block">• Student users: Can only see and edit their own appointment
@@ -272,7 +272,7 @@ console.log(subTitle.value);
 
                     </swiper>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light ">Student users can create a new appointment
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light ">Student users can create a new appointment
                         event by fill out all the required fields and the system will send an appointment confirmation
                         email to thier inbox.
 
@@ -286,16 +286,16 @@ console.log(subTitle.value);
 
                     </swiper>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light ">Student users can edit or delete their own
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light ">Student users can edit or delete their own
                         appointment, while admin users can edit or delete any appointment.
 
                     </p>
 
                     <img :src="o10" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">User Management</h1>
+                    <h1 class="font-medium text-white text-lg sm:text-xl mb-4">User Management</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Admin users have an access to the user list
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">Admin users have an access to the user list
                         page. Admin users can create/see/edit/delete user account.
 
 
@@ -312,9 +312,9 @@ console.log(subTitle.value);
 
                     </swiper>
 
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">System Architecture</h1>
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">System Architecture</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">OASIP has been built on dockerized SIT infrastructure and developed by using a 3-tier architecture consisting of 3 components.
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">OASIP has been built on dockerized SIT infrastructure and developed by using a 3-tier architecture consisting of 3 components.
 
                         <span class="ml-4 mt-4 block">• Frontend: serves as the User Interface (UI) layer where users can interact with the web app.</span>
                         <span class="ml-4 mt-4 block">• Backend: manages the web app’s logic. It processes requests from the frontend, executes business rules, and handles communication with the database.</span>
@@ -327,7 +327,7 @@ console.log(subTitle.value);
 
                 <!--Go next-->
                 <div class="mt-10">
-                    <h1 class="text-white text-2xl sm:text-xl font-medium mb-6">Where should I go next?</h1>
+                    <h1 class="text-white text-lg sm:text-xl font-medium mb-6">Where should I go next?</h1>
                     <router-link :to="{ name: 'Portfolio' }"
                         class="text-[#2F80ED] text-lg sm:text-base font-light hover:underline ">
                         Explore all of my projects

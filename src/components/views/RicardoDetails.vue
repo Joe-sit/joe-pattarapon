@@ -93,11 +93,11 @@ console.log(subTitle.value);
     <div>
         <backSVG @click="goToPortfolioPage" class="cursor-pointer mb-4" />
         <!--Title-->
-        <h1 class="flex mx-auto font-bold text-4xl sm:text-3xl text-[#F2F2F2]">
+        <h1 class="flex mx-auto font-bold text-2xl sm:text-3xl text-[#F2F2F2]">
             {{ portName }}
         </h1>
         <!--Sub Title-->
-        <p class="text-[#8A949C] mt-2 text-2xl sm:text-xl">{{ subTitle }}</p>
+        <p class="text-[#8A949C] mt-2 text-lg sm:text-xl">{{ subTitle }}</p>
 
         <div>
 
@@ -146,7 +146,7 @@ console.log(subTitle.value);
                 <span class="inline-block align-middle mr-2">
                     <scratchIcon class="h-6 w-6 fill-white" />
                 </span>
-                <span class="text-base sm:text-sm text-white whitespace-nowrap">Scratch</span>
+                <span class="text-sm sm:text-base text-white whitespace-nowrap">Scratch</span>
             </div>
         </div>
     </div>
@@ -161,7 +161,7 @@ console.log(subTitle.value);
                     <span class="inline-block align-middle mr-2">
                         <externalIcon class="h-6 w-6 fill-white" />
                     </span>
-                    <span class="text-base sm:text-sm text-white whitespace-nowrap">Fuelvin</span>
+                    <span class="text-sm sm:text-base text-white whitespace-nowrap">Fuelvin</span>
                     <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
                 </div>
             </div>
@@ -177,8 +177,8 @@ console.log(subTitle.value);
 
                 <!--Product Overview-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Instructions</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">1. How to Play Ricardo Your Hero
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Instructions</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">1. How to Play Ricardo Your Hero
                         <span class="ml-4 mt-4 block">• Movement: Use the W, A, S, D keys to walk.</span>
                         <span class="ml-4 mt-4 block">• Aiming: Aim using your mouse pointer.</span>
                         <span class="mt-4 block">2. Important Tips
@@ -232,7 +232,7 @@ console.log(subTitle.value);
 
                 <!--Go next-->
                 <div class="mt-10">
-                    <h1 class="text-white text-2xl sm:text-xl font-medium mb-6">Where should I go next?</h1>
+                    <h1 class="text-white text-lg sm:text-xl font-medium mb-6">Where should I go next?</h1>
                     <router-link :to="{ name: 'Portfolio' }"
                         class="text-[#2F80ED] text-lg sm:text-base font-light hover:underline ">
                         Explore all of my projects

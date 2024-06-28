@@ -96,11 +96,11 @@ console.log(subTitle.value);
     <div>
         <backSVG @click="goToPortfolioPage" class="cursor-pointer mb-4" />
         <!--Title-->
-        <h1 class="flex mx-auto font-bold text-4xl sm:text-3xl text-[#F2F2F2]">
+        <h1 class="flex mx-auto font-bold text-2xl sm:text-3xl text-[#F2F2F2]">
             {{ portName }}
         </h1>
         <!--Sub Title-->
-        <p class="text-[#8A949C] mt-2 text-2xl sm:text-xl">{{ subTitle }}</p>
+        <p class="text-[#8A949C] mt-2 text-lg sm:text-xl">{{ subTitle }}</p>
 
         <div>
 
@@ -124,7 +124,7 @@ console.log(subTitle.value);
 
                     <div> <!-- Wrapped the content in an additional div -->
                         <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
-                        <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
+                        <p class="text-[#F2F2F2] text-lg sm:text-xl mt-4 mx-6 break-words font-light  ">
                             This portfolio website was created using HTML and CSS.
                             This website includes sections about myself, education, previous work, and my future career
                             interests.
@@ -152,14 +152,14 @@ console.log(subTitle.value);
                                 <span class="inline-block align-middle mr-2">
                                     <photoshopIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Photoshop</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Photoshop</span>
                             </div>
 
                             <div class="flex items-center px-3 py-2 border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <vscodeIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Visual Studio
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Visual Studio
                                     Code</span>
                             </div>
                         </div>
@@ -175,7 +175,7 @@ console.log(subTitle.value);
                                     <span class="inline-block align-middle mr-2">
                                         <externalIcon class="h-6 w-6 fill-white" />
                                     </span>
-                                    <span class="text-base sm:text-sm text-white whitespace-nowrap">GitHub</span>
+                                    <span class="text-sm sm:text-base text-white whitespace-nowrap">GitHub</span>
                                     <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
                                 </div>
                             </div>
@@ -191,8 +191,8 @@ console.log(subTitle.value);
 
                 <!--Product Overview-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Project Scope</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">This is and individual project for Web
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Project Scope</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">This is and individual project for Web
                         Technology course. The project outcome is to build a simple portfolio website by using only HTML
                         and CSS without any other frameworks.</p>
 
@@ -208,7 +208,7 @@ console.log(subTitle.value);
 
                     </swiper>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">This website consists of 6 sections
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">This website consists of 6 sections
 
                         <span class="ml-4 mt-4 block">• About: A brief explanation about myself.</span>
                         <span class="ml-4 mt-4 block">• Education: Details about my educational background.</span>
@@ -243,7 +243,7 @@ console.log(subTitle.value);
 
                 <!--Go next-->
                 <div class="mt-10">
-                    <h1 class="text-white text-2xl sm:text-xl font-medium mb-6">Where should I go next?</h1>
+                    <h1 class="text-white text-lg sm:text-xl font-medium mb-6">Where should I go next?</h1>
                     <router-link :to="{ name: 'Portfolio' }"
                         class="text-[#2F80ED] text-lg sm:text-base font-light hover:underline ">
                         Explore all of my projects

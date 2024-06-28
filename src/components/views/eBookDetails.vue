@@ -123,11 +123,11 @@ console.log(subTitle.value);
     <div>
         <backSVG @click="goToPortfolioPage" class="cursor-pointer mb-4" />
         <!--Title-->
-        <h1 class="flex mx-auto font-bold text-4xl sm:text-3xl text-[#F2F2F2]">
+        <h1 class="flex mx-auto font-bold text-2xl sm:text-3xl text-[#F2F2F2]">
             {{ portName }}
         </h1>
         <!--Sub Title-->
-        <p class="text-[#8A949C] mt-2 text-2xl sm:text-xl">{{ subTitle }}</p>
+        <p class="text-[#8A949C] mt-2 text-lg sm:text-xl">{{ subTitle }}</p>
 
         <div>
 
@@ -149,7 +149,7 @@ console.log(subTitle.value);
 
                     <div>
                         <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6">Overview</h1>
-                        <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light">
+                        <p class="text-[#F2F2F2] text-lg sm:text-xl mt-4 mx-6 break-words font-light">
                             Goal of this project is to educate children on waste separating through an interactive
                             Scratch-based game and an informative e-book, which also promotes environmental awareness
                             and
@@ -178,21 +178,21 @@ console.log(subTitle.value);
                                 <span class="inline-block align-middle mr-2">
                                     <figmaIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Figma + FigJam</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Figma + FigJam</span>
                             </div>
 
                             <div class="flex items-center px-3 py-2 border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <scratchIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Scratch</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Scratch</span>
                             </div>
 
                             <div class="flex items-center px-3 py-2 border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <heyzineIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Heyzine</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Heyzine</span>
                             </div>
                         </div>
                     </div>
@@ -207,7 +207,7 @@ console.log(subTitle.value);
                                     <span class="inline-block align-middle mr-2">
                                         <youtubeIcon class="h-6 w-6 fill-white" />
                                     </span>
-                                    <span class="text-base sm:text-sm text-white whitespace-nowrap">YouTube</span>
+                                    <span class="text-sm sm:text-base text-white whitespace-nowrap">YouTube</span>
                                     <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
                                 </div>
                                 <div @click="goToEBook()" class="flex items-center px-3 py-2 cursor-pointer transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
@@ -215,7 +215,7 @@ console.log(subTitle.value);
                                     <span class="inline-block align-middle mr-2">
                                         <bookIcon class="h-6 w-6 fill-white" />
                                     </span>
-                                    <span class="text-base sm:text-sm text-white whitespace-nowrap">e-Book</span>
+                                    <span class="text-sm sm:text-base text-white whitespace-nowrap">e-Book</span>
                                     <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
                                 </div>
                             </div>
@@ -231,14 +231,14 @@ console.log(subTitle.value);
 
                 <!--Background-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Background</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light mb-4">This project was inspired by a <span
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Background</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light mb-4">This project was inspired by a <span
                             @click="goToBearTai()" class="text-[#0D99FF] cursor-pointer hover:underline">Beartai</span>
                         channel video where Governor Chadchart visited local communities to see how they handle waste.
                         The video highlighted the big environmental and economic problems caused by not separating waste
                         properly.</p>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Motivated by this, I created a fun
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">Motivated by this, I created a fun
                         Scratch-based game and an easy tounderstand e-book to teach kids about waste separation. By
                         learning to sort wet and dry waste, we hope to encourage better waste management and improve
                         recycling, helping make our city more sustainable.</p>
@@ -246,8 +246,8 @@ console.log(subTitle.value);
 
                 <!--Output-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Output</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light"> This project has two main outputs: an
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Output</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light"> This project has two main outputs: an
                         e-book and a Scratch-based game.
                         <span class="ml-4 mt-4 block">• E-book: An informative guide on waste separation for
                             children.</span>
@@ -276,7 +276,7 @@ console.log(subTitle.value);
 
                 <!--Go next-->
                 <div class="mt-10">
-                    <h1 class="text-white text-2xl sm:text-xl font-medium mb-6">Where should I go next?</h1>
+                    <h1 class="text-white text-lg sm:text-xl font-medium mb-6">Where should I go next?</h1>
                     <router-link :to="{ name: 'Portfolio' }"
                         class="text-[#2F80ED] text-lg sm:text-base font-light hover:underline ">
                         Explore all of my projects

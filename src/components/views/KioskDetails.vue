@@ -93,11 +93,11 @@ console.log(subTitle.value);
     <div>
         <backSVG @click="goToPortfolioPage" class="cursor-pointer mb-4" />
         <!--Title-->
-        <h1 class="flex mx-auto font-bold text-4xl sm:text-3xl text-[#F2F2F2]">
+        <h1 class="flex mx-auto font-bold text-2xl sm:text-3xl text-[#F2F2F2]">
             {{ portName }}
         </h1>
         <!--Sub Title-->
-        <p class="text-[#8A949C] mt-2 text-2xl sm:text-xl">{{ subTitle }}</p>
+        <p class="text-[#8A949C] mt-2 text-lg sm:text-xl">{{ subTitle }}</p>
 
         <div>
 
@@ -119,7 +119,7 @@ console.log(subTitle.value);
                     border border-[#ffffff]/5 rounded-xl ">
 
                     <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
-                    <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
+                    <p class="text-[#F2F2F2] text-lg sm:text-xl mt-4 mx-6 break-words font-light  ">
                         This project presents UI concepts for a hotel check-in kiosk integrated with AppMan's E-KYC
                         (Electronic Know Your Customer) solution.
                     </p>
@@ -146,21 +146,21 @@ console.log(subTitle.value);
                                 <span class="inline-block align-middle mr-2">
                                     <figmaIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Figma + FigJam</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Figma + FigJam</span>
                             </div>
 
                             <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <jiraIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Jira</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Jira</span>
                             </div>
 
                             <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <mondayIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">monday</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">monday</span>
                             </div>
                         </div>
 
@@ -177,7 +177,7 @@ console.log(subTitle.value);
                                     <span class="inline-block align-middle mr-2">
                                         <documentIcon class="h-6 w-6 fill-white" />
                                     </span>
-                                    <span class="text-base sm:text-sm text-white whitespace-nowrap">AppMan Co.,
+                                    <span class="text-sm sm:text-base text-white whitespace-nowrap">AppMan Co.,
                                         Ltd.</span>
                                     <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
                                 </div>
@@ -193,14 +193,14 @@ console.log(subTitle.value);
 
                 <!--Product Overview-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Work Flows</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light mb-4">I collaborated with the Product Owner (PO)
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Work Flows</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light mb-4">I collaborated with the Product Owner (PO)
                         of the E-KYC product to create this concept for the hotel check-in kiosk, which they will use to
                         present to customers.
 
                     </p>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">I was a member of the MAC team, which focuses on SaaS (Software as a Service) products, with E-KYC being one of the highlights. E-KYC is typically used on mobile and desktop devices, but the business team wants to expand the potential of e-kyc solution. So, we created this hotel check-in kiosk to show how E-KYC can make the check-in process faster and more secure.
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">I was a member of the MAC team, which focuses on SaaS (Software as a Service) products, with E-KYC being one of the highlights. E-KYC is typically used on mobile and desktop devices, but the business team wants to expand the potential of e-kyc solution. So, we created this hotel check-in kiosk to show how E-KYC can make the check-in process faster and more secure.
 
                     </p>
 
@@ -237,7 +237,7 @@ console.log(subTitle.value);
 
                 <!--Go next-->
                 <div class="mt-10">
-                    <h1 class="text-white text-2xl sm:text-xl font-medium mb-6">Where should I go next?</h1>
+                    <h1 class="text-white text-lg sm:text-xl font-medium mb-6">Where should I go next?</h1>
                     <router-link :to="{ name: 'Portfolio' }"
                         class="text-[#2F80ED] text-lg sm:text-base font-light hover:underline ">
                         Explore all of my projects

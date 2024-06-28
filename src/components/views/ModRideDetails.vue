@@ -148,11 +148,11 @@ console.log(subTitle.value);
     <div>
         <backSVG @click="goToPortfolioPage" class="cursor-pointer mb-4" />
         <!--Title-->
-        <h1 class="flex mx-auto font-bold text-4xl sm:text-3xl text-[#F2F2F2]">
+        <h1 class="flex mx-auto font-bold text-2xl sm:text-3xl text-[#F2F2F2]">
             {{ portName }}
         </h1>
         <!--Sub Title-->
-        <p class="text-[#8A949C] mt-2 text-2xl sm:text-xl">{{ subTitle }}</p>
+        <p class="text-[#8A949C] mt-2 text-lg sm:text-xl">{{ subTitle }}</p>
 
         <div>
 
@@ -176,7 +176,7 @@ console.log(subTitle.value);
 
                     <div> <!-- Wrapped the content in an additional div -->
                         <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
-                        <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
+                        <p class="text-[#F2F2F2] text-base sm:text-lg mt-4 mx-6 break-words font-light  ">
                             MOD RIDE is a ride-sharing web application that focuses on users from the KMUTT who want to
                             find
                             friends to travel to similar destinations. Users can share their trip event and ask other to
@@ -209,7 +209,7 @@ console.log(subTitle.value);
                                 <span class="inline-block align-middle mr-2">
                                     <figmaIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Figma + FigJam</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Figma + FigJam</span>
                             </div>
                         </div>
                     </div>
@@ -220,7 +220,7 @@ console.log(subTitle.value);
                                 <span class="inline-block align-middle mr-2">
                                     <vsCodeIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Visual Studio
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Visual Studio
                                     Code</span>
                             </div>
                         </div>
@@ -237,7 +237,7 @@ console.log(subTitle.value);
                                     <span class="inline-block align-middle mr-2">
                                         <documentIcon class="h-6 w-6 fill-white" />
                                     </span>
-                                    <span class="text-base sm:text-sm text-white whitespace-nowrap">Project
+                                    <span class="text-sm sm:text-base text-white whitespace-nowrap">Project
                                         Report</span>
                                     <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
                                 </div>
@@ -251,7 +251,7 @@ console.log(subTitle.value);
                                     <span class="inline-block align-middle mr-2">
                                         <externalIcon class="h-6 w-6 fill-white" />
                                     </span>
-                                    <span class="text-base sm:text-sm text-white whitespace-nowrap">SIT Portfolio</span>
+                                    <span class="text-sm sm:text-base text-white whitespace-nowrap">SIT Portfolio</span>
                                     <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
                                 </div>
                             </div>
@@ -267,11 +267,11 @@ console.log(subTitle.value);
 
                 <!--Background and Rationale-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Background and Rationale</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light mb-4">As COVID-19 eased in Thailand, KMUTT
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Background and Rationale</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light mb-4">As COVID-19 eased in Thailand, KMUTT
                         resumed onsite learning, leading to heavy traffic, limited parking, and increased pollution from
                         personal vehicles.</p>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">We propose a ride-sharing system to reduce
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">We propose a ride-sharing system to reduce
                         traffic both inside and outside KMUTT, while also
                         building a stronger community at KMUTT.</p>
 
@@ -279,27 +279,27 @@ console.log(subTitle.value);
 
                 <!--Feasibility Study-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Feasibility Study</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light mb-4">We conducted several online surveys
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Feasibility Study</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light mb-4">We conducted several online surveys
                         with target users and discovered that the main thing people consider others to get into their
                         vehicle is "How close their friendship is"</p>
 
                     <img :src="feStu1" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light mb-4">The survey response has broadened our
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light mb-4">The survey response has broadened our
                         design guidelines from a regular ride-sharing web app to a ride-sharing community for KMUTT that
                         can provide users with a sense of KMUTT's environment and rich features, encouraging people to
                         use the ride-sharing web app.</p>
 
                     <img :src="feStu2" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light mb-4">After ideating the features of MOD
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light mb-4">After ideating the features of MOD
                         RIDE, we also explored an existing ride-sharing app available in Thailand called "LILUNA." We
                         analyzed and compared features in order to demonstrate how our web app is different.</p>
 
                     <img :src="feStu3" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light mb-4">Both systems have similar features,
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light mb-4">Both systems have similar features,
                         but the user scopes are completely different. MOD RIDE focuses on building trust and confidence
                         in ride-sharing. To achieve this goal, we have designed a social network and other features that
                         are specifically designed for the KMUTT environment, enhancing the overall user experience.</p>
@@ -311,8 +311,8 @@ console.log(subTitle.value);
 
                 <!--Sitemap-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Sitemap</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">MOD RIDE sitemap design outlines the
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Sitemap</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">MOD RIDE sitemap design outlines the
                         navigation structure and key features of the ride-sharing application, catering to various user
                         roles including regular users, driver users, and admin users.</p>
 
@@ -323,28 +323,28 @@ console.log(subTitle.value);
 
                 <!--User Flows-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">User Flows</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">There are 4 main user flows that cover the
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">User Flows</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">There are 4 main user flows that cover the
                         overall features in this web application.</p>
 
                     <img :src="uf1" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light flex justify-center italic">New User Create
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light flex justify-center italic">New User Create
                         Account Flow</p>
 
                     <img :src="uf2" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light flex justify-center italic">Passenger Users
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light flex justify-center italic">Passenger Users
                         Flow</p>
 
                     <img :src="uf3" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light flex justify-center italic">Driver Users
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light flex justify-center italic">Driver Users
                         Flow</p>
 
                     <img :src="uf4" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light flex justify-center italic">Driver Approval
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light flex justify-center italic">Driver Approval
                         - Admin Flow</p>
 
                 </div>
@@ -352,18 +352,18 @@ console.log(subTitle.value);
 
                 <!--Hi-Fi Wireframes-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Hi-Fi Wireframes</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">The wireframe design for MOD RIDE inclueds
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Hi-Fi Wireframes</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">The wireframe design for MOD RIDE inclueds
                         more than 20 screens, covering both mobile and desktop intefaces</p>
 
                     <img :src="hifi1" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light flex justify-center italic">Mobile Screen
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light flex justify-center italic">Mobile Screen
                         for Normal Users</p>
 
                     <img :src="hifi2" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light flex justify-center italic">Desktop Screen
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light flex justify-center italic">Desktop Screen
                         for Admin Users</p>
 
                 </div>
@@ -371,8 +371,8 @@ console.log(subTitle.value);
 
                 <!--Design System-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Design System</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">MOD RIDE design system is designed to
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Design System</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">MOD RIDE design system is designed to
                         reflect the identity of King Mongkut's University of Technology Thonburi (KMUTT) and provide a
                         familiar experience for users. </p>
 
@@ -394,8 +394,8 @@ console.log(subTitle.value);
 
                 <!--Core Features-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Core Features</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Watch the video below for an overall
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Core Features</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">Watch the video below for an overall
                         features of MOD RIDE - Ride Sharing in KMUTT.</p>
                     <div class="mt-6 rounded-xl">
 
@@ -411,8 +411,8 @@ console.log(subTitle.value);
 
                 <!--D Day 2024-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">SIT D-Day Exhibition 2024 </h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light mb-4">Here are some photos of our project
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">SIT D-Day Exhibition 2024 </h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light mb-4">Here are some photos of our project
                         showcase at the SIT D-Day Exhibition 2024.</p>
 
 

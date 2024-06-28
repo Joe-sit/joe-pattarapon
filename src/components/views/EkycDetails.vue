@@ -86,11 +86,12 @@ console.log(subTitle.value);
     <div>
         <backSVG @click="goToPortfolioPage" class="cursor-pointer mb-4" />
         <!--Title-->
-        <h1 class="flex mx-auto font-bold text-4xl sm:text-3xl text-[#F2F2F2]">
+        <h1 class="flex mx-auto font-bold text-2xl sm:text-3xl
+ text-[#F2F2F2]">
             {{ portName }}
         </h1>
         <!--Sub Title-->
-        <p class="text-[#8A949C] mt-2 text-2xl sm:text-xl">{{ subTitle }}</p>
+        <p class="text-[#8A949C] mt-2 text-lg sm:text-xl">{{ subTitle }}</p>
 
         <div>
 
@@ -112,7 +113,7 @@ console.log(subTitle.value);
                     border border-[#ffffff]/5 rounded-xl ">
 
                     <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
-                    <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
+                    <p class="text-[#F2F2F2] text-lg sm:text-xl mt-4 mx-6 break-words font-light  ">
                         A comprehensive eKYC solution with OCR scanning to read ID cards and Face Recognition integrated
                         with Facetech to verify identities of the person.
                     </p>
@@ -139,21 +140,21 @@ console.log(subTitle.value);
                                 <span class="inline-block align-middle mr-2">
                                     <figmaIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Figma + FigJam</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Figma + FigJam</span>
                             </div>
 
                             <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <jiraIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Jira</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Jira</span>
                             </div>
 
                             <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <mondayIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">monday</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">monday</span>
                             </div>
                         </div>
 
@@ -170,7 +171,7 @@ console.log(subTitle.value);
                                     <span class="inline-block align-middle mr-2">
                                         <documentIcon class="h-6 w-6 fill-white" />
                                     </span>
-                                    <span class="text-base sm:text-sm text-white whitespace-nowrap">AppMan Co.,
+                                    <span class="text-sm sm:text-base text-white whitespace-nowrap">AppMan Co.,
                                         Ltd.</span>
                                     <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
                                 </div>
@@ -186,16 +187,16 @@ console.log(subTitle.value);
 
                 <!--Product Overview-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Product Overview</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">The Electronic Know Your Customer (E-KYC)
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Product Overview</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">The Electronic Know Your Customer (E-KYC)
                         solution is a highlight SaaS product of AppMan. It offers comprehensive features for secure
                         identity verification.</p>
                 </div>
 
                 <!--Responsibilities as Intern-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Responsibilities as Intern</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Responsibilities as Intern</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">
                         <span class="ml-4 mt-4 block">• Assisted in the design and development of the identity
                             verification processes.</span>
                         <span class="ml-4 mt-4 block">• Created Hi-Fi wireframes for new features of the identity
@@ -207,10 +208,10 @@ console.log(subTitle.value);
 
                 <!--Highlight Works-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Highlight Works</h1>
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Liveness Instruction Page</h1>
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Highlight Works</h1>
+                    <h1 class="font-medium text-white text-lg sm:text-xl mb-4">Liveness Instruction Page</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">We received feedback that some users
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">We received feedback that some users
                         struggled with positioning their face correctly during liveness verification, even with existing
                         guidelines. To address this, we created a liveness instruction page with clear guidelines and
                         helpful tips, including examples, to ensure users can complete the verification process easily
@@ -218,24 +219,33 @@ console.log(subTitle.value);
 
                     <img :src="hiImg1" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Select Verification Document Flow</h1>
+                    <h1 class="font-medium text-white text-lg sm:text-xl mb-4">Select Verification Document Flow</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">We designed this flow to help foreign users who want to proceed with eKYC but don't have a Thai ID card. This page allows users to select their nationality and proceed with the appropriate identity verification method that suits them best.</p>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">We designed this flow to help foreign users
+                        who want to proceed with eKYC but don't have a Thai ID card. This page allows users to select
+                        their nationality and proceed with the appropriate identity verification method that suits them
+                        best.</p>
 
                     <img :src="hiImg2" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Additional Document Flow</h1>
+                    <h1 class="font-medium text-white text-lg sm:text-xl mb-4">Additional Document Flow</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">When users run out of OCR scanning attempts, we don’t want to leave them stuck on a failed page. We created this additional document flow so users can upload other documents to continue the identity verification process and still get verified.</p>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">When users run out of OCR scanning
+                        attempts, we don’t want to leave them stuck on a failed page. We created this additional
+                        document flow so users can upload other documents to continue the identity verification process
+                        and still get verified.</p>
 
                     <img :src="hiImg3" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">OTP Authentication Before Proceeding E-KYC</h1>
+                    <h1 class="font-medium text-white text-lg sm:text-xl mb-4">OTP Authentication Before Proceeding
+                        E-KYC</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">To enhance security, we designed OTP authentication before users can proceed with the E-KYC process. This ensures only authorized users can continue with identity verification.</p>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">To enhance security, we designed OTP
+                        authentication before users can proceed with the E-KYC process. This ensures only authorized
+                        users can continue with identity verification.</p>
 
                     <img :src="hiImg4" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
-                    
+
 
                 </div>
 
@@ -245,15 +255,15 @@ console.log(subTitle.value);
 
 
 
-                
 
-               
 
-                
+
+
+
 
                 <!--Go next-->
                 <div class="mt-10">
-                    <h1 class="text-white text-2xl sm:text-xl font-medium mb-6">Where should I go next?</h1>
+                    <h1 class="text-white text-lg sm:text-xl font-medium mb-6">Where should I go next?</h1>
                     <router-link :to="{ name: 'Portfolio' }"
                         class="text-[#2F80ED] text-lg sm:text-base font-light hover:underline ">
                         Explore all of my projects

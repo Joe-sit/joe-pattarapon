@@ -94,11 +94,13 @@ console.log(subTitle.value);
     <div>
         <backSVG @click="goToPortfolioPage" class="cursor-pointer mb-4" />
         <!--Title-->
-        <h1 class="flex mx-auto font-bold text-4xl sm:text-3xl text-[#F2F2F2]">
+        <h1 class="flex mx-auto font-bold text-2xl sm:text-3xl
+ text-[#F2F2F2]">
             {{ portName }}
         </h1>
         <!--Sub Title-->
-        <p class="text-[#8A949C] mt-2 text-2xl sm:text-xl">{{ subTitle }}</p>
+        <p class="text-[#8A949C] mt-2 text-lg sm:text-xl
+">{{ subTitle }}</p>
 
         <div>
 
@@ -120,7 +122,7 @@ console.log(subTitle.value);
                     border border-[#ffffff]/5 rounded-xl ">
 
                     <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
-                    <p class="text-[#F2F2F2] text-xl sm:text-lg mt-4 mx-6 break-words font-light  ">
+                    <p class="text-[#F2F2F2] text-lg sm:text-xl mt-4 mx-6 break-words font-light  ">
                         Dip Chip Rider is a mobile application for agents to perform dip chip identity verification for
                         end users. Results are sent to the Case Keeper Dashboard, allowing admins to keep in touch with
                         the customer verification status.
@@ -148,21 +150,21 @@ console.log(subTitle.value);
                                 <span class="inline-block align-middle mr-2">
                                     <figmaIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Figma + FigJam</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Figma + FigJam</span>
                             </div>
 
                             <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <jiraIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">Jira</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Jira</span>
                             </div>
 
                             <div class="flex items-center px-3 py-2  border border-[#ffffff]/5 rounded-full">
                                 <span class="inline-block align-middle mr-2">
                                     <mondayIcon class="h-6 w-6 fill-white" />
                                 </span>
-                                <span class="text-base sm:text-sm text-white whitespace-nowrap">monday</span>
+                                <span class="text-sm sm:text-base text-white whitespace-nowrap">monday</span>
                             </div>
                         </div>
 
@@ -179,7 +181,7 @@ console.log(subTitle.value);
                                     <span class="inline-block align-middle mr-2">
                                         <documentIcon class="h-6 w-6 fill-white" />
                                     </span>
-                                    <span class="text-base sm:text-sm text-white whitespace-nowrap">AppMan Co.,
+                                    <span class="text-sm sm:text-base text-white whitespace-nowrap">AppMan Co.,
                                         Ltd.</span>
                                     <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
                                 </div>
@@ -195,8 +197,8 @@ console.log(subTitle.value);
 
                 <!--Product Overview-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Product Overview</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Dip Chip Rider is a KYC method using ID
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Product Overview</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">Dip Chip Rider is a KYC method using ID
                         cards to verify customer identities. Riders visit customers to gather data from ID chips,
                         capturing details like face, name, and ID number. This service benefits financial services by
                         providing accurate customer data, reducing risks like fraud and money laundering.</p>
@@ -204,8 +206,8 @@ console.log(subTitle.value);
 
                 <!--Responsibilities as Intern-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Responsibilities as Intern</h1>
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Responsibilities as Intern</h1>
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">
                         <span class="ml-4 mt-4 block">• Assisted in the design and development of the Dip Chip Rider
                             application..</span>
                         <span class="ml-4 mt-4 block">• Conducted business research and A/B testing to improve the
@@ -218,10 +220,10 @@ console.log(subTitle.value);
 
                 <!--Highlight Works-->
                 <div class="mt-10">
-                    <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Highlight Works</h1>
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Dip Chip Branch Journey</h1>
+                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Highlight Works</h1>
+                    <h1 class="font-medium text-white text-lg sm:text-xl mb-4">Dip Chip Branch Journey</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">The business requirement wants users to
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">The business requirement wants users to
                         choose the identity verification channel, either by performing dip chip with a rider or
                         selecting a nearby branch. The screen above shows the existing flow, while the one below
                         presents the new branch journey flow.</p>
@@ -230,9 +232,9 @@ console.log(subTitle.value);
 
 
 
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Testing Card Reader</h1>
+                    <h1 class="font-medium text-white text-lg sm:text-xl mb-4">Testing Card Reader</h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">"As a user of the Rider App, I want a
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">"As a user of the Rider App, I want a
                         simple and easy way to test the card reader feature, so that I can ensure that it is working
                         properly and use the app to be ready for the dip-chip process."</p>
 
@@ -242,9 +244,9 @@ console.log(subTitle.value);
 
 
 
-                    <h1 class="font-medium text-white text-2xl sm:text-xl mb-4">Rider’s Script </h1>
+                    <h1 class="font-medium text-white text-lg sm:text-xl mb-4">Rider’s Script </h1>
 
-                    <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">Rider’s Script
+                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">Rider’s Script
 
                         A pain point identified from the business requirement was that riders struggled to remember what
                         to say during the dip chip process with end users. To solve this,
@@ -285,7 +287,7 @@ console.log(subTitle.value);
 
                 <!--Go next-->
                 <div class="mt-10">
-                    <h1 class="text-white text-2xl sm:text-xl font-medium mb-6">Where should I go next?</h1>
+                    <h1 class="text-white text-lg sm:text-xl font-medium mb-6">Where should I go next?</h1>
                     <router-link :to="{ name: 'Portfolio' }"
                         class="text-[#2F80ED] text-lg sm:text-base font-light hover:underline ">
                         Explore all of my projects
