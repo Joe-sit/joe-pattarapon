@@ -374,7 +374,7 @@ console.log(subTitle.value);
                     <h1 class="text-white text-3xl sm:text-2xl font-medium mb-6">Design System</h1>
                     <p class="text-[#BDBDBD] text-2xl sm:text-xl font-light">MOD RIDE design system is designed to
                         reflect the identity of King Mongkut's University of Technology Thonburi (KMUTT) and provide a
-                        familiar experience for its users. </p>
+                        familiar experience for users. </p>
 
                     <img :src="desys1" alt="project image" class="w-auto mt-6 mb-6 rounded-xl">
 

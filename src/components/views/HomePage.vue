@@ -30,6 +30,11 @@ const goToTranscript = () => {
     window.open('https://drive.google.com/file/d/1Y050T_mqrkQ86p7JJax8Cx5qH5_pwRsB/view?usp=sharing', '_blank')
 }
 
+const goToResume = () => {
+    window.open('https://drive.google.com/file/d/1SgMjbau41IQnFTFTtOqEB5kRY4zNPF6E/view?usp=sharing', '_blank')
+}
+
+
 onMounted(() => {
     window.scrollTo(0, 0);
 });
@@ -262,9 +267,9 @@ const copyEmail = () => {
 
                             <!-- Basic Contacts Info. -->
                             <div class="grid text-[#F3F3F3] mt-4 mx-6">
-                                <button class="cursor-not-allowed opacity-50 border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
+                                <button @click="goToResume" class="border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
                             border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">
-                                    <ResumeSVG class="mr-2" />Resume (Coming soon)
+                                    <ResumeSVG class="mr-2" />Resume 
                                 </button>
                                 <button @click="goToTranscript" class="border flex justify-start transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
                             border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">

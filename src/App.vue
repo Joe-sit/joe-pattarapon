@@ -42,7 +42,7 @@ const closeMenuOnClickOutside = (event) => {
           <router-link to="/" class="text-white hover:text-gray-400" active-class="font-bold">Home</router-link>
           <router-link to="/" class="text-white opacity-50 cursor-not-allowed">About</router-link>
           <router-link to="/portfolio" class="text-white hover:text-gray-400" active-class="font-bold">Works</router-link>
-          <router-link to="/" class="text-white opacity-50 cursor-not-allowed">Resume</router-link>
+          <a href="https://drive.google.com/file/d/1SgMjbau41IQnFTFTtOqEB5kRY4zNPF6E/view?usp=sharing" target="_blank" class="text-white hover:text-gray-400">Resume</a>
           <a href="https://drive.google.com/file/d/1Y050T_mqrkQ86p7JJax8Cx5qH5_pwRsB/view?usp=sharing" target="_blank" class="text-white hover:text-gray-400">Transcript</a>
         </div>
         <button @click="toggleMenu" class="hamburger-button w-10 h-10 transition-colors border rounded-xl mx-6 duration-300 ease-in-out hover:bg-[#3a3a3a] border-[#ffffff]/5 bg-[#141414] md:hidden">
@@ -60,7 +60,7 @@ const closeMenuOnClickOutside = (event) => {
               <router-link to="/portfolio" class="block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl" active-class="font-bold">Works</router-link>
             </li>
             <li>
-              <a class="cursor-not-allowed opacity-50 block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl">Resume (Coming soon)</a>
+              <a href="https://drive.google.com/file/d/1SgMjbau41IQnFTFTtOqEB5kRY4zNPF6E/view?usp=sharing" target="_blank" class="block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl">Resume</a>
             </li>
             <li>
               <a href="https://drive.google.com/file/d/1Y050T_mqrkQ86p7JJax8Cx5qH5_pwRsB/view?usp=sharing" target="_blank" class="block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl">Transcript</a>
