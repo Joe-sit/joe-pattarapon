@@ -129,7 +129,9 @@ const copyEmail = () => {
                             </div>
                         </div>
                         <!-- About Section -->
-                        <div class="bg-[#101010]  border border-[#ffffff]/5 rounded-xl p-4 mt-4 md:mt-4 h-full">
+                        <router-link :to="{ name: 'AboutPage' }" class="bg-[#101010]
+                        border border-[#ffffff]/5 rounded-xl p-4 mt-4 md:mt-4 h-full
+                        transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]">
                             <h1 class="font-medium text-sm sm:text-base text-[#8A949C] mb-4 ">About me</h1>
                             <p class="text-sm sm:text-base font-normal break-keep">
                                 Hi, I’m Joe, a senior IT student who passionate about
@@ -139,11 +141,11 @@ const copyEmail = () => {
                             </p>
 
                             <!-- Go to About Page (Coming Soon) -->
-                            <!-- <div class="grid justify-end my-2 mx-2 ">
+                            <div class="grid justify-end my-2 mx-2 ">
                                 <GoSVG class="w-6 md:w-10" viewBox="0 0 40 40" />
-                            </div> -->
+                            </div>
 
-                        </div>
+                        </router-link>
                     </div>
                 </div>
 

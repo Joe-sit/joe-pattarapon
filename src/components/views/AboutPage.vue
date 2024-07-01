@@ -14,9 +14,20 @@ import FigmaSVG from '../../assets/figma-color.svg'
 import MondaySVG from '../../assets/monday-color.svg'
 import VSCodeSVG from '../../assets/vs-code-color.svg'
 import GitHubSVG from '../../assets/github-142_svgrepo.com.svg'
+import CrownSVG from '../../assets/CrownSimple.svg'
 
 
 
+import { Swiper, SwiperSlide } from 'swiper/vue';
+import { Pagination, Navigation } from 'swiper/modules'
+
+
+// import { EffectCube } from "swiper/vue"
+
+
+import 'swiper/swiper-bundle.css';
+import 'swiper/css/pagination';
+import 'swiper/css/navigation';
 
 
 
@@ -80,24 +91,17 @@ const copyEmail = () => {
                             <h1 class="font-medium text-base sm:text-base text-[#8A949C] mb-4 ">About me</h1>
                             <p class="text-sm sm:text-lg font-light break-keep ">
                                 Hey there! I’m Pattarapon Makhirun, but you can call me Joe. I was born and raised in
-                                Bangkok, Thailand. Ever since I was a child, I’ve had a passion for visual design and
-                                technology. I love connecting the dots between creativity and real-life problems, which
-                                is why I ended up studying Information Technology (IT) and had UX/UI Designer as my
-                                internship.
+                                Bangkok, Thailand. From a young age, I've been passionate about visual design and
+                                technology. I love merging creativity with practical solutions, which led me to study
+                                Information Technology (IT) and take on a UX/UI design internship.
                             </p>
 
-                            <br>
-
-                            <p class="text-sm sm:text-lg font-light break-keep">
-                                In my free time, I enjoy practicing piano and discovering
-                                new Jazz and J-Pop songs to cover. I'm not a big fan of going outside, but you can still
-                                find me at cafes because I’m a coffee lover.<br>
+                            <p class="text-sm sm:text-lg font-light break-keep mt-2">
+                                In my free time, I enjoy practicing piano and discovering new Jazz and J-Pop songs to
+                                cover. While I'm not a fan of going outside much, you can often find me at cafes
+                                enjoying my love for coffee.
                             </p>
 
-                            <!-- Go to About Page (Coming Soon) -->
-                            <!-- <div class="grid justify-end my-2 mx-2 ">
-                                <GoSVG class="w-6 md:w-10" viewBox="0 0 40 40" />
-                            </div> -->
 
                         </div>
                     </div>
@@ -148,33 +152,30 @@ const copyEmail = () => {
                             <!-- Stacks -->
                             <div class="grid text-[#F3F3F3] mt-4 mx-6">
 
-                                <div
-                                    class="border flex items-center  border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">
+                                <div class="border flex items-center  border-[#ffffff]/5 w-full 
+                                    px-4 py-4 rounded-xl bg-[#141414] font-medium text-sm sm:text-lg mb-4">
                                     <FigmaSVG class="mr-2" />Figma
                                     <!-- Stacks description -->
                                     <p class="ml-auto font-light text-base hidden sm:block ">Design Tools</p>
                                 </div>
 
-                                <div
-                                    class="border flex items-center  border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">
+                                <div class="border flex items-center  border-[#ffffff]/5 w-full
+                                     px-4 py-4 rounded-xl bg-[#141414] font-medium text-sm sm:text-lg mb-4">
                                     <MondaySVG class="mr-2" />Monday
                                     <p class="ml-auto font-light text-base hidden sm:block">Project Management</p>
                                 </div>
 
-                                <div
-                                    class="border flex items-center  border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">
+                                <div class="border flex items-center  border-[#ffffff]/5 w-full 
+                                    px-4 py-4 rounded-xl bg-[#141414] font-medium text-sm sm:text-lg mb-4">
                                     <VSCodeSVG class="mr-2" />Visual Studio Code
                                     <p class="ml-auto font-light text-base hidden sm:block">Code Editor</p>
                                 </div>
 
-                                <div
-                                    class="border flex items-center  border-[#ffffff]/5 w-full px-4 py-4 rounded-xl bg-[#141414] font-medium text-base mb-4">
+                                <div class="border flex items-center  border-[#ffffff]/5 w-full
+                                     px-4 py-4 rounded-xl bg-[#141414] font-medium text-sm sm:text-lg mb-4">
                                     <GitHubSVG class="mr-2 " />GitHub
                                     <p class="ml-auto font-light text-base hidden sm:block">Version Control</p>
                                 </div>
-
-
-
 
                             </div>
                         </div>
@@ -228,52 +229,13 @@ const copyEmail = () => {
 
             <div class="max-w-screen-lg w-full px-4">
                 <!-- Projects and Contact Section -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 mx-2 ">
+                <div class="grid grid-cols-12 md:grid-cols-12 gap-4 mt-4 mx-2 ">
 
                     <!-- Contact -->
-                    <div class="col-span-1 rounded-xl bg-[#101010] border border-[#ffffff]/5">
-                        <h1 class=" text-base sm:text-xl text-[#8A949C] mx-6 mt-6">Contacts</h1>
-                        <!-- Email -->
-                        <div class="flex flex-col mt-4 mx-6 ">
-                            <div class="flex items-center">
-                                <EmailSVG class="my-auto mr-4" />
-                                <a href="mailto:pattarapon.mak@gmail.com" class="email-address  
-                                    text-white break-words text-lg sm:text-xl">
-                                    pattarapon.mak@gmail.com
-                                </a>
-                            </div>
-                        </div>
-
-                        <!-- Phone -->
-                        <div class="flex mt-4 mx-6 ">
-                            <PhoneSVG class="my-auto mr-4" />
-                            <p class=" text-lg sm:text-xl text-white break-words ">(+66) 61 786 1777
-                            </p>
-                        </div>
-
-                        <!-- Copy email button -->
-                        <div class="flex justify-end mx-6 mt-10 ">
-                            <button v-if="!isCopied" @click="copyEmail" class="flex text-white bg-[#141414] my-4 rounded-xl px-4 py-4 
-                            transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]">
-                                Copy email<span class="mx-2">
-                                    <ClipBoardSVG />
-                                </span>
-                            </button>
-                            <button v-else class="flex text-white bg-[#141414] my-4 rounded-xl px-4 py-4 
-                            transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]">
-                                Copied<span class="mx-2">
-                                    <CheckSVG />
-                                </span>
-                            </button>
-                        </div>
-
-                    </div>
-
-                    <!-- Projects -->
-                    <div class="col-span-1 rounded-xl bg-[#101010]
+                    <div class="col-span-12 md:col-span-5 rounded-xl bg-[#101010]
                         border border-[#ffffff]/5 max-h-full ">
                         <div>
-                            <h1 class="font-medium text-base sm:text-xl text-[#8A949C] mx-6 mt-6">Docs & Socials</h1>
+                            <h1 class="font-medium text-sm sm:text-base text-[#8A949C] mx-6 mt-6">Docs & Socials</h1>
 
                             <!-- Basic Contacts Info. -->
                             <div class="grid text-[#F3F3F3] mt-4 mx-6">
@@ -307,6 +269,66 @@ const copyEmail = () => {
 
                         </div>
                     </div>
+
+
+
+                    <div class="col-span-12 md:col-span-4 rounded-xl bg-[#101010] border border-[#ffffff]/5">
+
+
+                        <!--Pagination-->
+
+                        <swiper class="rounded-xl object-contain " :modules="[Pagination]" :pagination="true">
+                            <swiper-slide>
+                                <img src="../../assets/hobby-coffee-1.jpg" alt="project image"
+                                    class="w-full h-full object-fill" />
+                            </swiper-slide>
+                            <swiper-slide>
+                                <img src="../../assets/hobby-coffee-2.jpg" alt="project image"
+                                    class="w-full h-full object-fill" />
+                            </swiper-slide>
+                            <swiper-slide>
+                                <img src="../../assets/hobby-eat-1.jpg" alt="project image"
+                                    class="w-full h-full object-fill" />
+                            </swiper-slide>
+                            <swiper-slide>
+                                <img src="../../assets/hobby-eat-2.jpg" alt="project image"
+                                    class="w-full h-full object-fill" />
+                            </swiper-slide>
+                            <swiper-slide>
+                                <img src="../../assets/hobby-piano-1.jpg" alt="project image"
+                                    class="w-full h-full object-fill" />
+                            </swiper-slide>
+
+                        </swiper>
+
+
+                    </div>
+
+                    <!-- Documents -->
+                    <div
+                        class="col-span-12 md:col-span-3 rounded-xl bg-[#101010] border border-[#ffffff]/5 max-h-full p-6 flex flex-col items-center text-center">
+                        <div class="mb-4">
+                            <CrownSVG class="mx-auto" />
+                        </div>
+                        <h1 class="text-white font-medium text-lg mb-6">Let’s get to know each other better</h1>
+
+                        <!-- Copy email button -->
+                        <div class="w-full">
+                            <button v-if="!isCopied" @click="copyEmail"
+                                class="flex items-center justify-center w-full text-white bg-[#141414] rounded-xl px-4 py-4 transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]">
+                                Copy email<span class="ml-2">
+                                    <ClipBoardSVG />
+                                </span>
+                            </button>
+                            <button v-else
+                                class="flex items-center justify-center w-full text-white bg-[#141414] rounded-xl px-4 py-4 transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]">
+                                Copied<span class="ml-2">
+                                    <CheckSVG />
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
@@ -361,5 +383,12 @@ body {
 .image-container:hover .showcase-image {
     transform: scale(1.1);
     /* Scale up by 10% on hover */
+}
+
+
+
+.swiper-pagination-bullet {
+    background-color: #bc4ee4;
+
 }
 </style>
