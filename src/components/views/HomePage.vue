@@ -240,7 +240,7 @@ const copyEmail = () => {
                         <!-- Phone -->
                         <div class="flex mt-4 mx-6 ">
                             <PhoneSVG class="my-auto mr-4" />
-                            <p class=" text-lg sm:text-xl text-white break-words ">(+66) 61 786 1777
+                            <p class=" text-lg sm:text-xl text-white break-words ">(+66) 61-786-1777
                             </p>
                         </div>
 
