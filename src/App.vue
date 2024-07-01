@@ -41,12 +41,12 @@ const closeMenuOnClickOutside = (event) => {
         </a>
         <div class="hidden md:flex space-x-6 my-auto mx-6">
           <router-link to="/" class="text-white hover:text-gray-400" active-class="font-bold">Home</router-link>
-          <router-link to="/" class="text-white opacity-50 cursor-not-allowed">About</router-link>
+          <router-link to="/about" class="text-white hover:text-gray-400" active-class="font-bold">About</router-link>
           <router-link to="/portfolio" class="text-white hover:text-gray-400"
             active-class="font-bold">Works</router-link>
           <a href="https://drive.google.com/file/d/1SgMjbau41IQnFTFTtOqEB5kRY4zNPF6E/view?usp=sharing" target="_blank"
             class="text-white hover:text-gray-400">Resume</a>
-          <a href="https://drive.google.com/file/d/1Y050T_mqrkQ86p7JJax8Cx5qH5_pwRsB/view?usp=sharing" target="_blank"
+          <a href="https://drive.google.com/file/d/1BVSDuNsfsuXhzVb81vYbGIh2kcZ9mDRe/view?usp=sharing" target="_blank"
             class="text-white hover:text-gray-400">Transcript</a>
         </div>
         <button @click="toggleMenu"
@@ -62,9 +62,8 @@ const closeMenuOnClickOutside = (event) => {
                 active-class="font-bold">Home</router-link>
             </li>
             <li>
-              <a
-                class="cursor-not-allowed opacity-50 block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl">About
-                (Coming soon)</a>
+              <router-link to="/about"
+                class="block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl">About</router-link>
             </li>
             <li>
               <router-link to="/portfolio"
@@ -77,7 +76,7 @@ const closeMenuOnClickOutside = (event) => {
                 class="block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl">Resume</a>
             </li>
             <li>
-              <a href="https://drive.google.com/file/d/1Y050T_mqrkQ86p7JJax8Cx5qH5_pwRsB/view?usp=sharing"
+              <a href="https://drive.google.com/file/d/1BVSDuNsfsuXhzVb81vYbGIh2kcZ9mDRe/view?usp=sharing"
                 target="_blank"
                 class="block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl">Transcript</a>
             </li>

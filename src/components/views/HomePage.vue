@@ -27,13 +27,12 @@ const goToInstagram = () => {
 }
 
 const goToTranscript = () => {
-    window.open('https://drive.google.com/file/d/1Y050T_mqrkQ86p7JJax8Cx5qH5_pwRsB/view?usp=sharing', '_blank')
+    window.open('https://drive.google.com/file/d/1BVSDuNsfsuXhzVb81vYbGIh2kcZ9mDRe/view?usp=sharing', '_blank')
 }
 
 const goToResume = () => {
     window.open('https://drive.google.com/file/d/1SgMjbau41IQnFTFTtOqEB5kRY4zNPF6E/view?usp=sharing', '_blank')
 }
-
 
 onMounted(() => {
     window.scrollTo(0, 0);
@@ -131,7 +130,7 @@ const copyEmail = () => {
                         </div>
                         <!-- About Section -->
                         <div class="bg-[#101010]  border border-[#ffffff]/5 rounded-xl p-4 mt-4 md:mt-4 h-full">
-                            <h1 class="font-medium text-base sm:text-xl text-[#8A949C] mb-4 ">About me</h1>
+                            <h1 class="font-medium text-sm sm:text-base text-[#8A949C] mb-4 ">About me</h1>
                             <p class="text-sm sm:text-base font-normal break-keep">
                                 Hi, I’m Joe, a senior IT student who passionate about
                                 digital product design and technologies.
@@ -226,7 +225,7 @@ const copyEmail = () => {
 
                     <!-- Contact -->
                     <div class="col-span-1 rounded-xl bg-[#101010] border border-[#ffffff]/5">
-                        <h1 class=" text-base sm:text-xl text-[#8A949C] mx-6 mt-6">Contacts</h1>
+                        <h1 class="font-medium text-sm sm:text-base text-[#8A949C] mx-6 mt-6">Contacts</h1>
                         <!-- Email -->
                         <div class="flex flex-col mt-4 mx-6 ">
                             <div class="flex items-center">
@@ -267,7 +266,7 @@ const copyEmail = () => {
                     <div class="col-span-1 rounded-xl bg-[#101010]
                         border border-[#ffffff]/5 max-h-full ">
                         <div>
-                            <h1 class="font-medium text-base sm:text-xl text-[#8A949C] mx-6 mt-6">Docs & Socials</h1>
+                            <h1 class="font-medium text-sm sm:text-base text-[#8A949C] mx-6 mt-6">Docs & Socials</h1>
 
                             <!-- Basic Contacts Info. -->
                             <div class="grid text-[#F3F3F3] mt-4 mx-6">
