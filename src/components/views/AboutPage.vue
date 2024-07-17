@@ -314,6 +314,8 @@ const copyEmail = () => {
 
                         <!-- Copy email button -->
                         <div class="w-full">
+
+                            
                             <button v-if="!isCopied" @click="copyEmail"
                                 class="flex items-center justify-center w-full text-white bg-[#141414] rounded-xl px-4 py-4 transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]">
                                 Copy email<span class="ml-2">

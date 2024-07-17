@@ -12,6 +12,8 @@ import AbcDetails from './AbcDetails.vue';
 import WaterMapDetails from './WaterMapDetails.vue';
 import PortWebDetails from './PortWebDetails.vue';
 import RicardoDetails from './RicardoDetails.vue';
+import CustomerDetails from './CustomerDetails.vue';
+
 
 
 
@@ -75,14 +77,18 @@ console.log("portID", portId);
             </div>
 
             <div v-else-if="portId == 10" class="w-full">
-                <WaterMapDetails />
+                <CustomerDetails />
             </div>
 
             <div v-else-if="portId == 11" class="w-full">
-                <PortWebDetails />
+                <WaterMapDetails />
             </div>
 
             <div v-else-if="portId == 12" class="w-full">
+                <PortWebDetails />
+            </div>
+
+            <div v-else-if="portId == 13" class="w-full">
                 <RicardoDetails />
             </div>
 

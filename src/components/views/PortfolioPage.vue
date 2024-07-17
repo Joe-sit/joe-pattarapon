@@ -76,23 +76,32 @@ const portfolios = ref([
         imgSrc: abcImg,
         subTitle: 'Client-side Web Programming Project 2022'
     },
-
     {
         portId: 10,
+        portName: 'Customer Personality Analytics',
+        category: 'Other',
+        imgSrc: customerImg,
+        subTitle: 'Statistics for IT Project 2021'
+    }
+    ,
+
+
+    {
+        portId: 11,
         portName: 'WaterMap',
         category: 'UX/UI',
         imgSrc: waterMapImg,
         subTitle: 'User Experience Design Project 2020'
     },
     {
-        portId: 11,
+        portId: 12,
         portName: 'Portfolio Website',
         category: 'Web Dev',
         imgSrc: portWebImg,
         subTitle: 'Web Technology Project 2020'
     },
     {
-        portId: 12,
+        portId: 13,
         portName: 'Ricardo Your Hero',
         category: 'Other',
         imgSrc: ricardoImg,
