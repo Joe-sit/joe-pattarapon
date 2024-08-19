@@ -72,7 +72,17 @@ const hiImg4 = ref(data.value[0].hiLightImg4)
 
 
 
+const isModalOpen = ref(false);
+const currentImage = ref(null);
 
+function openModal(image) {
+    currentImage.value = image;
+    isModalOpen.value = true;
+}
+
+function closeModal() {
+    isModalOpen.value = false;
+}
 
 
 const router = useRouter();
@@ -81,7 +91,7 @@ const goToPortfolioPage = () => {
     router.push({ name: 'Portfolio' });
 }
 
-const goToAppMan = () => {
+const goToGitHub = () => {
     window.open('https://github.com/Joe-sit/INT102-PORTFOLIO-WEB', '_blank')
 }
 
@@ -96,7 +106,7 @@ console.log(subTitle.value);
     <div>
         <backSVG @click="goToPortfolioPage" class="cursor-pointer mb-4" />
         <!--Title-->
-        <h1 class="flex mx-auto font-bold text-2xl sm:text-3xl text-[#F2F2F2]">
+        <h1 class="flex mx-auto font-bold text-2xl sm:text-3xl text-[#0D99FF]">
             {{ portName }}
         </h1>
         <!--Sub Title-->
@@ -118,97 +128,163 @@ console.log(subTitle.value);
             <div class="w-full grid grid-cols-12 gap-4 mt-6">
 
                 <!-- Overview -->
-                <div class="col-span-12 md:col-span-8 bg-[#101010] 
-    border border-[#ffffff]/5 rounded-xl flex flex-col justify-between">
-                    <!-- Added flex, flex-col, and justify-between -->
+                <div class="col-span-12 md:col-span-8 bg-white
+border border-[#B5B5B5] rounded-3xl flex flex-col justify-between">
 
-                    <div> <!-- Wrapped the content in an additional div -->
-                        <h1 class="text-[#8A949C] text-base font-medium mt-6 mx-6 ">Overview</h1>
-                        <p class="text-[#F2F2F2] text-lg sm:text-xl mt-4 mx-6 break-words font-light  ">
-                            This portfolio website was created using HTML and CSS.
-                            This website includes sections about myself, education, previous work, and my future career
-                            interests.
+                    <div>
+                        <h1 class="text-[#0D99FF] text-base font-bold mt-6 mx-6">Overview</h1>
+                        <p class="text-[#1c1c1c] text-lg sm:text-xl mt-4 mx-6 break-words font-light">
+                            This portfolio website was created using HTML and CSS. This website includes sections about
+                            myself, education, previous work, and my future career interests.
+
+
                         </p>
                     </div>
 
-                    <div class="flex justify-end mx-6 mb-6 mt-4">
-                        <a href="https://joe-sit.github.io/INT102-PORTFOLIO-WEB/" target="_blank" class="flex text-white bg-[#141414] my-2 rounded-xl px-3 py-3 
-            transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F] border border-[#ffffff]/5">
-                            Check the website
-                            <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
+                    <div class="flex justify-end mx-6 mb-6 mt-4 ">
+                        <a href="https://joe-sit.github.io/INT102-PORTFOLIO-WEB/" target="_blank" class="flex items-center text-[#fff] bg-[#0D99FF] my-2 rounded-3xl 
+px-4 py-2 transition-colors duration-300 ease-in-out hover:bg-[#055c9b] ">
+                            Check website
+                            <svg class="ml-2 inline-block w-4 h-4" viewBox="0 0 26 26" fill="none"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <path
+                                    d="M12 3H7C4.79086 3 3 4.79086 3 7V17C3 19.2091 4.79086 21 7 21H17C19.2091 21 21 19.2091 21 17V12"
+                                    stroke="white" stroke-width="2" stroke-linecap="round" class="my-path"></path>
+                                <path d="M21 3L21 9M21 3H15M21 3L14 10" stroke="white" stroke-width="2"
+                                    stroke-linecap="round" stroke-linejoin="round" class="my-path"></path>
+                            </svg>
+
                         </a>
                     </div>
+
+
                 </div>
 
                 <!-- Right column -->
-                <div class="col-span-12 md:col-span-4 bg-[#101010] mt-2 sm:mt-0
-    border border-[#ffffff]/5 rounded-xl px-2 py-2 ">
+                <div class="col-span-12 md:col-span-4 bg-white
+border border-[#B5B5B5] rounded-3xl mt-2 sm:mt-0
+px-2 py-2">
 
                     <!-- Tools -->
-                    <h1 class="text-[#8A949C] text-base font-medium mt-4 mx-4 ">Tools</h1>
+                    <h1 class="text-[#0D99FF] text-base font-bold mt-4 mx-4">Tools</h1>
                     <div class="w-full mt-4 mx-4">
-                        <div class=" flex flex-wrap gap-2">
-                            <div class="flex items-center px-3 py-2 border border-[#ffffff]/5 rounded-full">
+                        <div class="">
+                            <div class="flex items-center my-2 py-2 ">
                                 <span class="inline-block align-middle mr-2">
-                                    <photoshopIcon class="h-6 w-6 fill-white" />
+                                    <photoshopIcon class="h-6 w-6 fill-[#0D99FF]" />
                                 </span>
-                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Photoshop</span>
+                                <span class="text-sm sm:text-base text-[#1c1c1c] space-nowrap">Photoshop </span>
                             </div>
 
-                            <div class="flex items-center px-3 py-2 border border-[#ffffff]/5 rounded-full">
+                            <div class="flex items-center my-2 py-2 ">
                                 <span class="inline-block align-middle mr-2">
-                                    <vscodeIcon class="h-6 w-6 fill-white" />
+                                    <vscodeIcon class="h-6 w-6 fill-[#0D99FF]" />
                                 </span>
-                                <span class="text-sm sm:text-base text-white whitespace-nowrap">Visual Studio
-                                    Code</span>
+                                <span class="text-sm sm:text-base text-[#1c1c1c] space-nowrap">Visual Studio Code
+                                </span>
                             </div>
+
+
+
+
                         </div>
                     </div>
 
                     <div class="mt-6">
                         <!-- More/Method -->
-                        <h1 class="text-[#8A949C] text-base font-medium mx-4 ">More</h1>
-                        <div @click="goToAppMan()" class="w-full mt-4 mx-4 mb-6">
-                            <div class=" flex flex-wrap gap-2">
-                                <div class="flex items-center px-3 py-2 cursor-pointer transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F]
-                  border border-[#ffffff]/5 rounded-full">
+                        <h1 class="text-[#0D99FF] text-base font-bold mx-5">Learn more</h1>
+                        <div @click="goToGitHub()"
+                            class="mt-4 mx-4 mb-4 cursor-pointer rounded-xl transition-colors duration-300 ease-in-out hover:bg-blue-50 ">
+                            <div class="">
+                                <div class="flex items-center px-3 py-2  ">
                                     <span class="inline-block align-middle mr-2">
-                                        <externalIcon class="h-6 w-6 fill-white" />
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                                            xmlns="http://www.w3.org/2000/svg">
+                                            <path
+                                                d="M12 3H7C4.79086 3 3 4.79086 3 7V17C3 19.2091 4.79086 21 7 21H17C19.2091 21 21 19.2091 21 17V12"
+                                                stroke="black" stroke-width="2" stroke-linecap="round" class="my-path">
+                                            </path>
+                                            <path d="M21 3L21 9M21 3H15M21 3L14 10" stroke="black" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round" class="my-path"></path>
+                                        </svg>
                                     </span>
-                                    <span class="text-sm sm:text-base text-white whitespace-nowrap">GitHub</span>
-                                    <GoSVG class="ml-2 inline-block fill-white w-6 h-6" viewBox="0 0 40 40" />
+                                    <span class="text-sm sm:text-base text-[#1c1c1c] space-nowrap font-medium">GitHub
+                                    </span>
+
                                 </div>
                             </div>
                         </div>
+
+                        <!-- <div @click="goToEBook()" class="mx-4 mb-6 cursor-pointer transition-colors duration-300 ease-in-out
+hover:bg-blue-50 rounded-xl">
+<div class="flex flex-wrap gap-2">
+<div class="flex items-center px-3 py-2 ">
+<span class="inline-block align-middle mr-2">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+xmlns="http://www.w3.org/2000/svg">
+<path
+d="M12 3H7C4.79086 3 3 4.79086 3 7V17C3 19.2091 4.79086 21 7 21H17C19.2091 21 21 19.2091 21 17V12"
+stroke="#000000" stroke-width="2" stroke-linecap="round"
+class="my-path"></path>
+<path d="M21 3L21 9M21 3H15M21 3L14 10" stroke="#000000" stroke-width="2"
+stroke-linecap="round" stroke-linejoin="round" class="my-path"></path>
+</svg>
+</span>
+<span
+class="text-sm sm:text-base text-[#1c1c1c] [#F04E23] space-nowrap font-bold">e-Book
+</span>
+
+</div>
+</div>
+</div> -->
                     </div>
                 </div>
             </div>
+
+
 
 
             <!--Description-->
 
             <div>
 
+                <!-- Modal -->
+                <div v-if="isModalOpen"
+                    class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75"
+                    @click="closeModal">
+                    <img :src="currentImage" class="max-w-full max-h-full rounded-lg scale-95 md:scale-110 ">
+
+                </div>
+
+
                 <!--Product Overview-->
                 <div class="mt-10">
-                    <h1 class="text-white text-xl sm:text-2xl font-medium mb-6">Project Scope</h1>
-                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">This is and individual project for Web
+                    <h1 class="text-[#0D99FF] text-xl sm:text-2xl font-bold mb-6">Project Scope</h1>
+                    <p class="text-[#1c1c1c] text-lg sm:text-xl font-light">This is and individual project for Web
                         Technology course. The project outcome is to build a simple portfolio website by using only HTML
                         and CSS without any other frameworks.</p>
 
                     <!--Pagination-->
 
-                    <swiper class=" text-white w-auto mt-6 mb-6 rounded-3xl" :modules="[Pagination, Navigation]"
+                    <swiper class=" text-[#fff] w-auto mt-6 mb-6 rounded-3xl" :modules="[Pagination, Navigation]"
                         :pagination="{ type: 'fraction', }" :navigation="true">
-                        <swiper-slide><img :src="hiImg1" alt="project image" class="w-auto" /></swiper-slide>
-                        <swiper-slide><img :src="hiImg2" alt="problem image" class="w-auto" /></swiper-slide>
-                        <swiper-slide><img :src="hiImg3" alt="problem image" class="w-auto" /></swiper-slide>
-                        <swiper-slide><img :src="hiImg4" alt="problem image" class="w-auto" /></swiper-slide>
+                        <swiper-slide><img :src="hiImg1" alt="project image" class="w-auto cursor-pointer duration-500 overflow-hidden hover:scale-105"
+                        @click="openModal(hiImg1)"
+ /></swiper-slide>
+                        <swiper-slide><img :src="hiImg2" alt="problem image" class="w-auto cursor-pointer duration-500 overflow-hidden hover:scale-105"
+                        @click="openModal(hiImg2)"
+ /></swiper-slide>
+                        <swiper-slide><img :src="hiImg3" alt="problem image" class="w-auto cursor-pointer duration-500 overflow-hidden hover:scale-105"
+                        @click="openModal(hiImg3)"
+ /></swiper-slide>
+                        <swiper-slide><img :src="hiImg4" alt="problem image" class="w-auto cursor-pointer duration-500 overflow-hidden hover:scale-105"
+                        @click="openModal(hiImg4)"
+ /></swiper-slide>
 
 
                     </swiper>
 
-                    <p class="text-[#BDBDBD] text-lg sm:text-xl font-light">This website consists of 6 sections
+                    <p class="text-[#1c1c1c] text-lg sm:text-xl font-light">This website consists of 6 sections
 
                         <span class="ml-4 mt-4 block">• About: A brief explanation about myself.</span>
                         <span class="ml-4 mt-4 block">• Education: Details about my educational background.</span>
@@ -243,7 +319,7 @@ console.log(subTitle.value);
 
                 <!--Go next-->
                 <div class="mt-10">
-                    <h1 class="text-white text-lg sm:text-xl font-medium mb-6">Where should I go next?</h1>
+                    <h1 class="text-[#0D99FF] text-lg sm:text-xl font-medium mb-6">Where should I go next?</h1>
                     <router-link :to="{ name: 'Portfolio' }"
                         class="text-[#2F80ED] text-lg sm:text-base font-light hover:underline ">
                         Explore all of my projects

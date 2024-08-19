@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import LogoSVG from './assets/JoeRebrand.svg'
+import LogoSVG from './assets/joe-new-banner.svg'
 import Menu from './assets/menu.svg'
 import FooterSVG from './assets/Footer-JoeRebrand.svg'
 
@@ -31,67 +31,79 @@ const closeMenuOnClickOutside = (event) => {
 </script>
 
 <template>
-  <div class="">
-    <nav class="flex mx-auto bg-white/5 backdrop-blur-[4px] sticky top-0 rounded-xl">
-      <div class="flex flex-col-2 justify-between mx-auto w-[1024px] my-5 relative">
+  <div class="bg-white">
+    <nav class="flex mx-auto bg-white/5 backdrop-blur-[2px] sticky top-0 rounded-xl z-50">
+      <div class="flex flex-col-2 justify-between mx-auto w-[1024px] my-6 relative">
         <a href="/" class="flex my-auto">
-          <LogoSVG class="mx-6 mr-4" />
-          <h1 class="bg-gradient-to-r from-slate-50 to-zinc-400 bg-clip-text text-transparent font-bold text-2xl">Joe
-            Pattarapon</h1>
+          <LogoSVG class="mx-6" />
+          <!-- <h1 class="bg-gradient-to-r from-slate-50 to-zinc-400 bg-clip-text text-transparent font-bold text-2xl">Joe Pattarapon</h1> -->
         </a>
         <div class="hidden md:flex space-x-6 my-auto mx-6">
-          <router-link to="/" class="text-white hover:text-gray-400" active-class="font-bold">Home</router-link>
-          <router-link to="/about" class="text-white hover:text-gray-400" active-class="font-bold">About</router-link>
-          <router-link to="/portfolio" class="text-white hover:text-gray-400"
-            active-class="font-bold">Works</router-link>
-          <a href="https://drive.google.com/file/d/1SgMjbau41IQnFTFTtOqEB5kRY4zNPF6E/view?usp=sharing" target="_blank"
-            class="text-white hover:text-gray-400">Resume</a>
-          <a href="https://drive.google.com/file/d/1BVSDuNsfsuXhzVb81vYbGIh2kcZ9mDRe/view?usp=sharing" target="_blank"
-            class="text-white hover:text-gray-400">Transcript</a>
+          <router-link to="/" class="text-black hover:text-orange-400 "
+            active-class="text-orange-500 font-bold">Home</router-link>
+          <router-link to="/about" class="text-black hover:text-orange-400"
+            active-class="text-orange-500 font-bold">About</router-link>
+          <router-link to="/portfolio" class="text-black hover:text-orange-400"
+            active-class="text-orange-500 font-bold">Works</router-link>
+          <!-- <a href="https://drive.google.com/file/d/1BVSDuNsfsuXhzVb81vYbGIh2kcZ9mDRe/view?usp=sharing" target="_blank" class="text-black hover:text-orange-400">Transcript</a> -->
         </div>
+        <a href="https://drive.google.com/file/d/1SgMjbau41IQnFTFTtOqEB5kRY4zNPF6E/view?usp=sharing" target="_blank"
+          class="hidden md:flex text-white transition-all duration-500 hover:-translate-y-2 px-4 py-1 bg-[#FD5000] rounded-full text-center items-center">Download
+          CV</a>
         <button @click="toggleMenu"
-          class="hamburger-button w-10 h-10 transition-colors border rounded-xl mx-6 duration-300 ease-in-out hover:bg-[#3a3a3a] border-[#ffffff]/5 bg-[#141414] md:hidden">
+          class="hamburger-button w-10 h-10 transition-colors border rounded-xl mx-6 duration-500 ease-in-out hover:bg-[#3a3a3a] border-[#ffffff]/5 bg-[#1c1c1c] md:hidden">
           <Menu class="mx-auto" />
         </button>
         <div v-if="isMenuOpen"
-          class="menu-box absolute top-full mx-6 right-0 mt-2 w-auto bg-[#141414] border-[.5px] border-[#ffffff]/5 rounded-xl bg-opacity-100 fade-in-up shadow-2xl">
-          <ul class="text-white text-lg">
+          class="menu-box absolute top-full mx-6 right-0 mt-2 w-auto bg-[#ffffff] border-[.5px] border-[#ffffff]/5 rounded-xl bg-opacity-100 fade-in-up shadow-2xl">
+          <ul class="text-black text-lg">
             <li>
               <router-link to="/"
-                class="block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl"
-                active-class="font-bold">Home</router-link>
+                class="block py-2 px-4 transition-colors duration-500 ease-in-out hover:bg-orange-100 hover:text-orange-600 rounded-xl"
+                active-class="text-orange-500 font-bold">Home</router-link>
             </li>
             <li>
               <router-link to="/about"
-                class="block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl">About</router-link>
+                class="block py-2 px-4 transition-colors duration-500 ease-in-out hover:bg-orange-100 hover:text-orange-600 rounded-xl"
+                active-class="text-orange-500 font-bold">
+                About
+              </router-link>
             </li>
             <li>
               <router-link to="/portfolio"
-                class="block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl"
-                active-class="font-bold">Works</router-link>
+                class="block py-2 px-4 transition-colors duration-500 ease-in-out hover:bg-orange-100 hover:text-orange-600 rounded-xl"
+                active-class="text-orange-500 font-bold">Works</router-link>
             </li>
             <li>
               <a href="https://drive.google.com/file/d/1SgMjbau41IQnFTFTtOqEB5kRY4zNPF6E/view?usp=sharing"
                 target="_blank"
-                class="block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl">Resume</a>
+                class="block py-2 px-4 transition-colors duration-500 ease-in-out hover:bg-orange-100 hover:text-orange-600 rounded-xl">Resume</a>
             </li>
             <li>
               <a href="https://drive.google.com/file/d/1BVSDuNsfsuXhzVb81vYbGIh2kcZ9mDRe/view?usp=sharing"
                 target="_blank"
-                class="block py-2 px-4 transition-colors duration-300 ease-in-out hover:bg-[#3a3a3a] rounded-xl">Transcript</a>
+                class="block py-2 px-4 transition-colors duration-500 ease-in-out hover:bg-orange-100 hover:text-orange-600 rounded-xl">Transcript</a>
+            </li>
+            <!-- Download CV button added here for small screens -->
+            <li>
+              <a href="https://drive.google.com/file/d/1SgMjbau41IQnFTFTtOqEB5kRY4zNPF6E/view?usp=sharing"
+                target="_blank"
+                class="block md:hidden py-2 px-4 transition-colors duration-500 ease-in-out hover:bg-orange-100 hover:text-orange-600 rounded-xl ">Download
+                CV</a>
             </li>
           </ul>
         </div>
       </div>
     </nav>
+
     <router-view></router-view>
-    <footer class="text-white text-center w-full bg-white/5 h-auto py-6">
-      <div class="grid grid-row gap-y-2">
-        <FooterSVG class="mx-auto inline-block" />
-        <h1 class="font-light text-sm sm:text-base">@2024 All Right Reserved</h1>
-        <h1 class="font-light text-sm sm:text-base">Built & Designed by Pattarapon Makhirun</h1>
+    <footer class="text-white text-center w-full bg-white h-auto py-6">
+      <div class="grid grid-row gap-y-2 border-t-[1px] border-[#B5B5B5] px-6">
+        <!-- <FooterSVG class="mx-auto inline-block" /> -->
+        <h1 class="font-light text-sm sm:text-sm text-[#B5B5B5] mt-6">Designed & Built by Pattarapon Makhirun @2024 All Right Reserved.</h1>
       </div>
     </footer>
+
   </div>
 </template>
 
@@ -103,9 +115,6 @@ body {
   font-family: 'DM Sans', sans-serif;
 }
 
-body {
-  background-color: #141414;
-}
 
 @keyframes fade-in-up {
   from {
@@ -121,7 +130,7 @@ body {
 
 /* Apply fade-in-up animation to elements with the .fade-in-up class */
 .fade-in-up {
-  animation: fade-in-up 0.5s ease-in-out;
+  animation: fade-in-up 5s ease-in-out;
 }
 
 /* Showcase image animation */
@@ -133,7 +142,7 @@ body {
 }
 
 .showcase-image {
-  transition: transform 0.3s ease;
+  transition: transform 5s ease;
 }
 
 .image-container:hover .showcase-image {
@@ -142,6 +151,6 @@ body {
 }
 
 .menu-box {
-  transition: transform 0.1s ease-in-out;
+  transition: transform 5s ease-in-out;
 }
 </style>

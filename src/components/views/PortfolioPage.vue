@@ -14,6 +14,9 @@ import portWebImg from '../../assets/portfolios/first-portfolio-web.png'
 import ricardoImg from '../../assets/portfolios/ricardo-game.png'
 import PortfolioDetails from './PortfolioDetails.vue'
 
+import GoToSVG from '../../assets/bubble.svg'
+
+
 onMounted(() => {
     window.scrollTo(0, 0);
 });
@@ -82,10 +85,7 @@ const portfolios = ref([
         category: 'Other',
         imgSrc: customerImg,
         subTitle: 'Statistics for IT Project 2021'
-    }
-    ,
-
-
+    },
     {
         portId: 11,
         portName: 'WaterMap',
@@ -141,42 +141,57 @@ console.log(portfolios.value[5].imgSrc);
     <div class="">
         <div class="mx-auto max-w-screen-lg min-h-screen mb-6">
             <div class="w-full mt-10 flex ">
-                <h1 class="mx-auto font-bold text-4xl text-white">Works</h1>
+                <h1 class="mx-auto font-bold text-4xl text-[#1c1c1c]">Works</h1>
             </div>
 
             <!-- Filter Menu -->
             <div class="flex justify-center mt-4">
-                <div class="p-2 rounded-full flex space-x-4">
+                <div class="p-2 rounded-full flex space-x-4 ">
                     <button @click="filterPortfolios('All')"
-                        :class="['px-4 py-2 rounded-xl font-bold text-base transition-colors', { 'bg-white text-[#141414]': activeFilter === 'All', 'text-white bg-[#191919] hover:bg-[#272727]': activeFilter !== 'All' }]">
+                        :class="['text-sm md:text-base px-4 py-2 rounded-xl font-bold transition-colors border border-slate-400/1', { 'bg-[#FF6A00] text-white': activeFilter === 'All', 'bg-white text-[#1c1c1c] hover:bg-[#FF6A00] hover:text-white': activeFilter !== 'All' }]">
                         All
                     </button>
                     <button @click="filterPortfolios('UX/UI')"
-                        :class="['px-4 py-2 rounded-xl font-bold text-base transition-colors', { 'bg-white text-[#141414]': activeFilter === 'UX/UI', 'text-white bg-[#191919] hover:bg-[#272727]': activeFilter !== 'UX/UI' }]">
+                        :class="['text-sm md:text-base px-4 py-2 rounded-xl font-bold  transition-colors border border-slate-400/1', { 'bg-[#FF6A00] text-white': activeFilter === 'UX/UI', 'bg-white text-[#1c1c1c] hover:bg-[#FF6A00] hover:text-white': activeFilter !== 'UX/UI' }]">
                         UX/UI
                     </button>
                     <button @click="filterPortfolios('Web Dev')"
-                        :class="['px-4 py-2 rounded-xl font-bold text-base transition-colors', { 'bg-white text-[#141414]': activeFilter === 'Web Dev', 'text-white bg-[#191919] hover:bg-[#272727]': activeFilter !== 'Web Dev' }]">
+                        :class="['text-sm md:text-base px-4 py-2 rounded-xl font-bold  transition-colors border border-slate-400/1', { 'bg-[#FF6A00] text-white': activeFilter === 'Web Dev', 'bg-white text-[#1c1c1c] hover:bg-[#FF6A00] hover:text-white': activeFilter !== 'Web Dev' }]">
                         Web Dev
                     </button>
                     <button @click="filterPortfolios('Other')"
-                        :class="['px-4 py-2 rounded-xl font-bold text-base transition-colors', { 'bg-white text-[#141414]': activeFilter === 'Other', 'text-white bg-[#191919] hover:bg-[#272727]': activeFilter !== 'Other' }]">
+                        :class="['text-sm md:text-base px-4 py-2 rounded-xl font-bold  transition-colors border border-slate-400/1', { 'bg-[#FF6A00] text-white': activeFilter === 'Other', 'bg-white text-[#1c1c1c] hover:bg-[#FF6A00] hover:text-white': activeFilter !== 'Other' }]">
                         Other
                     </button>
                 </div>
             </div>
 
+
             <!-- Portfolio Grid -->
-            <div class="fade-in-up grid grid-cols-12 gap-6 mt-8 mx-6 ">
-                <div v-for="portfolio in filteredPortfolios" :key="portfolio.portId" class="col-span-12 md:col-span-6 rounded-xl mb-4 
-                    transition-colors duration-300 ease-in-out hover:bg-[#1F1F1F] px-1 py-1 ">
+            <div class="fade-in-up grid grid-cols-12 gap-6 mt-8 mx-4 ">
+                <div v-for="portfolio in filteredPortfolios" :key="portfolio.portId" class="col-span-12 md:col-span-6 rounded-2xl mb-4 
+                    group transition-all duration-500 hover:-translate-y-2 px-2 py-2
+                    hover:bg-slate-100 ">
+
                     <router-link :to="{ name: 'PortfolioDetails', params: { portId: portfolio.portId } }">
 
-                        <div class="image-container">
+
+                        <div class="image-container relative ">
+
+
+
                             <img :src="portfolio.imgSrc" :alt="portfolio.portName"
-                                class="object-cover object-center rounded-xl mb-4" />
-                            <p class="text-white font-medium text-xl">{{ portfolio.portName }}</p>
-                            <p class="text-[#8A949C] mt-2 text-base">{{ portfolio.subTitle }}</p>
+                                class="object-cover object-center rounded-xl border mb-4" />
+                            <p class="text-[#1c1c1c] font-medium text-xl ml-2">{{ portfolio.portName }}</p>
+                            <p class="text-[#8A949C] rounded-xl mt-2 ml-2 mb-2 text-base">{{ portfolio.subTitle }}</p>
+                            <button class="w-8 h-8 flex items-center absolute top-0 right-0 m-4 
+                                overflow-hidden justify-center rounded-full bg-white 
+                                group transition-all duration-500 hover:-translate-y-2">
+
+                                <GoToSVG class="transition-all duration-500 group-hover:fill-white"
+                                    viewBox="0 0 24 24" />
+
+                            </button>
                         </div>
                     </router-link>
                 </div>

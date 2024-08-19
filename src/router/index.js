@@ -4,6 +4,8 @@ import NotFoundPage from '../components/views/NotFoundPage.vue'
 import HomePage from '../components/views/HomePage.vue'
 import PortfolioDetails from '../components/views/PortfolioDetails.vue'
 import AboutPage from '../components/views/AboutPage.vue'
+import EkycDetails from '../components/views/EkycDetails.vue'
+
 
 const history = createWebHistory()
 
@@ -34,6 +36,11 @@ const routes = [
         path: '/about',
         name: 'AboutPage',
         component: AboutPage
+    },
+    {
+        path: '/portfolio/2',
+        name: 'EkycDetails',
+        component: EkycDetails
     }
 
 
