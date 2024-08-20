@@ -117,6 +117,10 @@ const goToBearTai = () => {
 
 console.log(subTitle.value);
 
+
+onMounted(() => {
+    window.scrollTo(0, 0);
+});
 </script>
 
 <template>
@@ -145,7 +149,7 @@ console.log(subTitle.value);
 
                 <!-- Overview -->
                 <div class="col-span-12 md:col-span-8 bg-white
-border border-[#B5B5B5] rounded-3xl flex flex-col justify-between">
+                border border-[#B5B5B5] rounded-3xl flex flex-col justify-between">
 
                     <div>
                         <h1 class="text-[#0D99FF] text-base font-bold mt-6 mx-6">Overview</h1>
@@ -228,7 +232,8 @@ border border-[#B5B5B5] rounded-3xl mt-2 sm:mt-0
                                             </path>
                                         </svg>
                                     </span>
-                                    <span class="text-sm sm:text-base text-[#1c1c1c] space-nowrap font-medium">Youtube Video</span>
+                                    <span class="text-sm sm:text-base text-[#1c1c1c] space-nowrap font-medium">Youtube
+                                        Video</span>
 
                                 </div>
                             </div>

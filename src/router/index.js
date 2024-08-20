@@ -7,6 +7,7 @@ import AboutPage from '../components/views/AboutPage.vue'
 import EkycDetails from '../components/views/EkycDetails.vue'
 
 
+
 const history = createWebHistory()
 
 const routes = [
@@ -30,22 +31,22 @@ const routes = [
     {
         path: '/portfolio/:portId',
         name: 'PortfolioDetails',
-        component: PortfolioDetails
+        component: PortfolioDetails,
+        props: route => ({ portId: Number(route.params.id) })  // Pass route params as props
     },
     {
         path: '/about',
         name: 'AboutPage',
         component: AboutPage
     },
-    {
-        path: '/portfolio/2',
-        name: 'EkycDetails',
-        component: EkycDetails
-    }
+    
+
 
 
 
 ]
 
-const router = createRouter({ history, routes })
+const router = createRouter({ history: createWebHistory(), routes })
+
+
 export default router

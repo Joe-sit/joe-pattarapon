@@ -1,6 +1,6 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRoute, useRouter, } from 'vue-router';
+import { ref, onMounted  } from 'vue'
+import {useRouter, } from 'vue-router';
 
 import ekycImg from '../../assets/portfolios/eKyc.png'
 
@@ -16,9 +16,7 @@ import hiLightImg4 from '../../assets/portfolios/ekyc-hi-4.jpg'
 
 
 
-import GoSVG from '../../assets/bubble.svg'
 import figmaIcon from '../../assets/figma-icon.svg'
-import lightIcon from '../../assets/light-blub-icon.svg'
 import jiraIcon from '../../assets/jira-icon.svg'
 import mondayIcon from '../../assets/monday-icon.svg'
 
@@ -26,8 +24,6 @@ import mondayIcon from '../../assets/monday-icon.svg'
 
 
 
-import { Swiper, SwiperSlide } from 'swiper/vue';
-import { Pagination, Navigation } from 'swiper/modules'
 
 
 // import { EffectCube } from "swiper/vue"
@@ -89,6 +85,11 @@ const goToAppMan = () => {
 
 
 console.log(subTitle.value);
+
+
+onMounted(() => {
+    window.scrollTo(0, 0);
+});
 
 </script>
 
@@ -309,6 +310,10 @@ console.log(subTitle.value);
 
 
 <style>
+
+
+.swiper-button-next {}
+
 .swiper-pagination-fraction {
     background-color: rgba(0, 0, 0, 0.5);
     width: auto;

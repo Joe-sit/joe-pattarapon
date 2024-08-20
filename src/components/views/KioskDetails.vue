@@ -97,6 +97,11 @@ const goToAppMan = () => {
 
 console.log(subTitle.value);
 
+
+onMounted(() => {
+    window.scrollTo(0, 0);
+});
+
 </script>
 
 <template>
@@ -212,7 +217,7 @@ Check the prototype
                 <div v-if="isModalOpen"
                     class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75"
                     @click="closeModal">
-                    <img :src="currentImage" class="max-w-full max-h-full rounded-lg scale-95 md:scale-125 ">
+                    <img :src="currentImage" class="max-w-full max-h-full rounded-lg scale-95 md:scale-110 ">
 
                 </div>
 

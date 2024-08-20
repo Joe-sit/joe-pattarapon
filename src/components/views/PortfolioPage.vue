@@ -15,6 +15,7 @@ import ricardoImg from '../../assets/portfolios/ricardo-game.png'
 import PortfolioDetails from './PortfolioDetails.vue'
 
 import GoToSVG from '../../assets/bubble.svg'
+import { getRandomPortfolios } from '../../utils/portfolioUtils.js';
 
 
 onMounted(() => {
@@ -109,6 +110,11 @@ const portfolios = ref([
     }
 ])
 
+
+
+
+
+
 // Filtered portfolios based on the selected category
 const filteredPortfolios = ref(portfolios.value)
 
@@ -133,6 +139,9 @@ const filterPortfolios = (category) => {
     container.classList.add('fade-in-up');
 }
 console.log(portfolios.value[5].imgSrc);
+
+
+console.log(getRandomPortfolios(portfolios.value, 'some-portfolio-id'));
 
 
 </script>

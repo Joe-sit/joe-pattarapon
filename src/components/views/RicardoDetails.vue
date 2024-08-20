@@ -97,6 +97,10 @@ const goToYouTube = () => {
 
 console.log(subTitle.value);
 
+onMounted(() => {
+    window.scrollTo(0, 0);
+});
+
 </script>
 
 <template>

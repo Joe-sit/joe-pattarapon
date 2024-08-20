@@ -98,6 +98,12 @@ const goToAppMan = () => {
 
 console.log(subTitle.value);
 
+
+
+onMounted(() => {
+    window.scrollTo(0, 0);
+});
+
 </script>
 
 <template>
@@ -306,18 +312,7 @@ border border-[#B5B5B5] rounded-3xl ">
                 </div>
 
 
-
-
-
-
-
-
-
-
-
-
-
-                <!--Go next-->
+<!--Go next-->
                 <div class="mt-10">
                     <h1 class="text-[#F32735] text-lg sm:text-xl font-bold mb-6">Where should I go next?</h1>
                     <router-link :to="{ name: 'Portfolio' }"
@@ -325,6 +320,17 @@ border border-[#B5B5B5] rounded-3xl ">
                         Explore all of my projects
                     </router-link>
                 </div>
+
+
+
+
+
+
+
+
+
+
+                
             </div>
         </div>
     </div>
