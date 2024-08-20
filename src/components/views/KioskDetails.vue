@@ -119,7 +119,7 @@ onMounted(() => {
 
 
             <!--Project banner-->
-            <img :src="imgSrc" alt="project image" class="w-auto mt-10 mb-6">
+            <img :src="imgSrc" alt="project image" class="w-auto mt-10 mb-6 border border-[#B5B5B5] rounded-3xl">
 
             <!--Project Overview section-->
             <div class="w-full grid grid-cols-12 gap-4 mt-6">
