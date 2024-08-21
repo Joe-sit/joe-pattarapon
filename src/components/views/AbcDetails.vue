@@ -321,14 +321,7 @@ px-2 py-2">
                 </div>
 
 
-                <!--Go next-->
-                <div class="mt-10">
-                    <h1 class="text-[#2F80ED] text-lg sm:text-xl font-bold mb-6">Where should I go next?</h1>
-                    <router-link :to="{ name: 'Portfolio' }"
-                        class="text-[#2F80ED] text-lg sm:text-base font-light hover:underline ">
-                        Explore all of my projects
-                    </router-link>
-                </div>
+                
             </div>
         </div>
     </div>

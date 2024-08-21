@@ -308,14 +308,7 @@ class="text-sm sm:text-base text-[#1c1c1c] [#F04E23] space-nowrap font-bold">e-B
 
 
 
-                <!--Go next-->
-                <div class="mt-10">
-                    <h1 class="text-[#EB5757] text-lg sm:text-xl font-bold mb-6">Where should I go next?</h1>
-                    <router-link :to="{ name: 'Portfolio' }"
-                        class="text-[#2F80ED] text-lg sm:text-base font-light hover:underline ">
-                        Explore all of my projects
-                    </router-link>
-                </div>
+                
             </div>
         </div>
     </div>
