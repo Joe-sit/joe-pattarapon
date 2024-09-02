@@ -47,9 +47,9 @@ const closeMenuOnClickOutside = (event) => {
             active-class="text-orange-500 font-bold">Works</router-link>
           <!-- <a href="https://drive.google.com/file/d/1BVSDuNsfsuXhzVb81vYbGIh2kcZ9mDRe/view?usp=sharing" target="_blank" class="text-black hover:text-orange-400">Transcript</a> -->
         </div>
-        <a href="https://drive.google.com/file/d/1SgMjbau41IQnFTFTtOqEB5kRY4zNPF6E/view?usp=sharing" target="_blank"
+        <a href="https://drive.google.com/file/d/1P7nafOesRX49pHXvN_QVr-MPoe0n4xEj/view?usp=sharing" target="_blank"
           class="hidden md:flex text-white transition-all duration-500 hover:-translate-y-0.5 px-4 py-1 bg-[#FD5000] rounded-full text-center items-center">Download
-          CV</a>
+          Resume</a>
         <button @click="toggleMenu"
           class="hamburger-button w-10 h-10 transition-colors border rounded-xl mx-6 duration-500 ease-in-out hover:bg-[#3a3a3a] border-[#ffffff]/5 bg-[#1c1c1c] md:hidden">
           <Menu class="mx-auto" />

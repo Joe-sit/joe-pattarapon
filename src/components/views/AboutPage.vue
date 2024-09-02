@@ -51,7 +51,7 @@ const goToCertificate = () => {
 }
 
 const goToResume = () => {
-    window.open('https://drive.google.com/file/d/1SgMjbau41IQnFTFTtOqEB5kRY4zNPF6E/view?usp=sharing', '_blank')
+    window.open('https://drive.google.com/file/d/1P7nafOesRX49pHXvN_QVr-MPoe0n4xEj/view?usp=sharing', '_blank')
 }
 
 onMounted(() => {
