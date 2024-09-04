@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import LogoSVG from './assets/joe-new-banner.svg'
 import Menu from './assets/menu.svg'
 import FooterSVG from './assets/Footer-JoeRebrand.svg'
+import { useMotion } from '@vueuse/motion'
 
 const isMenuOpen = ref(false);
 const router = useRouter();
@@ -32,7 +33,9 @@ const closeMenuOnClickOutside = (event) => {
 
 <template>
   <div class="bg-white">
-    <nav class="flex mx-auto bg-white/5 backdrop-blur-[2px] sticky top-0 rounded-xl z-50">
+    
+
+    <nav class=" flex mx-auto bg-white/5 backdrop-blur-[2px] sticky top-0 rounded-xl z-50">
       <div class="flex flex-col-2 justify-between mx-auto w-[1024px] my-6 relative">
         <a href="/" class="flex my-auto">
           <LogoSVG class="mx-6" />
@@ -100,7 +103,8 @@ const closeMenuOnClickOutside = (event) => {
     <footer class="text-white text-center w-full bg-white h-auto py-6">
       <div class="grid grid-row gap-y-2 border-t-[1px] border-[#B5B5B5] px-6">
         <!-- <FooterSVG class="mx-auto inline-block" /> -->
-        <h1 class="font-light text-sm sm:text-sm text-[#B5B5B5] mt-6">Designed & Built by Pattarapon Makhirun @2024 All Right Reserved.</h1>
+        <h1 class="font-light text-sm sm:text-sm text-[#B5B5B5] mt-6">Designed & Built by Pattarapon Makhirun @2024 All
+          Right Reserved.</h1>
       </div>
     </footer>
 
@@ -120,17 +124,19 @@ body {
   from {
     opacity: 0;
     transform: translateY(20px);
+    animation-duration: 6000ms;
   }
 
   to {
     opacity: 1;
     transform: translateY(0);
+
   }
 }
 
 /* Apply fade-in-up animation to elements with the .fade-in-up class */
 .fade-in-up {
-  animation: fade-in-up 5s ease-in-out;
+  animation: fade-in-up 6000ms ease-in-out;
 }
 
 /* Showcase image animation */

@@ -180,12 +180,18 @@ console.log(getRandomPortfolios(portfolios.value, 'some-portfolio-id'));
             <div class="fade-in-up grid grid-cols-12 gap-6 mt-8 mx-4 ">
                 <div v-for="portfolio in filteredPortfolios" :key="portfolio.portId" class="col-span-12 md:col-span-6 rounded-2xl mb-4 
                     group transition-all duration-500 hover:-translate-y-2 px-2 py-2
-                    hover:bg-slate-100 ">
+                    hover:bg-slate-100 "
 
-                    <router-link :to="{ name: 'PortfolioDetails', params: { portId: portfolio.portId } }">
+                    
+                    >
+
+                    <router-link :to="{ name: 'PortfolioDetails', params: { portId: portfolio.portId } }"
+
+                    
+                    >
 
 
-                        <div class="image-container relative ">
+                        <div class="image-container relative " >
 
 
 
