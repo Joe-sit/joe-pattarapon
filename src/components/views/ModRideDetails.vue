@@ -151,6 +151,12 @@ const goToSitPort = () => {
     window.open('https://seniorproject.sit.kmutt.ac.th/showproject/IT63-BU34', '_blank')
 }
 
+const goToYouTube = () => {
+    window.open('https://youtu.be/CABxUrGL_MM', '_blank')
+}
+
+
+
 
 
 console.log(subTitle.value);
@@ -253,7 +259,7 @@ onMounted(() => {
                         <h1 class="text-[#F04E23] text-base font-bold mx-4 ">Learn more</h1>
 
                         <div @click="goToReportDoc()"
-                            class="mt-4 mx-4 mb-4 cursor-pointer rounded-xl transition-colors duration-300 ease-in-out hover:bg-orange-50 ">
+                            class="mt-4 mx-4 mb-2 cursor-pointer rounded-xl transition-colors duration-300 ease-in-out hover:bg-orange-50 ">
                             <div class="flex flex-wrap gap-2">
                                 <div class="flex items-center px-3 py-2  ">
                                     <span class="inline-block align-middle mr-2">
@@ -278,7 +284,7 @@ onMounted(() => {
                             </div>
                         </div>
 
-                        <div @click="goToSitPort()" class="mx-4 mb-6 cursor-pointer transition-colors duration-300 ease-in-out
+                        <div @click="goToSitPort()" class="mx-4 mb-2 cursor-pointer transition-colors duration-300 ease-in-out
                         hover:bg-orange-50 rounded-xl">
                             <div class="flex flex-wrap gap-2">
                                 <div class="flex items-center px-3 py-2 ">
@@ -296,6 +302,30 @@ onMounted(() => {
                                     <span
                                         class="text-sm sm:text-base text-[#1c1c1c] [#F04E23] space-nowrap font-medium">SIT
                                         Portfolio</span>
+
+                                </div>
+                            </div>
+                        </div>
+
+                        <div @click="goToYouTube()" class="mx-4 mb-6 cursor-pointer transition-colors duration-300 ease-in-out
+                        hover:bg-orange-50 rounded-xl">
+                            <div class="flex flex-wrap gap-2">
+                                <div class="flex items-center px-3 py-2 ">
+                                    <span class="inline-block align-middle mr-2">
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                                            xmlns="http://www.w3.org/2000/svg">
+                                            <path
+                                                d="M2 10C2 7.17157 2 5.75736 2.87868 4.87868C3.75736 4 5.17157 4 8 4H11C13.8284 4 15.2426 4 16.1213 4.87868C17 5.75736 17 7.17157 17 10V14C17 16.8284 17 18.2426 16.1213 19.1213C15.2426 20 13.8284 20 11 20H8C5.17157 20 3.75736 20 2.87868 19.1213C2 18.2426 2 16.8284 2 14V10Z"
+                                                stroke="black" stroke-width="2" class="my-path"></path>
+                                            <path
+                                                d="M18.8531 8.20273L17 9.49989V15.4999L18.8531 16.797C20.2334 17.7633 20.9236 18.2464 21.4618 17.9662C22 17.686 22 16.8435 22 15.1586V9.8412C22 8.15625 22 7.31377 21.4618 7.03356C20.9236 6.75335 20.2334 7.23648 18.8531 8.20273Z"
+                                                stroke="black" stroke-width="2" stroke-linecap="round" class="my-path">
+                                            </path>
+                                        </svg>
+                                    </span>
+                                    <span
+                                        class="text-sm sm:text-base text-[#1c1c1c] [#F04E23] space-nowrap font-medium">YouTube
+                                        Video</span>
 
                                 </div>
                             </div>
@@ -500,7 +530,7 @@ onMounted(() => {
 
                 </div>
 
-                
+
             </div>
         </div>
     </div>
