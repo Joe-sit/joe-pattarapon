@@ -85,7 +85,7 @@ const copyEmail = () => {
     <div class=" mx-auto max-w-screen-lg min-h-screen mb-6 ">
 
         <div class="mx-6 md:mx-0">
-            <div class="relative bg-[#8155FF] bg-[url('src/assets/sparkle-bg.svg')] bg-no-repeat bg-right bg-contain border rounded-3xl px-6 py-6 h-full" v-motion
+            <div class="relative bg-[#8155FF] bg-[url('@/assets/sparkle-bg.svg')] bg-no-repeat bg-right bg-contain border rounded-3xl px-6 py-6 h-full" v-motion
                 :initial="{ opacity: 0, y: 100 }" :visibleOnce="{ opacity: 1, y: 0 }" :delay="200" :duration="600">
 
 
