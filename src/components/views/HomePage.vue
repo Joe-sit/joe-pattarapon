@@ -78,6 +78,7 @@ const copyEmail = () => {
             console.error('Failed to copy email: ', err);
         });
 }
+const imageUrl = new URL('@/assets/sparkle-bg.svg', import.meta.url).href;
 
 </script>
 
@@ -85,8 +86,9 @@ const copyEmail = () => {
     <div class=" mx-auto max-w-screen-lg min-h-screen mb-6 ">
 
         <div class="mx-6 md:mx-0">
-            <div class="relative bg-[#8155FF] bg-[url('@/assets/sparkle-bg.svg')] bg-no-repeat bg-right bg-contain border rounded-3xl px-6 py-6 h-full" v-motion
-                :initial="{ opacity: 0, y: 100 }" :visibleOnce="{ opacity: 1, y: 0 }" :delay="200" :duration="600">
+            <div class="relative bg-[#8155FF] bg-no-repeat bg-right bg-contain border rounded-3xl px-6 py-6 h-full"
+                :style="{ backgroundImage: `url(${imageUrl})` }" v-motion :initial="{ opacity: 0, y: 100 }"
+                :visibleOnce="{ opacity: 1, y: 0 }" :delay="200" :duration="600">
 
 
                 <p class="uppercase font-light text-xs sm:text-sm text-white mb-4 ">welcome to my website</p>
