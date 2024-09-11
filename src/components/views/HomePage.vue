@@ -54,6 +54,10 @@ const goToResume = () => {
     window.open('https://drive.google.com/file/d/1SgMjbau41IQnFTFTtOqEB5kRY4zNPF6E/view?usp=sharing', '_blank')
 }
 
+const goToBH = () => {
+    window.open('https://www.behance.net/gallery/207511697/Pattarapon-Portfolio-2023-2024-Edition', '_blank')
+}
+
 onMounted(() => {
     window.scrollTo(0, 0);
 });
@@ -80,33 +84,65 @@ const copyEmail = () => {
 <template>
     <div class=" mx-auto max-w-screen-lg min-h-screen mb-6 ">
 
+        <div class="mx-6 md:mx-0">
+            <div class="relative bg-[#8155FF] bg-[url('src/assets/sparkle-bg.svg')] bg-no-repeat bg-right bg-contain border rounded-3xl px-6 py-6 h-full" v-motion
+                :initial="{ opacity: 0, y: 100 }" :visibleOnce="{ opacity: 1, y: 0 }" :delay="200" :duration="600">
 
+
+                <p class="uppercase font-light text-xs sm:text-sm text-white mb-4 ">welcome to my website</p>
+                <h1 class="text-base sm:text-4xl text-white font-light">Don’t got much time to explore?</h1>
+                <h1 class="text-base sm:text-4xl text-white font-bold">Let’s hope on a
+                    <span class="outlined-text " style="color: transparent; text-shadow: 1px 1px 0 white, -1px 1px 0 white, 1px -1px 0 white, -1px -1px 0 white;
+                        color: #8155FF;">Quick
+                        Tour</span> of my works.
+
+                </h1>
+
+                <button @click="goToBH()" class="bg-[#1C1C1C] text-white 
+                                text-sm sm:text-base font-bold px-6 flex gap-x-3 py-3 items-center mt-10
+                                rounded-full transition-all duration-500 hover:-translate-y-2">
+
+                    <span class="text-sm sm:text-base font-bold"> Let's go to Behance</span>
+                    <div class="rounded-full bg-white p-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="#000000"
+                            viewBox="0 0 256 256">
+                            <path
+                                d="M160,80a8,8,0,0,1,8-8h64a8,8,0,0,1,0,16H168A8,8,0,0,1,160,80Zm-24,78a42,42,0,0,1-42,42H32a8,8,0,0,1-8-8V64a8,8,0,0,1,8-8H90a38,38,0,0,1,25.65,66A42,42,0,0,1,136,158ZM40,116H90a22,22,0,0,0,0-44H40Zm80,42a26,26,0,0,0-26-26H40v52H94A26,26,0,0,0,120,158Zm128-6a8,8,0,0,1-8,8H169a32,32,0,0,0,56.59,11.2,8,8,0,0,1,12.8,9.61A48,48,0,1,1,248,152Zm-17-8a32,32,0,0,0-62,0Z">
+                            </path>
+                        </svg>
+
+                    </div>
+
+
+                </button>
+
+
+            </div>
+        </div>
 
         <!-- About Section (NEW) -->
         <div class="text-white min-h-screen flex flex-col items-center py-6  ">
+
+
+
+
+
             <div class="max-w-screen-lg w-full px-">
                 <!-- Grid Layout -->
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-6 mx-6 md:mx-0">
 
                     <!-- Image Section -->
-                    <div class="col-span-1 md:col-span-3 flex justify-center items-center order-1 md:order-2 " 
-                    v-motion
-                        :initial="{ opacity: 0, y: 50 }" 
-                        :enter="{ opacity: 1, y: 0, scale: 1 }"
-                        :variants="{ custom: { scale: 2 } }" 
-                        :delay="600" 
-                        :duration="400">
+                    <div class="col-span-1 md:col-span-3 flex justify-center items-center order-1 md:order-2 " v-motion
+                        :initial="{ opacity: 0, y: 50 }" :enter="{ opacity: 1, y: 0, scale: 1 }"
+                        :variants="{ custom: { scale: 2 } }" :delay="600" :duration="400">
                         <img src="../../assets/joe-pic-new.jpg" class="object-cover w-full h-full rounded-3xl"
                             alt="Profile Picture" />
                     </div>
 
                     <!-- About Section -->
-                    <div class="col-span-1 md:col-span-9 flex flex-col order-2 md:order-1" 
-                    v-motion
-                        :initial="{ opacity: 0, x: -100 }" 
-                        :enter="{ opacity: 1, x: 0, scale: 1 }"
-                        :variants="{ custom: { scale: 2 } }" 
-                        :delay="300" :duration="800">
+                    <div class="col-span-1 md:col-span-9 flex flex-col order-2 md:order-1" v-motion
+                        :initial="{ opacity: 0, x: -100 }" :enter="{ opacity: 1, x: 0, scale: 1 }"
+                        :variants="{ custom: { scale: 2 } }" :delay="300" :duration="800">
                         <div
                             class="relative bg-gradient-to-tr from-white via-slate-50 to-orange-200 border rounded-3xl px-6 py-6 h-full">
                             <router-link :to="{ name: 'AboutPage' }">
@@ -211,11 +247,8 @@ const copyEmail = () => {
                 <div class="grid grid-cols-12 gap-4 mt-6 mx-6 md:mx-0">
                     <!-- Column -->
                     <router-link :to="{ name: 'PortfolioDetails', params: { portId: 1 } }"
-                        class="relative col-span-12 md:col-span-6 rounded-3xl" 
-                        v-motion
-                        :initial="{ opacity: 0, y: 100 }" 
-                        :visibleOnce="{ opacity: 1, y: 0 }" 
-                        :delay="200"
+                        class="relative col-span-12 md:col-span-6 rounded-3xl" v-motion
+                        :initial="{ opacity: 0, y: 100 }" :visibleOnce="{ opacity: 1, y: 0 }" :delay="200"
                         :duration="600">
                         <button class="w-10 h-10 flex items-center absolute top-0 right-0 m-4 z-40
                                 overflow-hidden justify-center rounded-full bg-white 
@@ -236,11 +269,8 @@ const copyEmail = () => {
 
                     <!-- Column -->
                     <router-link :to="{ name: 'PortfolioDetails', params: { portId: 2 } }"
-                        class="relative col-span-12 md:col-span-6 rounded-3xl" 
-                        v-motion
-                        :initial="{ opacity: 0, y: 100 }" 
-                        :visibleOnce="{ opacity: 1, y: 0 }" 
-                        :delay="300"
+                        class="relative col-span-12 md:col-span-6 rounded-3xl" v-motion
+                        :initial="{ opacity: 0, y: 100 }" :visibleOnce="{ opacity: 1, y: 0 }" :delay="300"
                         :duration="600">
                         <button class="w-10 h-10 flex items-center absolute top-0 right-0 m-4 z-40
                                 overflow-hidden justify-center rounded-full bg-white 
@@ -259,13 +289,9 @@ const copyEmail = () => {
                         </div>
                     </router-link>
                     <!-- Column -->
-                    <router-link :to="{ name: 'PortfolioDetails', params: { portId: 3 } }" 
-                    v-motion
-                        :initial="{ opacity: 0, y: 100 }" 
-                        :visibleOnce="{ opacity: 1, y: 0 }" 
-                        :delay="200"
-                        :duration="600"
-                        class="relative col-span-12 md:col-span-6 rounded-3xl">
+                    <router-link :to="{ name: 'PortfolioDetails', params: { portId: 3 } }" v-motion
+                        :initial="{ opacity: 0, y: 100 }" :visibleOnce="{ opacity: 1, y: 0 }" :delay="200"
+                        :duration="600" class="relative col-span-12 md:col-span-6 rounded-3xl">
                         <button class="w-10 h-10 flex items-center absolute top-0 right-0 m-4 z-40
                                 overflow-hidden justify-center rounded-full bg-white 
                                 group transition-all duration-500 hover:-translate-y-2">
@@ -283,13 +309,9 @@ const copyEmail = () => {
                         </div>
                     </router-link>
                     <!-- Column -->
-                    <router-link :to="{ name: 'PortfolioDetails', params: { portId: 5 } }" 
-                    v-motion
-                        :initial="{ opacity: 0, y: 100 }" 
-                        :visibleOnce="{ opacity: 1, y: 0 }" 
-                        :delay="300"
-                        :duration="600"
-                        class="relative col-span-12 md:col-span-6 rounded-3xl">
+                    <router-link :to="{ name: 'PortfolioDetails', params: { portId: 5 } }" v-motion
+                        :initial="{ opacity: 0, y: 100 }" :visibleOnce="{ opacity: 1, y: 0 }" :delay="300"
+                        :duration="600" class="relative col-span-12 md:col-span-6 rounded-3xl">
                         <button class="w-10 h-10 flex items-center absolute top-0 right-0 m-4 z-40
                                 overflow-hidden justify-center rounded-full bg-white 
                                 group transition-all duration-500 hover:-translate-y-2">
@@ -316,13 +338,9 @@ const copyEmail = () => {
                     <router-link :to="{ name: 'Portfolio' }"
                         class="mx-auto text-[#2F80ED] bg-white border border-[#2F80ED] 
                         rounded-full flex items-center gap-x-2 px-6 py-1 justify-center text-sm md:text-2xl font-medium text-center 
-                      hover:bg-[#2F80ED] transition-colors duration-500 ease-in-out hover:text-white hover:border-white group"
-                      v-motion
-                        :initial="{ opacity: 0, y: 100 }" 
-                        :visibleOnce="{ opacity: 1, y: 0 }" 
-                        :delay="100"
-                        :duration="600"
-                      >
+                      hover:bg-[#2F80ED] transition-colors duration-500 ease-in-out hover:text-white hover:border-white group" v-motion
+                        :initial="{ opacity: 0, y: 100 }" :visibleOnce="{ opacity: 1, y: 0 }" :delay="100"
+                        :duration="600">
 
                         <h1 class="py-2">See more works</h1>
 
@@ -360,12 +378,8 @@ const copyEmail = () => {
 
 
                 <div class="mx-6 md:mx-0">
-                    <div
-                        class="relative bg-gradient-to-bl from-white via-slate-50 to-orange-200 border rounded-3xl px-6 py-6 h-full"
-                        v-motion
-                        :initial="{ opacity: 0, y: 100 }" 
-                        :visibleOnce="{ opacity: 1, y: 0 }" 
-                        :delay="400"
+                    <div class="relative bg-gradient-to-bl from-white via-slate-50 to-orange-200 border rounded-3xl px-6 py-6 h-full"
+                        v-motion :initial="{ opacity: 0, y: 100 }" :visibleOnce="{ opacity: 1, y: 0 }" :delay="400"
                         :duration="600">
 
 
