@@ -85,19 +85,22 @@ const copyEmail = () => {
     <div class=" mx-auto max-w-screen-lg min-h-screen mb-6 ">
 
         <div class="mx-6 md:mx-0">
-            <div class="relative bg-[#8155FF] bg-[url('src/assets/sparkle-bg.png')] bg-no-repeat bg-right bg-contain border rounded-3xl px-6 py-6 h-full"
-                v-motion :initial="{ opacity: 0, y: 100 }" :visibleOnce="{ opacity: 1, y: 0 }" :delay="200"
-                :duration="600">
+            <div class="relative bg-[#8155FF] border rounded-3xl px-6 py-6 h-full overflow-hidden" v-motion
+                :initial="{ opacity: 0, y: 100 }" :visibleOnce="{ opacity: 1, y: 0 }" :delay="200" :duration="600">
+                <img src="../../assets/sparkle-bg.png" alt="Sparkle Background"
+                    class="absolute top-0 right-0 w-1/4 h-auto object-cover z-0 " />
 
-
-                <p class="uppercase font-light text-xs sm:text-sm text-white mb-4 ">welcome to my website</p>
-                <h1 class="text-base sm:text-4xl text-white font-light">Don’t got much time to explore?</h1>
-                <h1 class="text-base sm:text-4xl text-white font-bold">Let’s hope on a
-                    <span class="outlined-text " style="color: transparent; text-shadow: 1px 1px 0 white, -1px 1px 0 white, 1px -1px 0 white, -1px -1px 0 white;
+                <div class="relative z-10">
+                    <p class="uppercase font-light text-xs sm:text-sm text-white mb-4 ">welcome to my website</p>
+                    <h1 class="text-base sm:text-4xl text-white font-light">Don’t got much time to explore?</h1>
+                    <h1 class="text-base sm:text-4xl text-white font-bold">Let’s hope on a
+                        <span class="outlined-text " style="color: transparent; text-shadow: 1px 1px 0 white, -1px 1px 0 white, 1px -1px 0 white, -1px -1px 0 white;
                         color: #8155FF;">Quick
-                        Tour</span> of my works.
+                            Tour</span> of my works.
 
-                </h1>
+                    </h1>
+                </div>
+
 
                 <button @click="goToBH()" class="bg-[#1C1C1C] text-white 
                                 text-sm sm:text-base font-bold px-6 flex gap-x-3 py-3 items-center mt-10
