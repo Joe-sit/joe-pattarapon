@@ -93,7 +93,7 @@ const copyEmail = () => {
                 <div class="relative z-10">
                     <p class="uppercase font-light text-xs sm:text-sm text-white mb-4 ">welcome to my website</p>
                     <h1 class="text-base sm:text-4xl text-white font-light">Don’t got much time to explore?</h1>
-                    <h1 class="text-base sm:text-4xl text-white font-bold">Let’s hope on a
+                    <h1 class="text-base sm:text-4xl text-white font-bold">Let’s hop on a
                         <span class="outlined-text " style="color: transparent; text-shadow: 1px 1px 0 white, -1px 1px 0 white, 1px -1px 0 white, -1px -1px 0 white;
                         color: #8155FF;">Quick
                             Tour</span> of my works.

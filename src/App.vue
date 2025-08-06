@@ -103,7 +103,7 @@ const closeMenuOnClickOutside = (event) => {
     <footer class="text-white text-center w-full bg-white h-auto py-6">
       <div class="grid grid-row gap-y-2 border-t-[1px] border-[#B5B5B5] px-6">
         <!-- <FooterSVG class="mx-auto inline-block" /> -->
-        <h1 class="font-light text-sm sm:text-sm text-[#B5B5B5] mt-6">Designed & Built by Pattarapon Makhirun @2024 All
+        <h1 class="font-light text-sm sm:text-sm text-[#B5B5B5] mt-6">Designed & Built by Pattarapon Makhirun @2025 All
           Right Reserved.</h1>
       </div>
     </footer>
