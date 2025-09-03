@@ -84,7 +84,7 @@ const copyEmail = () => {
 <template>
     <div class=" mx-auto max-w-screen-lg min-h-screen mb-6 ">
 
-        <div class="mx-6 md:mx-0">
+        <!-- <div class="mx-6 md:mx-0">
             <div class="relative bg-[#8155FF] border rounded-3xl px-6 py-6 h-full overflow-hidden" v-motion
                 :initial="{ opacity: 0, y: 100 }" :visibleOnce="{ opacity: 1, y: 0 }" :delay="200" :duration="600">
                 <img src="../../assets/sparkle-bg.png" alt="Sparkle Background"
@@ -122,7 +122,7 @@ const copyEmail = () => {
 
 
             </div>
-        </div>
+        </div> -->
 
         <!-- About Section (NEW) -->
         <div class="text-white min-h-screen flex flex-col items-center py-6  ">
