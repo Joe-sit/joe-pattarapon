@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@studio-freight/lenis": "^1.0.42",
     "@vercel/analytics": "^1.2.2",
     "@vueuse/motion": "^2.2.3",
     "joe-pattarapon-portfolio": "file:",

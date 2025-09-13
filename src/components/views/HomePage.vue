@@ -82,7 +82,7 @@ const copyEmail = () => {
 </script>
 
 <template>
-    <div class=" mx-auto max-w-screen-lg min-h-screen mb-6 ">
+    <div data-scrol class=" mx-auto max-w-screen-lg min-h-screen mb-6 ">
 
         <!-- <div class="mx-6 md:mx-0">
             <div class="relative bg-[#8155FF] border rounded-3xl px-6 py-6 h-full overflow-hidden" v-motion
