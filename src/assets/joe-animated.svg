@@ -1,0 +1,61 @@
+<svg viewBox="-20 -20 180 260" preserveAspectRatio="xMidYMid meet"
+     xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Animated shapes">
+
+  <style>
+    .draw-stroke {
+      stroke-dasharray: 1000;
+      stroke-dashoffset: 1000;
+      animation: drawStroke 5s ease forwards;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .green {
+      animation-delay: 0s;
+    }
+
+    .blue {
+      animation-delay: 0.5s;
+    }
+
+    .orange-outline {
+      animation-delay: 0.3s;
+    }
+
+    @keyframes drawStroke {
+      to {
+        stroke-dashoffset: 0;
+      }
+    }
+
+    .fill-fade {
+      opacity: 0;
+      animation: fadeFill 0.3s ease forwards;
+      animation-delay: 1.3s; /* 0.3s (outline delay) + 1s */
+    }
+
+    @keyframes fadeFill {
+      to {
+        opacity: 1;
+      }
+    }
+  </style>
+
+  <!-- Green shape stroke animation -->
+  <path
+    d="M62.0378 216C53.8906 216 45.8231 214.395 38.296 211.276C30.769 208.156 23.9297 203.584 18.1687 197.821C12.4078 192.057 7.83791 185.215 4.72009 177.684C1.60227 170.154 -0.00244483 162.083 -0.00244412 153.932L62.0378 153.932L62.0378 216Z"
+    fill="none" stroke="#3C9C46" stroke-width="4" class="draw-stroke green" />
+
+  <!-- Blue shape stroke animation -->
+  <path
+    d="M122.075 91.8896C122.075 124.38 96.2686 150.84 64.0352 151.896V91.833C64.0353 59.3432 89.8419 32.8813 122.075 31.8262V91.8896Z"
+    fill="none" stroke="#2F80ED" stroke-width="4" class="draw-stroke blue" />
+
+  <!-- Orange circle outline + fill -->
+  <ellipse cx="40.942" cy="31.0343" rx="31.0201" ry="31.0343"
+           fill="none" stroke="#FD5000" stroke-width="4"
+           class="draw-stroke orange-outline" />
+
+  <ellipse cx="40.942" cy="31.0343" rx="31.0201" ry="31.0343"
+           fill="#FD5000" stroke="none" class="fill-fade" />
+</svg>
