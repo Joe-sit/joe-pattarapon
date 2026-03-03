@@ -12,6 +12,7 @@
     "@studio-freight/lenis": "^1.0.42",
     "@vercel/analytics": "^1.2.2",
     "@vueuse/motion": "^2.2.3",
+    "gsap": "^3.13.0",
     "joe-pattarapon-portfolio": "file:",
     "swiper": "^11.1.4",
     "vite-svg-loader": "^5.1.0",

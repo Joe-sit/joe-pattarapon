@@ -4,29 +4,37 @@ import { useRouter } from 'vue-router'
 import LogoSVG from './assets/joe-new-banner.svg'
 import Menu from './assets/menu.svg'
 import FooterSVG from './assets/Footer-JoeRebrand.svg'
-import JoeSVG from './assets/joe-animated.svg'
-import { useMotion } from '@vueuse/motion'
-import Lenis from '@studio-freight/lenis'   // <-- Lenis import
+import JoeSVG from './components/JoeSVG.vue'
+import Lenis from '@studio-freight/lenis'
+import gsap from 'gsap'
+import Flip from 'gsap/Flip'
 
-const isMenuOpen = ref(false);
-const showSplash = ref(true);
-const router = useRouter();
+gsap.registerPlugin(Flip)
+
+const isMenuOpen = ref(false)
+const showSplash = ref(true)
+const router = useRouter()
 
 const toggleMenu = () => {
-  isMenuOpen.value = !isMenuOpen.value;
+  isMenuOpen.value = !isMenuOpen.value
+}
+
+const closeMenuOnClickOutside = (event) => {
+  const menu = document.querySelector('.menu-box')
+  const hamburgerButton = document.querySelector('.hamburger-button')
+  if (menu && !menu.contains(event.target) && !hamburgerButton.contains(event.target)) {
+    isMenuOpen.value = false
+  }
 }
 
 onMounted(() => {
-  window.scrollTo(0, 0);
-  document.addEventListener('click', closeMenuOnClickOutside);
+  window.scrollTo(0, 0)
+  document.addEventListener('click', closeMenuOnClickOutside)
 
-  // --- Lenis smooth scroll setup ---
   const lenis = new Lenis({
-    duration: 1, // seconds
-    // easing: t => 1 - Math.pow(1 - t, 3), // easeOutCubic
+    duration: 1,
     smooth: true,
-    resetNativeScroll: true,
-
+    resetNativeScroll: true
   })
 
   function raf(time) {
@@ -36,24 +44,14 @@ onMounted(() => {
 
   requestAnimationFrame(raf)
 
-  // Close menu when navigation occurs
   router.afterEach(() => {
-    isMenuOpen.value = false;
-  });
+    isMenuOpen.value = false
+  })
 
-  // Hide splash screen after 6 seconds
   setTimeout(() => {
-    showSplash.value = false;
-  }, 6000);
-});
-
-const closeMenuOnClickOutside = (event) => {
-  const menu = document.querySelector('.menu-box');
-  const hamburgerButton = document.querySelector('.hamburger-button');
-  if (menu && !menu.contains(event.target) && !hamburgerButton.contains(event.target)) {
-    isMenuOpen.value = false;
-  }
-}
+    showSplash.value = false
+  }, 6000)
+})
 </script>
 
 <template>
@@ -66,11 +64,13 @@ const closeMenuOnClickOutside = (event) => {
 
     <!-- Main Content -->
     <div v-else>
-      <nav class="flex mx-auto bg-white/5 backdrop-blur-[2px] sticky top-0 rounded-xl z-50">
+      <!-- Navigation -->
+      <nav class="flex w-full bg-white/80 backdrop-blur-md border-b border-gray-100 fixed top-0 left-0 right-0 z-50">
         <div class="flex flex-col-2 justify-between mx-auto w-[1024px] my-6 relative">
           <a href="/" class="flex my-auto">
             <LogoSVG class="mx-6" />
           </a>
+
           <div class="hidden md:flex space-x-6 my-auto mx-6">
             <router-link to="/" class="text-black hover:text-orange-400"
               active-class="text-orange-500 font-bold">Home</router-link>
@@ -79,14 +79,17 @@ const closeMenuOnClickOutside = (event) => {
             <router-link to="/portfolio" class="text-black hover:text-orange-400"
               active-class="text-orange-500 font-bold">Works</router-link>
           </div>
+
           <a href="https://drive.google.com/file/d/1AL3EO8E9mwtoPQWW2I2QB8q-Oe1CYtB6/view?usp=sharing" target="_blank"
             class="hidden md:flex text-white transition-all duration-500 hover:-translate-y-0.5 px-4 py-1 bg-[#FD5000] rounded-full text-center items-center">
-            Download Resume
+            Resume
           </a>
+
           <button @click="toggleMenu"
             class="hamburger-button w-10 h-10 transition-colors border rounded-xl mx-6 duration-500 ease-in-out hover:bg-[#3a3a3a] border-[#ffffff]/5 bg-[#1c1c1c] md:hidden">
             <Menu class="mx-auto" />
           </button>
+
           <div v-if="isMenuOpen"
             class="menu-box absolute top-full mx-6 right-0 mt-2 w-auto bg-[#ffffff] border-[.5px] border-[#ffffff]/5 rounded-xl bg-opacity-100 fade-in-up shadow-2xl">
             <ul class="text-black text-lg">
@@ -127,8 +130,11 @@ const closeMenuOnClickOutside = (event) => {
         </div>
       </nav>
 
-      <router-view></router-view>
+      <!-- Router Content -->
+      <div class="pt-[88px]">
+        <router-view></router-view>
 
+      <!-- Footer -->
       <footer class="text-white text-center w-full bg-white h-auto py-6">
         <div class="grid grid-row gap-y-2 border-t-[1px] border-[#B5B5B5] px-6">
           <h1 class="font-light text-sm sm:text-sm text-[#B5B5B5] mt-6">
@@ -136,18 +142,26 @@ const closeMenuOnClickOutside = (event) => {
           </h1>
         </div>
       </footer>
+      </div>
     </div>
   </div>
 </template>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@100..1000&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=DM+Sans:wght@100..1000&display=swap');
+
+/* ✅ FIX: Override Tailwind's preflight font with !important */
+html,
+body,
+* {
+  font-family: 'Funnel Display', sans-serif !important;
+}
 
 html,
 body {
-  font-family: 'DM Sans', sans-serif;
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
 }
 
 /* Splash animation */

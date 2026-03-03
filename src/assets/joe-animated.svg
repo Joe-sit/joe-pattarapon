@@ -5,39 +5,27 @@
     .draw-stroke {
       stroke-dasharray: 1000;
       stroke-dashoffset: 1000;
-      animation: drawStroke 5s ease forwards;
+      animation: drawStroke 5s ease-in-out forwards;
       stroke-linecap: round;
       stroke-linejoin: round;
     }
 
-    .green {
-      animation-delay: 0s;
-    }
-
-    .blue {
-      animation-delay: 0.5s;
-    }
-
-    .orange-outline {
-      animation-delay: 0.3s;
-    }
+    .green { animation-delay: 0s; }
+    .blue { animation-delay: 0.5s; }
+    .orange-outline { animation-delay: 0.3s; }
 
     @keyframes drawStroke {
-      to {
-        stroke-dashoffset: 0;
-      }
+      to { stroke-dashoffset: 0; }
     }
 
     .fill-fade {
       opacity: 0;
-      animation: fadeFill 0.3s ease forwards;
-      animation-delay: 1.3s; /* 0.3s (outline delay) + 1s */
+      animation: fadeFill 0.6s ease-in-out forwards;
+      animation-delay: 1.3s; /* fill appears quicker */
     }
 
     @keyframes fadeFill {
-      to {
-        opacity: 1;
-      }
+      to { opacity: 1; }
     }
   </style>
 
@@ -51,11 +39,12 @@
     d="M122.075 91.8896C122.075 124.38 96.2686 150.84 64.0352 151.896V91.833C64.0353 59.3432 89.8419 32.8813 122.075 31.8262V91.8896Z"
     fill="none" stroke="#2F80ED" stroke-width="4" class="draw-stroke blue" />
 
-  <!-- Orange circle outline + fill -->
+  <!-- Orange circle outline -->
   <ellipse cx="40.942" cy="31.0343" rx="31.0201" ry="31.0343"
            fill="none" stroke="#FD5000" stroke-width="4"
            class="draw-stroke orange-outline" />
 
+  <!-- Orange circle fill -->
   <ellipse cx="40.942" cy="31.0343" rx="31.0201" ry="31.0343"
            fill="#FD5000" stroke="none" class="fill-fade" />
 </svg>
