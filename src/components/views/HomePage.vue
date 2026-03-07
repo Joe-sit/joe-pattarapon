@@ -208,7 +208,7 @@ const onGreetingMouseLeave = () => {
                         :variants="{ custom: { scale: 2 } }" :delay="300" :duration="800">
                         <div @click="goToAbout" @mousemove="onGreetingMouseMove" @mouseleave="onGreetingMouseLeave"
                             :style="{ transform: `perspective(1000px) rotateX(${greetingTilt.x}deg) rotateY(${greetingTilt.y}deg)` }"
-                            class="spotlight-border greeting-tilt rounded-3xl p-px cursor-pointer h-full">
+                            class="greeting-tilt rounded-3xl cursor-pointer h-full shadow-3xl">
                             <div
                                 class="spotlight-card relative bg-gradient-to-tr from-white via-slate-50 to-orange-200 rounded-3xl px-6 py-6 h-full overflow-hidden">
                                 <router-link :to="{ name: 'AboutPage' }">
@@ -285,7 +285,7 @@ const onGreetingMouseLeave = () => {
 
                 <div class="block mt-6 mx-6 md:mx-0 group" v-motion :initial="{ opacity: 0, y: 60 }"
                     :visibleOnce="{ opacity: 1, y: 0 }" :delay="200" :duration="700">
-                    <div class="spotlight-border rounded-3xl p-px" @mousemove="onCardMouseMove($event, 'Coming Soon')"
+                    <div class="rounded-3xl shadow-3xl" @mousemove="onCardMouseMove($event, 'Coming Soon')"
                         @mouseleave="onCardMouseLeave">
                         <div
                             class="spotlight-card relative bg-[#FAFBFD] rounded-3xl pt-10 px-10 pb-0 overflow-hidden select-text">
@@ -343,7 +343,7 @@ const onGreetingMouseLeave = () => {
 
                             <!-- Bottom: Preview Image -->
                             <div class="relative -mx-10 -mb-10 mt-8 px-8">
-                                <div class="w-full rounded-2xl overflow-hidden border border-[#B5B5B5]/30 bg-[#D9D9D9]">
+                                <div class="w-full rounded-2xl overflow-hidden bg-[#D9D9D9]">
                                     <img src="../../assets/portfolios/mockup-dashboard.png"
                                         alt="Nation-Scale Health Dashboard"
                                         class="w-full object-cover object-top transition-transform duration-700 group-hover:scale-[1.02]"
@@ -358,14 +358,14 @@ const onGreetingMouseLeave = () => {
                 <!-- Card: Vending Machine - Image Left, Content Right -->
                 <div class="block mt-6 mx-6 md:mx-0 group" v-motion :initial="{ opacity: 0, y: 60 }"
                     :visibleOnce="{ opacity: 1, y: 0 }" :delay="200" :duration="700">
-                    <div class="spotlight-border rounded-3xl p-px" @mousemove="onCardMouseMove($event, 'Coming Soon')"
+                    <div class="rounded-3xl shadow-3xl" @mousemove="onCardMouseMove($event, 'Coming Soon')"
                         @mouseleave="onCardMouseLeave">
                         <div
                             class="spotlight-card relative bg-[#FAFBFD] rounded-3xl overflow-hidden select-text flex flex-col md:flex-row min-h-[480px]">
 
                             <!-- Left: Image placeholder -->
                             <div class="md:w-1/2 h-64 md:h-auto flex-shrink-0 overflow-hidden bg-[#D9D9D9]">
-                                <img src="../../assets/portfolios/mock-vending.png" alt="..."
+                                <img src="../../assets/portfolios/auto-medicine-machine-cover.png" alt="..."
                                     class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
                             </div>
 
@@ -414,7 +414,7 @@ const onGreetingMouseLeave = () => {
                 <!-- Card: Communication App - Content Left, Image Right -->
                 <div class="block mt-6 mx-6 md:mx-0 group" v-motion :initial="{ opacity: 0, y: 60 }"
                     :visibleOnce="{ opacity: 1, y: 0 }" :delay="200" :duration="700">
-                    <div class="spotlight-border rounded-3xl p-px" @mousemove="onCardMouseMove($event, 'Coming Soon')"
+                    <div class="rounded-3xl shadow-3xl" @mousemove="onCardMouseMove($event, 'Coming Soon')"
                         @mouseleave="onCardMouseLeave">
                         <div
                             class="spotlight-card relative bg-[#FAFBFD] rounded-3xl overflow-hidden select-text flex flex-col md:flex-row min-h-[480px]">
@@ -511,11 +511,11 @@ const onGreetingMouseLeave = () => {
 
                     <!-- Left fade -->
                     <div
-                        class="absolute left-0 top-0 bottom-0 w-48 z-10 pointer-events-none bg-gradient-to-r from-white to-transparent">
+                        class="absolute left-0 top-0 bottom-0 w-48 z-10 pointer-events-none bg-gradient-to-r from-[#F1F0EE] to-transparent">
                     </div>
                     <!-- Right fade -->
                     <div
-                        class="absolute right-0 top-0 bottom-0 w-48 z-10 pointer-events-none bg-gradient-to-l from-white to-transparent">
+                        class="absolute right-0 top-0 bottom-0 w-48 z-10 pointer-events-none bg-gradient-to-l from-[#F1F0EE] to-transparent">
                     </div>
 
                     <!-- Cards track: horizontal shift on the whole strip, Y per card -->
@@ -524,6 +524,7 @@ const onGreetingMouseLeave = () => {
                         <!-- Hotel Check-in Kiosk -->
                         <router-link :to="{ name: 'PortfolioDetails', params: { portId: 5 } }"
                             class="relative flex-shrink-0 w-[26vw] rounded-3xl overflow-hidden"
+                            @mousemove="onCardMouseMove($event, 'Read more.')" @mouseleave="onCardMouseLeave"
                             :style="{ transform: `translateY(${cardParallax[0]}px)` }">
                             <button
                                 class="w-10 h-10 flex items-center absolute top-0 right-0 m-4 z-40 overflow-hidden justify-center rounded-full bg-white group transition-all duration-500 hover:-translate-y-2">
@@ -537,6 +538,7 @@ const onGreetingMouseLeave = () => {
                         <!-- MOD RIDE -->
                         <router-link :to="{ name: 'PortfolioDetails', params: { portId: 1 } }"
                             class="relative flex-shrink-0 w-[26vw] rounded-3xl overflow-hidden"
+                            @mousemove="onCardMouseMove($event, 'Read more.')" @mouseleave="onCardMouseLeave"
                             :style="{ transform: `translateY(${cardParallax[1]}px)` }">
                             <button
                                 class="w-10 h-10 flex items-center absolute top-0 right-0 m-4 z-40 overflow-hidden justify-center rounded-full bg-white group transition-all duration-500 hover:-translate-y-2">
@@ -550,6 +552,7 @@ const onGreetingMouseLeave = () => {
                         <!-- eKYC -->
                         <router-link :to="{ name: 'PortfolioDetails', params: { portId: 2 } }"
                             class="relative flex-shrink-0 w-[26vw] rounded-3xl overflow-hidden"
+                            @mousemove="onCardMouseMove($event, 'Read more.')" @mouseleave="onCardMouseLeave"
                             :style="{ transform: `translateY(${cardParallax[2]}px)` }">
                             <button
                                 class="w-10 h-10 flex items-center absolute top-0 right-0 m-4 z-40 overflow-hidden justify-center rounded-full bg-white group transition-all duration-500 hover:-translate-y-2">
@@ -563,6 +566,7 @@ const onGreetingMouseLeave = () => {
                         <!-- Case Keeper Dashboard -->
                         <router-link :to="{ name: 'PortfolioDetails', params: { portId: 3 } }"
                             class="relative flex-shrink-0 w-[26vw] rounded-3xl overflow-hidden"
+                            @mousemove="onCardMouseMove($event, 'Read more.')" @mouseleave="onCardMouseLeave"
                             :style="{ transform: `translateY(${cardParallax[3]}px)` }">
                             <button
                                 class="w-10 h-10 flex items-center absolute top-0 right-0 m-4 z-40 overflow-hidden justify-center rounded-full bg-white group transition-all duration-500 hover:-translate-y-2">

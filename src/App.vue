@@ -1,18 +1,19 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import LogoSVG from './assets/joe-new-banner.svg'
 import Menu from './assets/menu.svg'
-import FooterSVG from './assets/Footer-JoeRebrand.svg'
-import JoeSVG from './components/JoeSVG.vue'
+import JoeLogo from './assets/JoeRebrand.svg'
 import Lenis from '@studio-freight/lenis'
 import gsap from 'gsap'
 import Flip from 'gsap/Flip'
+// import SplashScreen from './components/SplashScreen.vue'
+import JoeSVG from './components/JoeSVG.vue'
 
 gsap.registerPlugin(Flip)
 
 const isMenuOpen = ref(false)
 const showSplash = ref(true)
+const isScrolled = ref(false)
 const router = useRouter()
 
 const toggleMenu = () => {
@@ -30,6 +31,10 @@ const closeMenuOnClickOutside = (event) => {
 onMounted(() => {
   window.scrollTo(0, 0)
   document.addEventListener('click', closeMenuOnClickOutside)
+
+  window.addEventListener('scroll', () => {
+    isScrolled.value = window.scrollY > 10
+  })
 
   const lenis = new Lenis({
     duration: 1,
@@ -50,105 +55,111 @@ onMounted(() => {
 
   setTimeout(() => {
     showSplash.value = false
-  }, 6000)
+  }, 4000)
 })
 </script>
 
 <template>
-  <div class="bg-white">
+  <div class="bg-[#F1F0EE]">
 
     <!-- Splash Screen -->
-    <div v-if="showSplash" class="splash-screen flex items-center justify-center fixed inset-0 bg-white z-[9999]">
-      <JoeSVG class="animate-fade-in-out w-64 h-64" />
+    <!-- <SplashScreen v-if="showSplash" /> -->
+    <div v-if="showSplash" class="splash-screen flex items-center justify-center fixed inset-0 bg-[#F1F0EE] z-[9999]">
+      <JoeSVG />
     </div>
 
     <!-- Main Content -->
     <div v-else>
       <!-- Navigation -->
-      <nav class="flex w-full bg-white/80 backdrop-blur-md border-b border-gray-100 fixed top-0 left-0 right-0 z-50">
-        <div class="flex flex-col-2 justify-between mx-auto w-[1024px] my-6 relative">
-          <a href="/" class="flex my-auto">
-            <LogoSVG class="mx-6" />
-          </a>
+      <nav
+          :class="['fixed top-6 left-1/2 -translate-x-1/2 z-50 nav-enter flex items-center gap-1 bg-white/60 border border-black/10 rounded-full px-2 py-1.5 transition-shadow duration-300', isScrolled ? 'shadow-lg' : 'shadow-sm']"
+          style="backdrop-filter: saturate(80%) blur(60px); -webkit-backdrop-filter: saturate(80%) blur(60px);">
+          <!-- Avatar + Name -->
+          <div class="flex items-center gap-2 px-2">
 
-          <div class="hidden md:flex space-x-6 my-auto mx-6">
-            <router-link to="/" class="text-black hover:text-orange-400"
-              active-class="text-orange-500 font-bold">Home</router-link>
-            <router-link to="/about" class="text-black hover:text-orange-400"
-              active-class="text-orange-500 font-bold">About</router-link>
-            <router-link to="/portfolio" class="text-black hover:text-orange-400"
-              active-class="text-orange-500 font-bold">Works</router-link>
+            <JoeLogo />
+
+            <span class="text-sm font-semibold text-black hidden md:block whitespace-nowrap">Joe</span>
           </div>
 
+          <!-- Divider -->
+          <div class="w-px h-4 bg-black/10 mx-1 hidden md:block"></div>
+
+          <!-- Nav Links -->
+          <div class="hidden md:flex items-center gap-0.5">
+            <router-link to="/"
+              class="px-3 py-1.5 rounded-full text-sm font-medium text-black/60 hover:text-black hover:bg-black/5 transition-all duration-200"
+              exact-active-class="!text-[#FD5000] font-semibold bg-[#FD5000]/10">Home</router-link>
+            <router-link to="/portfolio"
+              class="px-3 py-1.5 rounded-full text-sm font-medium text-black/60 hover:text-black hover:bg-black/5 transition-all duration-200"
+              exact-active-class="!text-[#FD5000] font-semibold bg-[#FD5000]/10">Work</router-link>
+            <router-link to="/about"
+              class="px-3 py-1.5 rounded-full text-sm font-medium text-black/60 hover:text-black hover:bg-black/5 transition-all duration-200"
+              exact-active-class="!text-[#FD5000] font-semibold bg-[#FD5000]/10">About</router-link>
+          </div>
+
+          <!-- Resume Button -->
           <a href="https://drive.google.com/file/d/1AL3EO8E9mwtoPQWW2I2QB8q-Oe1CYtB6/view?usp=sharing" target="_blank"
-            class="hidden md:flex text-white transition-all duration-500 hover:-translate-y-0.5 px-4 py-1 bg-[#FD5000] rounded-full text-center items-center">
+            class="hidden md:flex px-4 py-1.5 rounded-full text-sm font-medium bg-[#FD5000] text-white hover:bg-[#e04800] transition-all duration-200 ml-1">
             Resume
           </a>
 
+          <!-- Mobile Hamburger -->
           <button @click="toggleMenu"
-            class="hamburger-button w-10 h-10 transition-colors border rounded-xl mx-6 duration-500 ease-in-out hover:bg-[#3a3a3a] border-[#ffffff]/5 bg-[#1c1c1c] md:hidden">
-            <Menu class="mx-auto" />
+            class="hamburger-button w-8 h-8 flex items-center justify-center rounded-full md:hidden hover:bg-black/5 transition-colors duration-200">
+            <Menu />
           </button>
 
+          <!-- Mobile Dropdown -->
           <div v-if="isMenuOpen"
-            class="menu-box absolute top-full mx-6 right-0 mt-2 w-auto bg-[#ffffff] border-[.5px] border-[#ffffff]/5 rounded-xl bg-opacity-100 fade-in-up shadow-2xl">
-            <ul class="text-black text-lg">
+            class="menu-box absolute top-full left-0 right-0 mt-2 bg-white border border-black/10 rounded-2xl shadow-xl fade-in-up overflow-hidden">
+            <ul class="text-black py-1">
               <li>
-                <router-link to="/"
-                  class="block py-2 px-4 transition-colors duration-500 ease-in-out hover:bg-orange-100 hover:text-orange-600 rounded-xl"
-                  active-class="text-orange-500 font-bold">Home</router-link>
+                <router-link to="/" class="block py-2 px-4 text-sm hover:bg-black/5 transition-colors"
+                  active-class="font-semibold">Home</router-link>
               </li>
               <li>
-                <router-link to="/about"
-                  class="block py-2 px-4 transition-colors duration-500 ease-in-out hover:bg-orange-100 hover:text-orange-600 rounded-xl"
-                  active-class="text-orange-500 font-bold">About</router-link>
+                <router-link to="/portfolio" class="block py-2 px-4 text-sm hover:bg-black/5 transition-colors"
+                  active-class="font-semibold">Work</router-link>
               </li>
               <li>
-                <router-link to="/portfolio"
-                  class="block py-2 px-4 transition-colors duration-500 ease-in-out hover:bg-orange-100 hover:text-orange-600 rounded-xl"
-                  active-class="text-orange-500 font-bold">Works</router-link>
+                <router-link to="/about" class="block py-2 px-4 text-sm hover:bg-black/5 transition-colors"
+                  active-class="font-semibold">About</router-link>
               </li>
               <li>
                 <a href="https://drive.google.com/file/d/1SgMjbau41IQnFTFTtOqEB5kRY4zNPF6E/view?usp=sharing"
-                  target="_blank"
-                  class="block py-2 px-4 transition-colors duration-500 ease-in-out hover:bg-orange-100 hover:text-orange-600 rounded-xl">Resume</a>
-              </li>
-              <li>
-                <a href="https://drive.google.com/file/d/1BVSDuNsfsuXhzVb81vYbGIh2kcZ9mDRe/view?usp=sharing"
-                  target="_blank"
-                  class="block py-2 px-4 transition-colors duration-500 ease-in-out hover:bg-orange-100 hover:text-orange-600 rounded-xl">Transcript</a>
-              </li>
-              <li>
-                <a href="https://drive.google.com/file/d/1SgMjbau41IQnFTFTtOqEB5kRY4zNPF6E/view?usp=sharing"
-                  target="_blank"
-                  class="block md:hidden py-2 px-4 transition-colors duration-500 ease-in-out hover:bg-orange-100 hover:text-orange-600 rounded-xl">
-                  Download CV
-                </a>
+                  target="_blank" class="block py-2 px-4 text-sm hover:bg-black/5 transition-colors">Resume</a>
               </li>
             </ul>
           </div>
-        </div>
       </nav>
 
+      <!-- Top Scroll Fade -->
+      <div class="fixed top-0 left-0 right-0 h-24 bg-gradient-to-b from-gray-50 to-transparent pointer-events-none z-40"></div>
+
+      <!-- Bottom Scroll Fade -->
+      <div class="fixed bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-gray-50 to-transparent pointer-events-none z-40"></div>
+
       <!-- Router Content -->
-      <div class="pt-[88px]">
+      <div class="pt-24">
         <router-view></router-view>
 
-      <!-- Footer -->
-      <footer class="text-white text-center w-full bg-white h-auto py-6">
-        <div class="grid grid-row gap-y-2 border-t-[1px] border-[#B5B5B5] px-6">
-          <h1 class="font-light text-sm sm:text-sm text-[#B5B5B5] mt-6">
-            Designed & Built by Pattarapon Makhirun @2025 All Right Reserved.
-          </h1>
-        </div>
-      </footer>
+        <!-- Footer -->
+        <footer class="text-white text-center w-full bg-[#F1F0EE] h-auto pt-0 pb-16">
+          <div class="h-16 bg-gradient-to-b from-transparent to-gray-50 -mt-16 pointer-events-none"></div>
+          <div class="grid grid-row gap-y-2 border-t-[1px] border-[#B5B5B5] px-6">
+            <h1 class="font-light text-sm sm:text-sm text-[#B5B5B5] mt-6">
+              Designed & Built by Pattarapon Makhirun @2025 All Right Reserved.
+            </h1>
+          </div>
+        </footer>
       </div>
     </div>
   </div>
 </template>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=DM+Sans:wght@100..1000&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=DM+Sans:wght@100..1000&family=Mitr:wght@200;300;400&display=swap');
 
 /* ✅ FIX: Override Tailwind's preflight font with !important */
 html,
@@ -162,19 +173,24 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
+  background-color: #F1F0EE;
 }
 
-/* Splash animation */
-@keyframes fade-in-out {
-  0% { opacity: 0; }
-  20% { opacity: 1; }
-  80% { opacity: 1; }
-  100% { opacity: 0; }
+/* Splash screen */
+.splash-screen {
+  animation: splash-fade-out 0.6s ease-in-out 3.4s forwards;
 }
 
-.animate-fade-in-out {
-  animation: fade-in-out 6s ease-in-out forwards;
+@keyframes splash-fade-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
 }
+
 
 /* Menu animation */
 @keyframes fade-in-up {
@@ -182,6 +198,7 @@ body {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -190,5 +207,22 @@ body {
 
 .fade-in-up {
   animation: fade-in-up 0.3s ease-in-out;
+}
+
+/* Nav enter animation */
+.nav-enter {
+  animation: nav-slide-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes nav-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 </style>
