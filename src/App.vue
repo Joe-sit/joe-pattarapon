@@ -99,7 +99,7 @@ onMounted(() => {
           </div>
 
           <!-- Resume Button -->
-          <a href="https://drive.google.com/file/d/1AL3EO8E9mwtoPQWW2I2QB8q-Oe1CYtB6/view?usp=sharing" target="_blank"
+          <a href="https://drive.google.com/file/d/1wNLZ0a9ECBVrUdhQMQgO8cqppE5pFMcA/view?usp=sharing" target="_blank"
             class="hidden md:flex px-4 py-1.5 rounded-full text-sm font-medium bg-[#FD5000] text-white hover:bg-[#e04800] transition-all duration-200 ml-1">
             Resume
           </a>
