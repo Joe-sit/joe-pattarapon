@@ -60,11 +60,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="bg-[#F1F0EE]">
+  <div class="bg-gray-50">
 
     <!-- Splash Screen -->
     <!-- <SplashScreen v-if="showSplash" /> -->
-    <div v-if="showSplash" class="splash-screen flex items-center justify-center fixed inset-0 bg-[#F1F0EE] z-[9999]">
+    <div v-if="showSplash" class="splash-screen flex items-center justify-center fixed inset-0 bg-gray-50 z-[9999]">
       <JoeSVG />
     </div>
 
@@ -79,7 +79,7 @@ onMounted(() => {
 
             <JoeLogo />
 
-            <span class="text-sm font-semibold text-black hidden md:block whitespace-nowrap">Joe</span>
+            <span class="text-sm font-semibold text-black hidden md:block whitespace-nowrap">Joe.</span>
           </div>
 
           <!-- Divider -->
@@ -134,22 +134,21 @@ onMounted(() => {
           </div>
       </nav>
 
-      <!-- Top Scroll Fade -->
-      <div class="fixed top-0 left-0 right-0 h-24 bg-gradient-to-b from-gray-50 to-transparent pointer-events-none z-40"></div>
+
 
       <!-- Bottom Scroll Fade -->
-      <div class="fixed bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-gray-50 to-transparent pointer-events-none z-40"></div>
+      <div class="fixed bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-gray-50 to-transparent pointer-events-none z-40"></div>
 
       <!-- Router Content -->
       <div class="pt-24">
         <router-view></router-view>
 
         <!-- Footer -->
-        <footer class="text-white text-center w-full bg-[#F1F0EE] h-auto pt-0 pb-16">
+        <footer class="text-white text-center w-full bg-gray-50 h-auto pt-0 pb-16">
           <div class="h-16 bg-gradient-to-b from-transparent to-gray-50 -mt-16 pointer-events-none"></div>
           <div class="grid grid-row gap-y-2 border-t-[1px] border-[#B5B5B5] px-6">
             <h1 class="font-light text-sm sm:text-sm text-[#B5B5B5] mt-6">
-              Designed & Built by Pattarapon Makhirun @2025 All Right Reserved.
+              Designed & Built by Pattarapon Makhirun @2026 All Right Reserved.
             </h1>
           </div>
         </footer>
@@ -173,7 +172,7 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
-  background-color: #F1F0EE;
+  background-color: #f9fafb;
 }
 
 /* Splash screen */

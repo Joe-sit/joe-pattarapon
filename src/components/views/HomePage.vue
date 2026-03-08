@@ -296,7 +296,7 @@ const onGreetingMouseLeave = () => {
                                 <!-- Left: Title + Tags -->
                                 <div class="flex flex-col gap-4 max-w-sm">
                                     <h2 class="funnel text-2xl sm:text-3xl font-bold text-[#161616] leading-tight">
-                                        Designed Nation-Scale Health Dashboards
+                                        Nation-Scale Health Dashboards
                                     </h2>
                                     <div class="flex flex-wrap gap-2">
                                         <span
@@ -320,7 +320,7 @@ const onGreetingMouseLeave = () => {
                                     <div class="flex flex-col gap-1">
                                         <p ref="recordsRef"
                                             class="funnel text-5xl font-bold text-[#161616] leading-none">{{
-                                            recordsLabel }}</p>
+                                                recordsLabel }}</p>
                                         <p class="funnel text-sm font-semibold text-[#FD5000] mt-1">Records</p>
                                         <p class="funnel text-sm text-[#4C4C56] max-w-[220px] leading-5 mt-1">
                                             Translating over millions of data into insights
@@ -331,7 +331,7 @@ const onGreetingMouseLeave = () => {
                                     <div class="flex flex-col gap-1">
                                         <p ref="domainsRef"
                                             class="funnel text-5xl font-bold text-[#161616] leading-none">{{
-                                            domainsCount }}</p>
+                                                domainsCount }}</p>
                                         <p class="funnel text-sm font-semibold text-[#FD5000] mt-1">Domains</p>
                                         <p class="funnel text-sm text-[#4C4C56] max-w-[220px] leading-5 mt-1">
                                             End-to-end health coverage across 4 critical areas
@@ -344,9 +344,9 @@ const onGreetingMouseLeave = () => {
                             <!-- Bottom: Preview Image -->
                             <div class="relative -mx-10 -mb-10 mt-8 px-8">
                                 <div class="w-full rounded-2xl overflow-hidden bg-[#D9D9D9]">
-                                    <img src="../../assets/portfolios/mockup-dashboard.png"
+                                    <img src="../../assets/portfolios/dashboard-showcases.png"
                                         alt="Nation-Scale Health Dashboard"
-                                        class="w-full object-cover object-top transition-transform duration-700 group-hover:scale-[1.02]"
+                                        class="w-full object-cover rounded-2xl border object-top transition-transform duration-700 group-hover:scale-[1.02]"
                                         style="height: 512px;" />
                                 </div>
                             </div>
@@ -370,11 +370,11 @@ const onGreetingMouseLeave = () => {
                             </div>
 
                             <!-- Right: Content -->
-                            <div class="md:w-1/2 p-10 flex flex-col justify-center">
+                            <div class="md:w-1/2 p-10 flex flex-col justify-between">
                                 <div class="flex flex-col gap-4">
                                     <!-- <div class="w-14 h-14 bg-[#D9D9D9] rounded-full"></div> -->
                                     <h2 class="funnel text-2xl sm:text-3xl font-bold text-[#161616] leading-tight">
-                                        Designed End-to-End Interaction for Auto-Medicine Vending Machine
+                                         End-to-End Interaction for Auto-Medicine Vending Machine
                                     </h2>
                                     <div class="flex flex-wrap gap-2">
                                         <span
@@ -391,14 +391,16 @@ const onGreetingMouseLeave = () => {
 
                                 <div ref="vendingCardRef" class="flex gap-10 mt-8">
                                     <div class="flex flex-col gap-1">
-                                        <p class="funnel text-5xl font-bold text-[#161616] leading-none">{{ hospitalsCount }}</p>
+                                        <p class="funnel text-5xl font-bold text-[#161616] leading-none">{{
+                                            hospitalsCount }}</p>
                                         <p class="funnel text-sm font-semibold text-[#FD5000] mt-1">Hospitals</p>
                                         <p class="funnel text-sm text-[#4C4C56] max-w-[180px] leading-5 mt-1">
                                             Real-world deployment across 4 hospital sites
                                         </p>
                                     </div>
                                     <div class="flex flex-col gap-1">
-                                        <p class="funnel text-5xl font-bold text-[#161616] leading-none">{{ patientsLabel }}</p>
+                                        <p class="funnel text-5xl font-bold text-[#161616] leading-none">{{
+                                            patientsLabel }}</p>
                                         <p class="funnel text-sm font-semibold text-[#FD5000] mt-1">Patients Daily</p>
                                         <p class="funnel text-sm text-[#4C4C56] max-w-[180px] leading-5 mt-1">
                                             Serving 50+ patients daily via automated dispensing
@@ -420,7 +422,7 @@ const onGreetingMouseLeave = () => {
                             class="spotlight-card relative bg-[#FAFBFD] rounded-3xl overflow-hidden select-text flex flex-col md:flex-row min-h-[480px]">
 
                             <!-- Left: Content -->
-                            <div class="md:w-1/2 p-10 flex flex-col justify-center ">
+                            <div class="md:w-1/2 p-10 flex flex-col justify-between ">
                                 <div class="flex flex-col  gap-4">
                                     <!-- <div class="w-14 h-14 bg-[#D9D9D9] rounded-full"></div> -->
                                     <h2 class="funnel text-2xl sm:text-3xl font-bold text-[#161616] leading-tight">
@@ -439,14 +441,16 @@ const onGreetingMouseLeave = () => {
 
                                 <div ref="commCardRef" class="flex gap-10 mt-8">
                                     <div class="flex flex-col gap-1">
-                                        <p class="funnel text-5xl font-bold text-[#161616] leading-none">{{ usersLabel }}</p>
+                                        <p class="funnel text-5xl font-bold text-[#161616] leading-none">{{ usersLabel
+                                            }}</p>
                                         <p class="funnel text-sm font-semibold text-[#FD5000] mt-1">Users</p>
                                         <p class="funnel text-sm text-[#4C4C56] max-w-[180px] leading-5 mt-1">
                                             500+ active users across organizations
                                         </p>
                                     </div>
                                     <div class="flex flex-col gap-1">
-                                        <p class="funnel text-5xl font-bold text-[#161616] leading-none">{{ platformsCount }}</p>
+                                        <p class="funnel text-5xl font-bold text-[#161616] leading-none">{{
+                                            platformsCount }}</p>
                                         <p class="funnel text-sm font-semibold text-[#FD5000] mt-1">Platforms</p>
                                         <p class="funnel text-sm text-[#4C4C56] max-w-[180px] leading-5 mt-1">
                                             Unified design across web, iOS, and Android
