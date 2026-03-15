@@ -96,6 +96,9 @@ onMounted(() => {
             <router-link to="/about"
               class="px-3 py-1.5 rounded-full text-sm font-medium text-black/60 hover:text-black hover:bg-black/5 transition-all duration-200"
               exact-active-class="!text-[#FD5000] font-semibold bg-[#FD5000]/10">About</router-link>
+            <router-link to="/playground"
+              class="px-3 py-1.5 rounded-full text-sm font-medium text-black/60 hover:text-black hover:bg-black/5 transition-all duration-200"
+              exact-active-class="!text-[#FD5000] font-semibold bg-[#FD5000]/10">Playground</router-link>
           </div>
 
           <!-- Resume Button -->
@@ -125,6 +128,10 @@ onMounted(() => {
               <li>
                 <router-link to="/about" class="block py-2 px-4 text-sm hover:bg-black/5 transition-colors"
                   active-class="font-semibold">About</router-link>
+              </li>
+              <li>
+                <router-link to="/playground" class="block py-2 px-4 text-sm hover:bg-black/5 transition-colors"
+                  active-class="font-semibold">Playground</router-link>
               </li>
               <li>
                 <a href="https://drive.google.com/file/d/1SgMjbau41IQnFTFTtOqEB5kRY4zNPF6E/view?usp=sharing"
