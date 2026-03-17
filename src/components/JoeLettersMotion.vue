@@ -51,7 +51,7 @@ function buildTimeline() {
     gsap.set(el, { attr: { cx: 124, cy: 42 }, rotation: 0, opacity: 0 })
   })
   gsap.set('#j-body', { y: -100 })
-  gsap.set('#j-mask', { scale: 0, svgOrigin: '41 42' })
+  gsap.set('#j-mask', { scale: 0, svgOrigin: '34 31' })
   gsap.set('#j-corner', { scale: 0, svgOrigin: '0 0' })
   gsap.set('#letters-scene', { opacity: 1 })
 
@@ -313,13 +313,13 @@ onMounted(() => {
     { label: 'front-e', start: 0.9, end: 1.44, color: '#4a9' },
     { label: 'lower-e', start: 0.63, end: 1.71, color: '#4a9' },
     { label: 'back-e', start: 1.26, end: 1.8, color: '#4a9' },
-    { label: 'bullet', start: 1.64, end: 2.36, color: '#e94' },
-    { label: 'petals-in', start: 2.09, end: 2.31, color: '#e94' },
-    { label: 'petals-spread', start: 1.96, end: 2.85, color: '#e94' },
-    { label: 'petals-rotate', start: 2.02, end: 3.9, color: '#e94' },
-    { label: 'j-body', start: 1.76, end: 4.29, color: '#49e' },
-    { label: 'j-corner', start: 2.33, end: 3.75, color: '#49e' },
-    { label: 'j-mask', start: 2, end: 4.78, color: '#49e' },
+    { label: 'bullet', start: 1.52, end: 2.22, color: '#e94' },
+    { label: 'petals-in', start: 1.93, end: 2.14, color: '#e94' },
+    { label: 'petals-spread', start: 1.79, end: 2.78, color: '#e94' },
+    { label: 'petals-rotate', start: 1.93, end: 3.83, color: '#e94' },
+    { label: 'j-body', start: 1.19, end: 3.55, color: '#49e' },
+    { label: 'j-corner', start: 1.94, end: 3.92, color: '#49e' },
+    { label: 'j-mask', start: 2.17, end: 4.08, color: '#49e' },
     { label: 'hold+fade', start: 5, end: 5.4, color: '#666' },
   ].map(s => ({
     ...s,
