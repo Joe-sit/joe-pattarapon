@@ -13,16 +13,176 @@ let mainTl = null
 const segments = ref([])
 const exportedData = ref('')
 
+// O petal data
+const petalData = [
+  { cx: 119.717, cy: 62.9484, rot: 59.365 },
+  { cx: 128.342, cy: 20.4592, rot: 59.365 },
+  { cx: 101.732, cy: 41.2846, rot: 28.5804 },
+  { cx: 146.851, cy: 41.4516, rot: 28.5804 },
+]
+
 // Drag state
-let dragInfo = null // { segIndex, mode: 'move'|'resize-left'|'resize-right', startX, origStart, origEnd }
+let dragInfo = null
+
+function seg(label) {
+  const s = segments.value.find(s => s.label === label)
+  if (!s) return { start: 0, dur: 0 }
+  return { start: s.start, dur: s.end - s.start }
+}
+
+function buildTimeline() {
+  if (!canvasRef.value) return
+  const wasPlaying = isPlaying.value
+  const prevTime = mainTl ? mainTl.time() : 0
+
+  // Kill old timeline
+  if (mainTl) {
+    mainTl.kill()
+    mainTl = null
+  }
+
+  // Reset all elements to initial state
+  gsap.set('#e-clip-rect', { attr: { x: 180, width: 4 } })
+  gsap.set('#e-counter', { scaleX: 0, svgOrigin: '191 26' })
+  gsap.set('#e-opening', { x: 60 })
+  gsap.set('#e-front', { scaleX: 0, svgOrigin: '238 24.5' })
+  gsap.set('#o-bullet', { opacity: 0, attr: { cx: 175, r: 1 } })
+  canvasRef.value.querySelectorAll('.o-petal').forEach((el) => {
+    gsap.set(el, { attr: { cx: 124, cy: 42 }, rotation: 0, opacity: 0 })
+  })
+  gsap.set('#j-body', { y: -100 })
+  gsap.set('#j-mask', { scale: 0, svgOrigin: '41 42' })
+  gsap.set('#j-corner', { scale: 0, svgOrigin: '0 0' })
+  gsap.set('#letters-scene', { opacity: 1 })
+
+  mainTl = gsap.timeline({
+    repeat: -1, repeatDelay: 0,
+    onUpdate: function () {
+      const t = this.time()
+      const d = this.duration()
+      playheadPos.value = (t / d) * 100
+      currentTime.value = t.toFixed(2)
+    }
+  })
+  const tl = mainTl
+  const petals = canvasRef.value.querySelectorAll('.o-petal')
+
+  // ── E animation ──
+  const bodyE = seg('body-e')
+  tl.to('#e-clip-rect', {
+    attr: { width: 77 },
+    duration: bodyE.dur, ease: 'power2.inOut'
+  }, bodyE.start)
+
+  const upperE = seg('upper-e')
+  tl.to('#e-counter', {
+    scaleX: 1, duration: upperE.dur, ease: 'power2.inOut'
+  }, upperE.start)
+
+  const frontE = seg('front-e')
+  tl.to('#e-front', {
+    scaleX: 1, duration: frontE.dur, ease: 'power2.inOut'
+  }, frontE.start)
+
+  const lowerE = seg('lower-e')
+  tl.to('#e-opening', {
+    x: 0, duration: lowerE.dur, ease: 'power2.inOut'
+  }, lowerE.start)
+
+  const backE = seg('back-e')
+  tl.to('#e-clip-rect', {
+    attr: { x: 168 },
+    duration: backE.dur, ease: 'power2.inOut'
+  }, backE.start)
+
+  // ── O animation ──
+  const bullet = seg('bullet')
+  tl.set('#o-bullet', { opacity: 1 }, bullet.start)
+  tl.to('#o-bullet', {
+    attr: { cx: 124, r: 20 },
+    duration: bullet.dur, ease: 'power2.out'
+  }, bullet.start)
+
+  const petalsIn = seg('petals-in')
+  tl.to('.o-petal', {
+    opacity: 1, duration: petalsIn.dur, ease: 'power2.inOut'
+  }, petalsIn.start)
+
+  const petalsSpread = seg('petals-spread')
+  petals.forEach((el, i) => {
+    const p = petalData[i]
+    tl.to(el, {
+      attr: { cx: p.cx, cy: p.cy },
+      duration: petalsSpread.dur, ease: 'power2.inOut'
+    }, petalsSpread.start)
+  })
+
+  // Bullet fades as petals spread
+  tl.to('#o-bullet', {
+    opacity: 0, duration: 0.2, ease: 'power2.inOut'
+  }, petalsIn.start + 0.15)
+
+  const petalsRotate = seg('petals-rotate')
+  petals.forEach((el, i) => {
+    const p = petalData[i]
+    tl.to(el, {
+      rotation: p.rot,
+      svgOrigin: `${p.cx} ${p.cy}`,
+      duration: petalsRotate.dur, ease: 'power2.inOut'
+    }, petalsRotate.start)
+  })
+
+  // ── J animation ──
+  const jBody = seg('j-body')
+  tl.to('#j-body', {
+    y: 0, duration: jBody.dur, ease: 'power2.inOut'
+  }, jBody.start)
+
+  const jCorner = seg('j-corner')
+  tl.to('#j-corner', {
+    scale: 1, duration: jCorner.dur, ease: 'power2.inOut'
+  }, jCorner.start)
+
+  const jMask = seg('j-mask')
+  tl.to('#j-mask', {
+    scale: 1, duration: jMask.dur, ease: 'power2.inOut'
+  }, jMask.start)
+
+  // Hold + fade
+  const holdFade = seg('hold+fade')
+  if (holdFade.dur > 0) {
+    tl.to('#letters-scene', { opacity: 0, duration: 0.4, ease: 'power1.in' }, holdFade.start)
+  }
+
+  // Reset at end
+  tl.set('#letters-scene', { opacity: 1 })
+  tl.set('#j-body', { y: -100 })
+  tl.set('#j-mask', { scale: 0 })
+  tl.set('#j-corner', { scale: 0 })
+  tl.set('#e-clip-rect', { attr: { x: 180, width: 4 } })
+  tl.set('#e-counter', { scaleX: 0 })
+  tl.set('#e-opening', { x: 60 })
+  tl.set('#e-front', { scaleX: 0 })
+  tl.set('#o-bullet', { opacity: 0, attr: { cx: 175, r: 1 } })
+  petals.forEach((el) => {
+    tl.set(el, { attr: { cx: 124, cy: 42 }, rotation: 0, opacity: 0 })
+  })
+
+  // Restore playback state
+  if (prevTime > 0 && prevTime < tl.duration()) {
+    tl.time(prevTime)
+  }
+  if (!wasPlaying) {
+    tl.pause()
+  }
+}
 
 function onTrackMouseDown(e) {
   if (isAnalog.value) {
-    // In analog mode, check if clicking on a segment
     const segEl = e.target.closest('.timeline-segment')
     if (!segEl) return
     const i = parseInt(segEl.dataset.index)
-    const seg = segments.value[i]
+    const s = segments.value[i]
     const segRect = segEl.getBoundingClientRect()
     const xInSeg = e.clientX - segRect.left
     const edgeZone = 8
@@ -34,12 +194,11 @@ function onTrackMouseDown(e) {
     dragInfo = {
       segIndex: i, mode,
       startX: e.clientX,
-      origStart: seg.start,
-      origEnd: seg.end,
+      origStart: s.start,
+      origEnd: s.end,
     }
     e.preventDefault()
   } else {
-    // Normal scrub mode
     if (!mainTl) return
     const rect = e.currentTarget.getBoundingClientRect()
     const pct = (e.clientX - rect.left) / rect.width
@@ -58,23 +217,22 @@ function onTrackMouseMove(e) {
     const pxPerSec = totalWidth / maxEnd
     const dx = e.clientX - dragInfo.startX
     const dt = dx / pxPerSec
-    const seg = segments.value[dragInfo.segIndex]
+    const s = segments.value[dragInfo.segIndex]
 
     if (dragInfo.mode === 'move') {
       const newStart = Math.max(0, dragInfo.origStart + dt)
       const dur = dragInfo.origEnd - dragInfo.origStart
-      seg.start = parseFloat(newStart.toFixed(2))
-      seg.end = parseFloat((newStart + dur).toFixed(2))
+      s.start = parseFloat(newStart.toFixed(2))
+      s.end = parseFloat((newStart + dur).toFixed(2))
     } else if (dragInfo.mode === 'resize-left') {
       const newStart = Math.max(0, Math.min(dragInfo.origEnd - 0.05, dragInfo.origStart + dt))
-      seg.start = parseFloat(newStart.toFixed(2))
+      s.start = parseFloat(newStart.toFixed(2))
     } else if (dragInfo.mode === 'resize-right') {
-      const newEnd = Math.max(seg.start + 0.05, dragInfo.origEnd + dt)
-      seg.end = parseFloat(newEnd.toFixed(2))
+      const newEnd = Math.max(s.start + 0.05, dragInfo.origEnd + dt)
+      s.end = parseFloat(newEnd.toFixed(2))
     }
     recalcSegmentPcts()
   } else if (!isAnalog.value && e.buttons === 1 && mainTl) {
-    // Normal scrub
     const rect = e.currentTarget.getBoundingClientRect()
     const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
     mainTl.time(pct * mainTl.duration())
@@ -82,7 +240,10 @@ function onTrackMouseMove(e) {
 }
 
 function onTrackMouseUp() {
-  dragInfo = null
+  if (dragInfo) {
+    dragInfo = null
+    buildTimeline() // rebuild on drag end
+  }
 }
 
 function togglePlay() {
@@ -106,19 +267,21 @@ function toggleAnalog() {
 function updateSegStart(i, e) {
   const val = parseFloat(e.target.value)
   if (isNaN(val)) return
-  const seg = segments.value[i]
-  const dur = seg.end - seg.start
-  seg.start = val
-  seg.end = val + dur
+  const s = segments.value[i]
+  const dur = s.end - s.start
+  s.start = val
+  s.end = val + dur
   recalcSegmentPcts()
+  buildTimeline()
 }
 
 function updateSegDur(i, e) {
   const val = parseFloat(e.target.value)
   if (isNaN(val)) return
-  const seg = segments.value[i]
-  seg.end = seg.start + val
+  const s = segments.value[i]
+  s.end = s.start + val
   recalcSegmentPcts()
+  buildTimeline()
 }
 
 function recalcSegmentPcts() {
@@ -141,177 +304,31 @@ function exportTimeline() {
 }
 
 onMounted(() => {
+  const totalDur = 5.4
+
+  // Initialize segments (source of truth for all timing)
+  segments.value = [
+    { label: 'body-e', start: 0, end: 1.8, color: '#4a9' },
+    { label: 'upper-e', start: 0.54, end: 1.44, color: '#4a9' },
+    { label: 'front-e', start: 0.9, end: 1.44, color: '#4a9' },
+    { label: 'lower-e', start: 0.63, end: 1.71, color: '#4a9' },
+    { label: 'back-e', start: 1.26, end: 1.8, color: '#4a9' },
+    { label: 'bullet', start: 1.64, end: 2.36, color: '#e94' },
+    { label: 'petals-in', start: 2.09, end: 2.31, color: '#e94' },
+    { label: 'petals-spread', start: 1.96, end: 2.85, color: '#e94' },
+    { label: 'petals-rotate', start: 2.02, end: 3.9, color: '#e94' },
+    { label: 'j-body', start: 1.76, end: 4.29, color: '#49e' },
+    { label: 'j-corner', start: 2.33, end: 3.75, color: '#49e' },
+    { label: 'j-mask', start: 2, end: 4.78, color: '#49e' },
+    { label: 'hold+fade', start: 5, end: 5.4, color: '#666' },
+  ].map(s => ({
+    ...s,
+    leftPct: (s.start / totalDur) * 100,
+    widthPct: Math.max(((s.end - s.start) / totalDur) * 100, 0.5),
+  }))
+
   ctx = gsap.context(() => {
-    const DUR = 1.8 // base unit for animation timing
-    mainTl = gsap.timeline({
-      repeat: -1, repeatDelay: 0,
-      onUpdate: function () {
-        const t = this.time()
-        const d = this.duration()
-        playheadPos.value = (t / d) * 100
-        currentTime.value = t.toFixed(2)
-      }
-    })
-    const tl = mainTl
-
-    // Initial state
-    gsap.set('#e-clip-rect', { attr: { x: 180, width: 4 } })
-    gsap.set('#e-counter', { scaleX: 0, svgOrigin: '191 26' })
-    gsap.set('#e-opening', { x: 60 })
-    gsap.set('#e-front', { scaleX: 0, svgOrigin: '238 24.5' })
-
-    // O petal data: final positions and rotations
-    const petalData = [
-      { cx: 119.717, cy: 62.9484, rot: 59.365 },
-      { cx: 128.342, cy: 20.4592, rot: 59.365 },
-      { cx: 101.732, cy: 41.2846, rot: 28.5804 },
-      { cx: 146.851, cy: 41.4516, rot: 28.5804 },
-    ]
-
-    // O initial state: bullet hidden, petals at center with no rotation
-    gsap.set('#o-bullet', { opacity: 0, attr: { cx: 175, r: 1 } })
-    canvasRef.value.querySelectorAll('.o-petal').forEach((el) => {
-      gsap.set(el, { attr: { cx: 124, cy: 42 }, opacity: 0 })
-    })
-
-    // J initial state
-    gsap.set('#j-body', { y: -100 })
-    gsap.set('#j-mask', { scale: 0, svgOrigin: '41 42' })
-    gsap.set('#j-corner', { scale: 0, svgOrigin: '0 0' })
-
-    // ══════════════════════════════════════════════════════
-    // TIMELINE — see debug UI below for live view
-    // ══════════════════════════════════════════════════════
-
-    // ── E animation ──
-    // Clip expansion: width 4 → 77 (x stays at 180)
-    tl.to('#e-clip-rect', {
-      attr: { width: 77 },
-      duration: DUR, ease: 'power2.inOut'
-    }, 0)
-
-    // Upper counter: scales X to the right (overlaps with front)
-    tl.to('#e-counter', {
-      scaleX: 1, duration: DUR * 0.5, ease: 'power2.inOut'
-    }, DUR * 0.3)
-
-    // Front-e: expands from left, just before upper counter ends
-    tl.to('#e-front', {
-      scaleX: 1, duration: DUR * 0.3, ease: 'power2.inOut'
-    }, DUR * 0.3 + DUR * 0.5 - DUR * 0.30)
-
-    // Lower opening: slides in from the right (overlaps with counter)
-    tl.to('#e-opening', {
-      x: 0, duration: DUR * 0.6, ease: 'power2.inOut'
-    }, DUR * 0.35)
-
-    // Back e: reveal left extension (starts while lower is finishing)
-    tl.to('#e-clip-rect', {
-      attr: { x: 168 },
-      duration: DUR * 0.3, ease: 'power2.inOut'
-    }, DUR * 0.35 + DUR * 0.6 - DUR * 0.25)
-
-    // ── O animation ──
-    const BACK_E_START = DUR * 0.35 + DUR * 0.6 - DUR * 0.25
-
-    // Bullet appears as back-e edge passes cx=175, then shoots toward O
-    const bulletAppear = BACK_E_START + DUR * 0.2
-    tl.set('#o-bullet', { opacity: 1 }, bulletAppear)
-    tl.to('#o-bullet', {
-      attr: { cx: 124, r: 20 },
-      duration: DUR * 0.6, ease: 'power2.out'
-    }, bulletAppear)
-
-    // Petals appear while bullet is near full size
-    const bulletEnd = bulletAppear + DUR * 0.6
-    const petalStart = 2.23
-    const petals = canvasRef.value.querySelectorAll('.o-petal')
-
-    // Petals fade in at center (no pop)
-    tl.to('.o-petal', {
-      opacity: 1, duration: DUR * 0.2, ease: 'power2.inOut'
-    }, petalStart)
-
-    // Petals spread to final positions (starts while bullet still growing)
-    petals.forEach((el, i) => {
-      const p = petalData[i]
-      tl.to(el, {
-        attr: { cx: p.cx, cy: p.cy },
-        duration: DUR * 0.45, ease: 'power2.inOut'
-      }, petalStart)
-    })
-
-    // Bullet fades as petals spread past it
-    tl.to('#o-bullet', {
-      opacity: 0, duration: DUR * 0.2, ease: 'power2.inOut'
-    }, petalStart + DUR * 0.15)
-
-    // Petals rotate into final orientation (overlaps with spread)
-    petals.forEach((el, i) => {
-      const p = petalData[i]
-      tl.to(el, {
-        rotation: p.rot,
-        svgOrigin: `${p.cx} ${p.cy}`,
-        duration: DUR * 0.35, ease: 'power2.inOut'
-      }, petalStart + DUR * 0.25)
-    })
-
-    // ── J animation ──
-    const J_START = 2.23
-
-    // J-body slides down from above
-    tl.to('#j-body', {
-      y: 0, duration: DUR * 0.5, ease: 'power2.inOut'
-    }, J_START)
-
-    // J-corner scales in from top-left (starts while body still settling)
-    tl.to('#j-corner', {
-      scale: 1, duration: DUR * 0.4, ease: 'power2.inOut'
-    }, J_START + DUR * 0.2)
-
-    // J-mask scales up from center (starts while corner still growing)
-    tl.to('#j-mask', {
-      scale: 1, duration: DUR * 0.4, ease: 'power2.inOut'
-    }, J_START + DUR * 0.3)
-
-    // Build timeline segments for debug UI
-    const J_END = J_START + DUR * 0.3 + DUR * 0.4
-    const totalDur = J_END + 1 + 0.4 // hold + fade
-    segments.value = [
-      { label: 'body-e', start: 0, end: DUR, color: '#4a9' },
-      { label: 'upper-e', start: DUR * 0.3, end: DUR * 0.8, color: '#4a9' },
-      { label: 'front-e', start: DUR * 0.5, end: DUR * 0.8, color: '#4a9' },
-      { label: 'lower-e', start: DUR * 0.35, end: DUR * 0.95, color: '#4a9' },
-      { label: 'back-e', start: BACK_E_START, end: BACK_E_START + DUR * 0.3, color: '#4a9' },
-      { label: 'bullet', start: bulletAppear, end: bulletEnd, color: '#e94' },
-      { label: 'petals-in', start: petalStart, end: petalStart + DUR * 0.2, color: '#e94' },
-      { label: 'petals-spread', start: petalStart + DUR * 0.05, end: petalStart + DUR * 0.5, color: '#e94' },
-      { label: 'petals-rotate', start: petalStart + DUR * 0.25, end: petalStart + DUR * 0.6, color: '#e94' },
-      { label: 'j-body', start: J_START, end: J_START + DUR * 0.5, color: '#49e' },
-      { label: 'j-corner', start: J_START + DUR * 0.2, end: J_START + DUR * 0.6, color: '#49e' },
-      { label: 'j-mask', start: J_START + DUR * 0.3, end: J_END, color: '#49e' },
-      { label: 'hold+fade', start: J_END + 1, end: totalDur, color: '#666' },
-    ].map(s => ({
-      ...s,
-      leftPct: (s.start / totalDur) * 100,
-      widthPct: Math.max(((s.end - s.start) / totalDur) * 100, 0.5),
-    }))
-
-    // Hold final frame, then fade out and reset
-    tl.to('#letters-scene', { opacity: 0, duration: 0.4, ease: 'power1.in' }, '+=1')
-    tl.set('#letters-scene', { opacity: 1 })
-    tl.set('#j-body', { y: -100 })
-    tl.set('#j-mask', { scale: 0 })
-    tl.set('#j-corner', { scale: 0 })
-    tl.set('#e-clip-rect', { attr: { x: 180, width: 4 } })
-    tl.set('#e-counter', { scaleX: 0 })
-    tl.set('#e-opening', { x: 60 })
-    tl.set('#e-front', { scaleX: 0 })
-    tl.set('#o-bullet', { opacity: 0, attr: { cx: 175, r: 1 } })
-    petals.forEach((el) => {
-      tl.set(el, { attr: { cx: 124, cy: 42 }, rotation: 0, opacity: 0 })
-    })
-
+    buildTimeline()
   }, canvasRef.value)
 })
 
@@ -507,6 +524,7 @@ onUnmounted(() => {
   overflow: hidden;
   cursor: pointer;
   user-select: none;
+  flex: 1;
 }
 
 .timeline-segment {
@@ -542,10 +560,6 @@ onUnmounted(() => {
 .timeline-body {
   display: flex;
   gap: 16px;
-}
-
-.timeline-tracks {
-  flex: 1;
 }
 
 .timeline-controls {
