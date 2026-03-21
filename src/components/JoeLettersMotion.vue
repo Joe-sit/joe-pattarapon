@@ -15,10 +15,10 @@ const exportedData = ref('')
 
 // O petal data
 const petalData = [
-  { cx: 119.717, cy: 62.9484, rot: 59.365 },
-  { cx: 128.342, cy: 20.4592, rot: 59.365 },
-  { cx: 101.732, cy: 41.2846, rot: 28.5804 },
-  { cx: 146.851, cy: 41.4516, rot: 28.5804 },
+  { cx: 117.717, cy: 62.9484, rot: 59.365 },
+  { cx: 126.342, cy: 20.4592, rot: 59.365 },
+  { cx: 99.732, cy: 41.2846, rot: 28.5804 },
+  { cx: 144.851, cy: 41.4516, rot: 28.5804 },
 ]
 
 // Drag state
@@ -42,18 +42,19 @@ function buildTimeline() {
   }
 
   // Reset all elements to initial state
-  gsap.set('#e-clip-rect', { attr: { x: 180, width: 4 } })
-  gsap.set('#e-counter', { scaleX: 0, svgOrigin: '191 26' })
+  gsap.set('#e-clip-rect', { attr: { x: 174, width: 4 } })
+  gsap.set('#e-counter', { scaleX: 0, svgOrigin: '185 26' })
   gsap.set('#e-opening', { x: 60 })
-  gsap.set('#e-front', { scaleX: 0, svgOrigin: '238 24.5' })
-  gsap.set('#o-bullet', { opacity: 0, attr: { cx: 175, r: 1 } })
+  gsap.set('#e-front', { scaleX: 0, svgOrigin: '232 24.5' })
+  gsap.set('#o-bullet', { opacity: 0, attr: { cx: 173, r: 1 } })
   canvasRef.value.querySelectorAll('.o-petal').forEach((el) => {
-    gsap.set(el, { attr: { cx: 124, cy: 42 }, rotation: 0, opacity: 0 })
+    gsap.set(el, { attr: { cx: 122, cy: 42 }, rotation: 0, opacity: 0 })
   })
   gsap.set('#j-body', { y: -100 })
   gsap.set('#j-mask', { scale: 0, svgOrigin: '34 31' })
   gsap.set('#j-corner', { scale: 0, svgOrigin: '0 0' })
   gsap.set('#letters-scene', { opacity: 1 })
+  gsap.set('#slide-group', { x: -80 })
 
   mainTl = gsap.timeline({
     repeat: -1, repeatDelay: 0,
@@ -66,6 +67,16 @@ function buildTimeline() {
   })
   const tl = mainTl
   const petals = canvasRef.value.querySelectorAll('.o-petal')
+
+  // ── Slide ──
+  const slideSlow = seg('slide-slow')
+  tl.to('#slide-group', {
+    x: -60, duration: slideSlow.dur, ease: 'power1.in'
+  }, slideSlow.start)
+  const slideSnap = seg('slide-snap')
+  tl.to('#slide-group', {
+    x: 0, duration: slideSnap.dur, ease: 'power1.5.out'
+  }, slideSnap.start)
 
   // ── E animation ──
   const bodyE = seg('body-e')
@@ -91,7 +102,7 @@ function buildTimeline() {
 
   const backE = seg('back-e')
   tl.to('#e-clip-rect', {
-    attr: { x: 168 },
+    attr: { x: 162 },
     duration: backE.dur, ease: 'power2.inOut'
   }, backE.start)
 
@@ -99,7 +110,7 @@ function buildTimeline() {
   const bullet = seg('bullet')
   tl.set('#o-bullet', { opacity: 1 }, bullet.start)
   tl.to('#o-bullet', {
-    attr: { cx: 124, r: 20 },
+    attr: { cx: 122, r: 20 },
     duration: bullet.dur, ease: 'power2.out'
   }, bullet.start)
 
@@ -159,13 +170,14 @@ function buildTimeline() {
   tl.set('#j-body', { y: -100 })
   tl.set('#j-mask', { scale: 0 })
   tl.set('#j-corner', { scale: 0 })
-  tl.set('#e-clip-rect', { attr: { x: 180, width: 4 } })
+  tl.set('#e-clip-rect', { attr: { x: 174, width: 4 } })
   tl.set('#e-counter', { scaleX: 0 })
   tl.set('#e-opening', { x: 60 })
   tl.set('#e-front', { scaleX: 0 })
-  tl.set('#o-bullet', { opacity: 0, attr: { cx: 175, r: 1 } })
+  tl.set('#slide-group', { x: -80 })
+  tl.set('#o-bullet', { opacity: 0, attr: { cx: 173, r: 1 } })
   petals.forEach((el) => {
-    tl.set(el, { attr: { cx: 124, cy: 42 }, rotation: 0, opacity: 0 })
+    tl.set(el, { attr: { cx: 122, cy: 42 }, rotation: 0, opacity: 0 })
   })
 
   // Restore playback state
@@ -304,23 +316,25 @@ function exportTimeline() {
 }
 
 onMounted(() => {
-  const totalDur = 5.4
+  const totalDur = 3.4
 
   // Initialize segments (source of truth for all timing)
   segments.value = [
-    { label: 'body-e', start: 0, end: 1.8, color: '#4a9' },
-    { label: 'upper-e', start: 0.54, end: 1.44, color: '#4a9' },
-    { label: 'front-e', start: 0.9, end: 1.44, color: '#4a9' },
-    { label: 'lower-e', start: 0.63, end: 1.71, color: '#4a9' },
-    { label: 'back-e', start: 1.26, end: 1.8, color: '#4a9' },
-    { label: 'bullet', start: 1.52, end: 2.22, color: '#e94' },
-    { label: 'petals-in', start: 1.93, end: 2.14, color: '#e94' },
-    { label: 'petals-spread', start: 1.79, end: 2.78, color: '#e94' },
-    { label: 'petals-rotate', start: 1.93, end: 3.83, color: '#e94' },
-    { label: 'j-body', start: 1.19, end: 3.55, color: '#49e' },
-    { label: 'j-corner', start: 1.94, end: 3.92, color: '#49e' },
-    { label: 'j-mask', start: 2.17, end: 4.08, color: '#49e' },
-    { label: 'hold+fade', start: 5, end: 5.4, color: '#666' },
+    { label: 'body-e', start: 0, end: 1.32, color: '#4a9' },
+    { label: 'upper-e', start: 0.4, end: 1.06, color: '#4a9' },
+    { label: 'front-e', start: 0.66, end: 1.06, color: '#4a9' },
+    { label: 'lower-e', start: 0.46, end: 1.26, color: '#4a9' },
+    { label: 'back-e', start: 0.93, end: 1.32, color: '#4a9' },
+    { label: 'bullet', start: 1.12, end: 1.63, color: '#e94' },
+    { label: 'petals-in', start: 1.42, end: 1.57, color: '#e94' },
+    { label: 'petals-spread', start: 1.32, end: 2.04, color: '#e94' },
+    { label: 'petals-rotate', start: 1.42, end: 2.82, color: '#e94' },
+    { label: 'j-body', start: 0.87, end: 2.61, color: '#49e' },
+    { label: 'j-corner', start: 1.43, end: 2.88, color: '#49e' },
+    { label: 'j-mask', start: 1.6, end: 3, color: '#49e' },
+    { label: 'slide-slow', start: 0, end: 1.18, color: '#a5a' },
+    { label: 'slide-snap', start: 1.17, end: 3.23, color: '#d6d' },
+    { label: 'hold+fade', start: 3, end: 3.4, color: '#666' },
   ].map(s => ({
     ...s,
     leftPct: (s.start / totalDur) * 100,
@@ -341,7 +355,7 @@ onUnmounted(() => {
   <div ref="canvasRef" class="letters-canvas">
     <svg
       id="letters-scene"
-      viewBox="-10 -10 265 104"
+      viewBox="-10 -10 259 104"
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
@@ -349,10 +363,11 @@ onUnmounted(() => {
           <rect id="j-clip-rect" x="-1" y="-1" width="83" height="1" />
         </clipPath>
         <clipPath id="e-reveal">
-          <rect data-name="back-e" id="e-clip-rect" x="180" y="0" width="4" height="84" />
+          <rect data-name="back-e" id="e-clip-rect" x="174" y="0" width="4" height="84" />
         </clipPath>
       </defs>
 
+      <g id="slide-group">
       <!-- J -->
       <g data-name="j-letter">
         <path data-name="j-body" id="j-body" d="M0 0H81V43.5C81 65.8675 62.8675 84 40.5 84V84C18.1325 84 0 65.8675 0 43.5V0Z" fill="#E1E1E1" />
@@ -362,50 +377,35 @@ onUnmounted(() => {
 
       <!-- O -->
       <g data-name="o-letter" id="o-petals">
-        <ellipse class="o-petal" data-name="o-petal-1" cx="119.717" cy="62.9484" rx="15.1684" ry="18.4624" fill="#E1E1E1" />
-        <ellipse class="o-petal" data-name="o-petal-2" cx="128.342" cy="20.4592" rx="15.1684" ry="18.4624" fill="#E1E1E1" />
-        <ellipse class="o-petal" data-name="o-petal-3" cx="101.732" cy="41.2846" rx="14.1752" ry="19.4078" fill="#E1E1E1" />
-        <ellipse class="o-petal" data-name="o-petal-4" cx="146.851" cy="41.4516" rx="14.1752" ry="19.4078" fill="#E1E1E1" />
+        <ellipse class="o-petal" data-name="o-petal-1" cx="117.717" cy="62.9484" rx="15.1684" ry="18.4624" fill="#E1E1E1" />
+        <ellipse class="o-petal" data-name="o-petal-2" cx="126.342" cy="20.4592" rx="15.1684" ry="18.4624" fill="#E1E1E1" />
+        <ellipse class="o-petal" data-name="o-petal-3" cx="99.732" cy="41.2846" rx="14.1752" ry="19.4078" fill="#E1E1E1" />
+        <ellipse class="o-petal" data-name="o-petal-4" cx="144.851" cy="41.4516" rx="14.1752" ry="19.4078" fill="#E1E1E1" />
       </g>
 
       <!-- O bullet (outside clip, hidden until needed) -->
-      <circle data-name="o-bullet" id="o-bullet" cx="175" cy="42" r="1" fill="#E1E1E1" />
+      <circle data-name="o-bullet" id="o-bullet" cx="173" cy="42" r="1" fill="#E1E1E1" />
 
       <!-- E -->
       <g clip-path="url(#e-reveal)">
-        <path data-name="body-e" d="M180 2H238V81H180V65H168V18H180Z" fill="#E1E1E1" />
-        <rect data-name="front-e" id="e-front" x="237" y="10" width="8" height="29" fill="#E1E1E1" />
+        <path data-name="body-e" d="M174 2H232V81H174V65H162V18H174Z" fill="#E1E1E1" />
+        <rect data-name="front-e" id="e-front" x="231" y="10" width="8" height="29" fill="#E1E1E1" />
 
         <rect
           data-name="upper-e-mask"
           class="e-cutout" id="e-counter"
-          x="191" y="18" width="35" height="16" rx="8"
+          x="185" y="18" width="35" height="16" rx="8"
           fill="black"
         />
         <path
           data-name="lower-e-mask"
           class="e-cutout" id="e-opening"
-          d="M191 57C191 52.5817 194.582 49 199 49H245V65H199C194.582 65 191 61.4183 191 57Z"
+          d="M185 57C185 52.5817 188.582 49 193 49H239V65H193C188.582 65 185 61.4183 185 57Z"
           fill="black"
         />
       </g>
 
-      <!-- Debug labels -->
-      <text x="40" y="-2" fill="#666" font-size="5" font-family="monospace" text-anchor="middle">J</text>
-      <text x="57" y="18" fill="#666" font-size="4" font-family="monospace" text-anchor="middle">j-body</text>
-      <text x="16" y="18" fill="#666" font-size="3" font-family="monospace" text-anchor="middle">j-corner</text>
-      <text x="41" y="44" fill="#666" font-size="3" font-family="monospace" text-anchor="middle">j-mask</text>
-      <text x="124" y="-2" fill="#666" font-size="5" font-family="monospace" text-anchor="middle">O</text>
-      <text x="168" y="38" fill="#666" font-size="4" font-family="monospace">o-bullet</text>
-      <text x="119" y="72" fill="#666" font-size="3" font-family="monospace" text-anchor="middle">petal-1</text>
-      <text x="128" y="14" fill="#666" font-size="3" font-family="monospace" text-anchor="middle">petal-2</text>
-      <text x="88" y="42" fill="#666" font-size="3" font-family="monospace" text-anchor="middle">petal-3</text>
-      <text x="160" y="42" fill="#666" font-size="3" font-family="monospace" text-anchor="middle">petal-4</text>
-      <text x="200" y="-2" fill="#666" font-size="5" font-family="monospace">body-e</text>
-      <text x="243" y="8" fill="#666" font-size="4" font-family="monospace">front-e</text>
-      <text x="195" y="16" fill="#666" font-size="4" font-family="monospace">upper-e-mask</text>
-      <text x="195" y="48" fill="#666" font-size="4" font-family="monospace">lower-e-mask</text>
-      <text x="164" y="42" fill="#666" font-size="4" font-family="monospace" text-anchor="end">back-e</text>
+      </g><!-- /slide-group -->
     </svg>
   </div>
   <!-- Debug Timeline -->
