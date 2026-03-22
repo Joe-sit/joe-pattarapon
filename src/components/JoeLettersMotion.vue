@@ -8,6 +8,8 @@ const playheadPos = ref(0)
 const currentTime = ref('0.00')
 const isPlaying = ref(true)
 const isAnalog = ref(false)
+const isRecording = ref(false)
+const recordStatus = ref('')
 let ctx
 let mainTl = null
 const segments = ref([])
@@ -305,6 +307,93 @@ function recalcSegmentPcts() {
   })
 }
 
+async function recordVideo() {
+  if (!mainTl || !canvasRef.value) return
+  isRecording.value = true
+  recordStatus.value = 'Preparing...'
+
+  const svg = canvasRef.value.querySelector('#letters-scene')
+  const container = canvasRef.value
+  const containerRect = container.getBoundingClientRect()
+  const scale = 2 // 2x resolution
+  const width = Math.round(containerRect.width) * scale
+  const height = Math.round(containerRect.height) * scale
+
+  const offscreen = document.createElement('canvas')
+  offscreen.width = width
+  offscreen.height = height
+  const offCtx = offscreen.getContext('2d')
+
+  const stream = offscreen.captureStream(60)
+  const chunks = []
+  const recorder = new MediaRecorder(stream, {
+    mimeType: 'video/webm;codecs=vp9',
+    videoBitsPerSecond: 8_000_000,
+  })
+  recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data) }
+
+  // Pause and reset
+  mainTl.pause()
+  mainTl.time(0)
+  isPlaying.value = false
+
+  const fps = 60
+  const duration = mainTl.duration()
+  const totalFrames = Math.ceil(duration * fps)
+  const dt = 1 / fps
+  const frameInterval = 1000 / fps // ms per frame
+
+  recorder.start()
+
+  for (let frame = 0; frame <= totalFrames; frame++) {
+    const t = Math.min(frame * dt, duration)
+    mainTl.time(t)
+    recordStatus.value = `Recording ${Math.round((frame / totalFrames) * 100)}%`
+
+    // Serialize SVG to image
+    const svgData = new XMLSerializer().serializeToString(svg)
+    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const img = new Image()
+    img.width = width
+    img.height = height
+
+    await new Promise((resolve) => {
+      img.onload = () => {
+        offCtx.fillStyle = '#F1F0EE'
+        offCtx.fillRect(0, 0, width, height)
+        const svgW = svg.getBoundingClientRect().width * scale
+        const svgH = svg.getBoundingClientRect().height * scale
+        const ox = (width - svgW) / 2
+        const oy = (height - svgH) / 2
+        offCtx.drawImage(img, ox, oy, svgW, svgH)
+        URL.revokeObjectURL(url)
+        resolve()
+      }
+      img.src = url
+    })
+
+    // Wait real-time frame interval so MediaRecorder captures at correct speed
+    await new Promise(r => setTimeout(r, frameInterval))
+  }
+
+  recorder.stop()
+  await new Promise(r => { recorder.onstop = r })
+
+  const videoBlob = new Blob(chunks, { type: 'video/webm' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(videoBlob)
+  a.download = 'joe-logo-animation.webm'
+  a.click()
+  URL.revokeObjectURL(a.href)
+
+  recordStatus.value = ''
+  isRecording.value = false
+  mainTl.time(0)
+  mainTl.play()
+  isPlaying.value = true
+}
+
 function exportTimeline() {
   const data = segments.value.map(s => ({
     label: s.label,
@@ -370,38 +459,38 @@ onUnmounted(() => {
       <g id="slide-group">
       <!-- J -->
       <g data-name="j-letter">
-        <path data-name="j-body" id="j-body" d="M0 0H81V43.5C81 65.8675 62.8675 84 40.5 84V84C18.1325 84 0 65.8675 0 43.5V0Z" fill="#E1E1E1" />
-        <path data-name="j-mask" id="j-mask" d="M41 55C36.5817 55 33 51.4183 33 47L33 30L49 30L49 47C49 51.4183 45.4183 55 41 55V55Z" fill="black" />
-        <rect data-name="j-corner" id="j-corner" x="-1" y="-1" width="35" height="32" fill="black" />
+        <path data-name="j-body" id="j-body" d="M0 0H81V43.5C81 65.8675 62.8675 84 40.5 84V84C18.1325 84 0 65.8675 0 43.5V0Z" fill="#FD5000" />
+        <path data-name="j-mask" id="j-mask" d="M41 55C36.5817 55 33 51.4183 33 47L33 30L49 30L49 47C49 51.4183 45.4183 55 41 55V55Z" fill="#F1F0EE" />
+        <rect data-name="j-corner" id="j-corner" x="-1" y="-1" width="35" height="32" fill="#F1F0EE" />
       </g>
 
       <!-- O -->
       <g data-name="o-letter" id="o-petals">
-        <ellipse class="o-petal" data-name="o-petal-1" cx="117.717" cy="62.9484" rx="15.1684" ry="18.4624" fill="#E1E1E1" />
-        <ellipse class="o-petal" data-name="o-petal-2" cx="126.342" cy="20.4592" rx="15.1684" ry="18.4624" fill="#E1E1E1" />
-        <ellipse class="o-petal" data-name="o-petal-3" cx="99.732" cy="41.2846" rx="14.1752" ry="19.4078" fill="#E1E1E1" />
-        <ellipse class="o-petal" data-name="o-petal-4" cx="144.851" cy="41.4516" rx="14.1752" ry="19.4078" fill="#E1E1E1" />
+        <ellipse class="o-petal" data-name="o-petal-1" cx="117.717" cy="62.9484" rx="15.1684" ry="18.4624" fill="#FD5000" />
+        <ellipse class="o-petal" data-name="o-petal-2" cx="126.342" cy="20.4592" rx="15.1684" ry="18.4624" fill="#FD5000" />
+        <ellipse class="o-petal" data-name="o-petal-3" cx="99.732" cy="41.2846" rx="14.1752" ry="19.4078" fill="#FD5000" />
+        <ellipse class="o-petal" data-name="o-petal-4" cx="144.851" cy="41.4516" rx="14.1752" ry="19.4078" fill="#FD5000" />
       </g>
 
       <!-- O bullet (outside clip, hidden until needed) -->
-      <circle data-name="o-bullet" id="o-bullet" cx="173" cy="42" r="1" fill="#E1E1E1" />
+      <circle data-name="o-bullet" id="o-bullet" cx="173" cy="42" r="1" fill="#FD5000" />
 
       <!-- E -->
       <g clip-path="url(#e-reveal)">
-        <path data-name="body-e" d="M174 2H232V81H174V65H162V18H174Z" fill="#E1E1E1" />
-        <rect data-name="front-e" id="e-front" x="231" y="10" width="8" height="29" fill="#E1E1E1" />
+        <path data-name="body-e" d="M174 2H232V81H174V65H162V18H174Z" fill="#FD5000" />
+        <rect data-name="front-e" id="e-front" x="231" y="10" width="8" height="29" fill="#FD5000" />
 
         <rect
           data-name="upper-e-mask"
           class="e-cutout" id="e-counter"
           x="185" y="18" width="35" height="16" rx="8"
-          fill="black"
+          fill="#F1F0EE"
         />
         <path
           data-name="lower-e-mask"
           class="e-cutout" id="e-opening"
           d="M185 57C185 52.5817 188.582 49 193 49H239V65H193C188.582 65 185 61.4183 185 57Z"
-          fill="black"
+          fill="#F1F0EE"
         />
       </g>
 
@@ -415,6 +504,7 @@ onUnmounted(() => {
       <span class="timeline-time">{{ currentTime }}s</span>
       <button class="timeline-btn" :class="{ 'timeline-analog-active': isAnalog }" @click="toggleAnalog">{{ isAnalog ? '⏺ Analog' : '○ Analog' }}</button>
       <button class="timeline-btn timeline-export" @click="exportTimeline">Export</button>
+      <button class="timeline-btn timeline-record" :class="{ 'recording': isRecording }" :disabled="isRecording" @click="recordVideo">{{ isRecording ? recordStatus : 'Record' }}</button>
     </div>
     <div class="timeline-body">
       <div
@@ -467,7 +557,7 @@ onUnmounted(() => {
 .letters-canvas {
   width: 100%;
   aspect-ratio: 16 / 9;
-  background: #000000;
+  background: #F1F0EE;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -614,6 +704,25 @@ onUnmounted(() => {
   width: auto !important;
   padding: 4px 10px !important;
   margin-left: auto;
+}
+
+.timeline-record {
+  font-size: 11px !important;
+  width: auto !important;
+  padding: 4px 10px !important;
+  background: #363 !important;
+  border-color: #5a5 !important;
+}
+
+.timeline-record:hover {
+  background: #474 !important;
+}
+
+.timeline-record.recording {
+  background: #a33 !important;
+  border-color: #f55 !important;
+  cursor: wait;
+  min-width: 120px;
 }
 
 .timeline-analog-active {
