@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 const goToAbout = () => router.push({ name: 'AboutPage' })
 import GoToSVG from '../../assets/bubble.svg'
+import CursorArrow from '../CursorArrow.vue'
 
 const headlineText = "Hello, I'm Joe, a UX/UI Designer With a Web Dev Background"
 const highlightWord = "Joe"
@@ -23,7 +24,8 @@ const goToInstagram = () => {
     window.open('https://www.instagram.com/joe_autismxd/', '_blank')
 }
 
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { gsap } from 'gsap'
 
 const email = ref('pattarapon.mak@gmail.com')
 const isCopied = ref(false)
@@ -99,6 +101,7 @@ const animateCountUp = (target, duration, onUpdate) => {
 onMounted(() => {
     window.scrollTo(0, 0)
     rafId = requestAnimationFrame(updateParallax)
+    window.addEventListener('mousemove', onMouseMove)
 
     const observer = new IntersectionObserver(([entry]) => {
         if (entry.isIntersecting) {
@@ -137,7 +140,21 @@ onMounted(() => {
 
 onUnmounted(() => {
     if (rafId) cancelAnimationFrame(rafId)
+    window.removeEventListener('mousemove', onMouseMove)
 })
+
+// Cursor-following "You" badge
+const youBadgeRef = ref(null)
+
+const onMouseMove = (e) => {
+    if (!youBadgeRef.value) return
+    gsap.to(youBadgeRef.value, {
+        x: e.clientX,
+        y: e.clientY,
+        duration: 0.25,
+        ease: 'power2.out',
+    })
+}
 
 // Spotlight + tooltip effect
 const tooltip = ref({ visible: false, x: 0, y: 0, text: '' })
@@ -175,6 +192,23 @@ const onGreetingMouseLeave = () => {
 </script>
 
 <template>
+    <!-- Cursor-following "You" badge -->
+    <Teleport to="body">
+        <div
+            ref="youBadgeRef"
+            class="fixed top-0 left-0 pointer-events-none z-[9990] flex items-start gap-1"
+            style="transform: translate(-999px, -999px);"
+        >
+            <div style="transform: scaleX(-1)">
+                <CursorArrow color="#1868DB" :size="22" :rotation="270" />
+            </div>
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-white text-sm font-medium mt-3"
+                style="background:#1868DB;">
+                You
+            </span>
+        </div>
+    </Teleport>
+
     <!-- Cursor-following tooltip -->
     <Teleport to="body">
         <Transition name="tooltip-fade">
@@ -185,7 +219,60 @@ const onGreetingMouseLeave = () => {
         </Transition>
     </Teleport>
 
-    <div data-scrol class="mx-auto max-w-screen-lg min-h-screen mb-6">
+    <!-- ── Hero Section ── -->
+    <section id="hero" class="relative overflow-hidden flex items-center pl-[221px] pr-16"
+        style="height: 100vh; margin-top: -80px; padding-top: 80px; background: linear-gradient(360deg, #F5E6FD 0%, #FFFFFF 50%, #FFF4DF 100%);">
+
+
+
+        <!-- Content -->
+        <div class="relative z-10 w-full" style="max-width: 691px;">
+
+            <!-- "Joe" badge -->
+            <div class="flex flex-col items-end mb-6" style="width: fit-content;">
+                <span class="inline-flex items-center px-4 py-2 rounded-full text-white text-sm font-medium"
+                    style="background:#FD5000;">
+                    Joe
+                </span>
+                <CursorArrow color="#FD5000" :size="22" :rotation="0" style="margin-top: 2px; margin-right: -16px;" />
+            </div>
+
+            <!-- Headline -->
+            <div class="flex flex-col" style="gap: 24px; font-size: 72px; line-height: 90px; color: #292A2E;">
+                <!-- Line 1: Designer with — height: 100px, gap: 16px -->
+                <div class="flex items-center" style="gap: 16px; height: 100px;">
+                    <span class="flex items-center justify-center"
+                        style="padding: 24px; width: 358px; height: 100px; box-sizing: border-box; background: rgba(24,104,219,0.05); border: 1px dashed #1868DB; border-radius: 24px; font-weight: 700; color: #1868DB; flex-shrink: 0;">
+                        Designer
+                    </span>
+                    <span style="font-weight: 400; color: #292A2E;">with</span>
+                </div>
+                <!-- Line 2: {Dev} Background — height: 80px, gap: 16px -->
+                <div class="flex items-center" style="gap: 16px; height: 80px;">
+                    <span style="font-weight: 700; color: #EF4343;">{Dev}</span>
+                    <span style="font-weight: 400; color: #292A2E;">Background</span>
+                </div>
+            </div>
+
+            <!-- Subtitle -->
+            <p class="mt-6" style="font-size: 16px; line-height: 20px; color: #666666; max-width: 522px;">
+                I love crafting valuable things with passionate people to bringing design
+                to a real-world impact solution.
+            </p>
+
+
+        </div>
+
+        <!-- Bottom gradient fade -->
+        <div class="absolute bottom-0 pointer-events-none" style="
+        left: 50%; transform: translateX(-50%);
+        width: 1143px; height: 97px;
+        background: linear-gradient(188.35deg, rgba(241,240,238,0) 15.64%, #F1F0EE 93.6%);
+      " />
+    </section>
+
+    <!-- ── Existing content sections ── -->
+    <div id="works" class="mx-auto max-w-screen-lg min-h-screen mb-6">
 
         <!-- About Section -->
         <div class="text-white min-h-screen flex flex-col items-center py-6">
@@ -374,7 +461,7 @@ const onGreetingMouseLeave = () => {
                                 <div class="flex flex-col gap-4">
                                     <!-- <div class="w-14 h-14 bg-[#D9D9D9] rounded-full"></div> -->
                                     <h2 class="funnel text-2xl sm:text-3xl font-bold text-[#161616] leading-tight">
-                                         End-to-End Interaction for Auto-Medicine Vending Machine
+                                        End-to-End Interaction for Auto-Medicine Vending Machine
                                     </h2>
                                     <div class="flex flex-wrap gap-2">
                                         <span
@@ -442,7 +529,7 @@ const onGreetingMouseLeave = () => {
                                 <div ref="commCardRef" class="flex gap-10 mt-8">
                                     <div class="flex flex-col gap-1">
                                         <p class="funnel text-5xl font-bold text-[#161616] leading-none">{{ usersLabel
-                                            }}</p>
+                                        }}</p>
                                         <p class="funnel text-sm font-semibold text-[#FD5000] mt-1">Users</p>
                                         <p class="funnel text-sm text-[#4C4C56] max-w-[180px] leading-5 mt-1">
                                             500+ active users across organizations

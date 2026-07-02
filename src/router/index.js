@@ -7,6 +7,7 @@ import AboutPage from '../components/views/AboutPage.vue'
 import EkycDetails from '../components/views/EkycDetails.vue'
 import PlaygroundPage from '../components/views/PlaygroundPage.vue'
 import LogoPreviewPage from '../components/views/LogoPreviewPage.vue'
+import MascotPage from '../components/views/MascotPage.vue'
 
 
 
@@ -50,6 +51,11 @@ const routes = [
         path: '/logo',
         name: 'LogoPreview',
         component: LogoPreviewPage
+    },
+    {
+        path: '/mascot',
+        name: 'Mascot',
+        component: MascotPage
     },
     
 

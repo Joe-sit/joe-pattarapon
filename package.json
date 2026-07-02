@@ -12,6 +12,7 @@
     "@studio-freight/lenis": "^1.0.42",
     "@vercel/analytics": "^1.2.2",
     "@vueuse/motion": "^2.2.3",
+    "caveman-installer": "github:juliusbrussee/caveman",
     "defu": "^6.1.4",
     "gsap": "^3.14.2",
     "joe-pattarapon-portfolio": "file:",
