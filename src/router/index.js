@@ -5,6 +5,8 @@ import HomePage from '../components/views/HomePage.vue'
 import PortfolioDetails from '../components/views/PortfolioDetails.vue'
 import AboutPage from '../components/views/AboutPage.vue'
 import EkycDetails from '../components/views/EkycDetails.vue'
+import PlaygroundPage from '../components/views/PlaygroundPage.vue'
+import LogoPreviewPage from '../components/views/LogoPreviewPage.vue'
 
 
 
@@ -38,6 +40,16 @@ const routes = [
         path: '/about',
         name: 'AboutPage',
         component: AboutPage
+    },
+    {
+        path: '/playground',
+        name: 'Playground',
+        component: PlaygroundPage
+    },
+    {
+        path: '/logo',
+        name: 'LogoPreview',
+        component: LogoPreviewPage
     },
     
 
