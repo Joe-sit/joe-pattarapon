@@ -1,0 +1,114 @@
+@import 'tailwindcss';
+@import '@heroui/react/styles';
+
+@theme {
+  /* Brand palette — sourced from the 2026 logo + hero design */
+  --color-brand-orange: #fd5000;
+  --color-brand-orange-dark: #e04800;
+  --color-brand-blue: #1868db;
+  --color-brand-red: #ef4343;
+
+  /* Surfaces & ink */
+  --color-paper: #f1f0ee;
+  --color-ink: #292a2e;
+  --color-ink-muted: #666666;
+
+  --font-sans: 'Google Sans', 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-3xl: 0 20px 60px -5px rgb(0 0 0 / 0.06);
+  --shadow-rail: 0 4px 24px rgb(219 219 219 / 0.12);
+}
+
+@layer base {
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    background-color: var(--color-paper);
+    font-family: var(--font-sans);
+  }
+
+  /* Hard rule: anything clickable shows a pointer. */
+  a[href],
+  button,
+  summary,
+  label[for],
+  select,
+  [role='button'],
+  [role='link'],
+  [role='menuitem'],
+  [role='option'],
+  [role='switch'],
+  [role='checkbox'],
+  [role='radio'],
+  [role='slider'],
+  [role='tab'] {
+    cursor: pointer;
+  }
+
+  :disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+}
+
+/* ── Hero sky ──────────────────────────────────────────────────────── */
+@keyframes hero-cloud-drift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    /* Exactly one viewBox width: the second copy lands where the first began. */
+    transform: translateX(-1440px);
+  }
+}
+
+@keyframes hero-sun-breathe {
+  0%,
+  100% {
+    opacity: 0.92;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes hero-confetti-float {
+  0%,
+  100% {
+    opacity: 0.16;
+    transform: rotate(45deg) translateY(0);
+  }
+  50% {
+    opacity: 0.55;
+    transform: rotate(45deg) translateY(-7px);
+  }
+}
+
+.hero-clouds {
+  animation: hero-cloud-drift 90s linear infinite;
+}
+
+.hero-sun {
+  transform-origin: 352px 128px;
+  animation: hero-sun-breathe 7s ease-in-out infinite;
+}
+
+.hero-confetti {
+  transform-box: fill-box;
+  transform-origin: center;
+  /* Also the resting state, so reduced motion still gets diamonds. */
+  transform: rotate(45deg);
+  animation: hero-confetti-float 5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-clouds,
+  .hero-sun,
+  .hero-confetti {
+    animation: none;
+  }
+}
