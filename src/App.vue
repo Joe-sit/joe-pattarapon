@@ -5,7 +5,6 @@ import LogoSVG from './assets/joe-new-banner.svg'
 import Menu from './assets/menu.svg'
 import FooterSVG from './assets/Footer-JoeRebrand.svg'
 import { useMotion } from '@vueuse/motion'
-import Lenis from '@studio-freight/lenis'   // <-- Lenis import
 
 const isMenuOpen = ref(false)
 const router = useRouter()
@@ -29,21 +28,7 @@ onMounted(() => {
     isMenuOpen.value = false
   })
 
-  // --- Lenis smooth scroll setup ---
-  const lenis = new Lenis({
-    duration: 1, // seconds
-    // easing: t => 1 - Math.pow(1 - t, 3), // easeOutCubic
-    smooth: true,
-    resetNativeScroll: true,
-
-  })
-
-  function raf(time) {
-    lenis.raf(time)
-    requestAnimationFrame(raf)
-  }
-
-  requestAnimationFrame(raf)
+  
 })
 </script>
 
