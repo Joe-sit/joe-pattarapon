@@ -40,7 +40,7 @@ export function Logo({ width = 93, height = 32, className }: LogoProps) {
       {/* J */}
       <path
         d="M0 0H81V43.5C81 65.8675 62.8675 84 40.5 84V84C18.1325 84 0 65.8675 0 43.5V0Z"
-        fill="#FD5000"
+        fill="#F2F3F5"
         mask="url(#nav-j-mask)"
       />
       {/* O petals */}
@@ -50,7 +50,7 @@ export function Logo({ width = 93, height = 32, className }: LogoProps) {
         rx="15.1684"
         ry="18.4624"
         transform="rotate(59.365 117.717 62.9484)"
-        fill="#FD5000"
+        fill="#F2F3F5"
       />
       <ellipse
         cx="126.342"
@@ -58,7 +58,7 @@ export function Logo({ width = 93, height = 32, className }: LogoProps) {
         rx="15.1684"
         ry="18.4624"
         transform="rotate(59.365 126.342 20.4592)"
-        fill="#FD5000"
+        fill="#F2F3F5"
       />
       <ellipse
         cx="99.732"
@@ -66,7 +66,7 @@ export function Logo({ width = 93, height = 32, className }: LogoProps) {
         rx="14.1752"
         ry="19.4078"
         transform="rotate(28.5804 99.732 41.2846)"
-        fill="#FD5000"
+        fill="#F2F3F5"
       />
       <ellipse
         cx="144.851"
@@ -74,11 +74,11 @@ export function Logo({ width = 93, height = 32, className }: LogoProps) {
         rx="14.1752"
         ry="19.4078"
         transform="rotate(28.5804 144.851 41.4516)"
-        fill="#FD5000"
+        fill="#F2F3F5"
       />
       {/* E */}
-      <path d="M174 2H232V81H174V65H162V18H174Z" fill="#FD5000" mask="url(#nav-e-mask)" />
-      <rect x="231" y="10" width="8" height="29" fill="#FD5000" />
+      <path d="M174 2H232V81H174V65H162V18H174Z" fill="#F2F3F5" mask="url(#nav-e-mask)" />
+      <rect x="231" y="10" width="8" height="29" fill="#F2F3F5" />
     </svg>
   )
 }

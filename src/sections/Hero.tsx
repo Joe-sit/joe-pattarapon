@@ -1,8 +1,10 @@
 import { motion } from 'motion/react'
 import { HeroScene } from './hero/HeroScene'
 import { SkyDecor } from './hero/SkyDecor'
+import { ScrollCue } from './hero/ScrollCue'
 import { usePuzzleDone } from '@/stores/heroStory'
 import { useT } from '@/i18n/store'
+import { usePalette } from '@/stores/theme'
 
 const RISE = {
   initial: { opacity: 0, y: 16 },
@@ -11,6 +13,7 @@ const RISE = {
 
 export function Hero() {
   const t = useT()
+  const sky = usePalette().scene.sky
   // The sentence only lands once the orbs have finished bringing the puzzle in.
   const puzzleDone = usePuzzleDone()
 
@@ -22,8 +25,7 @@ export function Hero() {
         // Sky over ground. A 3D sky dome can't work here: the scene camera is a
         // 15° lens pitched 20° down, so the true horizon sits above the frame.
         // Splitting the backdrop in screen space puts sky on top regardless.
-        background:
-          'linear-gradient(180deg, #7FC0F2 0%, #A9D6F7 14%, #DCEEFF 30%, #F6FBFF 40%, #F7F3FB 62%, #F3EFFA 100%)',
+        background: `linear-gradient(180deg, ${sky[0]} 0%, ${sky[1]} 14%, ${sky[2]} 30%, ${sky[3]} 40%, ${sky[4]} 62%, ${sky[5]} 100%)`,
       }}
     >
       {/* Sky first, scene after: the platform has to paint over the sky band. */}
@@ -37,6 +39,9 @@ export function Hero() {
       {/* The copy lives in the sky band: the platform's far edge cuts across at
           roughly a third of the viewport, and the run above it is the only clear
           ground the sentence has. */}
+      {/* Same gate as the copy: the cue belongs to the finished picture. */}
+      {puzzleDone && <ScrollCue />}
+
       {puzzleDone && (
         <div className="relative z-10 mt-6 flex w-full max-w-[880px] flex-col items-center text-center">
           <motion.div

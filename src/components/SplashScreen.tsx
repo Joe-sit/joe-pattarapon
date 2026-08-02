@@ -28,16 +28,35 @@ const EYE_PLACE = `translate(${(STAGE - EYE_BOX.w * EYE_SCALE) / 2}, ${
   (STAGE - EYE_BOX.h * EYE_SCALE) / 2
 }) scale(${EYE_SCALE})`
 
+/**
+ * The reflection on the lower lid: one stroke per pass, widest and faintest
+ * first, so they stack into a glow with a bright core.
+ */
+const SHEEN = [
+  { width: 34, opacity: 0.8 },
+  { width: 17, opacity: 0.9 },
+  { width: 7, opacity: 1 },
+]
+
 /** Closed lid — a hairline rather than zero, so frame 1 shows a seam of light. */
 const SHUT = 0.008
 
-/** Storyboard beats, in seconds. */
+/**
+ * Storyboard beats, in seconds. `blank + openDur` is the hero clock's pre-roll —
+ * keep it in step with `EYE_OPEN_AT` in `sections/hero/story.ts`.
+ */
 const T = {
-  blank: 0.4,
-  openDur: 1.1,
-  /** A short held beat on the open eye before it swallows the frame. */
-  expand: 1.85,
-  expandDur: 1.2,
+  blank: 0.5,
+  openDur: 0.95,
+  /**
+   * The aperture swallows the frame the instant it is open — no held beat. The
+   * scene behind is already moving by then, and pausing on it read as the
+   * story stopping to wait for the splash.
+   */
+  get expand() {
+    return this.blank + this.openDur
+  },
+  expandDur: 0.6,
 }
 
 /**
@@ -60,17 +79,22 @@ export function SplashScreen({ onEyeOpen, onDone }: SplashScreenProps) {
     const ctx = gsap.context(() => {
       // Placement transforms live on wrapper groups, so GSAP owns these paths'
       // own transforms and works in the eye's local 368x154 space.
-      const aperture = '#sp-aperture-path, #sp-lid'
+      const aperture = '#sp-aperture-path, #sp-lid, #sp-sheen'
 
       // ── Frame 1: blank. The aperture is shut, so the backdrop is solid. ──
       gsap.set(aperture, { scaleY: SHUT, svgOrigin: EYE_ORIGIN })
-      gsap.set('#sp-lid', { opacity: 0 })
+      gsap.set('#sp-lid, #sp-sheen', { opacity: 0 })
 
       const tl = gsap.timeline({ onComplete: () => onDoneRef.current() })
 
       // ── Frames 2-3: the eye opens ─────────────────────────────────
-      tl.to('#sp-lid', { opacity: 1, duration: 0.25, ease: 'power1.out' }, T.blank)
-      tl.to(aperture, { scaleY: 1, duration: T.openDur, ease: 'power3.out' }, T.blank)
+      tl.to('#sp-lid', { opacity: 1, duration: 0.35, ease: 'power1.out' }, T.blank)
+      // The sheen only has something to catch once the lid is well open.
+      tl.to('#sp-sheen', { opacity: 1, duration: 0.5, ease: 'power1.out' }, T.blank + 0.3)
+      // In-out, not out: power3.out throws the lid most of the way open in its
+      // first few frames and then crawls, which reads as a snap. This eases in
+      // and out, so the lid parts the way an eye actually opens.
+      tl.to(aperture, { scaleY: 1, duration: T.openDur, ease: 'power2.inOut' }, T.blank)
       // The scene behind starts playing here, in full view through the hole.
       tl.call(() => onEyeOpenRef.current(), undefined, T.blank + T.openDur)
 
@@ -80,7 +104,7 @@ export function SplashScreen({ onEyeOpen, onDone }: SplashScreenProps) {
         { scale: 9, svgOrigin: EYE_ORIGIN, duration: T.expandDur, ease: 'power2.in' },
         T.expand,
       )
-      tl.to('#sp-lid', { opacity: 0, duration: 0.5, ease: 'power1.in' }, T.expand + 0.45)
+      tl.to('#sp-lid, #sp-sheen', { opacity: 0, duration: 0.35, ease: 'power1.in' }, T.expand + 0.2)
     }, scope)
 
     return () => ctx.revert()
@@ -103,14 +127,77 @@ export function SplashScreen({ onEyeOpen, onDone }: SplashScreenProps) {
               <path id="sp-aperture-path" d={EYE_PATH} fill="black" />
             </g>
           </mask>
+
+          {/* Brightest at the centre of the arc, gone by the corners — light
+              catching a curved wet rim, not a stroke around the whole shape. */}
+          <linearGradient id="sp-sheen-run" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#1FA8D8" stopOpacity="0" />
+            <stop offset="18%" stopColor="#1FA8D8" stopOpacity="0.85" />
+            <stop offset="50%" stopColor="#6FE0F7" stopOpacity="1" />
+            <stop offset="82%" stopColor="#1FA8D8" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="#1FA8D8" stopOpacity="0" />
+          </linearGradient>
+
+          {/* Keeps the lower arc only. The fade means the sheen dies out
+              towards the corners rather than stopping on a cut. */}
+          <linearGradient
+            id="sp-sheen-fade"
+            gradientUnits="userSpaceOnUse"
+            x1="0"
+            y1={EYE_BOX.h * 0.5}
+            x2="0"
+            y2={EYE_BOX.h * 0.86}
+          >
+            <stop offset="0%" stopColor="black" />
+            <stop offset="100%" stopColor="white" />
+          </linearGradient>
+          <mask id="sp-sheen-lower" maskUnits="userSpaceOnUse" x="-40" y="0" width="448" height="220">
+            <rect x="-40" y="0" width="448" height="220" fill="url(#sp-sheen-fade)" />
+          </mask>
+
+          {/* sRGB: the default linearRGB blur of a light stroke over nothing
+              comes back as a grey haze rather than a glow. */}
+          <filter
+            id="sp-sheen-blur"
+            x="-40%"
+            y="-40%"
+            width="180%"
+            height="180%"
+            colorInterpolationFilters="sRGB"
+          >
+            <feGaussianBlur stdDeviation="3.2" />
+          </filter>
+
         </defs>
+
+        {/* Light pooling on the inside of the lower lid.
+            Drawn *before* the backdrop on purpose: the backdrop paints over
+            everything except the eye, so it clips this to the inside of the
+            shape for free — no second copy of the path to keep in step with
+            the one GSAP is animating. That is what keeps the glow on the sky
+            instead of ringing the outside like a plastic edge. */}
+        <g transform={EYE_PLACE}>
+          <g id="sp-sheen" mask="url(#sp-sheen-lower)" filter="url(#sp-sheen-blur)">
+            {SHEEN.map(({ width, opacity }) => (
+              <path
+                key={width}
+                d={EYE_PATH}
+                fill="none"
+                stroke="url(#sp-sheen-run)"
+                strokeWidth={width}
+                strokeOpacity={opacity}
+                strokeLinecap="round"
+              />
+            ))}
+          </g>
+        </g>
 
         <rect
           x="-2000"
           y="-2000"
           width="5000"
           height="5000"
-          fill="#F1F0EE"
+          fill="#1E1F22"
           mask="url(#sp-aperture)"
         />
 
@@ -120,7 +207,7 @@ export function SplashScreen({ onEyeOpen, onDone }: SplashScreenProps) {
             id="sp-lid"
             d={EYE_PATH}
             fill="none"
-            stroke="#FD5000"
+            stroke="#5865F2"
             strokeWidth="3"
             strokeLinecap="round"
             vectorEffect="non-scaling-stroke"

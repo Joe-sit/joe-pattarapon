@@ -27,6 +27,7 @@ const en = {
   'hero.experiences': '{Experiences}',
   'hero.subtitle':
     'I love crafting valuable things with passionate people to bringing design to a real-world impact solution.',
+  'hero.scroll': 'Scroll to continue',
 
   'footer.credit': 'Designed & Built by {name} @{year} All Right Reserved.',
 } as const
@@ -55,6 +56,7 @@ const th: Record<TranslationKey, string> = {
   'hero.experiences': '{Experiences}',
   'hero.subtitle':
     'ผมชอบสร้างสิ่งที่มีคุณค่าร่วมกับคนที่มี passion เพื่อเปลี่ยนงานออกแบบให้เป็นทางแก้ปัญหาที่ใช้ได้จริง',
+  'hero.scroll': 'เลื่อนลงเพื่อไปต่อ',
 
   'footer.credit': 'ออกแบบและพัฒนาโดย {name} @{year} สงวนลิขสิทธิ์',
 }

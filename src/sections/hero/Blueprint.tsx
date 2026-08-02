@@ -2,7 +2,8 @@ import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { BackSide, FrontSide, PlaneGeometry, type Mesh } from 'three'
 import { createBlueprintPainter, createSheetBackTexture, type Outline } from './flatTextures'
-import { STORY, beat, easeInOutCubic } from './story'
+import { GLOW_LEAD, GLOW_RISE, STORY, beat, unrollProgress } from './story'
+import { usePalette } from '@/stores/theme'
 
 export type BlueprintProps = {
   width: number
@@ -16,6 +17,12 @@ export type BlueprintProps = {
   /** The scene's one clock, in seconds since the splash cleared. */
   now: { current: number }
 }
+
+/**
+ * The guides' bloom when the puzzle lands: it starts a beat before the sentence
+ * does, so the sheet reacts to the last piece rather than to the copy.
+ */
+const GLOW = { lead: GLOW_LEAD, duration: GLOW_RISE, steps: 12 }
 
 const SEGMENTS_ALONG = 160
 const SEGMENTS_ACROSS = 1
@@ -41,14 +48,16 @@ export const MAX_UNROLL = 0.88
  */
 export function Blueprint({ width, length, y, z, outlines, now }: BlueprintProps) {
   const meshRef = useRef<Mesh>(null)
+  const { scene: colors } = usePalette()
 
   const painter = useMemo(
-    () => createBlueprintPainter({ width, length, outlines }),
-    [width, length, outlines],
+    () => createBlueprintPainter({ width, length, outlines, fill: colors.blueprint }),
+    [width, length, outlines, colors.blueprint],
   )
-  /** Last painted value, so the texture is only re-uploaded when it changes. */
+  /** Last painted values, so the texture is only re-uploaded when they change. */
   const drawn = useRef(-1)
-  const backTexture = useMemo(() => createSheetBackTexture(), [])
+  const lit = useRef(-1)
+  const backTexture = useMemo(() => createSheetBackTexture(...colors.sheetBack), [colors.sheetBack])
 
   const { geometry, base } = useMemo(() => {
     const geo = new PlaneGeometry(width, length, SEGMENTS_ACROSS, SEGMENTS_ALONG)
@@ -68,13 +77,20 @@ export function Blueprint({ width, length, y, z, outlines, now }: BlueprintProps
   }, [width, length])
 
   useFrame(() => {
-    const p = easeInOutCubic(beat(now.current, STORY.unroll.at, STORY.unroll.duration)) * MAX_UNROLL
+    const p = unrollProgress(now.current) * MAX_UNROLL
 
     // The pen only runs over paper that is already out.
     const draw = beat(now.current, STORY.guides.at, STORY.guides.duration)
-    if (draw !== drawn.current) {
-      painter.paint(draw)
+    // The plan lights up once the picture it set out has been assembled.
+    // Quantised: every change repaints a 1024px canvas and re-uploads it, and
+    // at this size the steps are invisible while the per-frame cost is not.
+    const glow =
+      Math.round(beat(now.current, STORY.title - GLOW.lead, GLOW.duration) * GLOW.steps) /
+      GLOW.steps
+    if (draw !== drawn.current || glow !== lit.current) {
+      painter.paint(draw, glow)
       drawn.current = draw
+      lit.current = glow
     }
 
     const flat = length * p
