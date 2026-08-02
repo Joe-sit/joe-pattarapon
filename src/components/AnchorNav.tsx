@@ -63,7 +63,7 @@ export function AnchorNav() {
   }, [])
 
   return (
-    <div className="fixed top-1/2 left-16 z-40 hidden w-8 -translate-y-1/2 rounded-[100px] bg-white p-2 shadow-rail lg:block">
+    <div className="fixed top-1/2 left-16 z-40 hidden w-8 -translate-y-1/2 rounded-[100px] bg-panel p-2 shadow-rail lg:block">
       <div className="relative flex w-4 flex-col gap-6">
         {SECTIONS.map((s, i) => (
           <button

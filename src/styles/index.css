@@ -2,16 +2,20 @@
 @import '@heroui/react/styles';
 
 @theme {
-  /* Brand palette — sourced from the 2026 logo + hero design */
-  --color-brand-orange: #fd5000;
-  --color-brand-orange-dark: #e04800;
-  --color-brand-blue: #1868db;
-  --color-brand-red: #ef4343;
+  /* Brand palette — Discord's. `brand-orange` keeps its name: it is the
+     primary accent slot, wired through the logo, pills and CTAs, and renaming
+     it would touch every component for nothing. */
+  --color-brand-orange: #5865f2;
+  --color-brand-orange-dark: #4752c4;
+  --color-brand-blue: #404eed;
+  --color-brand-red: #ed4245;
 
-  /* Surfaces & ink */
-  --color-paper: #f1f0ee;
-  --color-ink: #292a2e;
-  --color-ink-muted: #666666;
+  /* Surfaces & ink — Discord's dark set. `paper` is the app background, `panel`
+     the raised surface that sits on it. */
+  --color-paper: #1e1f22;
+  --color-panel: #2b2d31;
+  --color-ink: #f2f3f5;
+  --color-ink-muted: #b5bac1;
 
   --font-sans: 'Google Sans', 'DM Sans', ui-sans-serif, system-ui, sans-serif;
 
@@ -64,7 +68,7 @@
   }
 }
 
-@keyframes hero-sun-breathe {
+@keyframes hero-moon-breathe {
   0%,
   100% {
     opacity: 0.92;
@@ -92,9 +96,9 @@
   animation: hero-cloud-drift 90s linear infinite;
 }
 
-.hero-sun {
-  transform-origin: 352px 128px;
-  animation: hero-sun-breathe 7s ease-in-out infinite;
+.hero-moon {
+  transform-origin: 436px 150px;
+  animation: hero-moon-breathe 7s ease-in-out infinite;
 }
 
 .hero-confetti {
@@ -107,7 +111,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .hero-clouds,
-  .hero-sun,
+  .hero-moon,
   .hero-confetti {
     animation: none;
   }

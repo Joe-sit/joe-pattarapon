@@ -9,7 +9,7 @@ type CursorArrowProps = {
 }
 
 export function CursorArrow({
-  color = '#FD5000',
+  color = '#5865F2',
   size = 24,
   rotation = 0,
   className,

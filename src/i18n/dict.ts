@@ -21,12 +21,13 @@ const en = {
   'anchor.contact': 'Contact',
 
   'hero.badge': 'Joe',
-  'hero.designer': 'Designer',
-  'hero.with': 'with',
-  'hero.dev': '{Dev}',
-  'hero.background': 'Background',
+  'hero.turning': 'Turning',
+  'hero.vision': 'Vision',
+  'hero.into': 'into',
+  'hero.experiences': '{Experiences}',
   'hero.subtitle':
     'I love crafting valuable things with passionate people to bringing design to a real-world impact solution.',
+  'hero.scroll': 'Scroll to continue',
 
   'footer.credit': 'Designed & Built by {name} @{year} All Right Reserved.',
 } as const
@@ -49,12 +50,13 @@ const th: Record<TranslationKey, string> = {
   'anchor.contact': 'ติดต่อ',
 
   'hero.badge': 'โจ้',
-  'hero.designer': 'Designer',
-  'hero.with': 'ที่มีพื้นฐาน',
-  'hero.dev': '{Dev}',
-  'hero.background': 'Background',
+  'hero.turning': 'เปลี่ยน',
+  'hero.vision': 'Vision',
+  'hero.into': 'ให้เป็น',
+  'hero.experiences': '{Experiences}',
   'hero.subtitle':
     'ผมชอบสร้างสิ่งที่มีคุณค่าร่วมกับคนที่มี passion เพื่อเปลี่ยนงานออกแบบให้เป็นทางแก้ปัญหาที่ใช้ได้จริง',
+  'hero.scroll': 'เลื่อนลงเพื่อไปต่อ',
 
   'footer.credit': 'ออกแบบและพัฒนาโดย {name} @{year} สงวนลิขสิทธิ์',
 }

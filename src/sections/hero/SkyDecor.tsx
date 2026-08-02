@@ -1,3 +1,8 @@
+import { useEffect, useRef } from 'react'
+import { panProgress } from './story'
+import { useEyeOpen } from '@/stores/intro'
+import { usePalette } from '@/stores/theme'
+
 /**
  * The sky band above the platform: sun, drifting clouds, floating confetti.
  *
@@ -7,6 +12,32 @@
  */
 
 const VIEW = { w: 1440, h: 280 }
+
+/**
+ * Headroom above the artwork, in user units. The band slides down by
+ * PARALLAX_PX during the intro; without a painted run above the artwork the
+ * band's own sky would start on a hard edge partway down the screen.
+ */
+const HEADROOM = 320
+
+/**
+ * How far the band travels over the camera pan, in px.
+ *
+ * Strictly a pedestal move leaves an infinitely distant sky untouched, but the
+ * story here needs the eye to open on sky: the band starts far enough down that
+ * the sun, clouds and confetti sit inside the aperture, then rides up to its
+ * resting place as the camera settles on the platform.
+ */
+const PARALLAX_PX = 300
+
+/**
+ * How far the band slides against the pointer, in px.
+ *
+ * Opposite the lens: swinging the camera right pushes distant things left, and
+ * the band is the most distant thing there is. Smaller than the scene's own
+ * sway for the same reason — parallax is what sells the depth.
+ */
+const SWAY_PX = { x: 26, y: 10 }
 
 /** One cloud as a single path: overlapping circles would seam under a gradient. */
 type Puff = { x: number; r: number }
@@ -49,30 +80,122 @@ const CONFETTI: { x: number; y: number; size: number; outline?: boolean }[] = [
 ]
 
 export function SkyDecor() {
+  const bandRef = useRef<HTMLDivElement>(null)
+  const introDone = useEyeOpen()
+  const { scene: colors } = usePalette()
+
+  useEffect(() => {
+    const band = bandRef.current
+    if (!band || !introDone) return
+
+    const start = performance.now()
+    const pointer = { x: 0, y: 0 }
+    const sway = { x: 0, y: 0 }
+    let last = start
+
+    const onMove = (event: PointerEvent) => {
+      pointer.x = (event.clientX / window.innerWidth) * 2 - 1
+      pointer.y = (event.clientY / window.innerHeight) * 2 - 1
+    }
+    window.addEventListener('pointermove', onMove, { passive: true })
+
+    // One loop for both moves: the pan is finite but the sway never ends, and
+    // two writers on one transform would each drop the other's half.
+    let frame = requestAnimationFrame(function step(now) {
+      const delta = Math.min((now - last) / 1000, 0.1)
+      last = now
+      const k = 1 - Math.exp(-delta * 3.5)
+      sway.x += (pointer.x - sway.x) * k
+      sway.y += (pointer.y - sway.y) * k
+
+      const p = panProgress((now - start) / 1000)
+      const x = -sway.x * SWAY_PX.x * p
+      const y = (1 - p) * PARALLAX_PX - sway.y * SWAY_PX.y * p
+      band.style.transform = `translate(${x}px, ${y}px)`
+      frame = requestAnimationFrame(step)
+    })
+
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('pointermove', onMove)
+    }
+  }, [introDone])
+
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 h-[36vh] overflow-hidden">
+    <div
+      ref={bandRef}
+      className="pointer-events-none absolute overflow-hidden"
+      style={{
+        // Wider than the viewport by more than the sway: sliding the band
+        // sideways would otherwise uncover a strip of the section behind it.
+        left: -(SWAY_PX.x + 8),
+        right: -(SWAY_PX.x + 8),
+        top: -HEADROOM,
+        height: `calc(36vh + ${HEADROOM}px)`,
+        transform: `translateY(${PARALLAX_PX}px)`,
+      }}
+    >
       <svg
         className="size-full"
-        viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
+        viewBox={`0 ${-HEADROOM} ${VIEW.w} ${VIEW.h + HEADROOM}`}
         preserveAspectRatio="xMidYMid slice"
         aria-hidden="true"
       >
         <defs>
+          {/* The band carries its own sky so it still reads as sky once it has
+              travelled down past the section's own gradient. The top stop
+              matches that gradient exactly, so at rest nothing changes. */}
+          {/* User-space so the ramp is pinned to the artwork, not to the
+              rect's box — the headroom above stays the top colour. */}
+          <linearGradient
+            id="sky-field"
+            gradientUnits="userSpaceOnUse"
+            x1="0"
+            y1="0"
+            x2="0"
+            y2={VIEW.h}
+          >
+            <stop offset="0%" stopColor={colors.band[0]} />
+            <stop offset="38%" stopColor={colors.band[1]} />
+            <stop offset="78%" stopColor={colors.band[2]} />
+            <stop offset="100%" stopColor={colors.band[3]} />
+          </linearGradient>
           <linearGradient id="sky-cloud" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#FFFFFF" stopOpacity="1" />
             <stop offset="55%" stopColor="#FFFFFF" stopOpacity="0.85" />
             <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
           </linearGradient>
-          <radialGradient id="sky-sun-glow">
-            <stop offset="0%" stopColor="#FFFBE6" stopOpacity="0.95" />
-            <stop offset="45%" stopColor="#FFFBE6" stopOpacity="0.45" />
-            <stop offset="100%" stopColor="#FFFBE6" stopOpacity="0" />
+          <radialGradient id="sky-moon-glow">
+            <stop offset="0%" stopColor={colors.moonGlow} stopOpacity="0.55" />
+            <stop offset="45%" stopColor={colors.moonGlow} stopOpacity="0.22" />
+            <stop offset="100%" stopColor={colors.moonGlow} stopOpacity="0" />
           </radialGradient>
+          {/* Crescent: the disc, minus a second disc biting into it from the
+              right — the sun in the 3D scene is off to the left, so the lit
+              limb has to be the left one. */}
+          <mask id="sky-moon">
+            <circle cx="436" cy="150" r="56" fill="white" />
+            <circle cx="472" cy="136" r="50" fill="black" />
+          </mask>
         </defs>
 
-        <g className="hero-sun">
-          <circle cx="352" cy="128" r="142" fill="url(#sky-sun-glow)" />
-          <circle cx="352" cy="128" r="56" fill="#FFFCEC" />
+        <rect
+          x="0"
+          y={-HEADROOM}
+          width={VIEW.w}
+          height={VIEW.h + HEADROOM}
+          fill="url(#sky-field)"
+        />
+
+        <g className="hero-moon">
+          <circle cx="436" cy="150" r="150" fill="url(#sky-moon-glow)" />
+          <circle
+            cx="436"
+            cy="150"
+            r="56"
+            fill={colors.moon}
+            mask={colors.celestial === 'moon' ? 'url(#sky-moon)' : undefined}
+          />
         </g>
 
         {/* Two copies a full viewport apart, slid by exactly that width: the
