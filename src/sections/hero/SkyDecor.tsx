@@ -1,3 +1,7 @@
+import { useEffect, useRef } from 'react'
+import { panProgress } from './story'
+import { useEyeOpen } from '@/stores/intro'
+
 /**
  * The sky band above the platform: sun, drifting clouds, floating confetti.
  *
@@ -7,6 +11,23 @@
  */
 
 const VIEW = { w: 1440, h: 280 }
+
+/**
+ * Headroom above the artwork, in user units. The band slides down by
+ * PARALLAX_PX during the intro; without a painted run above the artwork the
+ * band's own sky would start on a hard edge partway down the screen.
+ */
+const HEADROOM = 320
+
+/**
+ * How far the band travels over the camera pan, in px.
+ *
+ * Strictly a pedestal move leaves an infinitely distant sky untouched, but the
+ * story here needs the eye to open on sky: the band starts far enough down that
+ * the sun, clouds and confetti sit inside the aperture, then rides up to its
+ * resting place as the camera settles on the platform.
+ */
+const PARALLAX_PX = 300
 
 /** One cloud as a single path: overlapping circles would seam under a gradient. */
 type Puff = { x: number; r: number }
@@ -49,15 +70,58 @@ const CONFETTI: { x: number; y: number; size: number; outline?: boolean }[] = [
 ]
 
 export function SkyDecor() {
+  const bandRef = useRef<HTMLDivElement>(null)
+  const introDone = useEyeOpen()
+
+  useEffect(() => {
+    const band = bandRef.current
+    if (!band || !introDone) return
+
+    const start = performance.now()
+    let frame = requestAnimationFrame(function step(now) {
+      const p = panProgress((now - start) / 1000)
+      band.style.transform = `translateY(${(1 - p) * PARALLAX_PX}px)`
+      if (p < 1) frame = requestAnimationFrame(step)
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [introDone])
+
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 h-[36vh] overflow-hidden">
+    <div
+      ref={bandRef}
+      className="pointer-events-none absolute inset-x-0 overflow-hidden"
+      style={{
+        top: -HEADROOM,
+        height: `calc(36vh + ${HEADROOM}px)`,
+        transform: `translateY(${PARALLAX_PX}px)`,
+      }}
+    >
       <svg
         className="size-full"
-        viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
+        viewBox={`0 ${-HEADROOM} ${VIEW.w} ${VIEW.h + HEADROOM}`}
         preserveAspectRatio="xMidYMid slice"
         aria-hidden="true"
       >
         <defs>
+          {/* The band carries its own sky so it still reads as sky once it has
+              travelled down past the section's own gradient. The top stop
+              matches that gradient exactly, so at rest nothing changes. */}
+          {/* User-space so the ramp is pinned to the artwork, not to the
+              rect's box — the headroom above stays the top colour. */}
+          <linearGradient
+            id="sky-field"
+            gradientUnits="userSpaceOnUse"
+            x1="0"
+            y1="0"
+            x2="0"
+            y2={VIEW.h}
+          >
+            <stop offset="0%" stopColor="#7FC0F2" />
+            <stop offset="38%" stopColor="#A9D6F7" />
+            <stop offset="78%" stopColor="#DCEEFF" />
+            <stop offset="100%" stopColor="#F6FBFF" />
+          </linearGradient>
           <linearGradient id="sky-cloud" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#FFFFFF" stopOpacity="1" />
             <stop offset="55%" stopColor="#FFFFFF" stopOpacity="0.85" />
@@ -70,9 +134,17 @@ export function SkyDecor() {
           </radialGradient>
         </defs>
 
+        <rect
+          x="0"
+          y={-HEADROOM}
+          width={VIEW.w}
+          height={VIEW.h + HEADROOM}
+          fill="url(#sky-field)"
+        />
+
         <g className="hero-sun">
-          <circle cx="352" cy="128" r="142" fill="url(#sky-sun-glow)" />
-          <circle cx="352" cy="128" r="56" fill="#FFFCEC" />
+          <circle cx="436" cy="150" r="142" fill="url(#sky-sun-glow)" />
+          <circle cx="436" cy="150" r="56" fill="#FFFCEC" />
         </g>
 
         {/* Two copies a full viewport apart, slid by exactly that width: the

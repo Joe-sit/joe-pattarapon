@@ -93,7 +93,7 @@
 }
 
 .hero-sun {
-  transform-origin: 352px 128px;
+  transform-origin: 436px 150px;
   animation: hero-sun-breathe 7s ease-in-out infinite;
 }
 

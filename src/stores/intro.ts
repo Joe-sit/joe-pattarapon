@@ -1,11 +1,13 @@
 import { useSyncExternalStore } from 'react'
 
 /**
- * Whether the splash has finished and the landing page is actually on screen.
+ * Two beats of the splash the page underneath needs to know about.
  *
- * The page mounts underneath the splash from the first frame, so any scene that
- * animates on mount would play out unseen. Scenes wait on this instead.
+ * `eyeOpen` is the one scenes animate from: the aperture is open, so whatever
+ * they do is on screen even though the splash has not cleared yet. `introDone`
+ * is the later beat, once the aperture has swallowed the frame.
  */
+let eyeOpen = false
 let done = false
 const listeners = new Set<() => void>()
 
@@ -14,16 +16,36 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener)
 }
 
-function getSnapshot() {
-  return done
-}
-
-export function setIntroDone() {
-  if (done) return
-  done = true
+function announce() {
   listeners.forEach((l) => l())
 }
 
+function getEyeOpen() {
+  return eyeOpen
+}
+
+function getDone() {
+  return done
+}
+
+export function setEyeOpen() {
+  if (eyeOpen) return
+  eyeOpen = true
+  announce()
+}
+
+export function setIntroDone() {
+  // Straight to the landing page (splash disabled) still has to open the gate.
+  eyeOpen = true
+  if (done) return
+  done = true
+  announce()
+}
+
+export function useEyeOpen(): boolean {
+  return useSyncExternalStore(subscribe, getEyeOpen, getEyeOpen)
+}
+
 export function useIntroDone(): boolean {
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  return useSyncExternalStore(subscribe, getDone, getDone)
 }

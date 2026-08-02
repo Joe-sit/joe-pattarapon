@@ -2,6 +2,7 @@ import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { BackSide, FrontSide, PlaneGeometry, type Mesh } from 'three'
 import { createBlueprintPainter, createSheetBackTexture, type Outline } from './flatTextures'
+import { STORY, beat, easeInOutCubic } from './story'
 
 export type BlueprintProps = {
   width: number
@@ -12,16 +13,8 @@ export type BlueprintProps = {
   z: number
   /** Guide outlines, in sheet-local world units. */
   outlines: Outline[]
-  /** Seconds before the guides start being drawn on. */
-  drawDelay: number
-  drawDuration: number
-  /** Seconds before the sheet starts unrolling. */
-  delay: number
-  duration: number
-  /** The clock only runs once the scene is actually visible. */
-  active: boolean
-  /** Written back each frame so the pieces can wait for the sheet. */
-  progressRef: { current: number }
+  /** The scene's one clock, in seconds since the splash cleared. */
+  now: { current: number }
 }
 
 const SEGMENTS_ALONG = 160
@@ -37,33 +30,7 @@ const TURNS = 3.6
  * The sheet never fully unrolls: a stub stays curled at the far edge, which is
  * what reads as "a drawing rolled out on the table" rather than a loose plane.
  */
-const MAX_UNROLL = 0.88
-
-/**
- * How much of the unroll the intro plays on its own. The rest is the reader's:
- * the sheet rests half rolled and opens as the page is scrolled.
- */
-const INTRO_UNROLL = 0.82
-
-/** Scroll distance that spends the remaining unroll, as a fraction of a screen. */
-const SCROLL_SPAN = 0.7
-
-function easeInOutCubic(t: number) {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
-}
-
-/**
- * Lenis already smooths `window.scrollY`, so this needs no easing of its own.
- *
- * The span is capped by how far the page can actually scroll: with only the
- * hero and the footer on screen that is a couple of hundred pixels, and a fixed
- * span would leave the sheet stuck half open with no way to finish it.
- */
-function scrollFraction() {
-  const reachable = document.documentElement.scrollHeight - window.innerHeight
-  const span = Math.min(window.innerHeight * SCROLL_SPAN, reachable)
-  return span > 0 ? Math.max(0, Math.min(1, window.scrollY / span)) : 0
-}
+export const MAX_UNROLL = 0.88
 
 /**
  * A sheet rolled up at its far end that unrolls flat.
@@ -72,21 +39,8 @@ function scrollFraction() {
  * cylinder whose radius shrinks as the roll is spent, which is what makes it
  * read as paper rather than a bending plane.
  */
-export function Blueprint({
-  width,
-  length,
-  y,
-  z,
-  outlines,
-  drawDelay,
-  drawDuration,
-  delay,
-  duration,
-  active,
-  progressRef,
-}: BlueprintProps) {
+export function Blueprint({ width, length, y, z, outlines, now }: BlueprintProps) {
   const meshRef = useRef<Mesh>(null)
-  const elapsed = useRef(0)
 
   const painter = useMemo(
     () => createBlueprintPainter({ width, length, outlines }),
@@ -113,17 +67,11 @@ export function Blueprint({
     return { geometry: geo, base: { along, across } }
   }, [width, length])
 
-  useFrame((_, delta) => {
-    if (active) elapsed.current += delta
-    const t = Math.max(0, Math.min(1, (elapsed.current - delay) / duration))
-    const intro = easeInOutCubic(t) * INTRO_UNROLL
-    const scrolled = active ? (1 - INTRO_UNROLL) * scrollFraction() : 0
-    const norm = Math.min(1, intro + scrolled)
-    const p = norm * MAX_UNROLL
-    progressRef.current = norm
+  useFrame(() => {
+    const p = easeInOutCubic(beat(now.current, STORY.unroll.at, STORY.unroll.duration)) * MAX_UNROLL
 
-    // The pen only runs once the paper it draws on is out.
-    const draw = Math.max(0, Math.min(1, (elapsed.current - drawDelay) / drawDuration))
+    // The pen only runs over paper that is already out.
+    const draw = beat(now.current, STORY.guides.at, STORY.guides.duration)
     if (draw !== drawn.current) {
       painter.paint(draw)
       drawn.current = draw

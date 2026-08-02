@@ -7,7 +7,7 @@ import { AnchorNav } from '@/components/AnchorNav'
 import { HomePage } from '@/pages/HomePage'
 import { NotPortedPage } from '@/pages/NotPortedPage'
 import { SITE } from '@/config/site'
-import { setIntroDone } from '@/stores/intro'
+import { setEyeOpen, setIntroDone } from '@/stores/intro'
 import { useT } from '@/i18n/store'
 
 function Footer() {
@@ -49,6 +49,7 @@ export function App() {
           pupil and the mask hole reveals what is already there. */}
       {showSplash && (
         <SplashScreen
+          onEyeOpen={setEyeOpen}
           onDone={() => {
             setShowSplash(false)
             setIntroDone()
