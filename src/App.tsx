@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { Routes, Route, useLocation } from 'react-router'
 import Lenis from '@studio-freight/lenis'
 import { SplashScreen } from '@/components/SplashScreen'
+import { JoeSplash } from '@/components/JoeSplash'
 import { NavBar } from '@/components/NavBar'
 import { ThemePicker } from '@/components/ThemePicker'
 import { AnchorNav } from '@/components/AnchorNav'
 import { HomePage } from '@/pages/HomePage'
+import { MascotPage } from '@/pages/MascotPage'
 import { NotPortedPage } from '@/pages/NotPortedPage'
 import { SITE } from '@/config/site'
 import { setEyeOpen, setIntroDone } from '@/stores/intro'
@@ -28,6 +30,17 @@ export function App() {
   const [showSplash, setShowSplash] = useState(true)
   const location = useLocation()
 
+  // Which splash plays is decided by where the visitor landed, not by where
+  // they are now — it runs once, on load, and reading `location` live would
+  // swap it mid-animation the moment they navigated.
+  const [landedOn] = useState(() =>
+    typeof window === 'undefined' ? '/' : window.location.pathname,
+  )
+  const finishSplash = () => {
+    setShowSplash(false)
+    setIntroDone()
+  }
+
   useEffect(() => {
     window.scrollTo(0, 0)
 
@@ -47,16 +60,17 @@ export function App() {
   return (
     <div className="min-h-screen bg-paper">
       {/* The page renders underneath from the start — the splash zooms into the
-          pupil and the mask hole reveals what is already there. */}
-      {showSplash && (
-        <SplashScreen
-          onEyeOpen={setEyeOpen}
-          onDone={() => {
-            setShowSplash(false)
-            setIntroDone()
-          }}
-        />
-      )}
+          pupil and the mask hole reveals what is already there.
+
+          The mascot gets the wordmark instead. The eye's whole point is that it
+          opens onto the hero's own scene, and the mascot page has no such scene
+          to open onto. */}
+      {showSplash &&
+        (landedOn === '/mascot' ? (
+          <JoeSplash onDone={finishSplash} />
+        ) : (
+          <SplashScreen onEyeOpen={setEyeOpen} onDone={finishSplash} />
+        ))}
 
       <NavBar />
 
@@ -68,6 +82,7 @@ export function App() {
       <div className="pt-20">
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/mascot" element={<MascotPage />} />
           <Route path="*" element={<NotPortedPage />} />
         </Routes>
         <Footer />
