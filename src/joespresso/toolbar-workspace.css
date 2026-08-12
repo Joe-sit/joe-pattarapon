@@ -1,0 +1,73 @@
+/* หน้า workspace ปั้น toolbar — scope ใต้ .tw-page กัน style รั่วใส่ส่วนอื่นของเว็บ */
+
+.tw-page {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #f1e4d6;
+  font-family: 'Satoshi', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+.tw-page canvas {
+  display: block;
+  flex: 1;
+  min-height: 0;
+}
+
+/* leva ไม่จำกัดความสูงตัวเอง control เยอะแล้วยาวเลยจอ scroll ไม่ได้ — ดูคำอธิบายใน page.css */
+.jp-leva > div {
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+}
+
+.jp-leva > div > :last-child {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.tw-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 20px;
+  background: #fff;
+  border-bottom: 1px solid rgba(120, 60, 20, 0.12);
+  font-size: 13px;
+  color: #55565b;
+}
+
+.tw-bar a {
+  color: #1c1c1e;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.tw-bar a:hover {
+  text-decoration: underline;
+}
+
+/* ค่าที่คัดลอก — อ่านง่ายพอจะพิมพ์ตามได้ถ้า clipboard ใช้ไม่ได้ */
+.tw-out {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  max-height: 45vh;
+  max-width: 380px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(28, 28, 30, 0.92);
+  color: #f4efe9;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.tw-out b {
+  display: block;
+  margin-bottom: 6px;
+  color: #ffc97e;
+}
