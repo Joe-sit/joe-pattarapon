@@ -91,11 +91,21 @@ export function Mascot({
   const { size } = useThree()
 
   // debugger: จูนท่าทางทุกข้อต่อสด ๆ
+  // debugger: หัวหันตามเมาส์ — อยู่กลุ่มเดียวกับของกล้องใน App.jsx (leva รวม folder ชื่อเดียวกันให้)
+  const fol = useControls('Follow Cursor', {
+    headYaw: { value: 0.55, min: 0, max: 1.5, step: 0.01, label: 'หัว ซ้ายขวา' },
+    headPitch: { value: 0.28, min: 0, max: 1.2, step: 0.01, label: 'หัว ก้มเงย' },
+    headRoll: { value: 0.09, min: 0, max: 0.6, step: 0.01, label: 'หัว เอียง' },
+    headEase: { value: 0.08, min: 0.005, max: 0.4, step: 0.005, label: 'หัว หน่วง' },
+  })
+
   const pose = useControls('Rig', {
     pointShoulderZ: { value: 2.35, min: 0, max: 3.1, step: 0.05 },
     pointShoulderX: { value: -0.35, min: -2.5, max: 1.5, step: 0.05 },
     pointElbowX: { value: 0, min: -2.2, max: 2.2, step: 0.05 },
-    pointWristX: { value: 1.4, min: -2.2, max: 2.2, step: 0.05 },
+    // คลายมุมพับที่ bake มาใน GLB ให้ท่อนล่างต่อตรงกับท่อนบน แขนเลยเหยียดชี้ฟ้าเป็นเส้นเดียว
+    pointElbowZ: { value: 0.35, min: -2.2, max: 2.2, step: 0.05 },
+    pointWristX: { value: 0.7, min: -2.2, max: 2.2, step: 0.05 },
     mugShoulderX: { value: -0.5, min: -2, max: 1, step: 0.05 },
     mugElbowX: { value: 0, min: -2.2, max: 0.6, step: 0.05 },
     hipLX: { value: 0, min: -1.2, max: 1.2, step: 0.05 },
@@ -117,7 +127,12 @@ export function Mascot({
       o.material.roughness = 1
       o.material.metalness = 0
       // GLB โหลด async หลัง RimLight traverse ฉากไปแล้ว — ฉีด rim ตรงนี้ (ค่าเดียวกับ RimLight ใน App)
-      addRim(o.material, { color: '#FFF3DC', intensity: 0.5, power: 4.2 })
+      // เฉพาะ standard material: rim shader ใช้ normal/vViewPosition ซึ่ง MeshBasicMaterial ไม่มี
+      // ถ้าฉีดใส่ shader จะ compile ไม่ผ่าน แล้ว mesh นั้นจะไม่ถูกวาดเลย (แต่ยังทอดเงาได้)
+      // — ลูกตาเป็น MeshBasicMaterial ชิ้นเดียวในโมเดล จึงหายไปทั้งคู่
+      if (o.material.isMeshStandardMaterial) {
+        addRim(o.material, { color: '#FFF3DC', intensity: 0.5, power: 4.2 })
+      }
 
       // วัดใน local space ของโมเดล — world bbox โดน scale/position ของ root ปน ทำให้เกณฑ์ขนาดเพี้ยน
       o.geometry.computeBoundingBox()
@@ -145,6 +160,22 @@ export function Mascot({
     model.add(g)
     const headParts = [parts.head, ...parts.hair, ...parts.sideburn, ...parts.eye].filter(Boolean)
     for (const p of headParts) g.attach(p)
+
+    // GLB ฝังลูกตาไว้ "ใน" กล่องหัว (ลึกกว่าผิวหน้า ~0.03) เลยไม่โผล่จากมุมไหนเลย —
+    // เดิมไม่เคยเห็นเพราะ mascot หันหลังให้ตลอด ดันออกมาตามแนวตั้งฉากของหน้า
+    if (parts.head && parts.eye.length) {
+      model.updateMatrixWorld(true) // attach ด้านบนเพิ่งย้าย parent — matrixWorld ยังเป็นค่าเก่า
+      parts.head.geometry.computeBoundingBox()
+      const headC = parts.head.localToWorld(
+        parts.head.geometry.boundingBox.getCenter(new THREE.Vector3()),
+      )
+      for (const e of parts.eye) {
+        const w = e.getWorldPosition(new THREE.Vector3())
+        const n = w.clone().sub(headC).setY(0).normalize()
+        e.position.copy(e.parent.worldToLocal(w.addScaledVector(n, 0.05)))
+        e.castShadow = false // ตายื่นพ้นผิวหน้านิดเดียว ถ้าทอดเงาจะกลายเป็นรอยด่างข้างตา
+      }
+    }
 
     // GLB มีผมแค่บล็อกบน — เติมแผ่นผมคลุมท้ายทอยลงถึงต้นคอ
     // คำนวณใน local space ของหัว แล้วใส่เป็นลูกของหัวเอง จะได้ติดตำแหน่ง/หมุนตามหัวเสมอ
@@ -185,16 +216,94 @@ export function Mascot({
     })
 
     // rig แขน: ไหล่ (ทั้งแขน) -> ศอก (ท่อนล่าง: ปลายแขน+มือ) แบ่งที่ก้นแขนเสื้อ
+    const toLocal = model.matrixWorld.clone().invert()
+    const localBox = (meshes) => {
+      const bb = new THREE.Box3()
+      for (const o of meshes) {
+        o.geometry.computeBoundingBox()
+        bb.union(o.geometry.boundingBox.clone().applyMatrix4(toLocal.clone().multiply(o.matrixWorld)))
+      }
+      return bb
+    }
+
+    /**
+     * สลับซ้าย-ขวาของ "มือ" อย่างเดียว
+     *
+     * ท่าพักของ GLB นิ้วโป้งอยู่ด้านในถูกแล้ว แต่ท่ายกแขนหมุนไหล่ 135° ในระนาบ XY
+     * ซึ่งพาฝั่งในไปอยู่ฝั่งนอก นิ้วโป้งเลยหันออกนอกตัว สะท้อนมือกลับตั้งแต่ท่าพัก
+     * พอยกแขนแล้วนิ้วโป้งจึงมาอยู่ด้านใน
+     *
+     * ใช้สะท้อน (mirror) ไม่ใช่หมุนรอบแกนแขน เพราะการหมุนจะพลิกฝ่ามือไปด้วย
+     * ทำที่ geometry ตั้งแต่ตอนสร้าง rig จึงไม่กวนค่ามุมท่าทางใด ๆ ทีหลัง
+     */
+    const mirrorHandGeometry = (list) => {
+      // มือเป็นก้อน mesh ที่อยู่ต่ำสุดและเกาะกลุ่มกัน — ตัดที่ "ช่องว่าง" แรกของความสูง
+      // (แบ่งด้วยเกณฑ์ความสูงคงที่ไม่ได้ เดี๋ยวจะกินท่อนแขนช่วงข้อมือติดมาด้วย)
+      const ys = list.map(({ lp }) => lp.y).sort((a, b) => a - b)
+      let split = ys[0] + 0.06
+      for (let i = 1; i < ys.length; i++) {
+        if (ys[i] - ys[i - 1] > 0.05) {
+          split = (ys[i] + ys[i - 1]) / 2
+          break
+        }
+      }
+      const hands = list.filter(({ lp }) => lp.y <= split).map(({ o }) => o)
+      if (!hands.length) return
+
+      const bb = localBox(hands)
+      const cx = (bb.min.x + bb.max.x) / 2
+      const mirror = new THREE.Matrix4()
+        .makeTranslation(cx, 0, 0)
+        .multiply(new THREE.Matrix4().makeScale(-1, 1, 1))
+        .multiply(new THREE.Matrix4().makeTranslation(-cx, 0, 0))
+
+      for (const o of hands) {
+        model.attach(o) // ให้ local space ตรงกับ model ก่อน แล้ว bake ลง geometry
+        o.updateMatrix()
+        const geo = o.geometry.clone() // clone: scene.clone() แชร์ geometry กับ cache ของ useGLTF
+        geo.applyMatrix4(o.matrix)
+        geo.applyMatrix4(mirror)
+        // สะท้อนแล้วหน้าสามเหลี่ยมกลับด้าน ต้องกลับลำดับ index ไม่งั้นโดน backface culling หายทั้งชิ้น
+        const ix = geo.index
+        if (ix) {
+          const a = ix.array
+          for (let i = 0; i < a.length; i += 3) {
+            const t = a[i]
+            a[i] = a[i + 2]
+            a[i + 2] = t
+          }
+          ix.needsUpdate = true
+        }
+        geo.computeVertexNormals()
+        o.geometry = geo
+        o.position.set(0, 0, 0)
+        o.quaternion.identity()
+        o.scale.set(1, 1, 1)
+        o.updateMatrix()
+      }
+      model.updateMatrixWorld(true)
+    }
+
     const mkArm = (list) => {
       if (!list.length) return null
       const top = Math.max(...list.map(({ lp }) => lp.y))
       const bottom = Math.min(...list.map(({ lp }) => lp.y))
-      const cx = list.reduce((a, { lp }) => a + lp.x, 0) / list.length
       const sleeve = list.find(({ o }) => hexOf(o.material) === 'ede2cf')
       const elbowY = sleeve ? sleeve.lp.y - 0.3 : top - 0.75
 
+      // ขอบเขตจริงของแขน (bbox) — ใช้ origin ของ mesh ไม่ได้ มันไม่ได้อยู่กลางชิ้น
+      const bb = new THREE.Box3()
+      for (const { o } of list) {
+        o.geometry.computeBoundingBox()
+        bb.union(o.geometry.boundingBox.clone().applyMatrix4(toLocal.clone().multiply(o.matrixWorld)))
+      }
+      // จุดหมุนไหล่ต้องอยู่ที่ "หัวไหล่" คือขอบในบนสุดของแขน ซึ่งซ้อนอยู่ในลำตัว
+      // ถ้าหมุนรอบกึ่งกลางแขน (ของเดิม) ทั้งแขนจะเหวี่ยงออกจากตัวจนหลุดเป็นช่องว่าง
+      const outward = bb.max.x > 0 ? 1 : -1
+      const innerX = outward > 0 ? bb.min.x : bb.max.x
+
       const shoulder = new THREE.Group()
-      shoulder.position.set(cx, top + 0.12, 0)
+      shoulder.position.set(innerX + outward * 0.06, bb.max.y - 0.14, 0)
       model.add(shoulder)
       const elbow = new THREE.Group()
       elbow.position.set(0, elbowY - shoulder.position.y, 0)
@@ -203,6 +312,7 @@ export function Mascot({
 
       // ข้อมือ: แยกกลุ่มมือ (ช่วงล่างของปลายแขน) ไว้หมุนแก้มุมงอที่ bake มาใน GLB
       const wristY = bottom + 0.42 * (elbowY - bottom)
+
       const wrist = new THREE.Group()
       wrist.position.set(0, wristY - elbowY, 0)
       elbow.add(wrist)
@@ -219,6 +329,8 @@ export function Mascot({
     }
 
     // local +x = ฝั่งซ้ายจอหลังหันหลัง (แขนชี้), local -x = ฝั่งถือแก้ว
+    // เฉพาะแขนที่ยกชี้ — แขนถือแก้วหมุนไหล่นิดเดียว นิ้วโป้งยังอยู่ด้านในถูกอยู่แล้ว
+    mirrorHandGeometry(arms.R)
     const armPoint = mkArm(arms.R)
     const armMug = mkArm(arms.L)
     rig.current.pointShoulder = armPoint?.shoulder
@@ -260,8 +372,8 @@ export function Mascot({
   }, [size])
 
   useFrame((state, delta) => {
-    cur.current.x = lerp(cur.current.x, pointer.current.x, 0.08)
-    cur.current.y = lerp(cur.current.y, pointer.current.y, 0.08)
+    cur.current.x = lerp(cur.current.x, pointer.current.x, fol.headEase)
+    cur.current.y = lerp(cur.current.y, pointer.current.y, fol.headEase)
     const { x, y } = cur.current
 
     // หันหลัง: แกน local กลับด้าน ต้องสลับทิศให้หัวยังหันตามเมาส์บนจอถูกฝั่ง
@@ -269,9 +381,9 @@ export function Mascot({
     const baseYaw = rotation[1] + (facingAway ? Math.PI : 0)
 
     if (headGroup.current) {
-      headGroup.current.rotation.y = x * 0.55 * dir
-      headGroup.current.rotation.x = y * 0.28 * dir
-      headGroup.current.rotation.z = -x * 0.09 * dir
+      headGroup.current.rotation.y = x * fol.headYaw * dir
+      headGroup.current.rotation.x = y * fol.headPitch * dir
+      headGroup.current.rotation.z = -x * fol.headRoll * dir
     }
     if (root.current) {
       // ลำตัวนิ่ง — หันตามเมาส์เฉพาะหัว
@@ -284,7 +396,11 @@ export function Mascot({
       r.pointShoulder.rotation.z = pose.pointShoulderZ
       r.pointShoulder.rotation.x = pose.pointShoulderX
     }
-    if (r.pointElbow) r.pointElbow.rotation.x = pose.pointElbowX
+    if (r.pointElbow) {
+      r.pointElbow.rotation.x = pose.pointElbowX
+      // แกน Z ของศอก — คลายมุมพับที่ bake มาใน GLB ให้ท่อนล่างต่อตรงกับท่อนบน
+      r.pointElbow.rotation.z = pose.pointElbowZ
+    }
     if (r.pointWrist) r.pointWrist.rotation.x = pose.pointWristX
     if (r.mugShoulder) r.mugShoulder.rotation.x = pose.mugShoulderX
     if (r.mugElbow) r.mugElbow.rotation.x = pose.mugElbowX

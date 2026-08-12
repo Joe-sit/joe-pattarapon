@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { gradientTexture } from './utils'
 
 /** พารามิเตอร์เนินหน้า — ใช้ร่วมกับ hillY() เพื่อวางของให้ติดผิวเนินพอดี */
-export const FRONT_HILL = { R: 10, sx: 1.18, sy: 0.62, cy: -6.2, cz: 0 }
+export const FRONT_HILL = { R: 10, sx: 1.15, sy: 0.7, cy: -7.0, cz: 0 }
 
 /** ความสูงผิวเนินหน้า ณ ตำแหน่ง (x, z) — ยอดเนินอยู่ที่ y = 0 พอดี */
 export function hillY(x, z) {
