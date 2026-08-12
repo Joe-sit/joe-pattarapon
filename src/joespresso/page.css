@@ -1,0 +1,142 @@
+/* หน้า /joespresso — scope ทุกอย่างใต้ .jp-scroll กัน style รั่วใส่ส่วนอื่นของเว็บ
+   (ตัวแปร prefix jp- เพราะ repo ประกาศ --font-sans/--color-ink ของตัวเองใน Tailwind theme) */
+
+.jp-scroll {
+  --jp-ink: #1c1c1e;
+  --jp-pad: 24px;
+  --jp-font-sans: 'Satoshi', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --jp-font-display: 'Clash Display', var(--jp-font-sans);
+
+  /* รางสกรอลล์ — สูงกว่าจอเพื่อให้มีระยะ scroll ขับ animation (--sp 0..1 จาก JS) */
+  height: 260vh;
+  background: #fff;
+  font-family: var(--jp-font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.jp-scroll *,
+.jp-scroll *::before,
+.jp-scroll *::after {
+  box-sizing: border-box;
+}
+
+.jp-page {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: #fff;
+  /* ยุบ padding/gap ตาม scroll จนการ์ดเต็มจอ */
+  padding: calc(var(--jp-pad) * (1 - var(--sp, 0)));
+  gap: calc(18px * (1 - var(--sp, 0)));
+}
+
+/* ---- header ---- */
+.jp-nav {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  /* เลื่อนหลบขึ้นบน + จางหาย ระหว่างการ์ดขยายเต็มจอ */
+  margin-top: calc(var(--sp, 0) * -72px);
+  opacity: calc(1 - var(--sp, 0) * 1.6);
+  transform: translateY(calc(var(--sp, 0) * -12px));
+}
+
+.jp-nav-logo {
+  display: flex;
+  line-height: 0;
+}
+
+.jp-nav-links {
+  display: flex;
+  gap: 34px;
+}
+
+.jp-nav-links a {
+  color: var(--jp-ink);
+  text-decoration: none;
+  font-family: var(--jp-font-sans);
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  opacity: 0.85;
+  transition: opacity 0.18s ease;
+}
+
+.jp-nav-links a:hover {
+  opacity: 1;
+}
+
+/* ---- hero card ที่ห่อฉาก 3D ---- */
+.jp-hero {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.jp-hero-card {
+  position: relative;
+  height: 100%;
+  border-radius: calc(28px * (1 - var(--sp, 0)));
+  overflow: hidden;
+  background: #f8d9bc;
+}
+
+.jp-hero-card canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ---- overlay ---- */
+.jp-social {
+  position: absolute;
+  left: 22px;
+  bottom: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jp-social a {
+  display: block;
+  line-height: 0;
+  color: #fff;
+  opacity: 0.92;
+  filter: drop-shadow(0 1px 6px rgba(120, 60, 20, 0.25));
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.jp-social a:hover {
+  opacity: 1;
+  transform: translateY(-2px);
+}
+
+.jp-based {
+  position: absolute;
+  right: 24px;
+  bottom: 20px;
+  margin: 0;
+  color: #fff;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 8px rgba(120, 60, 20, 0.28);
+}
+
+@media (max-width: 640px) {
+  .jp-scroll {
+    --jp-pad: 14px;
+  }
+  .jp-nav-links {
+    gap: 20px;
+  }
+  .jp-hero-card {
+    border-radius: calc(20px * (1 - var(--sp, 0)));
+  }
+}
