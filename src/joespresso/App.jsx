@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { ContactShadows, SoftShadows } from '@react-three/drei'
+import { ContactShadows } from '@react-three/drei'
 import * as THREE from 'three'
 import { Sky } from './scene/Sky'
 import { Terrain } from './scene/Terrain'
@@ -101,8 +101,8 @@ function CameraRig({ strength = 1 }) {
 function Lights() {
   return (
     <>
-      {/* PCSS — เงานุ่มขึ้นตามระยะ แบบแดดจริง (layer 09) */}
-      <SoftShadows size={32} samples={16} focus={0.7} />
+      {/* เงานุ่มด้วย PCFSoft (shadows="soft" ที่ Canvas) — PCSS ของ drei ใช้กับ three r182 ไม่ได้แล้ว
+          (shadow map เปลี่ยนเป็น depth texture, unpackRGBAToDepth ใช้ไม่ได้ → shader ทึบทั้งฉาก compile พัง) */}
 
       {/* ambient อุ่นแรงขึ้น — ref โดมเรืองแสงฟุ้ง เงาไม่จม */}
       <ambientLight intensity={0.95} color="#FFE4D2" />
@@ -133,7 +133,7 @@ function Lights() {
 export function Scene() {
   return (
     <Canvas
-      shadows
+      shadows="soft"
       dpr={[1, 2]}
       camera={{ position: [0, 4.1, 14.5], fov: 24, near: 0.1, far: 120 }}
       gl={{ antialias: true }}
