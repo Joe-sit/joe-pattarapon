@@ -11,6 +11,8 @@ import { MascotPage } from '@/pages/MascotPage'
 import { NotPortedPage } from '@/pages/NotPortedPage'
 // ฉาก 3D หนัก (three.js) — lazy แยก chunk ไม่ถ่วงหน้าอื่น
 const JoespressoPage = lazy(() => import('@/joespresso/Page'))
+// workspace ปั้นทรง toolbar ของฉาก joespresso — ใช้ three เหมือนกัน แยก chunk เช่นกัน
+const ToolbarWorkspace = lazy(() => import('@/joespresso/ToolbarWorkspace'))
 import { SITE } from '@/config/site'
 import { setEyeOpen, setIntroDone } from '@/stores/intro'
 import { useT } from '@/i18n/store'
@@ -31,7 +33,8 @@ function Footer() {
 export function App() {
   const [showSplash, setShowSplash] = useState(true)
   const location = useLocation()
-  const isJoespresso = location.pathname === '/joespresso'
+  // ครอบหน้าลูกด้วย (/joespresso/toolbar) — กลุ่มนี้มี layout ของตัวเอง ไม่ใช้ shell ของเว็บ
+  const isJoespresso = location.pathname.startsWith('/joespresso')
 
   // Which splash plays is decided by where the visitor landed, not by where
   // they are now — it runs once, on load, and reading `location` live would
@@ -69,7 +72,7 @@ export function App() {
           opens onto the hero's own scene, and the mascot page has no such scene
           to open onto. */}
       {showSplash &&
-        landedOn !== '/joespresso' &&
+        !landedOn.startsWith('/joespresso') &&
         (landedOn === '/mascot' ? (
           <JoeSplash onDone={finishSplash} />
         ) : (
@@ -81,6 +84,7 @@ export function App() {
         <Suspense fallback={null}>
           <Routes>
             <Route path="/joespresso" element={<JoespressoPage />} />
+            <Route path="/joespresso/toolbar" element={<ToolbarWorkspace />} />
           </Routes>
         </Suspense>
       ) : (

@@ -20,12 +20,13 @@
   box-sizing: border-box;
 }
 
+/* fixed ไม่ใช่ sticky — repo ตั้ง overflow-x:hidden ที่ html/body (styles/index.css) ทำให้ body
+   กลายเป็น scroll container แล้ว sticky ก็ตาย เลื่อนหลุดจอไปพร้อมหน้า */
 .jp-page {
-  position: sticky;
-  top: 0;
+  position: fixed;
+  inset: 0;
   display: flex;
   flex-direction: column;
-  height: 100vh;
   overflow: hidden;
   background: #fff;
   /* ยุบ padding/gap ตาม scroll จนการ์ดเต็มจอ */
@@ -91,31 +92,79 @@
   height: 100% !important;
 }
 
+/* แผง leva ไม่ตั้ง max-height ให้ตัวเอง พอ control เยอะก็ยาวเลยจอไปเฉย ๆ scroll ไม่ได้
+   (มันเป็น position: fixed จึงไม่โดน overflow ของใครตัด แค่ยาวเกินจอ)
+   จำกัดความสูงที่ตัวแผง แล้วให้ "เนื้อหา" เลื่อนเอง — แถบหัวจะได้ค้างอยู่ที่เดิม
+   เลือกด้วย :last-child ไม่ใช่ชื่อคลาส เพราะคลาสของ leva เป็น hash ที่เปลี่ยนตามเวอร์ชัน */
+.jp-leva > div {
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+}
+
+.jp-leva > div > :last-child {
+  min-height: 0;
+  overflow-y: auto;
+}
+
 /* ---- overlay ---- */
+
+/* ไอคอนโซเชียล — hover แล้วมี "ยาเม็ด" ขาวคลุมทั้งคอลัมน์ ไอคอนกลับเป็นสีเข้ม (อ้างอิง moncy.dev)
+   padding ที่ ul = ตัวยาเม็ด, ชดเชยด้วย left/bottom ให้ไอคอนอยู่ตำแหน่งเดิม (22px) */
 .jp-social {
   position: absolute;
-  left: 22px;
-  bottom: 22px;
+  left: 9px;
+  bottom: 10px;
   display: flex;
   flex-direction: column;
   gap: 14px;
   margin: 0;
-  padding: 0;
+  padding: 12px 13px;
   list-style: none;
+  isolation: isolate; /* จำกัด mix-blend ของไอคอนไว้ในกลุ่มนี้ ไม่ไปผสมกับ canvas ข้างหลัง */
 }
 
+/* ยาเม็ด — ตอนพักถูก clip เหลือความสูง 0 (มองไม่เห็น) เมาส์เข้าแล้วขยายจากจุดที่เข้า
+   ตัว transition ที่นี่ใช้กับ keyboard focus; ส่วนเมาส์ JS เล่นเป็น Web Animation เพื่อกำหนดจุดเริ่มได้ */
+.jp-social-pill {
+  position: absolute;
+  inset: 0;
+  z-index: -1; /* ห้ามยก li ไอคอนขึ้น z-index แทน — stacking context ใหม่จะบัง backdrop ของ mix-blend */
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(120, 60, 20, 0.06);
+  clip-path: inset(50% 0 50% 0 round 999px);
+  transition: clip-path 0.32s ease-out;
+  pointer-events: none;
+}
+
+.jp-social:focus-within .jp-social-pill {
+  clip-path: inset(0 0 0 0 round 999px);
+}
+
+/* ความจางอยู่ใน color ไม่ใช่ opacity — opacity < 1 สร้าง isolated group แล้ว mix-blend ของ svg จะไม่ทำงาน */
 .jp-social a {
   display: block;
   line-height: 0;
-  color: #fff;
-  opacity: 0.92;
-  filter: drop-shadow(0 1px 6px rgba(120, 60, 20, 0.25));
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  color: rgba(255, 255, 255, 0.94);
 }
 
-.jp-social a:hover {
-  opacity: 1;
-  transform: translateY(-2px);
+/* difference: ขาว − ขาว = ดำ → ไอคอนกลับสีเฉพาะส่วนที่ยาเม็ดคลุมถึง ตามขอบที่กำลังขยาย */
+.jp-social svg {
+  mix-blend-mode: difference;
+  filter: drop-shadow(0 1px 6px rgba(120, 60, 20, 0.25));
+  transition: filter 0.2s ease-out;
+}
+
+.jp-social.is-open svg,
+.jp-social:focus-within svg {
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jp-social-pill {
+    transition: none;
+  }
 }
 
 .jp-based {
