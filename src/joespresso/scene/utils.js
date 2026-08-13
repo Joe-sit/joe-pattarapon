@@ -31,8 +31,29 @@ export function makeRandom(seed = 1) {
   }
 }
 
+/**
+ * เครื่องเบา = มือถือ/แท็บเล็ต หรือ CPU น้อยคอร์
+ * ใช้ตัดงบ pixel ratio / ขนาด shadow map / MSAA — ฉากนี้เป็น PBR + post ทั้งจอ
+ * ที่ dpr 3 บนมือถือคือวาด pixel มากกว่าเดสก์ท็อป 2 เท่าโดยไม่ได้อะไรกลับมา
+ */
+export const LOW_END =
+  typeof navigator !== 'undefined' &&
+  (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.hardwareConcurrency ?? 8) <= 4)
+
 export const lerp = (a, b, t) => a + (b - a) * t
 export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
+
+/**
+ * หน่วงแบบไม่ผูกกับ frame rate
+ *
+ * `lerp(x, target, a)` ทุกเฟรมจะเร็วเป็นสองเท่าบนจอ 120Hz และช้าลงครึ่งหนึ่งตอนเฟรมตก
+ * ตัวนี้รับ `a` ชุดเดิม (ค่าที่จูนไว้ตอน 60fps) แล้วแปลงเป็นค่าคงที่ต่อวินาที
+ * ผลลัพธ์ที่ 60fps เท่าเดิมเป๊ะ แต่จอเร็ว/ช้าจะได้ความรู้สึกเดียวกัน
+ */
+export function damp(x, target, alphaAt60, dt) {
+  if (alphaAt60 >= 1) return target
+  return THREE.MathUtils.damp(x, target, -60 * Math.log(1 - alphaAt60), dt)
+}
 
 /**
  * ฉีด rim light (fresnel) เข้า material — ขอบวัตถุติดแสงขาวนวลแบบภาพ ref
@@ -41,7 +62,9 @@ export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 export function addRim(material, { color = '#FFF3DC', power = 2.4, intensity = 0.6 } = {}) {
   if (material.userData.rimApplied) return material
   material.userData.rimApplied = true
-  material.onBeforeCompile = (shader) => {
+  const prev = material.onBeforeCompile
+  material.onBeforeCompile = (shader, renderer) => {
+    prev?.call(material, shader, renderer)
     shader.uniforms.rimColor = { value: new THREE.Color(color) }
     shader.uniforms.rimPower = { value: power }
     shader.uniforms.rimIntensity = { value: intensity }
@@ -62,3 +85,4 @@ export function addRim(material, { color = '#FFF3DC', power = 2.4, intensity = 0
   material.customProgramCacheKey = () => 'rim'
   return material
 }
+

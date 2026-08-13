@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { gradientTexture, makeRandom } from './utils'
 import { hillY, FRONT_HILL } from './Terrain'
 import { blobGeometry } from './Blob'
@@ -186,7 +187,10 @@ function makeLeafGeometry(segU = 14, segV = 26) {
  * texture ใบ: ไล่เฉดโคนเข้ม-ปลายสว่าง + เส้นกลางใบวาดเป็น stroke แบน
  * แบบเดียวกับเส้น doodle บนพุ่ม (ไม่ใช่ tube 3D)
  */
+const leafTexCache = new Map()
 function leafTexture(color, vein) {
+  const key = color + vein
+  if (leafTexCache.has(key)) return leafTexCache.get(key)
   const c = document.createElement('canvas')
   c.width = c.height = 256
   const ctx = c.getContext('2d')
@@ -211,6 +215,7 @@ function leafTexture(color, vein) {
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
   tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping
+  leafTexCache.set(key, tex)
   return tex
 }
 
@@ -234,28 +239,38 @@ function BigLeaf({ position, rotation = [0, 0, 0], scale = 1, color = '#008168',
 /**
  * ต้นแฉกแท่ง — แคปซูลปลายมนกางรัศมี โผล่หลังพุ่ม (ref มุมซ้ายบน)
  */
-function SpikeFan({ position, scale = 1, color = '#008168', blades = 13 }) {
+/**
+ * ต้นแฉก: แฉกทุกอันนิ่งและใช้ material เดียวกัน — หลอมเป็น geometry ก้อนเดียว
+ * ตอนแยก mesh มันกิน 14 draw call ต่อกอ แล้วโดนนับซ้ำอีกรอบตอน render shadow map
+ * ทรงเหมือนกันทุกกอ (ต่างแค่ scale/สี) เลย cache ตามจำนวนแฉก
+ */
+const spikeGeoCache = new Map()
+function spikeFanGeo(blades) {
+  let g = spikeGeoCache.get(blades)
+  if (g) return g
   const start = -1.25
   const span = 2.5
+  const parts = [new THREE.SphereGeometry(0.45, 14, 10)]
+  const m = new THREE.Matrix4()
+  for (let i = 0; i < blades; i++) {
+    const a = start + (i / (blades - 1)) * span
+    const len = 0.8 + 0.3 * Math.sin((i / (blades - 1)) * Math.PI)
+    const blade = new THREE.CapsuleGeometry(0.11, len, 4, 8)
+    blade.applyMatrix4(m.makeTranslation(0, 0.38 + len / 2, 0).premultiply(new THREE.Matrix4().makeRotationZ(-a)))
+    parts.push(blade)
+  }
+  g = mergeGeometries(parts)
+  for (const p of parts) p.dispose()
+  spikeGeoCache.set(blades, g)
+  return g
+}
+
+function SpikeFan({ position, scale = 1, color = '#008168', blades = 13 }) {
+  const geo = useMemo(() => spikeFanGeo(blades), [blades])
   return (
-    <group position={position} scale={scale}>
-      {Array.from({ length: blades }, (_, i) => {
-        const a = start + (i / (blades - 1)) * span
-        const len = 0.8 + 0.3 * Math.sin((i / (blades - 1)) * Math.PI)
-        return (
-          <group key={i} rotation={[0, 0, -a]}>
-            <mesh position={[0, 0.38 + len / 2, 0]} castShadow>
-              <capsuleGeometry args={[0.11, len, 4, 8]} />
-              <meshStandardMaterial color={color} roughness={1} metalness={0} />
-            </mesh>
-          </group>
-        )
-      })}
-      <mesh castShadow>
-        <sphereGeometry args={[0.45, 14, 10]} />
-        <meshStandardMaterial color={color} roughness={1} metalness={0} />
-      </mesh>
-    </group>
+    <mesh geometry={geo} position={position} scale={scale} castShadow>
+      <meshStandardMaterial color={color} roughness={1} metalness={0} />
+    </mesh>
   )
 }
 
@@ -286,42 +301,53 @@ function PetalSplat({ position, quaternion, scale = 1, color = '#F7C55F', petals
   )
 }
 
+const flatFanCache = new Map()
+function flatFanGeo(blades) {
+  let g = flatFanCache.get(blades)
+  if (g) return g
+  const r0 = 0.14
+  const r1 = 1.0
+  const h0 = 0.035
+  const h1 = 0.16
+  const sh = new THREE.Shape()
+  sh.moveTo(-h0, r0)
+  sh.lineTo(-h1, r1 - 0.14)
+  sh.quadraticCurveTo(0, r1 + 0.07, h1, r1 - 0.14)
+  sh.lineTo(h0, r0)
+  sh.quadraticCurveTo(0, r0 - 0.03, -h0, r0)
+  const blade = new THREE.ExtrudeGeometry(sh, {
+    depth: 0.06,
+    bevelEnabled: true,
+    bevelSize: 0.03,
+    bevelThickness: 0.03,
+    bevelSegments: 3,
+    curveSegments: 12,
+  })
+  const m = new THREE.Matrix4()
+  const parts = Array.from({ length: blades }, (_, i) => {
+    const a = 0.08 + (i / (blades - 1)) * (Math.PI - 0.16)
+    return blade.clone().applyMatrix4(m.makeRotationZ(a - Math.PI / 2))
+  })
+  g = mergeGeometries(parts)
+  blade.dispose()
+  for (const p of parts) p.dispose()
+  flatFanCache.set(blades, g)
+  return g
+}
+
 /**
  * แฉกครึ่งวงแบนแปะบนผิว — แท่งบางกางรัศมี (ref: แฉกส้มบนพื้นหน้าตัวละคร)
  */
 function FlatFan({ position, quaternion, scale = 1, color = '#F58A63', blades = 9 }) {
   // กลีบ = แผ่น wedge สามเหลี่ยมปลายมน กางชิดกันเป็นพัดครึ่งวงทึบ (แบบ ref)
-  const geo = useMemo(() => {
-    const r0 = 0.14
-    const r1 = 1.0
-    const h0 = 0.035
-    const h1 = 0.16
-    const sh = new THREE.Shape()
-    sh.moveTo(-h0, r0)
-    sh.lineTo(-h1, r1 - 0.14)
-    sh.quadraticCurveTo(0, r1 + 0.07, h1, r1 - 0.14)
-    sh.lineTo(h0, r0)
-    sh.quadraticCurveTo(0, r0 - 0.03, -h0, r0)
-    return new THREE.ExtrudeGeometry(sh, {
-      depth: 0.06,
-      bevelEnabled: true,
-      bevelSize: 0.03,
-      bevelThickness: 0.03,
-      bevelSegments: 3,
-      curveSegments: 12,
-    })
-  }, [])
+  // กลีบทั้งพัดนิ่งและสีเดียวกัน — หลอมก้อนเดียว (แยก mesh = 9 draw call ต่อพัด)
+  const geo = useMemo(() => flatFanGeo(blades), [blades])
   return (
     <group position={position} quaternion={quaternion} scale={scale}>
       <ShadowBlob w={2.4} l={0.75} dz={0.35} opacity={0.32} />
-      {Array.from({ length: blades }, (_, i) => {
-        const a = 0.08 + (i / (blades - 1)) * (Math.PI - 0.16)
-        return (
-          <mesh key={i} geometry={geo} rotation={[0, 0, a - Math.PI / 2]} castShadow>
-            <meshStandardMaterial color={color} roughness={1} metalness={0} />
-          </mesh>
-        )
-      })}
+      <mesh geometry={geo} castShadow>
+        <meshStandardMaterial color={color} roughness={1} metalness={0} />
+      </mesh>
     </group>
   )
 }
@@ -364,21 +390,31 @@ function shadowTex() {
   return shadowTexCache
 }
 
+// plane 1x1 ก้อนเดียวใช้ร่วมทุกเงา — <planeGeometry> ใน JSX ปั้นใหม่ทุก instance
+const QUAD = new THREE.PlaneGeometry(1, 1)
+
 function ShadowBlob({ w = 0.6, l = 0.4, dz = 0.2, opacity = 0.3 }) {
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, dz]} scale={[w, l, 1]} renderOrder={1}>
-      <planeGeometry args={[1, 1]} />
+    <mesh
+      geometry={QUAD}
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[0, 0.02, dz]}
+      scale={[w, l, 1]}
+      renderOrder={1}
+    >
       <meshBasicMaterial map={shadowTex()} transparent opacity={opacity} depthWrite={false} />
     </mesh>
   )
 }
 
+// ก้อนกรวดทุกลูกเป็นทรงเดียวกัน ต่างแค่ scale/สี — geometry ก้อนเดียวพอ
+const PEBBLE_GEO = new THREE.SphereGeometry(0.22, 16, 12)
+
 function Pebble({ position, quaternion, scale = 1, color }) {
   return (
     <group position={position} quaternion={quaternion}>
       <ShadowBlob w={0.85 * scale} l={0.5 * scale} dz={0.2 * scale + 0.06} />
-      <mesh scale={[scale, scale * 0.58, scale]} castShadow receiveShadow>
-        <sphereGeometry args={[0.22, 16, 12]} />
+      <mesh geometry={PEBBLE_GEO} scale={[scale, scale * 0.58, scale]} castShadow receiveShadow>
         <meshStandardMaterial color={color} roughness={1} metalness={0} />
       </mesh>
     </group>

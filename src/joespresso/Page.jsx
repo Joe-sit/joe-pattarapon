@@ -6,6 +6,14 @@ import { GithubIcon, InstagramIcon, LinkedinIcon } from './Icons'
 import { scrollState } from './scroll'
 import './page.css'
 
+/**
+ * แผง debug โผล่เฉพาะตอน dev — ของจริงไม่ควรเห็นปุ่มจูนฉาก
+ * ถ้าอยากจูนบน build ที่ deploy แล้ว เติม ?debug ท้าย URL
+ */
+const DEBUG_UI =
+  import.meta.env.DEV ||
+  (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug'))
+
 const NAV = [
   { label: 'About', href: '#about' },
   { label: 'Works', href: '#works' },
@@ -90,7 +98,7 @@ export default function Page() {
         {/* data-lenis-prevent: Lenis (smooth scroll ของทั้งเว็บ) ดัก wheel ไว้หมด
             ถ้าไม่กันไว้ ล้อเมาส์บนแผงจะไปเลื่อนหน้าแทนที่จะเลื่อนในแผง */}
         <div className="jp-leva" data-lenis-prevent>
-          <Leva collapsed titleBar={{ title: 'debug', position: { x: 0, y: 64 } }} />
+          <Leva collapsed hidden={!DEBUG_UI} titleBar={{ title: 'debug', position: { x: 0, y: 64 } }} />
         </div>
         <header className="jp-nav">
           <a className="jp-nav-logo" href="/" aria-label="Joe — home">

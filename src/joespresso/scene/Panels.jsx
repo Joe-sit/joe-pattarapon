@@ -1,7 +1,23 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useControls } from 'leva'
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+
+/**
+ * คืน GPU buffer ของ geometry/texture ที่ถูกสร้างใหม่
+ *
+ * useMemo ที่ผูกกับ slider ของ leva จะปั้นของใหม่ทุกครั้งที่ลากค่า
+ * three ไม่เก็บกวาดให้เอง — ของเก่าค้างบน GPU จนเบราว์เซอร์บวมตอนปั้นทรง
+ */
+function useDisposable(target) {
+  useEffect(
+    () => () => {
+      for (const o of Array.isArray(target) ? target : [target]) o?.dispose?.()
+    },
+    [target],
+  )
+}
 
 /**
  * ดัด geometry ให้ห่อรอบแกนตั้งแบบผนังทรงกระบอก (เว้าเข้าหากล้อง)
@@ -19,6 +35,46 @@ export function bendGeometry(geo, R) {
   pos.needsUpdate = true
   geo.computeVertexNormals()
   return geo
+}
+
+/**
+ * ดัด geometry ให้ไปวางบน "จอโค้งใบเดียว" ที่มีจุดศูนย์กลางอยู่ที่ตาคนดู
+ *
+ * ต่างจาก bendGeometry ตรง *สเปซที่ดัด* ไม่ใช่สูตร:
+ * bendGeometry ดัดในสเปซของแผ่นเอง แกนโค้งอยู่กลางแผ่นนั้น ๆ ผลคือแต่ละแผ่นม้วนรอบตัวเอง
+ * ต่างคนต่างม้วน ไม่มีความสัมพันธ์กัน
+ *
+ * ตัวนี้ยุบ transform ของแผ่นลง geometry ก่อน (ทุกแผ่นมาอยู่สเปซโลกร่วมกัน) แล้วค่อยม้วน
+ * รอบแกนตั้งที่ลากผ่านตาคนดู ทุกแผ่นจึงโค้งตามส่วนโค้งเดียวกัน แผ่นที่อยู่ริมจะหันเข้าหา
+ * คนดูเองโดยอัตโนมัติ — curvilinear perspective แบบ Fig.128 ที่ทุกเส้นวิ่งเข้า station point
+ *
+ * k = 0 แบนเท่าเดิม, 1 = โค้งเต็มตามระยะจริง (ทุก vertex ห่างจากตาเท่ากันหมด)
+ */
+export function curveOnScreen(geo, matrix, k, eyeZ) {
+  geo.applyMatrix4(matrix)
+  const pos = geo.attributes.position
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i)
+    const z = pos.getZ(i) - eyeZ // เทียบกับตา: ของที่อยู่ข้างหน้าเป็นลบ
+    const d = -z
+    if (d <= 1e-3) continue
+    // มุมกวาด = ความยาวส่วนโค้ง / รัศมี -> รักษาความยาวแผ่นไว้ ไม่ยืดไม่หด
+    const th = x / d
+    pos.setX(i, x + (d * Math.sin(th) - x) * k)
+    pos.setZ(i, z + (-d * Math.cos(th) - z) * k + eyeZ)
+  }
+  pos.needsUpdate = true
+  geo.computeVertexNormals()
+  return geo
+}
+
+/** matrix ของแผ่นจาก position/rotation — ใช้ยุบเข้า geometry ก่อนม้วน */
+function panelMatrix(position, rotation) {
+  return new THREE.Matrix4().compose(
+    new THREE.Vector3(...position),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(...rotation)),
+    new THREE.Vector3(1, 1, 1),
+  )
 }
 
 /** alphaMap มุมมน — plane ธรรมดาจะได้มุมโค้งแบบการ์ด UI */
@@ -48,7 +104,8 @@ function CurvedPanel({
   color = '#FFFFFF',
   opacity = 0.42,
   rows = [],
-  R = 6,
+  curve = 1,
+  eyeZ = 14.5,
   corner = 0.18,
 }) {
   const ref = useRef()
@@ -56,33 +113,52 @@ function CurvedPanel({
   const [w, h] = size
 
   const alpha = useMemo(() => roundedAlphaTex(w, h, corner), [w, h, corner])
-  const bodyGeo = useMemo(() => bendGeometry(new THREE.PlaneGeometry(w, h, 48, 1), R), [w, h, R])
   const rowKey = JSON.stringify(rows)
-  const rowGeos = useMemo(
-    () =>
-      rows.map((r) => {
-        const g = new THREE.PlaneGeometry(r.w, r.h ?? 0.16, 24, 1)
-        g.translate(r.x ?? 0, r.y, 0.03)
-        return bendGeometry(g, R)
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rowKey, R],
-  )
 
-  useFrame(() => {
+  // ยุบ transform ลง geometry แล้วม้วนรอบแกนที่ตาคนดู จากนั้นค่อยดึงกลับมาให้จุดหมุน
+  // อยู่กลางแผ่น — hover จะได้ขยาย/ขยับรอบตัวเองเหมือนเดิม ไม่ใช่รอบตาคนดู
+  const built = useMemo(() => {
+    const m = panelMatrix(position, rotation)
+    // ซอย x ถี่ขึ้นกว่าเดิม: ตอนนี้แผ่นเดียวกวาดส่วนโค้งกว้างกว่ามาก
+    const body = curveOnScreen(new THREE.PlaneGeometry(w, h, 96, 1), m, curve, eyeZ)
+    const rowGeos = rows.map((r) => {
+      const g = new THREE.PlaneGeometry(r.w, r.h ?? 0.16, 48, 1)
+      g.translate(r.x ?? 0, r.y, 0.03)
+      return curveOnScreen(g, m, curve, eyeZ)
+    })
+    body.computeBoundingBox()
+    const center = body.boundingBox.getCenter(new THREE.Vector3())
+    body.translate(-center.x, -center.y, -center.z)
+    for (const g of rowGeos) g.translate(-center.x, -center.y, -center.z)
+    // ทิศเข้าหาตา — hover ให้แผ่นลอยเข้าหาคนดูตามแนวรัศมี ไม่ใช่ตามแกน z ของฉาก
+    const toEye = new THREE.Vector3(0, center.y, eyeZ).sub(center).normalize()
+    return { body, rowGeos, center, toEye }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [w, h, rowKey, curve, eyeZ, position[0], position[1], position[2], rotation[1]])
+
+  useDisposable(alpha)
+  useDisposable(built.body)
+  useDisposable(built.rowGeos)
+
+  useFrame((_, delta) => {
     if (!ref.current) return
-    const target = hovered.current ? 0.55 : 0
-    ref.current.position.z += (position[2] + target - ref.current.position.z) * 0.12
+    const dt = Math.min(delta, 0.05)
+    const lift = hovered.current ? 0.55 : 0
+    const o = ref.current
+    const c = built.center
+    const e = built.toEye
+    o.position.x = THREE.MathUtils.damp(o.position.x, c.x + e.x * lift, 7.7, dt)
+    o.position.y = THREE.MathUtils.damp(o.position.y, c.y + e.y * lift, 7.7, dt)
+    o.position.z = THREE.MathUtils.damp(o.position.z, c.z + e.z * lift, 7.7, dt)
     const s = hovered.current ? 1.04 : 1
-    ref.current.scale.x += (s - ref.current.scale.x) * 0.12
-    ref.current.scale.y += (s - ref.current.scale.y) * 0.12
+    o.scale.x = THREE.MathUtils.damp(o.scale.x, s, 7.7, dt)
+    o.scale.y = THREE.MathUtils.damp(o.scale.y, s, 7.7, dt)
   })
 
   return (
     <group
       ref={ref}
-      position={position}
-      rotation={rotation}
+      position={built.center}
       onPointerOver={(e) => {
         e.stopPropagation()
         hovered.current = true
@@ -93,7 +169,7 @@ function CurvedPanel({
         document.body.style.cursor = ''
       }}
     >
-      <mesh geometry={bodyGeo}>
+      <mesh geometry={built.body}>
         <meshStandardMaterial
           color={color}
           transparent
@@ -105,7 +181,7 @@ function CurvedPanel({
         />
       </mesh>
       {rows.map((r, i) => (
-        <mesh key={i} geometry={rowGeos[i]}>
+        <mesh key={i} geometry={built.rowGeos[i]}>
           <meshBasicMaterial
             color={r.color}
             transparent
@@ -357,7 +433,7 @@ export const TOOLBAR_DEFAULTS = {
   tileStart: -1.28,
   hoverScale: 1.14,
   pressDepth: 0.4, // สัดส่วนของความนูนปุ่มที่จมลงตอนกด — 1 = จมมิดหายเข้าไปในแท่ง
-  bendR: 3,
+  bendR: 80,
   bodyColor: '#2c2c2c',
   tileColor: '#2c2c2c', // ปุ่มปกติกลืนกับแท่ง เห็นเฉพาะตัวที่เลือก แบบ toolbar ของ Figma จริง
   activeColor: '#0c8ce9',
@@ -381,6 +457,7 @@ function ToolTile({ x, type, active, onClick, R = 6, p = TOOLBAR_DEFAULTS }) {
       }),
     [p.tileSize, p.tileRadius, p.tileDepth, p.tileBevel],
   )
+  useDisposable(tileGeo)
   const a = x / R
   // วางบนผิวหน้าของแท่ง toolbar ตาม normal ของทรงกระบอก
   // ผิวหน้าแท่งอยู่ที่ bodyDepth/2 (ExtrudeGeometry ถูก translate ให้กึ่งกลางอยู่ที่ z=0)
@@ -477,6 +554,7 @@ export function FigmaToolbar({ position, rotation = [0, 0, 0], R, params }) {
     })
     return bendGeometry(g, bend)
   }, [p.bodyW, p.bodyH, p.bodyRadius, p.bodyDepth, p.bodyBevel, bend])
+  useDisposable(bodyGeo)
 
   return (
     <group ref={ref} position={position} rotation={rotation}>
@@ -498,19 +576,22 @@ export function FigmaToolbar({ position, rotation = [0, 0, 0], R, params }) {
   )
 }
 
-/** กรอบเลือก + จุดจับ 4 มุม — โค้งตามทรงกระบอกเดียวกับ panel */
-function SelectionBox({ position, size = [4.6, 1.9], color = '#7C5CFC', R = 6 }) {
+/** กรอบเลือก + จุดจับ 4 มุม — วางบนจอโค้งใบเดียวกับ panel */
+function SelectionBox({ position, size = [4.6, 1.9], color = '#7C5CFC', curve = 1, eyeZ = 14.5 }) {
   const [w, h] = size
   const hw = w / 2
   const hh = h / 2
 
-  const parts = useMemo(() => {
+  // ขอบ 4 ด้าน + จุดจับ 4 มุม ใช้ material เดียวกันหมด → หลอมเป็น geometry เดียว
+  // 8 mesh = 8 draw call ทั้งที่วาดของหน้าตาเหมือนกัน
+  const frame = useMemo(() => {
+    const m = panelMatrix(position, [0, 0, 0])
     const mk = (pw, ph, tx, ty) => {
-      const g = new THREE.PlaneGeometry(pw, ph, 48, 1)
+      const g = new THREE.PlaneGeometry(pw, ph, 64, 1)
       g.translate(tx, ty, 0)
-      return bendGeometry(g, R)
+      return curveOnScreen(g, m, curve, eyeZ)
     }
-    return [
+    const parts = [
       mk(w, 0.035, 0, hh),
       mk(w, 0.035, 0, -hh),
       mk(0.035, h, -hw, 0),
@@ -520,29 +601,77 @@ function SelectionBox({ position, size = [4.6, 1.9], color = '#7C5CFC', R = 6 })
       mk(0.22, 0.22, -hw, -hh),
       mk(0.22, 0.22, hw, -hh),
     ]
-  }, [w, h, hw, hh, R])
+    const merged = mergeGeometries(parts)
+    for (const g of parts) g.dispose()
+    return merged
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [w, h, hw, hh, curve, eyeZ, position[0], position[1], position[2]])
+  useDisposable(frame)
 
+  // ไม่ใส่ position ที่ group: curveOnScreen ยุบ position ลง vertex ไปแล้ว
+  // (ใส่ซ้ำ = เลื่อนสองเท่า กรอบเลยหลุดออกไปจากการ์ดที่ควรครอบ)
   return (
-    <group position={position}>
-      {parts.map((g, i) => (
-        <mesh key={i} geometry={g}>
-          <meshBasicMaterial color={color} toneMapped={false} side={THREE.DoubleSide} />
-        </mesh>
-      ))}
-    </group>
+    <mesh geometry={frame}>
+      <meshBasicMaterial color={color} toneMapped={false} side={THREE.DoubleSide} />
+    </mesh>
   )
 }
 
+/** ตำแหน่งกล้องตั้งต้น — ใช้เป็นจุดศูนย์กลางในการดันชั้น panel ให้ลึกขึ้น */
+const CAM0 = [0, 4.1, 14.5]
+
+const TOOLBAR_POS = [-5.5, 0.2, -2.2]
+
+/**
+ * วาง toolbar ให้แนบ "จอโค้ง" ใบเดียวกับ panel
+ *
+ * toolbar เป็นวัตถุ 3D มีความหนา ใช้ curveOnScreen (ที่ยุบ transform ลง vertex) ไม่ได้ตรง ๆ
+ * เพราะปุ่มถูกวางด้วยสูตรวงกลมรัศมี R แยกจาก geometry ของแท่ง
+ *
+ * แต่ bendGeometry ม้วนรอบแกนที่อยู่ห่างจากแผ่นไป R อยู่แล้ว — ถ้าตั้ง R = ระยะจากตาถึง toolbar
+ * แล้วหันหน้าแท่งเข้าหาตา แกนม้วนจะไปตกที่ตาพอดี ผิวแท่งกับปุ่มจึงนอนอยู่บนทรงกระบอกใบเดียว
+ * กับ panel โดยไม่ต้องแก้โครงข้างในเลย
+ *
+ * k = ความโค้งจอ (0 = แบน -> R อนันต์)
+ */
+function toolbarOnScreen([x, y, z], k, [ex, , ez]) {
+  const dx = x - ex
+  const dz = z - ez
+  const dist = Math.hypot(dx, dz)
+  return {
+    position: [x, y, z],
+    // หันหน้า (+z ของแท่ง) เข้าหาตา
+    rotation: [0, Math.atan2(-dx, -dz), 0],
+    R: k > 0.001 ? dist / k : 1e6,
+  }
+}
+
 export function Panels() {
-  // debugger: จูนรัศมีทรงกระบอกที่ใช้ดัด panel/toolbar สด ๆ (R น้อย = โค้งจัด)
-  const { panelR } = useControls('Curve Perspective', {
-    panelR: { value: 6, min: 2, max: 20, step: 0.5, label: 'panel bend R' },
+  // debugger: ความโค้งของ "จอ" ที่ panel ทุกใบวางอยู่ — 0 แบน, 1 โค้งเต็มตามระยะจริง
+  // แกนโค้งอยู่ที่ตาคนดู ทุกใบจึงโค้งตามส่วนโค้งเดียวกัน ไม่ใช่ต่างคนต่างม้วน
+  const { screenCurve } = useControls('Curve Perspective', {
+    screenCurve: { value: 1.6, min: 0, max: 2.5, step: 0.05, label: 'ความโค้งจอ' },
+  })
+  // debugger: ดันชั้น panel ให้ลึกเข้าไปในฉาก
+  // ขยายทั้งกลุ่มรอบ "จุดกล้อง" — ระยะกับขนาดโตพร้อมกัน ภาพบนจอจึงเท่าเดิมเป๊ะ
+  // แต่ตัว panel ถอยไปอยู่หลังพุ่มไม้จริง ๆ พุ่มกับสันเนินเลยบังฐาน panel ให้เอง
+  // 1.25 = panel ตัวหน้าสุด z -3.2 ไปอยู่ -7.5 พอดีหลังแนวพุ่ม (พุ่มอยู่ -6.2 ถึง -3.2)
+  // มากกว่านี้จะเลยไปโซนหมอก (เริ่มที่ระยะ 30) สีจะซีดลงด้วย
+  const { depth } = useControls('Curve Perspective', {
+    depth: { value: 1.25, min: 1, max: 3.5, step: 0.05, label: 'ความลึก panel' },
   })
   return (
-    <group>
+    <>
+      <group position={CAM0} scale={depth}>
+        <group position={[-CAM0[0], -CAM0[1], -CAM0[2]]}>
+          {/* layer 02 — toolbar สไตล์ Figma: เครื่องมือกดเลือกได้
+              R/rotation คำนวณให้แนบจอโค้งใบเดียวกับ panel (ดู toolbarOnScreen)
+              bendR ใน TOOLBAR_DEFAULTS ใช้เฉพาะตอนปั้นที่ /joespresso/toolbar */}
+          <FigmaToolbar {...toolbarOnScreen(TOOLBAR_POS, screenCurve, CAM0)} />
       {/* ซ้าย */}
       <CurvedPanel
-        R={panelR}
+        curve={screenCurve}
+        eyeZ={CAM0[2]}
         position={[-5.9, 4.2, -6]}
         rotation={[0, 0.32, 0]}
         size={[2.4, 1.5]}
@@ -551,7 +680,8 @@ export function Panels() {
         rows={[{ y: 0, w: 1.2, h: 0.22, color: '#FFFFFF', opacity: 0.55 }]}
       />
       <CurvedPanel
-        R={panelR}
+        curve={screenCurve}
+        eyeZ={CAM0[2]}
         position={[-5.0, 2.3, -3.6]}
         rotation={[0, 0.22, 0]}
         size={[3.4, 2.1]}
@@ -562,14 +692,11 @@ export function Panels() {
           { y: -0.3, w: 2.1, h: 0.1, color: '#5B4BE8', opacity: 0.5 },
         ]}
       />
-      {/* layer 02 — toolbar สไตล์ Figma: เครื่องมือกดเลือกได้
-          ไม่ส่ง R = ใช้ bendR ของตัวเองใน TOOLBAR_DEFAULTS (ปั้นที่ /joespresso/toolbar)
-          ไม่งั้น panelR จะทับ แล้วค่าที่ปั้นมาไม่มีผลในฉากจริง */}
-      <FigmaToolbar position={[-5.5, 0.2, -2.2]} rotation={[0, 0.36, 0]} />
 
       {/* ขวา */}
       <CurvedPanel
-        R={panelR}
+        curve={screenCurve}
+        eyeZ={CAM0[2]}
         position={[5.6, 4.4, -5.4]}
         rotation={[0, -0.3, 0]}
         size={[3.6, 2.2]}
@@ -583,7 +710,8 @@ export function Panels() {
         ]}
       />
       <CurvedPanel
-        R={panelR}
+        curve={screenCurve}
+        eyeZ={CAM0[2]}
         position={[5.4, 2.0, -3.2]}
         rotation={[0, -0.34, 0]}
         size={[3.6, 2.6]}
@@ -598,7 +726,9 @@ export function Panels() {
           { y: -0.3, x: 0.6, w: 2.0, h: 0.18, color: '#FFFFFF' },
         ]}
       />
-      <SelectionBox position={[-5.0, 2.3, -3.45]} size={[3.7, 2.3]} R={panelR} />
-    </group>
+          <SelectionBox position={[-5.0, 2.3, -3.45]} size={[3.7, 2.3]} curve={screenCurve} eyeZ={CAM0[2]} />
+        </group>
+      </group>
+    </>
   )
 }

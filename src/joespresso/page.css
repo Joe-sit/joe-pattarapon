@@ -4,6 +4,7 @@
 .jp-scroll {
   --jp-ink: #1c1c1e;
   --jp-pad: 24px;
+  --jp-nav-h: 80px;
   --jp-font-sans: 'Satoshi', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --jp-font-display: 'Clash Display', var(--jp-font-sans);
 
@@ -29,53 +30,76 @@
   flex-direction: column;
   overflow: hidden;
   background: #fff;
-  /* ยุบ padding/gap ตาม scroll จนการ์ดเต็มจอ */
-  padding: calc(var(--jp-pad) * (1 - var(--sp, 0)));
-  gap: calc(18px * (1 - var(--sp, 0)));
+  /* design วาง header ชิดขอบบนจอ แล้วการ์ดต่อท้ายทันทีที่ y=80 — padding/gap จึงไม่อยู่ที่นี่
+     แต่ไปอยู่ที่ .jp-hero แทน (ยุบตาม scroll จนการ์ดเต็มจอเหมือนเดิม) */
+  padding: 0;
+  gap: 0;
 }
 
 /* ---- header ---- */
 .jp-nav {
   flex: none;
+  /* สูงคงที่ 80px — เดิมปล่อยให้สูงตามโลโก้ (26px) ความสูงหัวเว็บเลยไม่นิ่ง
+     ถ้าเปลี่ยนขนาดโลโก้หรือฟอนต์เมนูทีหลัง แถบนี้ก็ยังสูงเท่าเดิม */
+  height: var(--jp-nav-h);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
-  /* เลื่อนหลบขึ้นบน + จางหาย ระหว่างการ์ดขยายเต็มจอ */
-  margin-top: calc(var(--sp, 0) * -72px);
+  /* design วางโลโก้/เมนูห่างขอบจอ 64px */
+  padding: 0 64px;
+  /* เลื่อนหลบขึ้นบน + จางหาย ระหว่างการ์ดขยายเต็มจอ — เลื่อนเท่าความสูงตัวเองพอดี */
+  margin-top: calc(var(--sp, 0) * var(--jp-nav-h) * -1);
   opacity: calc(1 - var(--sp, 0) * 1.6);
   transform: translateY(calc(var(--sp, 0) * -12px));
 }
 
+/* โลโก้ตาม design: 93 x 32 */
 .jp-nav-logo {
   display: flex;
   line-height: 0;
 }
 
+.jp-nav-logo svg {
+  height: 32px;
+  width: auto;
+}
+
+/* เมนูเป็น pill กว้าง 80 เว้น 5px ตาม design — กล่องกว้างกว่าตัวอักษรคือ hit area
+   ไม่ใช่แค่ระยะห่าง กดง่ายขึ้นด้วย */
 .jp-nav-links {
   display: flex;
-  gap: 34px;
+  gap: 5px;
 }
 
 .jp-nav-links a {
-  color: var(--jp-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  padding: 8px 16px;
+  border-radius: 100px;
+  color: #292a2e;
   text-decoration: none;
   font-family: var(--jp-font-sans);
-  font-weight: 500;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-  opacity: 0.85;
-  transition: opacity 0.18s ease;
+  font-weight: 700;
+  font-size: 14px;
+  /* 8 + 19 + 8 = 35 เท่ากล่องใน design เป๊ะ */
+  line-height: 19px;
+  white-space: nowrap;
+  transition: background-color 0.18s ease;
 }
 
 .jp-nav-links a:hover {
-  opacity: 1;
+  background: rgba(41, 42, 46, 0.07);
 }
 
 /* ---- hero card ที่ห่อฉาก 3D ---- */
 .jp-hero {
   flex: 1 1 auto;
   min-height: 0;
+  /* ขอบซ้าย/ขวา/ล่าง 24px ตาม design (การ์ด 1392 กว้างบนจอ 1440) ด้านบนชนใต้ header พอดี
+     ยุบเป็น 0 ตอน scroll สุด การ์ดจึงกินเต็มจอ */
+  padding: 0 calc(var(--jp-pad) * (1 - var(--sp, 0))) calc(var(--jp-pad) * (1 - var(--sp, 0)));
 }
 
 .jp-hero-card {
@@ -181,9 +205,18 @@
 @media (max-width: 640px) {
   .jp-scroll {
     --jp-pad: 14px;
+    --jp-nav-h: 64px;
   }
-  .jp-nav-links {
-    gap: 20px;
+  /* inset 64px ของ design เป็นค่าจอเดสก์ท็อป (1440) บนมือถือกินพื้นที่เกินไป */
+  .jp-nav {
+    padding: 0 16px;
+  }
+  .jp-nav-logo svg {
+    height: 26px;
+  }
+  .jp-nav-links a {
+    width: auto;
+    padding: 8px 10px;
   }
   .jp-hero-card {
     border-radius: calc(20px * (1 - var(--sp, 0)));

@@ -42,6 +42,18 @@
       "sourceType": "github",
       "skillPath": "skills/caveman-stats/SKILL.md",
       "computedHash": "331f720e2fa97b68cacdae44384878071e8cac6013479edea68f4c8eca308852"
+    },
+    "r3f-best-practices": {
+      "source": "emalorenzo/three-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/r3f-best-practices/SKILL.md",
+      "computedHash": "d15cf5c47c35125afb4bfb079c3da515a34152f9839985065270a85e6bf36fb5"
+    },
+    "three-best-practices": {
+      "source": "emalorenzo/three-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/three-best-practices/SKILL.md",
+      "computedHash": "d135429cf44ae2fe06e6403b0fb417eaeb8c328641308b1b615e85a130c73794"
     }
   }
 }

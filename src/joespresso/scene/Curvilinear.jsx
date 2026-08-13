@@ -6,6 +6,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
+import { LOW_END } from './utils'
 
 /**
  * Curvilinear perspective — บิดภาพแบบเลนส์ fisheye อ่อน ๆ
@@ -52,7 +53,8 @@ export function Curvilinear({ strength = 0.15 }) {
   const composer = useMemo(() => {
     const dpr = gl.getPixelRatio()
     const rt = new THREE.WebGLRenderTarget(size.width * dpr, size.height * dpr, {
-      samples: 4,
+      // MSAA 4x เต็มจอบนมือถือกิน bandwidth หนัก — เครื่องเบาใช้ 2x
+      samples: LOW_END ? 2 : 4,
       type: THREE.HalfFloatType,
     })
     const c = new EffectComposer(gl, rt)

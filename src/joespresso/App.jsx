@@ -1,6 +1,5 @@
 import { Suspense, useEffect, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { ContactShadows } from '@react-three/drei'
 import * as THREE from 'three'
 import { Sky } from './scene/Sky'
 import { Terrain } from './scene/Terrain'
@@ -9,7 +8,7 @@ import { Panels } from './scene/Panels'
 import { Mascot } from './scene/Mascot'
 import { Curvilinear } from './scene/Curvilinear'
 import { useControls } from 'leva'
-import { addRim, clamp, lerp } from './scene/utils'
+import { addRim, clamp, damp, lerp, LOW_END } from './scene/utils'
 import { scrollState } from './scroll'
 
 /** ใส่ rim light ให้วัตถุทึบทั้งฉาก — ขอบติดแสงขาวนวล (layer 09) */
@@ -60,10 +59,10 @@ function CameraRig({ strength = 1 }) {
   // แล้วเยื้อง ~30° ให้ได้มุม 3/4; เป้ามองเยื้องขวา+ต่ำกว่าหัว เพื่อดันตัวไปซ้ายและหัวขึ้นบน
   const fc = useControls('Focus Cam', {
     focusX: { value: 2.48, min: -8, max: 8, step: 0.1 },
-    focusY: { value: 2.5, min: 0, max: 8, step: 0.1 },
+    focusY: { value: 2.87, min: 0, max: 8, step: 0.1 },
     focusZ: { value: -4.12, min: -12, max: 12, step: 0.1 },
     focusLookX: { value: -0.85, min: -5, max: 5, step: 0.05 },
-    focusLookY: { value: 1.88, min: 0, max: 6, step: 0.05 },
+    focusLookY: { value: 2.25, min: 0, max: 6, step: 0.05 },
     focusLookZ: { value: 0.48, min: -6, max: 6, step: 0.05 },
     focusFov: { value: 24, min: 12, max: 60, step: 1 },
   })
@@ -76,14 +75,16 @@ function CameraRig({ strength = 1 }) {
     focusSway: { value: 0.25, min: 0, max: 1, step: 0.01, label: 'ตอน focus' },
   })
 
-  useFrame(({ pointer }) => {
+  useFrame(({ pointer }, delta) => {
+    // dt ตัดเพดานไว้ — สลับแท็บกลับมาแล้ว delta ก้อนใหญ่จะทำให้กล้องกระโดด
+    const dt = Math.min(delta, 0.05)
     target.current.x = clamp(pointer.x, -1, 1)
     target.current.y = clamp(pointer.y, -1, 1)
-    cur.current.x = lerp(cur.current.x, target.current.x, fol.camEase)
-    cur.current.y = lerp(cur.current.y, target.current.y, fol.camEase)
+    cur.current.x = damp(cur.current.x, target.current.x, fol.camEase, dt)
+    cur.current.y = damp(cur.current.y, target.current.y, fol.camEase, dt)
 
     // scroll blend: smoothstep + หน่วงเล็กน้อย
-    sp.current = lerp(sp.current, scrollState.p, 0.12)
+    sp.current = damp(sp.current, scrollState.p, 0.12, dt)
     const t = sp.current
     const k = t * t * (3 - 2 * t)
     // ตอน focus ลด parallax ลงเหลือตาม focusSway (ระยะใกล้ ขยับนิดเดียวก็เหวี่ยงแรง)
@@ -126,7 +127,7 @@ function Lights() {
         position={[1.5, 8.5, -13]}
         intensity={2.6}
         color="#FFD9A8"
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={LOW_END ? [1024, 1024] : [2048, 2048]}
         shadow-bias={-0.0005}
         shadow-normalBias={0.05}
         shadow-camera-left={-18}
@@ -147,9 +148,10 @@ export function Scene() {
   return (
     <Canvas
       shadows="soft"
-      dpr={[1, 2]}
+      dpr={[1, LOW_END ? 1.5 : 2]}
       camera={{ position: [0, 4.1, 14.5], fov: 24, near: 0.1, far: 120 }}
-      gl={{ antialias: true }}
+      // ภาพสุดท้ายออกจาก EffectComposer — AA มาจาก MSAA ของ render target ไม่ใช่ของ canvas
+      gl={{ antialias: false, powerPreference: 'high-performance' }}
       onCreated={({ gl }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping
         gl.toneMappingExposure = 1.05
@@ -169,7 +171,8 @@ export function Scene() {
       <Panels />
 
       <Suspense fallback={null}>
-        <Mascot position={[0, 2.236, 0.9]} scale={0.55} rotation={[0, -0.32, 0]} facingAway />
+        {/* y: ยืดขาตาม comp แล้วฝ่าเท้าลงไปอีก 0.68 หน่วยโมเดล (×0.55 = 0.374) ยกตัวขึ้นชดเชย */}
+        <Mascot position={[0, 2.61, 0.9]} scale={0.55} rotation={[0, -0.32, 0]} facingAway />
       </Suspense>
 
       {/* <ContactShadows
