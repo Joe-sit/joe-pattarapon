@@ -1,7 +1,7 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { gradientTexture, makeRandom } from './utils'
+import { gradientTexture, makeRandom, useDisposable, useStaticSubtree } from './utils'
 import { hillY, FRONT_HILL } from './Terrain'
 import { blobGeometry } from './Blob'
 
@@ -118,6 +118,8 @@ function BushCloud({ position, scale = 1, dark = false, seed = 20 }) {
     () => doodleTexture({ ...shade, seed: seed * 13 + 1, strokes: 2 }),
     [shade, seed],
   )
+  // texture ต่อ instance (ลายสุ่มตาม seed) ไม่ได้แชร์เหมือน geo — ต้องคืนเอง
+  useDisposable(tex)
   return (
     <mesh geometry={geo} position={position} scale={scale * 2} castShadow receiveShadow>
       <meshStandardMaterial map={tex} roughness={1} metalness={0} />
@@ -127,11 +129,14 @@ function BushCloud({ position, scale = 1, dark = false, seed = 20 }) {
 
 /** พุ่มแท่งสูงทรงแคปซูล + ลายเส้นตั้ง (ref ฝั่งขวา) */
 function TallBush({ position, scale = 1, dark = false, seed = 5 }) {
+  // planarSphereGeo() ปั้นใหม่ทุก instance (ไม่มี cache แบบ bushGeo) — ต้องคืนทั้ง geo และ tex
   const geo = useMemo(() => planarSphereGeo(), [])
+  useDisposable(geo)
   const tex = useMemo(() => {
     const shade = dark ? MOUND_SHADE.dark : MOUND_SHADE.light
     return doodleTexture({ ...shade, seed, strokes: 3, vertical: true })
   }, [dark, seed])
+  useDisposable(tex)
   return (
     <mesh geometry={geo} position={position} scale={[0.85 * scale, 1.9 * scale, 0.85 * scale]} castShadow receiveShadow>
       <meshStandardMaterial map={tex} roughness={1} metalness={0} />
@@ -422,8 +427,11 @@ function Pebble({ position, quaternion, scale = 1, color }) {
 }
 
 export function Foliage() {
+  // ต้นไม้ทุกต้นวางตายตัว ไม่มี useFrame ในไฟล์นี้ — ปิด matrix update ทั้ง subtree
+  const ref = useRef(null)
+  useStaticSubtree(ref)
   return (
-    <group>
+    <group ref={ref}>
       {/* layer 06 — พุ่มทรงเมฆจมครึ่ง: หลังเข้มสูงกว่า หน้าอ่อนเตี้ยกว่า */}
       {/* อยู่หลังโดม (z ลึกกว่าสัน) ให้สันโดมบังฐานพุ่ม */}
       <BushCloud position={onHill(-5.0, -6.2, 0.45)} scale={1.35} dark seed={21} />

@@ -1,4 +1,43 @@
+import { useEffect, useLayoutEffect } from 'react'
 import * as THREE from 'three'
+
+/**
+ * คืน GPU buffer ของ geometry/texture ที่ถูกสร้างใหม่
+ *
+ * useMemo ที่ผูกกับ slider ของ leva จะปั้นของใหม่ทุกครั้งที่ลากค่า
+ * three ไม่เก็บกวาดให้เอง — ของเก่าค้างบน GPU จนเบราว์เซอร์บวมตอนปั้นทรง
+ *
+ * ห้ามใช้กับของที่ cache ไว้ระดับ module (bushGeo/leafTexture/shadowTex) —
+ * ตัวนั้นถูกแชร์ข้าม instance การ dispose ตอน component เดียว unmount จะทำให้ตัวอื่นจอดำ
+ */
+export function useDisposable(target) {
+  useEffect(
+    () => () => {
+      for (const o of Array.isArray(target) ? target : [target]) o?.dispose?.()
+    },
+    [target],
+  )
+}
+
+/**
+ * หยุดคำนวณ matrix ของ subtree ที่ไม่เคยขยับ
+ *
+ * ทุกเฟรม three จะไล่ updateMatrixWorld ลงทั้ง scene graph ฉากส่วนที่นิ่งสนิท
+ * (ฟ้า/เนิน/ต้นไม้) จ่ายค่านั้นฟรี ๆ — ปิด recursion แล้วคำนวณเองครั้งเดียวตอน mount
+ *
+ * เงื่อนไข: ห้ามมี useFrame ขยับอะไรใน subtree นี้ (Panels มี — ห้ามใช้)
+ */
+export function useStaticSubtree(ref) {
+  useLayoutEffect(() => {
+    const o = ref.current
+    if (!o) return
+    o.updateMatrixWorld(true)
+    o.matrixWorldAutoUpdate = false
+    return () => {
+      o.matrixWorldAutoUpdate = true
+    }
+  }, [ref])
+}
 
 /**
  * สร้าง texture ไล่สีจาก canvas — ใช้แทน texture ไฟล์

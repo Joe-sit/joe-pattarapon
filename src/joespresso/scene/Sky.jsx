@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { gradientTexture, makeRandom } from './utils'
+import { gradientTexture, makeRandom, useDisposable, useStaticSubtree } from './utils'
 import { blobGeometry } from './Blob'
 
 /** ผนังไล่สีด้านหลังทั้งฉาก + ดวงอาทิตย์ + เมฆ */
@@ -14,9 +14,14 @@ export function Sky() {
       ]),
     [],
   )
+  useDisposable(bg)
+
+  // ฟ้าไม่เคยขยับ — ตัดออกจาก matrix update ทุกเฟรม
+  const ref = useRef(null)
+  useStaticSubtree(ref)
 
   return (
-    <group>
+    <group ref={ref}>
       {/* ผนังหลัง — ไม่รับแสง จะได้สีเรียบเนียน */}
       <mesh position={[0, 4, -26]} renderOrder={-1}>
         <planeGeometry args={[90, 46]} />
@@ -57,6 +62,9 @@ function Sun({ position, radius }) {
     [],
   )
   const glow = useMemo(() => radialGlow('#FFC97E'), [])
+  // แยกเรียกทีละตัว — ส่ง array literal เข้าไปจะเป็น ref ใหม่ทุก render, effect รันซ้ำแล้ว dispose ทิ้งทันที
+  useDisposable(grad)
+  useDisposable(glow)
   return (
     <group position={position}>
       <mesh position={[0, 0, -0.15]}>

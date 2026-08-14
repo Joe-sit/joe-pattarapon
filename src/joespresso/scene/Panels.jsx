@@ -1,23 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useControls } from 'leva'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-
-/**
- * คืน GPU buffer ของ geometry/texture ที่ถูกสร้างใหม่
- *
- * useMemo ที่ผูกกับ slider ของ leva จะปั้นของใหม่ทุกครั้งที่ลากค่า
- * three ไม่เก็บกวาดให้เอง — ของเก่าค้างบน GPU จนเบราว์เซอร์บวมตอนปั้นทรง
- */
-function useDisposable(target) {
-  useEffect(
-    () => () => {
-      for (const o of Array.isArray(target) ? target : [target]) o?.dispose?.()
-    },
-    [target],
-  )
-}
+import { useDisposable } from './utils'
 
 /**
  * ดัด geometry ให้ห่อรอบแกนตั้งแบบผนังทรงกระบอก (เว้าเข้าหากล้อง)
