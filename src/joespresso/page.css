@@ -10,13 +10,10 @@
 
   /* สีที่แผ่คลุมเฟรมตอนดื่มกาแฟจบ — โทนเอสเปรสโซ */
   --jp-fill: #2b1a12;
-  /* จุดกำเนิดของวงสี = ตำแหน่งแก้ว/ปากบนจอตอนกล้อง focus แล้ว (จูนคู่กับ Focus Cam) */
-  --jp-fill-x: 34%;
-  --jp-fill-y: 46%;
-
-  /* รางสกรอลล์ — ครึ่งแรก (160vh) ขับ --sp, ครึ่งหลัง (160vh) ขับ --sp2
-     ดู SPLIT ใน scroll.js — ถ้าแก้ความสูงตรงนี้ ทั้งสองช่วงยืดเท่า ๆ กัน */
-  height: 420vh;
+  /* รางสกรอลล์ — บีตทั้งหมดถูกซอยจากความสูงนี้ตามสัดส่วนใน BEATS (scroll.js)
+     แก้ตรงนี้ = ทุกบีตยืด/หดพร้อมกัน ถ้าจะยืดเฉพาะบีตเดียวให้ไปแก้ช่วงในตารางแทน
+     เดิม 420vh ตอนมีสองบีต — เรื่องยาวขึ้นเป็นหกบีตแล้ว ต้องมีรางให้เล่า */
+  height: 780vh;
   background: #fff;
   font-family: var(--jp-font-sans);
   -webkit-font-smoothing: antialiased;
@@ -56,7 +53,7 @@
   padding: 0 64px;
   /* ตัวแถบยุบขึ้นไปเท่าความสูงตัวเอง เพื่อให้การ์ดขยายเต็มจอเหมือนเดิม
      แต่ "ของข้างใน" ไม่ยุบตาม (ดู .jp-nav-logo / .jp-nav-links) — ค้างอยู่ที่เดิมบนจอ ลอยทับการ์ด */
-  margin-top: calc(var(--sp, 0) * var(--jp-nav-h) * -1);
+  margin-top: calc(var(--b-focus, 0) * var(--jp-nav-h) * -1);
   /* ยกเหนือการ์ด ไม่งั้นโลโก้/เมนูจะถูกการ์ดทับตอนแถบยุบไปแล้ว */
   position: relative;
   z-index: 2;
@@ -65,7 +62,7 @@
 /* หักล้างการยุบของแถบพอดี — ของข้างในจึงนิ่งสนิทที่ตำแหน่งเดิม */
 .jp-nav-logo,
 .jp-nav-links {
-  transform: translateY(calc(var(--sp, 0) * var(--jp-nav-h)));
+  transform: translateY(calc(var(--b-focus, 0) * var(--jp-nav-h)));
 }
 
 /* โลโก้ตาม design: 93 x 32 */
@@ -114,13 +111,13 @@
   min-height: 0;
   /* ขอบซ้าย/ขวา/ล่าง 24px ตาม design (การ์ด 1392 กว้างบนจอ 1440) ด้านบนชนใต้ header พอดี
      ยุบเป็น 0 ตอน scroll สุด การ์ดจึงกินเต็มจอ */
-  padding: 0 calc(var(--jp-pad) * (1 - var(--sp, 0))) calc(var(--jp-pad) * (1 - var(--sp, 0)));
+  padding: 0 calc(var(--jp-pad) * (1 - var(--b-focus, 0))) calc(var(--jp-pad) * (1 - var(--b-focus, 0)));
 }
 
 .jp-hero-card {
   position: relative;
   height: 100%;
-  border-radius: calc(28px * (1 - var(--sp, 0)));
+  border-radius: calc(28px * (1 - var(--b-focus, 0)));
   overflow: hidden;
   background: #f8d9bc;
 }
@@ -159,48 +156,26 @@
   transform: none !important;
 }
 
-/* ---- ฉาก 2: สีคลุมเฟรม + เนื้อหาถัดไป ---- */
+/* ---- ฉาก 2: บรรทัดส่งต่อ ----
+   สีที่คลุมเฟรมย้ายไปอยู่ในฉาก 3D แล้ว (หมอก + พื้นหลังของ three, ดู SceneFill ใน App.jsx)
+   ทำที่นั่นเพราะแผ่นสี DOM ทับ mascot แบน ๆ เหมือนสติกเกอร์ ส่วนหมอกกลืน mascot
+   ไปพร้อมฉากจริง ๆ โดยยังเหลือแสงกับความลึกจนวินาทีสุดท้าย */
 
-/* วงสีแผ่ออกจากตำแหน่งแก้ว — clip-path ไม่ใช่ scale เพราะขอบวงต้องคมและกินเต็มเฟรมพอดี
-   ช่วงที่ใช้จริงคือ --sp2 .45-.82 (ก่อนหน้านั้น mascot กำลังยกแก้ว) map เป็น 0..1 ด้วย clamp */
-.jp-fill {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  background: var(--jp-fill);
-  /* % ของรัศมีวัดกับเส้นทแยงที่ normalize แล้ว ไม่ใช่ด้านยาว — 85% ยังเหลือมุมขวาโผล่
-     120% เผื่อให้คลุมมุมไกลสุดครบทุกอัตราส่วนจอ */
-  clip-path: circle(
-    calc(clamp(0, (var(--sp2, 0) - 0.45) / 0.37, 1) * 120%) at var(--jp-fill-x) var(--jp-fill-y)
-  );
-  pointer-events: none;
-}
-
-/* เนื้อหาถัดไป — ลอยขึ้นมาหลังสีคลุมเต็มแล้ว ยังไม่รับคลิก (ยังเป็น placeholder ไม่มีลิงก์)
-   ถ้าใส่ลิงก์จริงต้องสลับ pointer-events ตอน --sp2 = 1 ด้วย */
+/* บรรทัดเดียว ลอยขึ้นมาหลังฉากกลายเป็นสีล้วนแล้ว
+   ยังไม่รับคลิก — ถ้าใส่ลิงก์จริงต้องสลับ pointer-events ตอน --b-line = 1 ด้วย */
 .jp-next {
   position: absolute;
   inset: 0;
   z-index: 4;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
   padding: 0 24px;
   text-align: center;
   color: #fff;
   pointer-events: none;
-  opacity: clamp(0, (var(--sp2, 0) - 0.78) / 0.18, 1);
-  transform: translateY(calc((1 - clamp(0, (var(--sp2, 0) - 0.78) / 0.18, 1)) * 28px));
-}
-
-.jp-next-kicker {
-  margin: 0;
-  font-size: 13px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.62);
+  opacity: clamp(0, var(--b-line, 0) / 0.4, 1);
+  transform: translateY(calc((1 - clamp(0, var(--b-line, 0) / 0.4, 1)) * 28px));
 }
 
 .jp-next-title {
@@ -210,12 +185,6 @@
   font-size: clamp(32px, 6vw, 72px);
   line-height: 1.05;
   letter-spacing: -0.02em;
-}
-
-.jp-next-sub {
-  margin: 0;
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.7);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -312,6 +281,6 @@
     padding: 8px 10px;
   }
   .jp-hero-card {
-    border-radius: calc(20px * (1 - var(--sp, 0)));
+    border-radius: calc(20px * (1 - var(--b-focus, 0)));
   }
 }

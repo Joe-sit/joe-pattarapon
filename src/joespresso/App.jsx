@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Sky } from './scene/Sky'
@@ -10,7 +10,7 @@ import { Curvilinear } from './scene/Curvilinear'
 import { OrbitControls } from '@react-three/drei'
 import { button, levaStore, useControls } from 'leva'
 import { addRim, clamp, damp, lerp, LOW_END } from './scene/utils'
-import { scrollState } from './scroll'
+import { BEATS, scrollState } from './scroll'
 
 /** ใส่ rim light ให้วัตถุทึบทั้งฉาก — ขอบติดแสงขาวนวล (layer 09) */
 function RimLight({ color = '#FFF3DC', intensity = 0.5, power = 4.2 }) {
@@ -189,6 +189,18 @@ function CameraRig({ strength = 1 }) {
     focusSway: { value: 0.25, min: 0, max: 1, step: 0.01, label: 'ตอน focus' },
   })
 
+  // บีต zoom — กล้องดันเข้าไปอีกหลังจาก focus เข้าที่แล้ว ภาพอึดอัดขึ้นเรื่อย ๆ
+  // ดันตามแนวสายตา (ตำแหน่ง -> เป้ามอง) ไม่ใช่ตามแกน z ของโลก มุมภาพจะได้ไม่เพี้ยน
+  const zm = useControls('Zoom (ฉาก 2)', {
+    zoomIn: { value: 0.1, min: 0, max: 0.9, step: 0.01, label: 'ดันเข้า (สัดส่วนระยะ)' },
+    zoomFov: { value: 5, min: 0, max: 18, step: 0.5, label: 'บีบ fov (องศา)' },
+    // ดันเข้าแล้วเฟรมแคบลง เป้ามองเดิม (ต่ำกว่าหัว) จะพาหน้าหลุดขอบบน — ยกเป้าตามไปด้วย
+    zoomRise: { value: 0.45, min: -1, max: 1, step: 0.01, label: 'เป้ามอง เลื่อนขึ้น' },
+    zoomEase: { value: 0.1, min: 0.02, max: 0.5, step: 0.01, label: 'หน่วง' },
+    zoomPreview: { value: 0, min: 0, max: 1, step: 0.01, label: 'พรีวิว (ไม่ต้อง scroll)' },
+  }, { collapsed: true })
+  const zoom = useRef(0)
+
   useFrame(({ pointer }, delta) => {
     // dt ตัดเพดานไว้ — สลับแท็บกลับมาแล้ว delta ก้อนใหญ่จะทำให้กล้องกระโดด
     const dt = Math.min(delta, 0.05)
@@ -198,9 +210,16 @@ function CameraRig({ strength = 1 }) {
     cur.current.y = damp(cur.current.y, target.current.y, fol.camEase, dt)
 
     // scroll blend: smoothstep + หน่วงเล็กน้อย
-    sp.current = damp(sp.current, scrollState.p, 0.12, dt)
+    sp.current = damp(sp.current, scrollState.b.focus, 0.12, dt)
     const t = sp.current
     const k = t * t * (3 - 2 * t)
+    zoom.current = damp(
+      zoom.current,
+      Math.max(scrollState.b.zoom, zm.zoomPreview),
+      zm.zoomEase,
+      dt,
+    )
+    const z = zoom.current * zoom.current * (3 - 2 * zoom.current)
     // ตอน focus ลด parallax ลงเหลือตาม focusSway (ระยะใกล้ ขยับนิดเดียวก็เหวี่ยงแรง)
     const sway = strength * (1 - k * (1 - fol.focusSway))
 
@@ -213,13 +232,76 @@ function CameraRig({ strength = 1 }) {
     camera.position.z = lerp(bz, fc.focusZ, k)
 
     look.current.set(lerp(0, fc.focusLookX, k), lerp(cam.lookY, fc.focusLookY, k), lerp(0, fc.focusLookZ, k))
+    look.current.y += z * zm.zoomRise
 
-    const fov = lerp(cam.fov, fc.focusFov, k)
+    // ดันกล้องเข้าหาเป้ามองตามสัดส่วนของระยะที่เหลือ — ใกล้แค่ไหนก็ไม่ทะลุ
+    if (z > 0.0001) {
+      camera.position.lerp(look.current, z * zm.zoomIn)
+    }
+
+    const fov = lerp(cam.fov, fc.focusFov, k) - z * zm.zoomFov
     if (Math.abs(camera.fov - fov) > 0.01) {
       camera.fov = fov
       camera.updateProjectionMatrix()
     }
     camera.lookAt(look.current)
+  })
+  return null
+}
+
+/**
+ * ฉากกลืนเป็นสีเดียว — บีต fill
+ *
+ * ทำด้วยหมอกกับสีพื้นหลังของ three ไม่ใช่แผ่นสีทับใน DOM แบบเดิม
+ * แผ่น DOM ทับ mascot เป็นภาพแบน ๆ เหมือนแปะสติกเกอร์ ส่วนหมอกหุบเข้าหากล้อง
+ * จะกลืนของไกลก่อนแล้วค่อยถึงตัว mascot — ยังเหลือแสงกับความลึกจนวินาทีสุดท้าย
+ * และไม่ต้องแตะ material สักตัว (ไม่เพิ่ม draw call, ไม่พัง material ที่แชร์กันอยู่)
+ *
+ * far คือตัวหลัก: ลากจากระยะปกติเข้ามาจนสั้นกว่าระยะกล้อง-ตัวละคร ทุกอย่างจึงจมสีหมด
+ */
+const FILL_COLOR = new THREE.Color('#2B1A12')
+function SceneFill() {
+  const { scene } = useThree()
+  const base = useRef(null)
+  const fill = useRef(0)
+
+  const f = useControls('Fill (ฉาก 2)', {
+    fillNear: { value: 0.02, min: 0.01, max: 6, step: 0.01, label: 'หมอก near ปลายทาง' },
+    fillFar: { value: 1.6, min: 0.2, max: 20, step: 0.1, label: 'หมอก far ปลายทาง' },
+    fillEase: { value: 0.14, min: 0.02, max: 0.5, step: 0.01, label: 'หน่วง' },
+    fillPreview: { value: 0, min: 0, max: 1, step: 0.01, label: 'พรีวิว (ไม่ต้อง scroll)' },
+  }, { collapsed: true })
+
+  useFrame((_, delta) => {
+    const fog = scene.fog
+    // โหมดปั้นถอด fog ออก — ไม่มีอะไรให้กลืน ข้ามไป
+    if (!fog) {
+      base.current = null
+      return
+    }
+    // จำค่าตั้งต้นไว้ครั้งเดียว เพื่อคืนกลับได้เป๊ะตอน scroll ย้อนขึ้น
+    if (!base.current) {
+      base.current = {
+        near: fog.near,
+        far: fog.far,
+        fog: fog.color.clone(),
+        bg: scene.background?.isColor ? scene.background.clone() : null,
+      }
+    }
+    const b = base.current
+    const dt = Math.min(delta, 0.05)
+    fill.current = damp(fill.current, Math.max(scrollState.b.fill, f.fillPreview), f.fillEase, dt)
+    const t = fill.current
+    const v = t * t * (3 - 2 * t)
+
+    // ไล่แบบคูณ ไม่ใช่แบบบวก — fog ตั้งต้นไว้ที่ 30/64 หน่วย ส่วนกล้องตอน focus
+    // ห่างตัวละครแค่ ~3 หน่วย ถ้า lerp เชิงเส้นครึ่งทางยังได้ near 15 ซึ่งยังไม่แตะอะไรเลย
+    // แล้วทั้งฉากจะมาจมสีรวดเดียวที่ปลายบีต — log-lerp กระจายช่วงที่ "เห็นผล" ให้ทั่วบีต
+    fog.near = b.near * Math.pow(Math.max(f.fillNear, 0.01) / b.near, v)
+    fog.far = b.far * Math.pow(f.fillFar / b.far, v)
+    fog.color.copy(b.fog).lerp(FILL_COLOR, v)
+    // พื้นหลังต้องไปสีเดียวกับหมอก ไม่งั้นขอบฟ้ายังเป็นสีส้มค้างอยู่หลังม่าน
+    if (b.bg) scene.background.copy(b.bg).lerp(FILL_COLOR, v)
   })
   return null
 }
@@ -258,6 +340,55 @@ function Lights() {
   )
 }
 
+/**
+ * หยุด render ตอนฉากถูกบังจนมิด
+ *
+ * ฉากนี้เป็น PBR + shadow map + post ทั้งจอ — พอ scroll ลงไปอ่านส่วนล่างของหน้า
+ * มันยังวาดครบทุกเฟรมทั้งที่ไม่มีใครเห็น กิน GPU/แบตแล้วแย่ง frame budget กับ
+ * animation ของ DOM ที่กำลังเลื่อนอยู่จริง ๆ
+ *
+ * IntersectionObserver ใช้ไม่ได้กับหน้านี้: .jp-page เป็น position: fixed; inset: 0
+ * ทั้งหน้าเลยไม่เคยเลื่อน canvas อยู่ในจอเสมอ (วัดแล้ว — draw call ตอน scroll สุดราง
+ * เท่ากับตอนมองอยู่) สิ่งที่ทำให้ไม่มีอะไรให้ดูคือบีต fill: พอหมอกหุบจนสุด
+ * ทั้งเฟรมเหลือสีเดียวนิ่ง ๆ วาดต่อไปก็ได้ภาพเดิมทุกเฟรม
+ *
+ * คำนวณตำแหน่งเองจาก scrollY ไม่อ่าน scrollState เพราะ effect ของลูกรันก่อนของพ่อ
+ * (Scene อยู่ใน Page) listener ตัวนี้จะได้ค่าช้าไปหนึ่ง event ถ้าไปพึ่งของ Page
+ */
+const FILL_BEAT = BEATS.find(([name]) => name === 'fill')
+/** หน่วงก่อนหยุด — กล้อง glide ด้วย camEase 0.045 ใช้เวลาราว 1 วิเข้าที่ */
+const FREEZE_DELAY = 1200
+function useCoveredFrameloop() {
+  const [covered, setCovered] = useState(false)
+  useEffect(() => {
+    let timer = 0
+    const read = () => {
+      const range = document.documentElement.scrollHeight - window.innerHeight
+      const raw = range > 0 ? Math.min(1, Math.max(0, window.scrollY / range)) : 0
+      if (raw >= FILL_BEAT[2]) {
+        // หยุดช้าไว้ก่อน: ถ้ากระโดดมาทันที (anchor link / เบราว์เซอร์คืนตำแหน่ง scroll)
+        // แล้วหยุดเลย กล้องจะค้างกลางทาง พอเลื่อนกลับขึ้นมาต้องไล่ต่อให้เห็น
+        // ปล่อยให้วาดต่ออีกครู่จนเข้าที่ แล้วค่อยแช่แข็งที่ท่าสุดท้าย
+        if (!timer) timer = window.setTimeout(() => setCovered(true), FREEZE_DELAY)
+      } else {
+        // กลับมาวาดทันที ไม่หน่วง — ผู้ใช้กำลังเลื่อนขึ้นมาดู
+        window.clearTimeout(timer)
+        timer = 0
+        setCovered(false)
+      }
+    }
+    read()
+    window.addEventListener('scroll', read, { passive: true })
+    window.addEventListener('resize', read)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('scroll', read)
+      window.removeEventListener('resize', read)
+    }
+  }, [])
+  return covered ? 'never' : 'always'
+}
+
 export function Scene() {
   // โหมดทำงาน: ปิดสี/บรรยากาศทั้งหมด เหลือแต่ทรงกับเงา — จูนโมเดลได้โดยไม่ถูกสีหลอกตา
   const { clay, clayScene, clayGrid, clayOrbit } = useControls('Workspace', {
@@ -283,8 +414,11 @@ export function Scene() {
     }),
   })
 
+  const frameloop = useCoveredFrameloop()
+
   return (
     <Canvas
+      frameloop={frameloop}
       shadows="soft"
       dpr={[1, LOW_END ? 1.5 : 2]}
       // การ์ดขยายเต็มจอระหว่าง scroll (--sp ยุบ padding) ขนาดกล่องจึงเปลี่ยนทุกเฟรม
@@ -312,6 +446,8 @@ export function Scene() {
       )}
       {/* จอโค้งบิดเส้นตรงทั้งฉาก — ปิดตอนปั้น ไม่งั้นแยกไม่ออกว่าโมเดลเบี้ยวเองหรือโดนโค้ง */}
       <Curvilinear strength={clay ? 0 : 0.06} />
+      {/* ฉากกลืนเป็นสีเดียว — ปิดตอนปั้น (โหมดปั้นถอด fog ออกอยู่แล้ว) */}
+      {!clay && <SceneFill />}
       {!clay && <RimLight />}
       <ClayMode enabled={clay} />
 

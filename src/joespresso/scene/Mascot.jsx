@@ -151,6 +151,59 @@ const IK_QE = new THREE.Quaternion()
 const DRAG_PLANE = new THREE.Plane()
 const DRAG_HIT = new THREE.Vector3()
 
+/**
+ * ประกายในตา (บีต eyes) — จุดขาวสองจุดแบบตาการ์ตูน จุดใหญ่บนซ้าย จุดเล็กล่างขวา
+ *
+ * แขวนไว้กับ "พ่อของลูกตา" ไม่ใช่ตัวลูกตา เพราะลูกตาถูกย่อ/ขยายตอนกระพริบและตอนบีต
+ * ถ้าเป็นลูกของตา ประกายจะยืดหดตามจนบิดเบี้ยว
+ *
+ * geometry/material แชร์กันทุกจุด — ไม่ dispose เพราะเป็นแคชระดับโมดูลเหมือน bushGeo/shadowTex
+ * material เป็น basic จึงไม่โดน addRim (มันข้ามตัวที่ไม่ใช่ standard) และติดธง keepColor
+ * กัน ClayMode ทาเทาทับ
+ */
+const FORWARD = new THREE.Vector3(0, 0, 1)
+const SPARK_GEO = new THREE.CircleGeometry(1, 16)
+const SPARK_MAT = new THREE.MeshBasicMaterial({
+  color: '#FFFFFF',
+  transparent: true,
+  depthWrite: false,
+  toneMapped: false,
+})
+const SPARK_LAYOUT = [
+  // [สัดส่วนกว้างของตา, เยื้องขวา, เยื้องขึ้น]
+  [0.3, -0.26, 0.24],
+  [0.15, 0.24, -0.2],
+]
+function addCatchlights(eye, worldNormal) {
+  eye.geometry.computeBoundingBox()
+  const size = eye.geometry.boundingBox.getSize(new THREE.Vector3())
+  // ทิศ "ออกจากหน้า" ในสเปซของพ่อ — ใช้วางประกายให้ลอยพ้นผิวลูกตา และหันหน้าเข้าหาคนดู
+  const n = worldNormal.clone()
+  eye.parent.getWorldQuaternion(TMP_Q).invert()
+  n.applyQuaternion(TMP_Q).normalize()
+
+  const w = size.x * eye.scale.x
+  const h = size.y * eye.scale.y
+  const sparks = []
+  for (const [r, dx, dy] of SPARK_LAYOUT) {
+    const m = new THREE.Mesh(SPARK_GEO, SPARK_MAT)
+    m.name = 'Catchlight'
+    m.userData.keepColor = true
+    m.userData.baseRadius = w * r
+    m.position.copy(eye.position).addScaledVector(n, size.z * eye.scale.z * 0.5 + 0.012)
+    // เยื้องในระนาบหน้า: ขวา = n × up, ขึ้น = แกน y ของสเปซพ่อ
+    TMP_V.set(0, 1, 0)
+    TMP_V2.crossVectors(TMP_V, n).normalize()
+    m.position.addScaledVector(TMP_V2, w * dx).addScaledVector(TMP_V, h * dy)
+    m.quaternion.setFromUnitVectors(FORWARD, n)
+    m.scale.setScalar(0) // เริ่มมองไม่เห็น รอบีต eyes ดันขึ้นมา
+    m.renderOrder = 2
+    eye.parent.add(m)
+    sparks.push(m)
+  }
+  eye.userData.sparks = sparks
+}
+
 /** สัดส่วนแบ่งท่อนขา — ต้นขา 52% ที่เหลือเป็นหน้าแข้ง (จุดหมุนเข่าอยู่รอยต่อ) */
 const THIGH_LEN = LEG_LEN * 0.52
 const SHIN_LEN = LEG_LEN - THIGH_LEN
@@ -410,6 +463,7 @@ export function Mascot({
     g.scale.setScalar(HEAD_SCALE)
     g.position.y = NECK_Y * (1 - HEAD_SCALE)
 
+    // ประกายในตา — ทำครั้งเดียวตอนตั้งฉาก ค่อยขยายเข้ามาตอนบีต eyes (ดู useFrame ท้ายไฟล์)
     // GLB ฝังลูกตาไว้ "ใน" กล่องหัว (ลึกกว่าผิวหน้า ~0.03) เลยไม่โผล่จากมุมไหนเลย —
     // เดิมไม่เคยเห็นเพราะ mascot หันหลังให้ตลอด ดันออกมาตามแนวตั้งฉากของหน้า
     if (parts.head && parts.eye.length) {
@@ -423,6 +477,7 @@ export function Mascot({
         const n = w.clone().sub(headC).setY(0).normalize()
         e.position.copy(e.parent.worldToLocal(w.addScaledVector(n, 0.05)))
         e.castShadow = false // ตายื่นพ้นผิวหน้านิดเดียว ถ้าทอดเงาจะกลายเป็นรอยด่างข้างตา
+        addCatchlights(e, n)
       }
     }
 
@@ -1242,13 +1297,20 @@ export function Mascot({
   // ลากวางแขน (debug) — drag.current = มุมไหล่ที่กำลังลากอยู่, handle = ลูกบอลจับที่ปลายนิ้ว
   const drag = useRef(null)
   const dragging = useRef(false)
-  // ความคืบหน้าท่าดื่ม (หน่วงจาก scrollState.p2) — เก็บใน ref ไม่ใช่ state, useFrame อ่านทุกเฟรม
+  // ความคืบหน้าท่าดื่ม (หน่วงจาก scrollState.b.sip) — เก็บใน ref ไม่ใช่ state, useFrame อ่านทุกเฟรม
   const sip = useRef(0)
   const handle = useRef()
 
   const pointer = useRef({ x: 0, y: 0 })
   const cur = useRef({ x: 0, y: 0 })
   const blink = useRef({ next: 2, closing: 0 })
+  // บีต eyes — ตาโต + ประกาย
+  const eyeGrow = useRef(0)
+  const eyec = useControls('Eyes (ฉาก 2)', {
+    eyesScale: { value: 0.85, min: 0, max: 2.5, step: 0.05, label: 'ตาโตขึ้น (เท่า)' },
+    eyesEase: { value: 0.16, min: 0.02, max: 0.5, step: 0.01, label: 'หน่วง' },
+    eyesPreview: { value: 0, min: 0, max: 1, step: 0.01, label: 'พรีวิว (ไม่ต้อง scroll)' },
+  }, { collapsed: true })
 
   useEffect(() => {
     const onMove = (e) => {
@@ -1273,7 +1335,7 @@ export function Mascot({
     // sipPreview คือค่าบังคับจาก slider ไว้จูนท่าโดยไม่ต้องเลื่อนหน้าไปมา
     sip.current = damp(
       sip.current,
-      Math.max(scrollState.p2, sipc.sipPreview),
+      Math.max(scrollState.b.sip, sipc.sipPreview),
       sipc.sipEase,
       dt,
     )
@@ -1463,10 +1525,30 @@ export function Mascot({
       b.closing -= delta
       k = 0.12
     }
+
+    // บีต eyes — ตาโตขึ้นแบบการ์ตูน + ประกายในตาโผล่
+    // ระหว่างบีตนี้หยุดกระพริบ ไม่งั้นตาที่กำลังเบิกโตจะวูบปิดกลางจังหวะ
+    eyeGrow.current = damp(
+      eyeGrow.current,
+      Math.max(scrollState.b.eyes, eyec.eyesPreview),
+      eyec.eyesEase,
+      dt,
+    )
+    const grow = eyeGrow.current
+    if (grow > 0.35) k = 1
+    const scaleUp = 1 + grow * eyec.eyesScale
+
     for (const e of eyes.current) {
       const base = e.userData.baseScale
       if (!base) continue
-      e.scale.y = damp(e.scale.y, base.y * k, 0.45, dt)
+      e.scale.x = damp(e.scale.x, base.x * scaleUp, 0.35, dt)
+      e.scale.y = damp(e.scale.y, base.y * scaleUp * k, 0.45, dt)
+      for (const s of e.userData.sparks ?? []) {
+        // โผล่ช้ากว่าตาเล็กน้อยแล้วค่อยเด้งเกินนิดหนึ่ง — ไม่ให้ดูเหมือนแค่ fade in
+        const pop = seg(grow, 0.25, 1) * (1 + 0.12 * Math.sin(seg(grow, 0.25, 1) * Math.PI))
+        s.scale.setScalar(s.userData.baseRadius * pop * scaleUp)
+        s.visible = pop > 0.001
+      }
     }
   })
 

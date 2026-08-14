@@ -3,7 +3,7 @@ import { Leva } from 'leva'
 import { Scene } from './App'
 import { Logo } from './Logo'
 import { GithubIcon, InstagramIcon, LinkedinIcon } from './Icons'
-import { scrollState, SPLIT } from './scroll'
+import { BEATS, resetBeats, updateBeats } from './scroll'
 import './page.css'
 
 /**
@@ -74,30 +74,22 @@ export default function Page() {
     }
   }, [])
 
-  // scroll → progress: ครึ่งแรกของราง = --sp (การ์ดขยาย + กล้อง focus)
-  //                    ครึ่งหลัง      = --sp2 (ดื่มกาแฟ -> สีคลุมเฟรม -> เนื้อหาถัดไป)
-  // แยกเป็นสองตัวแทนที่จะยืดตัวเดิม เพราะค่ากล้อง/การ์ดถูกจูนไว้กับ 0..1 ของช่วงแรกแล้ว
+  // scroll → บีต: ลำดับและความยาวของเรื่องอยู่ในตาราง BEATS ที่ scroll.js
+  // ที่นี่ทำแค่แปลงตำแหน่ง scroll เป็น 0..1 แล้วโยนเข้า updateBeats
   useEffect(() => {
-    const clamp01 = (v) => Math.min(1, Math.max(0, v))
     const onScroll = () => {
       const range = document.documentElement.scrollHeight - window.innerHeight
-      const raw = range > 0 ? clamp01(window.scrollY / range) : 0
-      const p = clamp01(raw / SPLIT)
-      const p2 = clamp01((raw - SPLIT) / (1 - SPLIT))
-      scrollState.p = p
-      scrollState.p2 = p2
+      const raw = range > 0 ? window.scrollY / range : 0
       const s = document.documentElement.style
-      s.setProperty('--sp', p.toFixed(4))
-      s.setProperty('--sp2', p2.toFixed(4))
+      for (const [k, v] of updateBeats(raw)) s.setProperty(k, v)
     }
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => {
       window.removeEventListener('scroll', onScroll)
-      scrollState.p = 0
-      scrollState.p2 = 0
-      document.documentElement.style.removeProperty('--sp')
-      document.documentElement.style.removeProperty('--sp2')
+      resetBeats()
+      const s = document.documentElement.style
+      for (const [name] of BEATS) s.removeProperty(`--b-${name}`)
     }
   }, [])
 
@@ -156,13 +148,11 @@ export default function Page() {
             </ul>
             <p className="jp-based">Based in Bangkok, Thailand</p>
 
-            {/* ฉาก 2 — ขับด้วย --sp2 ล้วน ๆ ไม่มี state ฝั่ง React (ไม่งั้น re-render ทุกเฟรมที่ scroll)
-                ลำดับ: mascot ยกแก้วดื่ม (0-.55) -> สีแผ่จากแก้วคลุมเฟรม (.45-.82) -> เนื้อหาโผล่ (.78-1) */}
-            <div className="jp-fill" aria-hidden="true" />
+            {/* ฉาก 2 — ขับด้วยตัวแปร --b-* ล้วน ๆ ไม่มี state ฝั่ง React (ไม่งั้น re-render ทุกเฟรมที่ scroll)
+                สีที่คลุมเฟรมไม่ได้อยู่ตรงนี้แล้ว — หมอกกับพื้นหลังในฉาก 3D เป็นคนกลืนภาพเอง
+                (ดู SceneFill ใน App.jsx) เหลือแค่บรรทัดส่งต่อที่ลอยขึ้นมาทีหลัง */}
             <section className="jp-next" aria-label="Next">
-              <p className="jp-next-kicker">One sip later</p>
-              <h2 className="jp-next-title">Let&rsquo;s build something</h2>
-              <p className="jp-next-sub">Design engineer · 3D · motion</p>
+              <h2 className="jp-next-title">I turn coffee into works</h2>
             </section>
           </div>
         </main>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useControls } from 'leva'
 import * as THREE from 'three'
@@ -6,7 +6,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
-import { LOW_END } from './utils'
+import { damp, LOW_END } from './utils'
+import { scrollState } from '../scroll'
 
 /**
  * Curvilinear perspective — บิดภาพแบบเลนส์ fisheye อ่อน ๆ
@@ -42,12 +43,13 @@ const DistortShader = {
     }`,
 }
 
-export function Curvilinear({ strength = 0.15 }) {
+export function Curvilinear({ strength = 0.15, lensPunch = 0.16 }) {
   const { gl, scene, camera, size } = useThree()
 
   // debugger: จูนความโค้งเลนส์สด ๆ (ค่าเริ่มตาม prop)
-  const { lensK } = useControls('Curve Perspective', {
+  const { lensK, lensPunch: punch } = useControls('Curve Perspective', {
     lensK: { value: strength, min: -0.4, max: 0.5, step: 0.005, label: 'lens barrel k' },
+    lensPunch: { value: lensPunch, min: 0, max: 0.5, step: 0.005, label: 'บวกตอน zoom' },
   }, { collapsed: true })
 
   const composer = useMemo(() => {
@@ -73,9 +75,18 @@ export function Curvilinear({ strength = 0.15 }) {
     composer.userData.distort.uniforms.aspect.value = size.width / size.height
   }, [composer, gl, size])
 
-  useEffect(() => {
-    composer.userData.distort.uniforms.k.value = lensK
-  }, [composer, lensK])
+  // ความโค้งเลนส์เป็นปุ่ม "ความอึดอัด" ของบีต zoom ด้วย — ยิ่ง scroll เข้าไปใกล้
+  // ขอบภาพยิ่งบีบ เหมือนเลนส์ไวด์จ่อหน้า ไม่ต้องเพิ่ม effect ตัวใหม่ให้จ่าย pass เพิ่ม
+  const distortion = useRef(lensK)
+  useFrame((_, delta) => {
+    const d = composer.userData.distort
+    const want = lensK + scrollState.b.zoom * punch
+    distortion.current = damp(distortion.current, want, 0.12, Math.min(delta, 0.05))
+    d.uniforms.k.value = distortion.current
+    // k = 0 ทำให้สูตรกลายเป็น q = p (ภาพเท่าเดิมเป๊ะ) แต่ยังจ่าย fullscreen pass เต็มจอ
+    // โหมดปั้นส่ง strength = 0 มาตลอดและไม่มีบีต — ข้าม pass ไปเลย
+    d.enabled = Math.abs(distortion.current) > 0.0005
+  }, 0)
 
   useEffect(() => () => composer.dispose(), [composer])
 
