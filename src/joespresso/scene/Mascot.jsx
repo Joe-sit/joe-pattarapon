@@ -768,10 +768,45 @@ export function Mascot({
      * จัดด้วย centroid ของกำปั้นไม่ได้ (นิ้วโป้ง/สันมือถ่วงไปคนละทาง เคยลองแล้วมือบิดทั้งก้อน)
      * ใช้ "แกนที่นิ้วยื่นออก" ที่ได้จากตอนต่อนิ้ว (ฝ่ามือ -> แถวข้อนิ้ว) ซึ่งเป็นแกนจริงของมือ
      */
-    const alignHandToArm = (arm) => {
+    /**
+     * แกนที่มือชี้ (ในสเปซข้อมือ) — จากศูนย์กลางฝ่ามือไปหาแถวข้อนิ้ว
+     * แยกออกมาเป็นฟังก์ชันเพราะเดิมคำนวณอยู่ในโค้ดต่อนิ้วชี้ ซึ่งรันเฉพาะแขนขวา
+     * แขนถือแก้วเลยไม่เคยมีค่านี้ มือจึงไม่เคยถูกหันให้ตรงแกนแขน
+     */
+    const handDir = (wrist) => {
+      wrist.updateMatrixWorld(true)
+      const toWrist = wrist.matrixWorld.clone().invert()
+      const list = []
+      wrist.traverse((o) => {
+        if (!o.isMesh) return
+        o.geometry.computeBoundingBox()
+        const bb = o.geometry.boundingBox.clone().applyMatrix4(toWrist.clone().multiply(o.matrixWorld))
+        const size = bb.getSize(new THREE.Vector3())
+        list.push({ o, bb, size, c: bb.getCenter(new THREE.Vector3()), vol: size.x * size.y * size.z })
+      })
+      if (!list.length) return null
+      const maxVol = Math.max(...list.map((p) => p.vol))
+      const small = list.filter((p) => p.vol < maxVol * 0.15)
+      // ข้อนิ้ว 4 ท่อนขนาดเท่ากันเป๊ะ นิ้วโป้งขนาดต่างออกไป — จับกลุ่มจากปริมาตรที่ซ้ำกันมากสุด
+      const knuckles = small.filter(
+        (p) => small.filter((q) => Math.abs(q.vol - p.vol) < p.vol * 0.15).length >= 3,
+      )
+      const thumb = small.find((p) => !knuckles.includes(p))
+      if (!knuckles.length || !thumb) return null
+      const palm = list.filter((p) => !small.includes(p)).sort((a, b) => a.vol - b.vol)[0]
+      if (!palm) return null
+      const row = knuckles
+        .reduce((v, p) => v.add(p.c), new THREE.Vector3())
+        .divideScalar(knuckles.length)
+      return { list, small, knuckles, thumb, palm, dir: row.clone().sub(palm.c).normalize() }
+    }
+
+    // pose0 เหมือน rebuildForearm — แขนถือแก้วต้องคิดที่ท่าพักของมันเอง ไม่ใช่มุมศอกของแขนชี้
+    const alignHandToArm = (arm, { pose0 = true } = {}) => {
       const dirLocal = arm.wrist.userData.pointDir
       if (!dirLocal) return
-      arm.elbow.rotation.set(POSE0.elbowX, 0, POSE0.elbowZ)
+      if (pose0) arm.elbow.rotation.set(POSE0.elbowX, 0, POSE0.elbowZ)
+      else arm.elbow.quaternion.copy(arm.elbow.userData.rest ?? new THREE.Quaternion())
       arm.wrist.quaternion.identity()
       model.updateMatrixWorld(true)
 
@@ -809,7 +844,9 @@ export function Mascot({
      */
     // pose0: แขนชี้วางผังที่มุมศอกชุด POSE0 / แขนถือแก้ววางผังที่ท่าพักของมันเอง (ห้อยดิ่ง)
     // keepLower: เก็บ 'ท่อนล่าง' ไว้ให้ slider pointArmFwd เลื่อน — ใช้กับแขนชี้เท่านั้น
-    const rebuildForearm = (arm, { pose0 = true, keepLower = true } = {}) => {
+    // yokeIn: บ่าจมย้อนแกนแขนเข้าลำตัวกี่เท่าของ F
+    //   แขนยก -> ทิศย้อนแกนพุ่งเข้าตัว จมได้เยอะ / แขนห้อย -> พุ่งขึ้นฟ้า จมเยอะแล้วโผล่เป็นก้อนข้างคอ
+    const rebuildForearm = (arm, { pose0 = true, keepLower = true, yokeIn = 0.5 } = {}) => {
       if (!arm) return
       // ต้องคิดที่ท่าจริง — มุมศอก/ข้อมือมีผลกับตำแหน่งมือ
       if (pose0) arm.elbow.rotation.set(POSE0.elbowX, 0, POSE0.elbowZ)
@@ -923,10 +960,13 @@ export function Mascot({
       const yoke = arm.shoulder.userData.yoke
       if (yoke) {
         const p = yoke.geometry.parameters
-        const yokeLo = -F * 0.5 // จมเข้าไปในลำตัว ปิดข้อต่อ
+        const yokeLo = -F * yokeIn // จมเข้าไปในลำตัว ปิดข้อต่อ
         const yokeHi = cuffStart + cuffLen * 0.45
         yoke.geometry.dispose()
-        yoke.geometry = new THREE.BoxGeometry(yokeCross, yokeHi - yokeLo, p.depth)
+        // ความลึกบ่ามาจาก bbox ลำตัวที่แปลงเข้าสเปซไหล่ซึ่งหมุนอยู่ — กล่องพองตามแนวทแยง
+        // (แขนห้อยวัดได้ 1.47 ทั้งที่ลำตัวลึกจริง 0.66) หนีบไม่ให้เกินหน้าตัดบ่าเอง
+        const depth = Math.min(p.depth, yokeCross * 1.2)
+        yoke.geometry = new THREE.BoxGeometry(yokeCross, yokeHi - yokeLo, depth)
         yoke.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis)
         yoke.position.copy(axis).multiplyScalar((yokeLo + yokeHi) / 2)
       }
@@ -1022,34 +1062,13 @@ export function Mascot({
     if (armPoint) {
       const wrist = armPoint.wrist
       model.updateMatrixWorld(true)
-      const toWrist = wrist.matrixWorld.clone().invert()
 
       // แจกแจงชิ้นในมือ (พิกัดของ wrist): ท่อนแขน > ฝ่ามือ > ข้อนิ้ว 4 ท่อน > นิ้วโป้ง
-      const parts2 = []
-      wrist.traverse((o) => {
-        if (!o.isMesh) return
-        o.geometry.computeBoundingBox()
-        const bb = o.geometry.boundingBox
-          .clone()
-          .applyMatrix4(toWrist.clone().multiply(o.matrixWorld))
-        const size = bb.getSize(new THREE.Vector3())
-        parts2.push({ o, bb, size, c: bb.getCenter(new THREE.Vector3()), vol: size.x * size.y * size.z })
-      })
-      const maxVol = Math.max(...parts2.map((p) => p.vol))
-      const small = parts2.filter((p) => p.vol < maxVol * 0.15)
-      // ข้อนิ้ว 4 ท่อนขนาดเท่ากันเป๊ะ ส่วนนิ้วโป้งขนาดต่างออกไป — จับกลุ่มจากปริมาตรที่ซ้ำกันมากสุด
-      const knuckles = small.filter(
-        (p) => small.filter((q) => Math.abs(q.vol - p.vol) < p.vol * 0.15).length >= 3,
-      )
-      const thumb = small.find((p) => !knuckles.includes(p))
-
-      if (knuckles.length && thumb) {
-        const palm = parts2.filter((p) => !small.includes(p)).sort((a, b) => a.vol - b.vol)[0]
-        // ทิศที่นิ้วยื่นออก = จากฝ่ามือไปหาแถวข้อนิ้ว (ไม่ใช่แนวแขน — ข้อมือบิดอยู่ 40°)
-        const row = knuckles
-          .reduce((v, p) => v.add(p.c), new THREE.Vector3())
-          .divideScalar(knuckles.length)
-        const dir = row.clone().sub(palm.c).normalize()
+      const hp = handDir(wrist)
+      const knuckles = hp?.knuckles ?? []
+      const thumb = hp?.thumb
+      if (hp) {
+        const { dir } = hp
         // เก็บไว้ให้ alignHandToArm ใช้ — นี่คือ "แกนที่มือชี้" ตัวจริง ไม่ใช่ centroid ของกำปั้น
         wrist.userData.pointDir = dir.clone()
         // นิ้วชี้ = ข้อนิ้วที่อยู่ชิดนิ้วโป้งที่สุด
@@ -1102,6 +1121,35 @@ export function Mascot({
     }
 
     if (armMug) {
+      // ปั้นบ่า/แขนเสื้อ/ท่อนแขนใหม่ด้วยฟังก์ชันชุดเดียวกับแขนชี้ — ชิ้นของ GLB เป็นแผ่นเฉียง
+      // หมุนยังไงก็ไม่เป็นแขนห้อยตรง
+      rebuildShoulder(armMug)
+      centerPivot(armMug.wrist)
+      centerPivot(armMug.elbow)
+      // หันกำปั้นให้ชี้ตามแกนแขน — ขั้นตอนเดียวกับแขนชี้ ต่างแค่แกนมือคำนวณสด ๆ ตรงนี้
+      // (ของแขนชี้ได้มาแถมตอนต่อนิ้ว) ไม่ทำแล้วกำปั้นบิด 40° ตามที่ GLB bake มา เห็นเป็นขั้นบันได
+      const mugHand = handDir(armMug.wrist)
+      if (mugHand) {
+        armMug.wrist.userData.pointDir = mugHand.dir.clone()
+        alignHandToArm(armMug, { pose0: false })
+      }
+      rebuildForearm(armMug, { pose0: false, keepLower: false, yokeIn: 0.06 })
+
+      // ห้อยตรงแนบลำตัว — หมุนไหล่ให้ 'แกนแขนที่เพิ่งปั้น' ดิ่งลงจริง
+      // alignArmAxis ก่อนหน้านี้เล็งจาก centroid ของ mesh GLB (แผ่นเฉียง) พอปั้นชิ้นใหม่เรียงตามแกน
+      // แกนจริงเลยเอียงออกนอกตัว ~13°
+      const armAxis = armMug.shoulder.userData.armAxis
+      if (armAxis) {
+        const axisModel = armAxis.clone().applyQuaternion(armMug.shoulder.quaternion)
+        // เอียงออกนอกตัวนิดเดียวพอให้พ้นสะโพก ไม่ใช่ดิ่ง 100% (แขนจะเสียดลำตัว)
+        const want = new THREE.Vector3(0.05 * armMug.outward, -1, 0).normalize()
+        armMug.shoulder.userData.rest.premultiply(
+          new THREE.Quaternion().setFromUnitVectors(axisModel, want),
+        )
+        armMug.shoulder.quaternion.copy(armMug.shoulder.userData.rest)
+        model.updateMatrixWorld(true)
+      }
+
       const mug = makeCoffeeCup()
       // แขวนกับข้อมือ แก้วจะได้ติดไปกับมือทุกท่า (ของเดิมผูกกับข้อศอก พอขยับแขนแล้วหลุดมือ)
       armMug.wrist.updateMatrixWorld(true)
