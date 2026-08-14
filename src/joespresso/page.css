@@ -8,8 +8,15 @@
   --jp-font-sans: 'Satoshi', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --jp-font-display: 'Clash Display', var(--jp-font-sans);
 
-  /* รางสกรอลล์ — สูงกว่าจอเพื่อให้มีระยะ scroll ขับ animation (--sp 0..1 จาก JS) */
-  height: 260vh;
+  /* สีที่แผ่คลุมเฟรมตอนดื่มกาแฟจบ — โทนเอสเปรสโซ */
+  --jp-fill: #2b1a12;
+  /* จุดกำเนิดของวงสี = ตำแหน่งแก้ว/ปากบนจอตอนกล้อง focus แล้ว (จูนคู่กับ Focus Cam) */
+  --jp-fill-x: 34%;
+  --jp-fill-y: 46%;
+
+  /* รางสกรอลล์ — ครึ่งแรก (160vh) ขับ --sp, ครึ่งหลัง (160vh) ขับ --sp2
+     ดู SPLIT ใน scroll.js — ถ้าแก้ความสูงตรงนี้ ทั้งสองช่วงยืดเท่า ๆ กัน */
+  height: 420vh;
   background: #fff;
   font-family: var(--jp-font-sans);
   -webkit-font-smoothing: antialiased;
@@ -47,10 +54,18 @@
   justify-content: space-between;
   /* design วางโลโก้/เมนูห่างขอบจอ 64px */
   padding: 0 64px;
-  /* เลื่อนหลบขึ้นบน + จางหาย ระหว่างการ์ดขยายเต็มจอ — เลื่อนเท่าความสูงตัวเองพอดี */
+  /* ตัวแถบยุบขึ้นไปเท่าความสูงตัวเอง เพื่อให้การ์ดขยายเต็มจอเหมือนเดิม
+     แต่ "ของข้างใน" ไม่ยุบตาม (ดู .jp-nav-logo / .jp-nav-links) — ค้างอยู่ที่เดิมบนจอ ลอยทับการ์ด */
   margin-top: calc(var(--sp, 0) * var(--jp-nav-h) * -1);
-  opacity: calc(1 - var(--sp, 0) * 1.6);
-  transform: translateY(calc(var(--sp, 0) * -12px));
+  /* ยกเหนือการ์ด ไม่งั้นโลโก้/เมนูจะถูกการ์ดทับตอนแถบยุบไปแล้ว */
+  position: relative;
+  z-index: 2;
+}
+
+/* หักล้างการยุบของแถบพอดี — ของข้างในจึงนิ่งสนิทที่ตำแหน่งเดิม */
+.jp-nav-logo,
+.jp-nav-links {
+  transform: translateY(calc(var(--sp, 0) * var(--jp-nav-h)));
 }
 
 /* โลโก้ตาม design: 93 x 32 */
@@ -120,15 +135,93 @@
    (มันเป็น position: fixed จึงไม่โดน overflow ของใครตัด แค่ยาวเกินจอ)
    จำกัดความสูงที่ตัวแผง แล้วให้ "เนื้อหา" เลื่อนเอง — แถบหัวจะได้ค้างอยู่ที่เดิม
    เลือกด้วย :last-child ไม่ใช่ชื่อคลาส เพราะคลาสของ leva เป็น hash ที่เปลี่ยนตามเวอร์ชัน */
-.jp-leva > div {
-  max-height: calc(100vh - 96px);
-  display: flex;
-  flex-direction: column;
+/* แผง leva ยาวเกินจอ (ตอนนี้ ~1290px) แล้วเลื่อนไม่ถึงล่างสุด
+   สาเหตุ: leva วัดความสูงเนื้อหาตัวเองเพื่อทำ animation ยุบ/กาง แล้วใส่เป็น inline height
+   ถ้าเราไปจำกัด max-height ที่ตัวมัน ค่าที่มันวัดได้จะเพี้ยน (ได้ 880 ทั้งที่เนื้อหา 1289)
+   ส่วนที่เกินเลยเข้าไม่ถึงไม่ว่าจะ scroll ยังไง
+   ทางออก: ไม่แตะตัวแผง ให้ "กล่องที่เราครอบไว้" เป็นตัวเลื่อนแทน แล้วดึงแผงกลับมาอยู่ในสายธรรมดา */
+.jp-leva {
+  position: fixed;
+  top: 64px;
+  right: 8px;
+  z-index: 1000;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-.jp-leva > div > :last-child {
-  min-height: 0;
-  overflow-y: auto;
+/* transform: leva ใส่ inline ไว้ (ทั้งจาก titleBar.position และตอนลากย้ายแผง) ถ้าปล่อยไว้
+   แผงจะถูกดันหลุดออกนอกกล่อง scroll แล้วหายไปทั้งอัน — แลกด้วยการลากย้ายแผงไม่ได้
+   (ไม่จำเป็น เพราะตอนนี้มันถูกตรึงมุมขวาบนโดย .jp-leva อยู่แล้ว) */
+.jp-leva > div {
+  position: static;
+  max-height: none;
+  transform: none !important;
+}
+
+/* ---- ฉาก 2: สีคลุมเฟรม + เนื้อหาถัดไป ---- */
+
+/* วงสีแผ่ออกจากตำแหน่งแก้ว — clip-path ไม่ใช่ scale เพราะขอบวงต้องคมและกินเต็มเฟรมพอดี
+   ช่วงที่ใช้จริงคือ --sp2 .45-.82 (ก่อนหน้านั้น mascot กำลังยกแก้ว) map เป็น 0..1 ด้วย clamp */
+.jp-fill {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: var(--jp-fill);
+  /* % ของรัศมีวัดกับเส้นทแยงที่ normalize แล้ว ไม่ใช่ด้านยาว — 85% ยังเหลือมุมขวาโผล่
+     120% เผื่อให้คลุมมุมไกลสุดครบทุกอัตราส่วนจอ */
+  clip-path: circle(
+    calc(clamp(0, (var(--sp2, 0) - 0.45) / 0.37, 1) * 120%) at var(--jp-fill-x) var(--jp-fill-y)
+  );
+  pointer-events: none;
+}
+
+/* เนื้อหาถัดไป — ลอยขึ้นมาหลังสีคลุมเต็มแล้ว ยังไม่รับคลิก (ยังเป็น placeholder ไม่มีลิงก์)
+   ถ้าใส่ลิงก์จริงต้องสลับ pointer-events ตอน --sp2 = 1 ด้วย */
+.jp-next {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 24px;
+  text-align: center;
+  color: #fff;
+  pointer-events: none;
+  opacity: clamp(0, (var(--sp2, 0) - 0.78) / 0.18, 1);
+  transform: translateY(calc((1 - clamp(0, (var(--sp2, 0) - 0.78) / 0.18, 1)) * 28px));
+}
+
+.jp-next-kicker {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.jp-next-title {
+  margin: 0;
+  font-family: var(--jp-font-display);
+  font-weight: 600;
+  font-size: clamp(32px, 6vw, 72px);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.jp-next-sub {
+  margin: 0;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jp-next {
+    transform: none;
+  }
 }
 
 /* ---- overlay ---- */

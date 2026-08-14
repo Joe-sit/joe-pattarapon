@@ -4,6 +4,13 @@ import { useGLTF } from '@react-three/drei'
 import { useControls } from 'leva'
 import * as THREE from 'three'
 import { addRim, clamp, damp } from './utils'
+import { scrollState } from '../scroll'
+
+/** 0..1 พร้อม ease-in-out — ใช้ทำ sub-timeline ในช่วง scroll ของฉาก 2 */
+const seg = (v, a, b) => {
+  const t = clamp((v - a) / (b - a), 0, 1)
+  return t * t * (3 - 2 * t)
+}
 
 const MODEL = '/mascot.glb'
 
@@ -20,6 +27,17 @@ const HEX = {
 
 function hexOf(mat) {
   return mat?.color ? mat.color.getHexString() : ''
+}
+
+/**
+ * สีของชิ้นส่วน "ตัวจริง"
+ *
+ * โหมดปั้น (ClayMode ใน App.jsx) สลับ material ทั้งฉากเป็นดินเทา แล้วเก็บของเดิมไว้ที่ userData
+ * ถ้าอ่านจาก o.material ตรง ๆ ทุกชิ้นจะกลายเป็นสีเดียวกันหมด — โค้ดข้างล่างนี้ใช้สีจำแนกชิ้นส่วน
+ * (GLB ไม่มีชื่อ node) แขนเลยหาชิ้นไม่เจอและไม่ถูกปั้นใหม่ ต้องมองข้ามสีดินเทาไปที่ของเดิมเสมอ
+ */
+function hexOfMesh(o) {
+  return hexOf(o?.userData?.clayFrom ?? o?.material)
 }
 
 /**
@@ -88,6 +106,29 @@ const LEG_LEN = 1.92
  */
 const LEG_SPLAY = 0.17
 
+/**
+ * ท่าตั้งต้นของข้อศอก/ข้อมือ — ใช้ทั้งเป็นค่าเริ่มของ slider และตอนปั้นท่อนแขน
+ * (rebuildForearm ต้องวัดที่ท่าจริง ถ้าวัดที่ท่าพักจะได้ท่อนแขนยาวผิด)
+ */
+const POSE0 = { elbowX: 0, elbowZ: 0.35, wristX: 0 }
+
+/**
+ * จานสีสำหรับโหมด debug แยกชิ้นส่วนแขน — สร้างครั้งเดียวแล้วใช้ซ้ำ
+ * เลือกสีที่ต่างกันชัดในภาพเดียว ไม่ใช่ไล่เฉด (ต้องแยกออกแม้ชิ้นเล็กและโดนแสงต่างกัน)
+ */
+const DEBUG_ARM_COLORS = [
+  '#E5322D', '#1F7A1F', '#1E5AE0', '#F2B705', '#C81FC8',
+  '#00A8A8', '#FF6A00', '#6A00CC', '#0F0F0F', '#FFFFFF',
+]
+const debugMatCache = []
+function debugMat(i) {
+  const k = i % DEBUG_ARM_COLORS.length
+  debugMatCache[k] =
+    debugMatCache[k] ??
+    new THREE.MeshStandardMaterial({ color: DEBUG_ARM_COLORS[k], roughness: 1, metalness: 0 })
+  return debugMatCache[k]
+}
+
 /** ย่อหัวให้สัดส่วนตรง comp — 1 = ขนาดที่มากับ GLB */
 const HEAD_SCALE = 0.92
 
@@ -96,40 +137,91 @@ const TMP_Q = new THREE.Quaternion()
 const TMP_E = new THREE.Euler()
 const TMP_V = new THREE.Vector3()
 const TMP_V2 = new THREE.Vector3()
+const TMP_Q2 = new THREE.Quaternion()
+// IK ท่ายกแก้วดื่ม (ฉาก 2)
+const IK_T = new THREE.Vector3()
+const IK_D = new THREE.Vector3()
+const IK_U = new THREE.Vector3()
+const IK_P = new THREE.Vector3()
+const IK_UP = new THREE.Vector3()
+const IK_FW = new THREE.Vector3()
+const IK_QS = new THREE.Quaternion()
+const IK_QE = new THREE.Quaternion()
+// ระนาบ/จุดตัด สำหรับโหมดลากวางแขน
+const DRAG_PLANE = new THREE.Plane()
+const DRAG_HIT = new THREE.Vector3()
+
+/** สัดส่วนแบ่งท่อนขา — ต้นขา 52% ที่เหลือเป็นหน้าแข้ง (จุดหมุนเข่าอยู่รอยต่อ) */
+const THIGH_LEN = LEG_LEN * 0.52
+const SHIN_LEN = LEG_LEN - THIGH_LEN
 
 function Legs({ rig }) {
-  // ขาแต่ละข้างห้อยจากจุดหมุนสะโพก (rig.hipL / rig.hipR) — หมุนได้ทั้งท่อน
-  const leg = (side, name) => (
+  /**
+   * ขาข้างละ 3 ข้อ: สะโพก -> เข่า -> ข้อเท้า
+   *
+   * เดิมขาเป็นท่อนตันท่อนเดียว หมุนได้แค่ทั้งขาจากสะโพก (แกน X แกนเดียว) งอเข่าไม่ได้เลย
+   * แยกกล่องยีนส์เป็นต้นขา/หน้าแข้งที่ตำแหน่งเดิมเป๊ะ — ท่ายืนตรงจึงหน้าตาเหมือนเดิมทุกพิกเซล
+   * แต่ตอนนี้มีจุดหมุนคั่นกลางให้งอได้
+   */
+  const leg = (side, key) => (
     <group
       key={side}
       position={[0.29 * side, -2.36, 0]}
       rotation={[0, 0.3 * side, LEG_SPLAY * side]}
       ref={(g) => {
-        if (rig) rig.current[name] = g
+        if (!rig || !g) return
+        rig.current[`hip${key}`] = g
+        // ท่าตั้งต้น — slider ทุกตัวบวกเพิ่มจากค่าพวกนี้ ไม่ได้เขียนทับ
+        //
+        // ??= สำคัญ: ref callback เป็นฟังก์ชันตัวใหม่ทุก render (leg() สร้างใหม่)
+        // React จึงถอด/ใส่ ref ใหม่ทุกครั้งที่ re-render (ขยับ slider ตัวไหนก็ได้ในไฟล์นี้)
+        // ถ้าจับค่าใหม่ทุกรอบ มันจะจับ "ตำแหน่งที่ useFrame ขยับไปแล้ว" มาเป็นค่าตั้งต้น
+        // ค่า offset เลยทบไปเรื่อย ๆ ขาไหลออกจากตัวทีละนิดทุกครั้งที่แตะ slider
+        g.userData.base = g.userData.base ?? g.position.clone()
+        g.userData.baseRot = g.userData.baseRot ?? g.rotation.clone()
+        g.userData.side = side
       }}
     >
-      {/* ท่อนขายีนส์ — ขอบบนคาไว้ที่ +0.07 ใต้ชายเสื้อ ยืดลงล่างอย่างเดียว */}
-      <mesh position={[0, 0.07 - LEG_LEN / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.5, LEG_LEN, 0.56]} />
+      {/* ต้นขา — ขอบบนคาไว้ที่ +0.07 ใต้ชายเสื้อ ยืดลงล่างอย่างเดียว */}
+      <mesh position={[0, 0.07 - THIGH_LEN / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.5, THIGH_LEN, 0.56]} />
         <meshStandardMaterial color={JEANS} roughness={1} metalness={0} />
       </mesh>
-      {/* ขอบพับ — แถบฟ้าคาดปลายขา กว้างกว่าขาเล็กน้อย */}
-      <mesh position={[0, 0.07 - LEG_LEN - 0.07, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.6, 0.28, 0.66]} />
-        <meshStandardMaterial color={CUFF} roughness={1} metalness={0} />
-      </mesh>
-      {/* บูท — หัวยื่นหน้า ส้นใต้ขอบพับ
-          ไม่หมุนสวนขาแล้ว: เท้าเอียงไปตามท่อนขาจริง ๆ ขอบนอกจะจมพื้นบ้างก็ปล่อย
-          (พื้นทรายมีรอยยุบรับอยู่ ดูเป็นน้ำหนักกดลงไปมากกว่าเท้าลอยราบ) */}
-      <group position={[0, 0.07 - LEG_LEN - 0.4, 0]}>
-        <mesh position={[0, 0, 0.14]} castShadow receiveShadow>
-          <boxGeometry args={[0.6, 0.34, 0.9]} />
-          <meshStandardMaterial color={BOOT} roughness={1} metalness={0} />
+
+      <group
+        position={[0, 0.07 - THIGH_LEN, 0]}
+        ref={(g) => {
+          if (rig && g) rig.current[`knee${key}`] = g
+        }}
+      >
+        {/* หน้าแข้ง */}
+        <mesh position={[0, -SHIN_LEN / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.5, SHIN_LEN, 0.56]} />
+          <meshStandardMaterial color={JEANS} roughness={1} metalness={0} />
         </mesh>
-        <mesh position={[0, -0.21, 0.14]} castShadow receiveShadow>
-          <boxGeometry args={[0.64, 0.09, 0.94]} />
-          <meshStandardMaterial color={SOLE} roughness={1} metalness={0} />
+        {/* ขอบพับ — แถบฟ้าคาดปลายขา กว้างกว่าขาเล็กน้อย */}
+        <mesh position={[0, -SHIN_LEN - 0.07, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.6, 0.28, 0.66]} />
+          <meshStandardMaterial color={CUFF} roughness={1} metalness={0} />
         </mesh>
+        {/* บูท — หัวยื่นหน้า ส้นใต้ขอบพับ
+            ไม่หมุนสวนขาแล้ว: เท้าเอียงไปตามท่อนขาจริง ๆ ขอบนอกจะจมพื้นบ้างก็ปล่อย
+            (พื้นทรายมีรอยยุบรับอยู่ ดูเป็นน้ำหนักกดลงไปมากกว่าเท้าลอยราบ) */}
+        <group
+          position={[0, -SHIN_LEN - 0.4, 0]}
+          ref={(g) => {
+            if (rig && g) rig.current[`ankle${key}`] = g
+          }}
+        >
+          <mesh position={[0, 0, 0.14]} castShadow receiveShadow>
+            <boxGeometry args={[0.6, 0.34, 0.9]} />
+            <meshStandardMaterial color={BOOT} roughness={1} metalness={0} />
+          </mesh>
+          <mesh position={[0, -0.21, 0.14]} castShadow receiveShadow>
+            <boxGeometry args={[0.64, 0.09, 0.94]} />
+            <meshStandardMaterial color={SOLE} roughness={1} metalness={0} />
+          </mesh>
+        </group>
       </group>
     </group>
   )
@@ -140,8 +232,8 @@ function Legs({ rig }) {
         <boxGeometry args={[1.24, 0.34, 0.6]} />
         <meshStandardMaterial color={JEANS} roughness={1} metalness={0} />
       </mesh>
-      {leg(-1, 'hipL')}
-      {leg(1, 'hipR')}
+      {leg(-1, 'L')}
+      {leg(1, 'R')}
     </group>
   )
 }
@@ -158,7 +250,7 @@ export function Mascot({
   const headGroup = useRef()
   const eyes = useRef([])
   const rig = useRef({})
-  const { size } = useThree()
+  const { size, gl } = useThree()
 
   // debugger: จูนท่าทางทุกข้อต่อสด ๆ
   // debugger: หัวหันตามเมาส์ — อยู่กลุ่มเดียวกับของกล้องใน App.jsx (leva รวม folder ชื่อเดียวกันให้)
@@ -167,31 +259,95 @@ export function Mascot({
     headPitch: { value: 0.28, min: 0, max: 1.2, step: 0.01, label: 'หัว ก้มเงย' },
     headRoll: { value: 0.09, min: 0, max: 0.6, step: 0.01, label: 'หัว เอียง' },
     headEase: { value: 0.08, min: 0.005, max: 0.4, step: 0.005, label: 'หัว หน่วง' },
+    // ท่าตั้งต้นของหัว — เอียงเฉียงไปทางเดียวกับที่แขนชี้ (เมาส์ขยับต่อจากท่านี้ ไม่ได้แทนที่)
+    headBaseYaw: { value: -0.22, min: -1, max: 1, step: 0.01, label: 'หัว หันตั้งต้น' },
+    headBaseRoll: { value: -0.14, min: -0.8, max: 0.8, step: 0.01, label: 'หัว เอียงตั้งต้น' },
+    headBasePitch: { value: 0, min: -0.6, max: 0.6, step: 0.01, label: 'หัว ก้มตั้งต้น' },
   })
 
-  const pose = useControls('Rig', {
+  const [pose, setPose] = useControls('Rig', () => ({
     // 1.55 rad = แขนทำมุม ~38° กับแนวนอน ตรงตาม comp (ของเดิม 2.35 = 81° เกือบตั้งฉาก)
     pointShoulderZ: { value: 1.55, min: 0, max: 3.1, step: 0.05 },
-    pointShoulderX: { value: -0.35, min: -2.5, max: 1.5, step: 0.05 },
+    pointShoulderX: { value: 0.4, min: -2.5, max: 1.5, step: 0.05 },
+    // กวาดแขนไปข้างหน้า/ข้างหลัง — แกน X ใช้ไม่ได้กับท่านี้ (แขนชี้ไปตามแกน x พอดี
+    // หมุนรอบแกนตัวเองก็แค่บิด ไม่ได้พาแขนไปไหน) ต้องหมุนรอบแกน Y ถึงจะกวาดไปหน้าจริง
+    pointShoulderY: { value: 0.45, min: -1.2, max: 1.2, step: 0.05 },
     // ลดหัวไหล่ข้างที่ชี้ลงมา — ยกแขนแล้วไหล่มันดันขึ้นไปชิดคอ
-    pointShoulderDrop: { value: 0.16, min: -0.3, max: 0.6, step: 0.01 },
-    pointElbowX: { value: 0, min: -2.2, max: 2.2, step: 0.05 },
-    // คลายมุมพับที่ bake มาใน GLB ให้ท่อนล่างต่อตรงกับท่อนบน แขนเลยเหยียดชี้ฟ้าเป็นเส้นเดียว
-    pointElbowZ: { value: 0.35, min: -2.2, max: 2.2, step: 0.05 },
-    pointWristX: { value: 0.7, min: -2.2, max: 2.2, step: 0.05 },
+    pointShoulderDrop: { value: 0.32, min: -0.3, max: 0.6, step: 0.01 },
+    // ย้ายจุดหมุนไหล่ = ขยับ "ทั้งแขน" (บ่า/แขนเสื้อ/ท่อนแขน/มือ/นิ้ว) ไปทั้งก้อน ไม่ใช่หมุน
+    // ต่างจาก pointArmFwd ที่เลื่อนเฉพาะท่อนล่าง — อันนี้ยกโคนไหล่ออกจากลำตัวด้วย
+    pointShoulderOut: { value: 0, min: -0.3, max: 1, step: 0.01 },
+    pointShoulderFwd: { value: 0, min: -0.6, max: 0.6, step: 0.01 },
+    // ท่อนแขนที่ปั้นใหม่อิงมุมชุดนี้ — ขยับ slider แล้วมือจะเลื่อนออกจากปลายท่อนแขน
+    pointElbowX: { value: POSE0.elbowX, min: -2.2, max: 2.2, step: 0.05 },
+    pointElbowY: { value: 0, min: -2.2, max: 2.2, step: 0.05 },
+    pointElbowZ: { value: POSE0.elbowZ, min: -2.2, max: 2.2, step: 0.05 },
+    pointWristX: { value: POSE0.wristX, min: -2.2, max: 2.2, step: 0.05 },
+    pointWristY: { value: 0.1, min: -2.2, max: 2.2, step: 0.05 },
+    pointWristZ: { value: -0.5, min: -2.2, max: 2.2, step: 0.05 },
+    // เลื่อน "ท่อนล่างทั้งก้อน" (ท่อนแขน + มือ + นิ้ว) ไปทางด้านหน้าของ mascot
+    // ไม่ใช่การหมุน — ใช้จัดให้หน้าตัดโคนท่อนแขนบรรจบกับปลายแขนเสื้อพอดีทั้ง block
+    pointArmFwd: { value: 0, min: -1, max: 1, step: 0.01 },
     // 0 = ใช้ท่าตั้งต้นที่ alignArmAxis จัดให้ (แขนดิ่งแนบตัว) — ค่าเก่า -0.5 เอียงไปหน้า 28.6°
     mugShoulderX: { value: 0, min: -2, max: 1, step: 0.05 },
     // ท่าพักใน GLB แขนกางออกข้าง — comp ปล่อยแขนแนบตัว ต้องกดลงด้วยแกน Z เหมือนแขนชี้
     mugShoulderZ: { value: 0, min: -3.1, max: 3.1, step: 0.05 },
     mugElbowX: { value: 0, min: -2.2, max: 0.6, step: 0.05 },
-    hipLX: { value: 0, min: -1.2, max: 1.2, step: 0.05 },
-    hipRX: { value: 0, min: -1.2, max: 1.2, step: 0.05 },
-  })
+    // debug: ทาสีชิ้นส่วนแขนแยกกันคนละสี ดูว่าชิ้นไหนคือชิ้นไหน / ทับกันตรงไหน
+    armDebug: { value: false, label: 'แยกสีชิ้นแขน' },
+    // debug: ลากลูกบอลที่ปลายนิ้วเพื่อเล็งแขน — ปล่อยแล้วค่ามุมไหล่ถูกเขียนกลับลง slider ด้านบน
+    armDrag: { value: false, label: 'ลากวางแขน' },
+  }))
+
+  /**
+   * ขา — ข้อละ 3 แกนเหมือนแขน + เลื่อนทั้งขาออกจากลำตัว
+   * ค่าทุกตัว "บวกเพิ่ม" จากท่ายืนตั้งต้น (กางขา 0.17 rad, บิดปลายเท้าออก 0.3 rad) ไม่ใช่เขียนทับ
+   * L = ข้างเดียวกับที่ถือแก้ว, R = ข้างที่ชี้
+   */
+  const legc = useControls('Legs', {
+    hipLX: { value: 0, min: -1.4, max: 1.4, step: 0.05, label: 'ซ้าย สะโพก หน้า/หลัง' },
+    hipLY: { value: 0, min: -1, max: 1, step: 0.05, label: 'ซ้าย สะโพก บิด' },
+    hipLZ: { value: 0, min: -0.8, max: 0.8, step: 0.05, label: 'ซ้าย สะโพก กางออก' },
+    kneeLX: { value: 0, min: -0.2, max: 2.2, step: 0.05, label: 'ซ้าย เข่า งอ' },
+    ankleLX: { value: 0.1, min: -1, max: 1, step: 0.05, label: 'ซ้าย ข้อเท้า' },
+    legLOut: { value: 0.09, min: -0.4, max: 0.8, step: 0.01, label: 'ซ้าย ทั้งขา ออกข้าง' },
+    legLFwd: { value: 0, min: -0.8, max: 0.8, step: 0.01, label: 'ซ้าย ทั้งขา หน้า/หลัง' },
+    hipRX: { value: 0, min: -1.4, max: 1.4, step: 0.05, label: 'ขวา สะโพก หน้า/หลัง' },
+    hipRY: { value: 0.2, min: -1, max: 1, step: 0.05, label: 'ขวา สะโพก บิด' },
+    hipRZ: { value: 0, min: -0.8, max: 0.8, step: 0.05, label: 'ขวา สะโพก กางออก' },
+    kneeRX: { value: 0, min: -0.2, max: 2.2, step: 0.05, label: 'ขวา เข่า งอ' },
+    ankleRX: { value: 0.15, min: -1, max: 1, step: 0.05, label: 'ขวา ข้อเท้า' },
+    legROut: { value: 0.14, min: -0.4, max: 0.8, step: 0.01, label: 'ขวา ทั้งขา ออกข้าง' },
+    legRFwd: { value: 0, min: -0.8, max: 0.8, step: 0.01, label: 'ขวา ทั้งขา หน้า/หลัง' },
+  }, { collapsed: true })
+
+  // ฉาก 2: ยกแก้วขึ้นดื่ม — ค่าปลายทางของแขนถือแก้ว (ค่าตั้งต้นคือ slider ชุด mug* ด้านบน)
+  // แยก folder เพราะจูนคนละจังหวะกัน: ชุดบนคือท่ายืนนิ่ง ชุดนี้คือท่าปลายทางตอน scroll สุด
+  const sipc = useControls('Sip (ฉาก 2)', {
+    // เลื่อน "จุดที่แก้วต้องไปถึง" เทียบกับปาก (หน่วยโมเดล) — IK แก้มุมข้อต่อให้เอง
+    sipAimFwd: { value: 0, min: -0.6, max: 0.6, step: 0.01, label: 'เป้า หน้า/หลัง' },
+    sipAimUp: { value: 0, min: -0.6, max: 0.6, step: 0.01, label: 'เป้า ขึ้น/ลง' },
+    sipAimSide: { value: 0, min: -0.6, max: 0.6, step: 0.01, label: 'เป้า ซ้าย/ขวา' },
+    sipMugTilt: { value: 0.35, min: -1.6, max: 1.6, step: 0.05, label: 'แก้ว เอียง' },
+    sipHeadPitch: { value: 0.3, min: -0.8, max: 0.8, step: 0.01, label: 'หัว ก้ม/เงย' },
+    sipEase: { value: 0.12, min: 0.02, max: 0.5, step: 0.01, label: 'หน่วง' },
+    sipPreview: { value: 0, min: 0, max: 1, step: 0.01, label: 'พรีวิว (ไม่ต้อง scroll)' },
+  }, { collapsed: true })
 
   // clone เพื่อไม่ไปแก้ cache ของ useGLTF
   const model = useMemo(() => scene.clone(true), [scene])
 
   useEffect(() => {
+    // rig ได้ครั้งเดียวต่อโมเดล — ทุกอย่างข้างล่างนี้แก้ตัว model ถาวร (ย้าย parent, mirror geometry,
+    // ต่อนิ้ว, อุดข้อต่อ) รันซ้ำแล้วพัง: นิ้วซ้อน ก้อนอุดโผล่สองลูก มือหลุดจากแขน
+    // รันซ้ำเกิดได้จริงทั้ง StrictMode (dev mount 2 รอบ) และ Suspense ที่ remount ตอน GLB โหลดเสร็จ
+    // — เก็บ rig ที่ปั้นแล้วไว้บน model แล้วคืนค่ากลับให้ ref แทนการปั้นใหม่
+    if (model.userData.rig) {
+      rig.current = model.userData.rig
+      headGroup.current = model.userData.headGroup
+      eyes.current = model.userData.eyes
+      return
+    }
     const parts = { hair: [], eye: [], head: null, sideburn: [] }
     // GLB export แยก material ให้ทุก mesh ถึงจะสีเดียวกัน (ผมดำ 6 ชิ้น = 6 material)
     // ยุบตามหน้าตาจริง — ลด state change ต่อเฟรม และ addRim ก็คอมไพล์ shader ครั้งเดียวต่อสี
@@ -225,7 +381,7 @@ export function Mascot({
       o.geometry.computeBoundingBox()
       const s = o.geometry.boundingBox.getSize(new THREE.Vector3())
 
-      const hex = hexOf(o.material)
+      const hex = hexOfMesh(o)
       if (hex === HEX.eye) parts.eye.push(o)
       else if (hex === HEX.hair) {
         // ชิ้นเล็กที่อยู่ข้างหัว = จอน, ก้อนใหญ่ด้านบน = ผม
@@ -276,8 +432,9 @@ export function Mascot({
       const bb = parts.head.geometry.boundingBox
       const hs = bb.getSize(new THREE.Vector3())
       const hc = bb.getCenter(new THREE.Vector3())
+      // material ตัวจริง ไม่ใช่ดินเทาของโหมดปั้น ไม่งั้นแผ่นนี้จะค้างเป็นสีเทาถาวร
       const hairMat = parts.hair[0]
-        ? parts.hair[0].material
+        ? (parts.hair[0].userData.clayFrom ?? parts.hair[0].material)
         : new THREE.MeshStandardMaterial({ color: '#282729', roughness: 1, metalness: 0 })
       const back = new THREE.Mesh(
         new THREE.BoxGeometry(hs.x * 1.04, hs.y * 1.02, hs.z * 0.3),
@@ -285,6 +442,7 @@ export function Mascot({
       )
       back.position.set(hc.x, hc.y + hs.y * 0.02, hc.z - hs.z * 0.42)
       back.castShadow = back.receiveShadow = true
+      back.name = 'BackHair'
       parts.head.add(back)
     }
 
@@ -377,11 +535,41 @@ export function Mascot({
       model.updateMatrixWorld(true)
     }
 
+    /**
+     * ย้ายจุดหมุนของข้อไปไว้ "กลางท่อนแขน" (แกน x/z) โดยท่าพักไม่ขยับ
+     *
+     * mkArm วางจุดหมุนไว้ที่ x = z = 0 ของสเปซแขน ซึ่งไม่ใช่แกนกลางของเนื้อแขนเลย
+     * (ปลายแขนจริงอยู่ที่ x 0.21, z 0.22) พอพับข้อ ท่อนล่างเลยกวาดเป็นวงรอบจุดที่อยู่นอกตัวมัน
+     * หน้าตัดสองท่อนถ่างออกจากกันเป็นรอยผ่าเห็นทะลุฉากหลัง — ยิ่งพับมาก ยิ่งถ่าง
+     *
+     * ย้ายจุดหมุนมาที่แกนกลางแล้วชดเชยตำแหน่งลูกกลับเท่าเดิม รูปทรงท่าพักคงเดิมเป๊ะ
+     * แต่การพับกลายเป็น "บิดรอบแกนตัวเอง" รอยต่อจึงตันโดยไม่ต้องเอาอะไรไปอุด
+     */
+    const centerPivot = (joint) => {
+      const inv = joint.parent.matrixWorld.clone().invert()
+      const bb = new THREE.Box3()
+      joint.traverse((o) => {
+        if (!o.isMesh) return
+        o.geometry.computeBoundingBox()
+        bb.union(o.geometry.boundingBox.clone().applyMatrix4(inv.clone().multiply(o.matrixWorld)))
+      })
+      if (bb.isEmpty()) return
+      const delta = new THREE.Vector3(
+        joint.position.x - (bb.min.x + bb.max.x) / 2,
+        0,
+        joint.position.z - (bb.min.z + bb.max.z) / 2,
+      )
+      joint.position.sub(delta)
+      // ลูกยังไม่ถูกหมุน (rotation ของข้อเป็น identity ตอนตั้งริก) บวกกลับตรง ๆ ได้เลย
+      joint.children.forEach((c) => c.position.add(delta))
+      joint.updateMatrixWorld(true)
+    }
+
     const mkArm = (list) => {
       if (!list.length) return null
       const top = Math.max(...list.map(({ lp }) => lp.y))
       const bottom = Math.min(...list.map(({ lp }) => lp.y))
-      const sleeve = list.find(({ o }) => hexOf(o.material) === 'ede2cf')
+      const sleeve = list.find(({ o }) => hexOfMesh(o) === 'ede2cf')
       const elbowY = sleeve ? sleeve.lp.y - 0.3 : top - 0.75
 
       // ขอบเขตจริงของแขน (bbox) — ใช้ origin ของ mesh ไม่ได้ มันไม่ได้อยู่กลางชิ้น
@@ -419,6 +607,9 @@ export function Mascot({
       shoulder.userData.len = top + 0.12 - bottom
       // เก็บความสูงตั้งต้นไว้ ให้ slider เลื่อนไหล่ขึ้นลงทีหลังได้ (mesh เป็นลูก จะขยับตามทั้งแขน)
       shoulder.userData.baseY = shoulder.position.y
+      // ตำแหน่งตั้งต้นอีกสองแกน — slider ขยับ "ทั้งแขนรวมไหล่" ออกจากลำตัว/ไปด้านหน้า
+      shoulder.userData.baseX = shoulder.position.x
+      shoulder.userData.baseZ = shoulder.position.z
       elbow.userData.len = elbowY - bottom
       shoulder.userData.outward = outward
       return { shoulder, elbow, wrist, outward }
@@ -435,7 +626,7 @@ export function Mascot({
     const meshCentroid = (group, skip) => {
       const bb = new THREE.Box3()
       group.traverse((o) => {
-        if (!o.isMesh) return
+        if (!o.isMesh || !o.visible) return
         for (let p = o.parent; p; p = p.parent) if (p === skip) return
         o.geometry.computeBoundingBox()
         bb.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld))
@@ -484,6 +675,313 @@ export function Mascot({
       )
     }
 
+    /**
+     * ปั้นหัวไหล่ใหม่สำหรับแขนที่ยกชี้
+     *
+     * GLB มีชิ้นแขนเสื้อก้อนเดียวยาว 0.78 หน่วย ทำหน้าที่ทั้ง "บ่า" และ "แขนเสื้อ" รวมกัน
+     * ท่าพักห้อยลงข้างตัวก็ดูปกติ แต่พอยกแขนชี้ (ไหล่หมุน ~89°) ทั้งก้อนพลิกไปนอนแนวนอน
+     * กลายเป็นแผ่นครีมยื่นออกข้างยาวเท่าต้นแขน — ไหล่บวมผิดสัดส่วน แถมบ่าเปิดเป็นช่องโหว่
+     *
+     * แยกเป็นสองชิ้นตามหน้าที่จริง:
+     *   บ่า (yoke)  — ครึ่งบนของแขนเสื้อ เกาะกับลำตัว อยู่นิ่งทุกท่า ปิดข้อต่อไว้
+     *   แขนเสื้อ    — ท่อนสั้นกว่า เกาะกับต้นแขน หมุนตามแขนไป
+     * สัดส่วนถอดจากชิ้นเดิมทั้งหมด (กว้าง/ลึกเท่าเดิม แบ่งความยาว) จึงเข้ากับลำตัวเป๊ะเหมือนอีกข้าง
+     */
+    const rebuildShoulder = (arm) => {
+      if (!arm) return
+      const inv = arm.shoulder.matrixWorld.clone().invert()
+      let sleeve = null
+      arm.shoulder.traverse((o) => {
+        if (o.isMesh && hexOfMesh(o) === 'ede2cf') sleeve = o
+      })
+      if (!sleeve) return
+      sleeve.geometry.computeBoundingBox()
+      const bb = sleeve.geometry.boundingBox
+        .clone()
+        .applyMatrix4(inv.clone().multiply(sleeve.matrixWorld))
+      // ต้นแขนจริง (เนื้อสีผิว) — ใช้เป็นหน้าตัดอ้างอิงของแขนเสื้อ
+      const arm3 = new THREE.Box3()
+      arm.shoulder.traverse((o) => {
+        if (!o.isMesh || hexOfMesh(o) !== 'efb49b') return
+        for (let p = o.parent; p; p = p.parent) if (p === arm.elbow) return
+        o.geometry.computeBoundingBox()
+        arm3.union(o.geometry.boundingBox.clone().applyMatrix4(inv.clone().multiply(o.matrixWorld)))
+      })
+      if (arm3.isEmpty()) return
+
+      const w = bb.max.x - bb.min.x
+      const len = bb.max.y - bb.min.y
+      // บ่าลึกเท่าลำตัว ไม่ใช่เท่าชิ้นเดิม — ชิ้นเดิมลึก 0.74 กว่าลำตัว (0.66) และกว่าต้นแขน (0.44) มาก
+      // ท่าห้อยมองจากหน้ายังดูเป็นเสื้อหลวม แต่พอยกแขนเรามองมันจากด้านข้าง ความลึกกลายเป็นความกว้าง
+      // ไหล่เลยพองเป็นแผ่น — ตัดให้พอดีตัวทั้งบ่าและแขนเสื้อ
+      const torso = new THREE.Box3()
+      model.traverse((o) => {
+        if (!o.isMesh || hexOfMesh(o) !== 'ede2cf') return
+        for (let p = o.parent; p; p = p.parent) if (p.userData?.baseY !== undefined) return
+        o.geometry.computeBoundingBox()
+        torso.union(o.geometry.boundingBox.clone().applyMatrix4(inv.clone().multiply(o.matrixWorld)))
+      })
+      const d = torso.isEmpty() ? bb.max.z - bb.min.z : torso.max.z - torso.min.z
+      sleeve.visible = false
+
+      const srcMat = sleeve.userData.clayFrom ?? sleeve.material
+      const piece = (sw, sh, sd) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(sw, sh, sd), srcMat)
+        m.castShadow = true
+        m.receiveShadow = true
+        return m
+      }
+
+      // บ่า: อยู่ในกลุ่มไหล่ (หมุนไปกับแขนทั้งก้อน) — รูปทรง/ตำแหน่งจริงถูกจัดอีกทีใน rebuildForearm
+      // ตอนที่รู้แกนแขนแล้ว
+      //
+      // เดิมแขวนไว้กับลำตัวแล้วให้หมุนตามแขนแค่ 45% ผลคือแกนของบ่าไปคนละทางกับแกนแขน
+      // ปลายล่างของบ่าเลยยื่นเป็นแผ่นออกมาจากใต้แขน ไม่มีอะไรมาต่อ ("ไหล่ไม่สอดคล้องกับแขน")
+      // ท่านี้เป็นท่านิ่ง ไม่มี animation ที่ข้อไหล่ จึงให้บ่าเป็นชิ้นหนึ่งของแขนไปเลย
+      // ปลายด้านในของมันจมอยู่ในลำตัวอยู่แล้ว ข้อต่อจึงยังตัน
+      const yoke = piece(w, len * 0.5, d)
+      arm.shoulder.add(yoke)
+      arm.shoulder.userData.yoke = yoke
+
+      // แขนเสื้อ: หุ้มต้นแขนพอดี (หนากว่าเนื้อแขน 14%) วางบนแกนของต้นแขน ไม่ใช่แกนของชิ้นเดิม
+      // ยาวแค่ 45% ของต้นแขน — เสื้อแขนสั้นตาม comp ไม่ใช่คลุมทั้งท่อนแบบชิ้นเดิม
+      const cuffH = (arm3.max.y - arm3.min.y) * 0.45
+      const cuff = piece(
+        (arm3.max.x - arm3.min.x) * 1.14,
+        cuffH,
+        (arm3.max.z - arm3.min.z) * 1.14,
+      )
+      cuff.position.set(
+        (arm3.min.x + arm3.max.x) / 2,
+        bb.max.y - len * 0.35 - cuffH / 2,
+        (arm3.min.z + arm3.max.z) / 2,
+      )
+      arm.shoulder.add(cuff)
+      // rebuildForearm ต้องรู้ว่าแขนเสื้อยาวแค่ไหน เพื่อหาว่าท่อนแขนต้องเริ่มตรงไหน
+      arm.shoulder.userData.cuff = { mesh: cuff, len: cuffH }
+    }
+
+    /**
+     * หันกำปั้นให้ชี้ไปตามแกนแขน
+     *
+     * GLB bake มุมข้อมือบิดไว้ ~40° กำปั้นเลยชี้คนละทางกับท่อนแขน มองแล้วเหมือนมือหักข้อ
+     * จัดด้วย centroid ของกำปั้นไม่ได้ (นิ้วโป้ง/สันมือถ่วงไปคนละทาง เคยลองแล้วมือบิดทั้งก้อน)
+     * ใช้ "แกนที่นิ้วยื่นออก" ที่ได้จากตอนต่อนิ้ว (ฝ่ามือ -> แถวข้อนิ้ว) ซึ่งเป็นแกนจริงของมือ
+     */
+    const alignHandToArm = (arm) => {
+      const dirLocal = arm.wrist.userData.pointDir
+      if (!dirLocal) return
+      arm.elbow.rotation.set(POSE0.elbowX, 0, POSE0.elbowZ)
+      arm.wrist.quaternion.identity()
+      model.updateMatrixWorld(true)
+
+      // แกนแขน = จุดหมุนไหล่ (origin ของสเปซไหล่) -> จุดหมุนข้อมือ
+      const wristInShoulder = arm.wrist.position
+        .clone()
+        .applyQuaternion(arm.elbow.quaternion)
+        .add(arm.elbow.position)
+      if (wristInShoulder.lengthSq() < 1e-8) return
+      // ย้ายมาคิดในสเปซของศอก เพราะ quaternion ของข้อมือทำงานในสเปซนั้น
+      const axisElbow = wristInShoulder
+        .normalize()
+        .applyQuaternion(arm.elbow.quaternion.clone().invert())
+
+      arm.wrist.userData.rest = new THREE.Quaternion().setFromUnitVectors(
+        dirLocal.clone().normalize(),
+        axisElbow,
+      )
+      arm.wrist.quaternion.copy(arm.wrist.userData.rest)
+      model.updateMatrixWorld(true)
+    }
+
+    /**
+     * จัดวางท่อนล่างของแขนใหม่ทั้งช่วง — แขนเสื้อ / ท่อนแขน / มือ ให้เรียงต่อกันบนแกนเดียว
+     *
+     * วัดตำแหน่งจริงตามแกนแขน (t = ระยะจากจุดหมุนไหล่) ของทุกชิ้นแล้วได้แบบนี้:
+     *   แขนเสื้อ  t -0.02 .. 0.68
+     *   กำปั้น    t  0.43 .. 1.49
+     * สองก้อนนี้ "ซ้อนทับกัน" ตั้งแต่ 0.43 ถึง 0.68 — กำปั้นงอกออกจากไหล่โดยไม่มีท่อนแขนคั่น
+     * นี่คือทั้งอาการ "ไหล่กับแขนทับซ้อน" และ "มือไม่ต่อแขน" มันคือเรื่องเดียวกัน
+     *
+     * เลยเลิกยัดท่อนแขนลงในช่องว่างที่ไม่มีอยู่จริง เปลี่ยนเป็นวางผังใหม่ทั้งแถบ:
+     * ย่นแขนเสื้อ ผลักกลุ่มมือออกไปให้พ้น แล้วปั้นท่อนแขนคั่นตรงกลาง
+     * สัดส่วนอิงขนาดกำปั้น (F) ทั้งหมด — โมเดลเปลี่ยนขนาดเมื่อไรก็ยังได้สัดส่วนเดิม
+     */
+    // pose0: แขนชี้วางผังที่มุมศอกชุด POSE0 / แขนถือแก้ววางผังที่ท่าพักของมันเอง (ห้อยดิ่ง)
+    // keepLower: เก็บ 'ท่อนล่าง' ไว้ให้ slider pointArmFwd เลื่อน — ใช้กับแขนชี้เท่านั้น
+    const rebuildForearm = (arm, { pose0 = true, keepLower = true } = {}) => {
+      if (!arm) return
+      // ต้องคิดที่ท่าจริง — มุมศอก/ข้อมือมีผลกับตำแหน่งมือ
+      if (pose0) arm.elbow.rotation.set(POSE0.elbowX, 0, POSE0.elbowZ)
+      else arm.elbow.quaternion.copy(arm.elbow.userData.rest ?? new THREE.Quaternion())
+      arm.wrist.quaternion.copy(arm.wrist.userData.rest ?? new THREE.Quaternion())
+      model.updateMatrixWorld(true)
+
+      const cuff = arm.shoulder.userData.cuff
+      let stub = null
+      arm.shoulder.children.forEach((o) => {
+        if (o.isMesh && o.visible && hexOfMesh(o) === 'efb49b') stub = o
+      })
+      if (!cuff || !stub) return
+
+      const inv = arm.shoulder.matrixWorld.clone().invert()
+      // แกนแขน = ไหล่ (origin ของสเปซนี้) -> "ศูนย์กลางฝ่ามือ"
+      //
+      // เคยใช้จุดหมุนข้อมือเป็นปลายแกน แล้ววนเป็นงูกินหาง: เราจะเลื่อนกลุ่มมือให้เข้าแกน
+      // แต่พอเลื่อน จุดหมุนก็ขยับ แกนก็ขยับตาม ไม่มีวันบรรจบ
+      // ฝ่ามือคือ "เนื้อที่ตาเห็น" และเป็นสิ่งที่ต้องอยู่กลางแขน จึงยึดมันเป็นปลายแกนแทน
+      // (จุดหมุนข้อมือใน GLB ไม่ได้อยู่กลางเนื้อมือ เยื้องออกไป 0.28 หน่วย — ต้นเหตุที่กำปั้นเหลื่อม)
+      let palm = null
+      arm.wrist.traverse((o) => {
+        if (!o.isMesh || !o.visible) return
+        o.geometry.computeBoundingBox()
+        const bb = o.geometry.boundingBox.clone().applyMatrix4(inv.clone().multiply(o.matrixWorld))
+        const sz = bb.getSize(new THREE.Vector3())
+        const vol = sz.x * sz.y * sz.z
+        if (!palm || vol > palm.vol) palm = { o, vol, c: bb.getCenter(new THREE.Vector3()) }
+      })
+      if (!palm || palm.c.lengthSq() < 1e-8) return
+      const axis = palm.c.clone().normalize()
+      // เก็บไว้ให้โหมดลากวางแขนใช้ — แกนนี้อยู่ในสเปซของไหล่ ไม่ขึ้นกับมุมที่ไหล่หมุนอยู่
+      arm.shoulder.userData.armAxis = axis.clone()
+
+      /** ช่วงที่ mesh กินตามแกนแขน — กาง 8 มุมของ "กล่อง geometry เอง" แล้วค่อยแปลงตาม matrix
+       *  (กาง bbox ที่แปลงแล้วจะได้กล่องพองตามแนวทแยง วัดผิดไปเยอะ) */
+      const spanOf = (o) => {
+        o.geometry.computeBoundingBox()
+        const bb = o.geometry.boundingBox
+        const m = inv.clone().multiply(o.matrixWorld)
+        let lo = Infinity
+        let hi = -Infinity
+        for (const x of [bb.min.x, bb.max.x])
+          for (const y of [bb.min.y, bb.max.y])
+            for (const z of [bb.min.z, bb.max.z]) {
+              const t = TMP_V.set(x, y, z).applyMatrix4(m).dot(axis)
+              lo = Math.min(lo, t)
+              hi = Math.max(hi, t)
+            }
+        return [lo, hi]
+      }
+
+      // แกนตั้งฉากสองแกน ไว้วัดความอ้วนของชิ้นส่วนเทียบกับแกนแขน
+      const u = new THREE.Vector3(0, 1, 0).cross(axis)
+      if (u.lengthSq() < 1e-6) u.set(1, 0, 0)
+      u.normalize()
+      const v = axis.clone().cross(u).normalize()
+      /** ความกว้างเฉลี่ยของ mesh ในระนาบตั้งฉากกับแกนแขน */
+      const girthOf = (o) => {
+        o.geometry.computeBoundingBox()
+        const bb = o.geometry.boundingBox
+        const m = inv.clone().multiply(o.matrixWorld)
+        const c = bb.getCenter(new THREE.Vector3()).applyMatrix4(m)
+        let uw = 0
+        let vw = 0
+        for (const x of [bb.min.x, bb.max.x])
+          for (const y of [bb.min.y, bb.max.y])
+            for (const z of [bb.min.z, bb.max.z]) {
+              const d = TMP_V.set(x, y, z).applyMatrix4(m).sub(c)
+              uw = Math.max(uw, Math.abs(d.dot(u)))
+              vw = Math.max(vw, Math.abs(d.dot(v)))
+            }
+        return uw + vw
+      }
+
+      // ขนาดกำปั้น F = ความกว้างของชิ้นใหญ่สุดในกลุ่มมือ (ฝ่ามือ)
+      // ต้องวัดในสเปซไหล่ ไม่ใช่จาก geometry ตรง ๆ — mesh ใน GLB มี scale ของตัวเองติดมาด้วย
+      // (วัดจาก geometry ได้ 0.37 ทั้งที่ของจริงกว้าง 0.68 ผังทั้งแถบเลยหดครึ่งหนึ่ง)
+      let handLo = Infinity
+      arm.wrist.traverse((o) => {
+        if (o.isMesh && o.visible) handLo = Math.min(handLo, spanOf(o)[0])
+      })
+      if (!isFinite(handLo)) return
+      const F = girthOf(palm.o)
+
+      // ผังใหม่บนแกนแขน (หน่วยเป็นเท่าของ F) — ต่อกันโดยเผื่อซ้อน 0.05 ทุกรอยต่อ
+      const cuffLen = F * 0.45
+      const armLen = F * 0.58
+      // เริ่มแขนเสื้อให้พ้นก้อนบ่าออกมา — ของเดิม 0.24F ยังจมอยู่ในบ่า มุมกล่องโผล่ทะลุออกมาข้างคอ
+      const cuffStart = F * 0.36
+      const cuffEnd = cuffStart + cuffLen
+      const armEnd = cuffEnd + armLen
+      // ไล่เรียวจากบ่าลงไปหามือ — บ่าต้องเป็นส่วนที่หนาที่สุดของแขน
+      // ของเดิมบ่ากว้าง 0.52 แต่ท่อนแขน 0.59 ไหล่เลยดูเล็กกว่าแขนที่งอกออกมา
+      const thick = F * 0.78
+      const cuffThick = F * 0.95
+      const yokeCross = F * 1.05
+
+      // 1) ย่อ+หันแขนเสื้อให้วางตามแกน (เดิมเป็นกล่องตั้งฉากกับสเปซไหล่ เอียงคร่อมแกนอยู่)
+      cuff.mesh.geometry.dispose()
+      cuff.mesh.geometry = new THREE.BoxGeometry(cuffThick, cuffLen, cuffThick)
+      // ปิดรับเงาเฉพาะแขนเสื้อ — ท่อนแขนวางแนบมันจนเงาตัวเองตกลงบนหน้าสัมผัส กลายเป็นลายฟันปลา
+      // (shadow map ที่ระยะนี้หยาบเกินกว่าจะแยกสองผิวที่ห่างกันไม่ถึงหนึ่ง texel) ตัวบ่าข้างหลังยังรับเงาปกติ
+      cuff.mesh.receiveShadow = false
+      cuff.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis)
+      cuff.mesh.position.copy(axis).multiplyScalar(cuffStart + cuffLen / 2)
+      cuff.len = cuffLen
+
+      // 1b) บ่า: วางบนแกนแขนเหมือนชิ้นอื่น เริ่มจากในลำตัวออกมาซ้อนใต้แขนเสื้อ
+      const yoke = arm.shoulder.userData.yoke
+      if (yoke) {
+        const p = yoke.geometry.parameters
+        const yokeLo = -F * 0.5 // จมเข้าไปในลำตัว ปิดข้อต่อ
+        const yokeHi = cuffStart + cuffLen * 0.45
+        yoke.geometry.dispose()
+        yoke.geometry = new THREE.BoxGeometry(yokeCross, yokeHi - yokeLo, p.depth)
+        yoke.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis)
+        yoke.position.copy(axis).multiplyScalar((yokeLo + yokeHi) / 2)
+      }
+
+      // 2) ขยับกลุ่มมือทั้งก้อน — สองทิศพร้อมกัน
+      //
+      //   ตามแกน: ผลักออกไปจนโคนกำปั้นซ้อนเข้าไปในปลายท่อนแขน
+      //   ตั้งฉากกับแกน: ดึงเข้ามาให้ศูนย์กลางกำปั้นอยู่บนแกนแขนพอดี
+      //
+      // ข้อสองสำคัญ: วัดแล้วบ่า/แขนเสื้อ/ท่อนแขน อยู่บนแกนเป๊ะ (perp = 0) แต่ชิ้นในกลุ่มมือ
+      // เยื้องออกจากแกน 0.22-0.33 หน่วยทุกชิ้น เพราะ mkArm วางจุดหมุนข้อมือไว้ไม่ตรงกลางเนื้อมือ
+      // หน้าตัดโคนกำปั้นจึงไม่บรรจบกับปลายท่อนแขน เห็นเป็นก้อนเหลื่อมกันอยู่
+      // แกนพาดผ่านศูนย์กลางฝ่ามืออยู่แล้ว จึงเหลือแค่เลื่อนตามแกน ไม่ต้องดึงเข้าด้านข้างอีก
+      const along = armEnd - F * 0.2 - handLo
+      const move = axis.clone().multiplyScalar(along)
+      arm.wrist.position.add(move.applyQuaternion(arm.elbow.quaternion.clone().invert()))
+      model.updateMatrixWorld(true)
+
+      // 2b) ย้ายจุดหมุนศอก/ข้อมือมาไว้ "บนแกนแขน" โดยของไม่ขยับ
+      //
+      // วัดแล้วจุดหมุนศอกเยื้องออกจากแกน 0.356 ข้อมือ 0.241 — หมุน slider ที่ข้อพวกนี้
+      // ท่อนล่างจะเหวี่ยงเป็นวงรอบจุดที่อยู่นอกตัวแขน (แขนแยกออกจากกัน) แทนที่จะงอตรงข้อ
+      // เลื่อนจุดหมุนเข้าแกนแล้วชดเชยตำแหน่งลูกกลับเท่าเดิม ท่าปัจจุบันไม่เปลี่ยน แต่หมุนแล้วงอถูกที่
+      const centerOnAxis = (joint, axisInParent) => {
+        const want = axisInParent.clone().multiplyScalar(joint.position.dot(axisInParent))
+        const delta = joint.position.clone().sub(want)
+        joint.position.copy(want)
+        const inLocal = delta.applyQuaternion(joint.quaternion.clone().invert())
+        joint.children.forEach((c) => c.position.add(inLocal))
+        joint.updateMatrixWorld(true)
+      }
+      centerOnAxis(arm.elbow, axis)
+      centerOnAxis(arm.wrist, axis.clone().applyQuaternion(arm.elbow.quaternion.clone().invert()))
+      model.updateMatrixWorld(true)
+
+      // 3) ท่อนแขนคั่นกลาง
+      const forearm = new THREE.Mesh(
+        new THREE.BoxGeometry(thick, armEnd - cuffEnd + 0.1, thick),
+        stub.userData.clayFrom ?? stub.material,
+      )
+      forearm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis)
+      forearm.position.copy(axis).multiplyScalar((cuffEnd + armEnd) / 2)
+      forearm.castShadow = true
+      forearm.receiveShadow = true
+      stub.visible = false
+      arm.shoulder.add(forearm)
+
+      // ท่อนล่างทั้งก้อน = กล่องท่อนแขน + กลุ่มศอก (ซึ่งพามือกับนิ้วไปด้วย)
+      // เก็บตำแหน่งตั้งต้นไว้ ให้ slider pointArmFwd เลื่อนทั้งสองชิ้นพร้อมกันเป็นก้อนเดียว
+      forearm.userData.base = forearm.position.clone()
+      arm.elbow.userData.base = arm.elbow.position.clone()
+      if (keepLower) rig.current.pointLower = [forearm, arm.elbow]
+
+    }
+
     // local +x = ฝั่งซ้ายจอหลังหันหลัง (แขนชี้), local -x = ฝั่งถือแก้ว
     // เฉพาะแขนที่ยกชี้ — แขนถือแก้วหมุนไหล่นิดเดียว นิ้วโป้งยังอยู่ด้านในถูกอยู่แล้ว
     mirrorHandGeometry(arms.R)
@@ -494,6 +992,13 @@ export function Mascot({
     rig.current.pointWrist = armPoint?.wrist
     rig.current.mugShoulder = armMug?.shoulder
     rig.current.mugElbow = armMug?.elbow
+    // เฉพาะแขนที่ยกชี้ — แขนถือแก้วห้อยลงตามท่าพัก ข้อยังไม่พับ รอยต่อเลยยังตันอยู่เอง
+    rebuildShoulder(armPoint)
+    // เฉพาะแขนที่ยกชี้ — แขนถือแก้วห้อยตรงอยู่แล้ว และ alignRest ของมันคิดจากจุดหมุนเดิม
+    if (armPoint) {
+      centerPivot(armPoint.wrist)
+      centerPivot(armPoint.elbow)
+    }
 
     // แขนถือแก้ว: ห้อยลงแนบลำตัว กางออกนิดเดียวพอให้แก้วไม่จมสะโพก (ตาม comp)
     // ทิศ "กางออก" ต้องอิงข้างของแขนเอง — แขนนี้อยู่ฝั่ง -x ถ้าใส่ +x จะเหวี่ยงแขนพาดหน้าอก
@@ -545,6 +1050,8 @@ export function Mascot({
           .reduce((v, p) => v.add(p.c), new THREE.Vector3())
           .divideScalar(knuckles.length)
         const dir = row.clone().sub(palm.c).normalize()
+        // เก็บไว้ให้ alignHandToArm ใช้ — นี่คือ "แกนที่มือชี้" ตัวจริง ไม่ใช่ centroid ของกำปั้น
+        wrist.userData.pointDir = dir.clone()
         // นิ้วชี้ = ข้อนิ้วที่อยู่ชิดนิ้วโป้งที่สุด
         const index = knuckles.reduce((best, p) =>
           p.c.distanceTo(thumb.c) < best.c.distanceTo(thumb.c) ? p : best,
@@ -568,7 +1075,10 @@ export function Mascot({
         // ซึ่งเป็นทรงแบนสูง พอยืดออกไปเลยได้ไม้บรรทัดแทนที่จะเป็นนิ้ว
         const thick = rowW * 0.36
 
-        const finger = new THREE.Mesh(new THREE.BoxGeometry(thick, len, thick), index.o.material)
+        const finger = new THREE.Mesh(
+          new THREE.BoxGeometry(thick, len, thick),
+          index.o.userData.clayFrom ?? index.o.material,
+        )
         finger.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
         // โคนนิ้วทาบที่เดิมของข้อนิ้ว แล้วยืดออกไปข้างหน้าอย่างเดียว
         finger.position.copy(index.c).addScaledVector(dir, (len - knuckleLen) / 2)
@@ -578,6 +1088,17 @@ export function Mascot({
         wrist.add(finger)
         rig.current.pointFinger = finger
       }
+
+      alignHandToArm(armPoint)
+      rebuildForearm(armPoint)
+
+      // รายชื่อชิ้นส่วนแขน เรียงจากบ่าออกไปหาปลายนิ้ว — ใช้กับโหมดทาสีแยกชิ้น (slider 'แยกสีชิ้นแขน')
+      const parts = []
+      if (armPoint.shoulder.userData.yoke) parts.push(armPoint.shoulder.userData.yoke)
+      armPoint.shoulder.traverse((o) => {
+        if (o.isMesh && o.visible) parts.push(o)
+      })
+      rig.current.pointParts = parts
     }
 
     if (armMug) {
@@ -597,14 +1118,85 @@ export function Mascot({
       mug.position.copy(mug.userData.grip)
       armMug.wrist.add(mug)
       rig.current.mug = mug
+
+      /**
+       * ฉาก 2 — ข้อมูลสำหรับ IK ท่ายกแก้วดื่ม
+       *
+       * ทำไมไม่ใช้ slider มุมเหมือนท่าอื่น: ข้อต่อของ GLB ไม่ได้อยู่บนแกนเนื้อแขน
+       * (ปัญหาเดียวกับแขนชี้) หมุน Euler ทีละแกนแล้วแก้วเหวี่ยงไปหลังหัวแทนที่จะถึงปาก
+       * ที่นี่จึงเก็บ "ความยาวท่อน + ทิศตั้งต้นในสเปซของแต่ละข้อ" ไว้ แล้วแก้มุมจริงตอน useFrame
+       * จากโจทย์เดียว: เอา 'จุดจับแก้ว' ไปให้ถึงจุดที่กำหนด
+       *
+       * ทุกค่าเป็นค่าคงที่ของโครง (ไม่ขึ้นกับมุมข้อต่อ) จึงคิดครั้งเดียวตรงนี้
+       */
+      model.updateMatrixWorld(true)
+      const gripW = armMug.wrist.localToWorld(mug.userData.grip.clone())
+      // ทิศ/ระยะจากจุดหมุนศอก -> จุดจับแก้ว ในสเปซของศอก (ไม่ขึ้นกับ quaternion ของศอกเอง)
+      const vElbow = armMug.elbow.worldToLocal(gripW.clone())
+      const ik = {
+        u: armMug.elbow.position.clone().normalize(), // ทิศต้นแขนในสเปซไหล่
+        L1: armMug.elbow.position.length(),
+        v: vElbow.clone().normalize(),
+        L2: vElbow.length(),
+        // ระนาบที่ศอกจะงอออกไป — ชี้ลงและออกนอกตัว (ท่ายกแก้วจริงศอกไม่กางขึ้นข้าง)
+        hint: new THREE.Vector3(0.35 * armMug.outward, -1, 0.15).normalize(),
+        target: new THREE.Vector3(),
+      }
+      if (parts.head) {
+        const toModel = model.matrixWorld.clone().invert()
+        parts.head.geometry.computeBoundingBox()
+        const hb = parts.head.geometry.boundingBox
+          .clone()
+          .applyMatrix4(toModel.multiply(parts.head.matrixWorld))
+        const hs = hb.getSize(new THREE.Vector3())
+        // ปาก = กลางกล่องหัว เลื่อนลงหนึ่งในสี่ แล้วออกมาที่ผิวหน้า (หน้าอยู่ทาง +z ในสเปซ model)
+        // เป้าของ "จุดจับ" ต่ำกว่าปากลงมาเท่าครึ่งความสูงแก้ว — แก้วอยู่เหนือกำปั้นตอนเอียงเข้าปาก
+        ik.target.copy(hb.getCenter(new THREE.Vector3()))
+        // ต่ำกว่าหัวลงมาเกือบทั้งใบ — ข้อไหล่/ข้อศอกของแขนข้างนี้ยังเป็นของ GLB (ไม่ได้ปั้นใหม่
+        // แบบแขนชี้) งอมากแล้วรอยต่อจะอ้าเป็นช่อง จึงยกแก้วแค่ระดับอก แล้วให้ 'หัวก้มลงหาแก้ว' แทน
+        ik.target.y -= hs.y * 0.95
+        // พ้นผิวหน้าออกมา ไม่ใช่แค่แตะ — แก้วมีความหนาของมันเอง
+        ik.target.z += hs.z * 0.7
+        // เยื้างมาฝั่งแขนที่ถือแก้ว ท่อนแขนจะได้เข้าจากด้านข้าง ไม่ตัดผ่านกลางหน้า
+        ik.target.x += hs.x * 0.16 * armMug.outward
+      }
+      rig.current.sipIK = ik
     }
 
     headGroup.current = g
     eyes.current = parts.eye
-    eyes.current.forEach((e) => (e.userData.baseScale = e.scale.clone()))
+    eyes.current.forEach((e) => {
+      e.userData.baseScale = e.scale.clone()
+      // โหมดปั้น (ClayMode ใน App.jsx) ทาเทาทั้งฉาก — เว้นตาไว้ ไม่งั้นดูไม่ออกว่าหัวหันทางไหน
+      e.userData.keepColor = true
+    })
+
+    model.userData.rig = rig.current
+    model.userData.headGroup = g
+    model.userData.eyes = parts.eye
 
   }, [model])
 
+
+  // ทาสีแยกชิ้นส่วนแขน — เก็บ material เดิมไว้บน mesh แล้วสลับกลับตอนปิด
+  useEffect(() => {
+    const parts = rig.current.pointParts
+    if (!parts) return
+    parts.forEach((m, i) => {
+      // ถ้าโหมดปั้นทาเทาไปแล้ว material ที่เห็นตอนนี้คือดินเทา ไม่ใช่ของจริง — เอาของจริงจาก clayFrom
+      m.userData.armMat = m.userData.armMat ?? m.userData.clayFrom ?? m.material
+      // กัน ClayMode (App.jsx) ทาเทาทับสี debug ทุกครึ่งวินาที
+      m.userData.keepColor = pose.armDebug
+      m.material = pose.armDebug ? debugMat(i) : m.userData.armMat
+    })
+  }, [pose.armDebug, model])
+
+  // ลากวางแขน (debug) — drag.current = มุมไหล่ที่กำลังลากอยู่, handle = ลูกบอลจับที่ปลายนิ้ว
+  const drag = useRef(null)
+  const dragging = useRef(false)
+  // ความคืบหน้าท่าดื่ม (หน่วงจาก scrollState.p2) — เก็บใน ref ไม่ใช่ state, useFrame อ่านทุกเฟรม
+  const sip = useRef(0)
+  const handle = useRef()
 
   const pointer = useRef({ x: 0, y: 0 })
   const cur = useRef({ x: 0, y: 0 })
@@ -629,10 +1221,23 @@ export function Mascot({
     const dir = facingAway ? -1 : 1
     const baseYaw = rotation[1] + (facingAway ? Math.PI : 0)
 
+    // ฉาก 2: p2 ขับท่าดื่ม — หน่วงไว้ให้แขนตามช้ากว่านิ้ว scroll เล็กน้อย ไม่กระตุกตามล้อ
+    // sipPreview คือค่าบังคับจาก slider ไว้จูนท่าโดยไม่ต้องเลื่อนหน้าไปมา
+    sip.current = damp(
+      sip.current,
+      Math.max(scrollState.p2, sipc.sipPreview),
+      sipc.sipEase,
+      dt,
+    )
+    // ยกแก้วให้จบภายใน 55% แรกของช่วง ที่เหลือปล่อยให้สีคลุมเฟรม (ฝั่ง DOM)
+    const raise = seg(sip.current, 0, 0.55)
+
     if (headGroup.current) {
-      headGroup.current.rotation.y = x * fol.headYaw * dir
-      headGroup.current.rotation.x = y * fol.headPitch * dir
-      headGroup.current.rotation.z = -x * fol.headRoll * dir
+      headGroup.current.rotation.y = fol.headBaseYaw + x * fol.headYaw * dir
+      // เงยหน้ารับแก้ว — บวกทับการก้มตามเมาส์ ไม่ได้แทนที่ (ยังมองตามเมาส์อยู่)
+      headGroup.current.rotation.x =
+        fol.headBasePitch + y * fol.headPitch * dir + raise * sipc.sipHeadPitch
+      headGroup.current.rotation.z = fol.headBaseRoll - x * fol.headRoll * dir
     }
     if (root.current) {
       // ลำตัวนิ่ง — หันตามเมาส์เฉพาะหัว
@@ -642,16 +1247,38 @@ export function Mascot({
     // apply ท่าจาก rig controls
     const r = rig.current
     if (r.pointShoulder) {
-      r.pointShoulder.rotation.z = pose.pointShoulderZ
-      r.pointShoulder.rotation.x = pose.pointShoulderX
-      r.pointShoulder.position.y = r.pointShoulder.userData.baseY - pose.pointShoulderDrop
+      // ระหว่างลาก ใช้มุมจาก drag แทน slider — เขียนลง slever ทุกเฟรมจะ re-render React 60 ครั้ง/วิ
+      const d = drag.current
+      r.pointShoulder.rotation.z = d ? d.z : pose.pointShoulderZ
+      r.pointShoulder.rotation.x = d ? d.x : pose.pointShoulderX
+      r.pointShoulder.rotation.y = d ? d.y : pose.pointShoulderY
+      const ud = r.pointShoulder.userData
+      // out = ทิศออกนอกตัวของแขนข้างนี้ (+x หรือ -x), หน้า = -z ในสเปซ model
+      r.pointShoulder.position.set(
+        ud.baseX + (ud.outward ?? 1) * pose.pointShoulderOut,
+        ud.baseY - pose.pointShoulderDrop,
+        ud.baseZ - pose.pointShoulderFwd,
+      )
+    }
+    // เลื่อนท่อนล่างไปตามแกน "หน้า" ของ mascot (-z ในสเปซ model) แปลงเข้าสเปซไหล่ก่อน
+    // เพราะชิ้นพวกนี้เป็นลูกของไหล่ ไหล่หมุนอยู่ ทิศหน้าในสเปซของมันจึงไม่ใช่ -z ตรง ๆ
+    if (r.pointLower && r.pointShoulder) {
+      TMP_V.set(0, 0, -1).applyQuaternion(TMP_Q.copy(r.pointShoulder.quaternion).invert())
+      for (const o of r.pointLower) {
+        o.position.copy(o.userData.base).addScaledVector(TMP_V, pose.pointArmFwd)
+      }
     }
     if (r.pointElbow) {
-      r.pointElbow.rotation.x = pose.pointElbowX
-      // แกน Z ของศอก — คลายมุมพับที่ bake มาใน GLB ให้ท่อนล่างต่อตรงกับท่อนบน
-      r.pointElbow.rotation.z = pose.pointElbowZ
+      r.pointElbow.rotation.set(pose.pointElbowX, pose.pointElbowY, pose.pointElbowZ)
     }
-    if (r.pointWrist) r.pointWrist.rotation.x = pose.pointWristX
+    // ข้อมือ: ตั้งต้นจาก quaternion ที่หันกำปั้นให้ตรงแกนแขนแล้ว slider เป็นมุมงอเพิ่ม
+    if (r.pointWrist?.userData.rest) {
+      r.pointWrist.quaternion
+        .copy(r.pointWrist.userData.rest)
+        .multiply(
+          TMP_Q.setFromEuler(TMP_E.set(pose.pointWristX, pose.pointWristY, pose.pointWristZ)),
+        )
+    }
     // แขนถือแก้ว: ตั้งต้นจาก quaternion ที่กดแขนให้ห้อยแนบตัวแล้ว slider เป็นส่วนเพิ่มจากตรงนั้น
     if (r.mugShoulder?.userData.rest) {
       r.mugShoulder.quaternion
@@ -663,10 +1290,49 @@ export function Mascot({
         .copy(r.mugElbow.userData.rest)
         .multiply(TMP_Q.setFromEuler(TMP_E.set(pose.mugElbowX, 0, 0)))
     }
+
+    // ฉาก 2: IK สองท่อน — พา "จุดจับแก้ว" ไปที่ปาก แล้ว slerp จากท่ายืนไปหาท่านั้นตาม raise
+    if (r.sipIK && raise > 0.001 && r.mugShoulder && r.mugElbow) {
+      const ik = r.sipIK
+      // เป้าในสเปซ model: ปาก + ระยะที่ปรับจาก slider (+z = หน้า, +x = ฝั่งแขนถือแก้วออกนอกตัว)
+      IK_T.copy(ik.target)
+      IK_T.z += sipc.sipAimFwd
+      IK_T.y += sipc.sipAimUp
+      IK_T.x += sipc.sipAimSide * (r.mugShoulder.userData.outward ?? 1)
+      IK_D.copy(IK_T).sub(r.mugShoulder.position)
+      // เกินเอื้อม/ใกล้เกินพับ = สูตร cos ให้ค่านอกช่วง acos — หนีบระยะไว้ก่อน
+      const D = clamp(IK_D.length(), Math.abs(ik.L1 - ik.L2) + 1e-3, ik.L1 + ik.L2 - 1e-3)
+      IK_U.copy(IK_D).normalize()
+      // ทิศที่ศอกจะกางออก = ส่วนของ hint ที่ตั้งฉากกับแนวไหล่->เป้า
+      IK_P.copy(ik.hint).addScaledVector(IK_U, -ik.hint.dot(IK_U))
+      if (IK_P.lengthSq() < 1e-6) IK_P.set(0, -1, 0).addScaledVector(IK_U, -IK_U.y)
+      IK_P.normalize()
+      const a = Math.acos(clamp((ik.L1 * ik.L1 + D * D - ik.L2 * ik.L2) / (2 * ik.L1 * D), -1, 1))
+      // ทิศต้นแขน = เอียงออกจากแนวเป้าไปทาง IK_P เป็นมุม a
+      IK_UP.copy(IK_U).multiplyScalar(Math.cos(a)).addScaledVector(IK_P, Math.sin(a))
+      // ทิศท่อนล่าง = จากปลายต้นแขนไปยังเป้า
+      IK_FW.copy(IK_T)
+        .sub(r.mugShoulder.position)
+        .addScaledVector(IK_UP, -ik.L1)
+        .normalize()
+
+      IK_QS.setFromUnitVectors(ik.u, IK_UP)
+      IK_QE.setFromUnitVectors(ik.v, IK_FW.applyQuaternion(TMP_Q2.copy(IK_QS).invert()))
+      r.mugShoulder.quaternion.slerp(IK_QS, raise)
+      r.mugElbow.quaternion.slerp(IK_QE, raise)
+    }
     if (r.mug) {
       // แก้วตั้งตรงเสมอ — หักล้าง rotation ที่สะสมมาตามข้อต่อทั้งเส้น
       r.mug.parent.updateWorldMatrix(true, false)
       r.mug.quaternion.copy(r.mug.parent.getWorldQuaternion(TMP_Q).invert())
+      // ตอนดื่ม เอียงแก้วเข้าหาปาก — หมุนรอบ "แกนขวาของตัว mascot ในโลกจริง"
+      // (right-multiply เพราะ quaternion ที่เพิ่ง copy คือ world->local ค่าที่คูณต่อจึงอยู่ในกรอบโลก)
+      if (raise > 0.001 && root.current) {
+        TMP_V2.set(1, 0, 0).applyQuaternion(root.current.getWorldQuaternion(TMP_Q2))
+        r.mug.quaternion.multiply(
+          TMP_Q2.setFromAxisAngle(TMP_V2, sipc.sipMugTilt * seg(sip.current, 0.35, 0.55)),
+        )
+      }
       // หย่อนแก้วลงจากกำปั้น แล้วดันไป "ด้านหน้าตัว" ไม่ใช่ด้านข้าง
       // ดันออกข้างแล้วท่อนแขนจะบังแก้วมิดตอนมองจากหน้า ซึ่งเป็นมุมที่ scroll ไปหยุด
       // (comp ก็ถือแก้วเยื้องมาหน้าต้นขา ไม่ได้แนบสะโพก)
@@ -676,13 +1342,66 @@ export function Mascot({
         .sub(root.current.getWorldPosition(TMP_V))
         .setY(0)
         .normalize()
+      // ท่ายืน: แก้วห้อยต่ำกว่ากำปั้นและเยื้องมาหน้าต้นขา
+      // ท่าดื่ม: ดึงกลับมาอยู่ที่กำปั้นพอดี — IK พา "จุดจับ" ไปที่ปากแล้ว ถ้ายังห้อยอยู่แก้วจะต่ำกว่าปาก
       r.mug.position
         .copy(r.mug.userData.grip)
-        .addScaledVector(TMP_V.set(0, -1, 0).applyQuaternion(r.mug.quaternion), 0.24)
-        .addScaledVector(outW.applyQuaternion(r.mug.quaternion), 0.13)
+        .addScaledVector(TMP_V.set(0, -1, 0).applyQuaternion(r.mug.quaternion), 0.24 - 0.2 * raise)
+        .addScaledVector(outW.applyQuaternion(r.mug.quaternion), 0.13 * (1 - raise))
     }
-    if (r.hipL) r.hipL.rotation.x = pose.hipLX
-    if (r.hipR) r.hipR.rotation.x = pose.hipRX
+    // ขา: สะโพก(3 แกน + เลื่อนทั้งขา) -> เข่า -> ข้อเท้า
+    for (const k of ['L', 'R']) {
+      const hip = r[`hip${k}`]
+      if (hip?.userData.base) {
+        const b = hip.userData.base
+        const br = hip.userData.baseRot
+        const side = hip.userData.side
+        // ออกข้าง = ตามข้างของขาเอง, หน้า = -z ในสเปซ model (เหมือน slider ของไหล่)
+        hip.position.set(
+          b.x + side * legc[`leg${k}Out`],
+          b.y,
+          b.z - legc[`leg${k}Fwd`],
+        )
+        hip.rotation.set(
+          br.x + legc[`hip${k}X`],
+          br.y + legc[`hip${k}Y`],
+          br.z + side * legc[`hip${k}Z`],
+        )
+      }
+      const knee = r[`knee${k}`]
+      if (knee) knee.rotation.x = legc[`knee${k}X`]
+      const ankle = r[`ankle${k}`]
+      if (ankle) ankle.rotation.x = legc[`ankle${k}X`]
+    }
+
+    // ลากวางแขน: เล็งแกนแขนไปยังจุดที่เมาส์ชี้
+    if (handle.current) {
+      const tip = r.pointFinger ?? r.pointWrist
+      if (tip && pose.armDrag) {
+        tip.getWorldPosition(TMP_V)
+        handle.current.position.copy(TMP_V)
+      }
+      handle.current.visible = pose.armDrag
+    }
+    if (dragging.current && r.pointShoulder?.userData.armAxis && root.current) {
+      // ระนาบที่ลากคือระนาบผ่านหัวไหล่ที่หันเข้าหากล้อง — ลากในระนาบจอตรง ๆ ไม่ต้องเดาความลึก
+      const sh = r.pointShoulder.getWorldPosition(TMP_V)
+      DRAG_PLANE.setFromNormalAndCoplanarPoint(
+        state.camera.getWorldDirection(TMP_V2).negate(),
+        sh,
+      )
+      state.raycaster.setFromCamera(state.pointer, state.camera)
+      const hit = state.raycaster.ray.intersectPlane(DRAG_PLANE, DRAG_HIT)
+      if (hit) {
+        // ทิศที่ต้องการ (world) -> สเปซของ model แล้วหาควอเทอร์เนียนที่หมุนแกนแขนไปทางนั้น
+        const want = hit.clone().sub(sh).normalize()
+        root.current.getWorldQuaternion(TMP_Q).invert()
+        want.applyQuaternion(TMP_Q)
+        TMP_Q.setFromUnitVectors(r.pointShoulder.userData.armAxis, want)
+        TMP_E.setFromQuaternion(TMP_Q, 'XYZ')
+        drag.current = { x: TMP_E.x, y: TMP_E.y, z: TMP_E.z }
+      }
+    }
 
     // กระพริบตา: ย่อแกน Y ของ mesh ตา
     const b = blink.current
@@ -703,11 +1422,50 @@ export function Mascot({
     }
   })
 
+  const endDrag = () => {
+    if (!dragging.current) return
+    dragging.current = false
+    gl.domElement.style.cursor = ''
+    // ปล่อยแล้วค่อยเขียนค่าลง slider ทีเดียว (ระหว่างลากใช้ ref เพื่อไม่ให้ React re-render ทุกเฟรม)
+    if (drag.current) {
+      setPose({
+        pointShoulderX: drag.current.x,
+        pointShoulderY: drag.current.y,
+        pointShoulderZ: drag.current.z,
+      })
+      drag.current = null
+    }
+  }
+
   return (
-    <group ref={root} position={position} scale={scale} rotation={rotation}>
-      <primitive object={model} />
-      <Legs rig={rig} />
-    </group>
+    <>
+      <group ref={root} position={position} scale={scale} rotation={rotation}>
+        <primitive object={model} />
+        <Legs rig={rig} />
+      </group>
+      {/* จับลาก — อยู่นอก group ของ mascot เพราะตำแหน่งถูกเซ็ตเป็นพิกัด world ทุกเฟรม */}
+      <mesh
+        ref={handle}
+        visible={false}
+        onPointerDown={(e) => {
+          e.stopPropagation()
+          dragging.current = true
+          gl.domElement.style.cursor = 'grabbing'
+          e.target?.setPointerCapture?.(e.pointerId)
+        }}
+        onPointerUp={endDrag}
+        onPointerLeave={endDrag}
+        onPointerOver={() => {
+          if (!dragging.current) gl.domElement.style.cursor = 'grab'
+        }}
+        onPointerOut={() => {
+          if (!dragging.current) gl.domElement.style.cursor = ''
+        }}
+      >
+        <sphereGeometry args={[0.16, 20, 14]} />
+        <meshBasicMaterial color="#6C4CF5" transparent opacity={0.75} depthTest={false} />
+      </mesh>
+    </>
   )
 }
 

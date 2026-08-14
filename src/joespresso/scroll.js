@@ -1,3 +1,8 @@
-// scroll progress ที่แชร์ระหว่าง DOM (Page) กับ Canvas (CameraRig)
-// 0 = บนสุด (การ์ด hero ปกติ), 1 = scroll สุด (เต็มจอ + กล้อง focus mascot)
-export const scrollState = { p: 0 }
+// scroll progress ที่แชร์ระหว่าง DOM (Page) กับ Canvas (CameraRig, Mascot)
+// รางสกรอลล์ถูกซอยเป็นสองช่วงด้วย SPLIT — ค่าทั้งสองตัวจึงวิ่ง 0..1 แยกกัน ไม่ทับกัน
+//   p  = ช่วงแรก: การ์ด hero ขยายเต็มจอ + กล้องวนไป focus mascot
+//   p2 = ช่วงสอง: mascot ยกแก้วดื่ม -> สีแผ่คลุมเฟรม -> เนื้อหาถัดไปโผล่
+export const scrollState = { p: 0, p2: 0 }
+
+/** สัดส่วนของรางที่ยกให้ช่วงแรก (ที่เหลือเป็นของช่วงสอง) */
+export const SPLIT = 0.5

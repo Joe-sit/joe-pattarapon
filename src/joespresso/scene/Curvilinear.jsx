@@ -48,7 +48,7 @@ export function Curvilinear({ strength = 0.15 }) {
   // debugger: จูนความโค้งเลนส์สด ๆ (ค่าเริ่มตาม prop)
   const { lensK } = useControls('Curve Perspective', {
     lensK: { value: strength, min: -0.4, max: 0.5, step: 0.005, label: 'lens barrel k' },
-  })
+  }, { collapsed: true })
 
   const composer = useMemo(() => {
     const dpr = gl.getPixelRatio()

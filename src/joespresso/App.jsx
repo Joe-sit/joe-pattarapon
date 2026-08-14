@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef } from 'react'
+import { Suspense, useEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Sky } from './scene/Sky'
@@ -7,7 +7,8 @@ import { Foliage } from './scene/Foliage'
 import { Panels } from './scene/Panels'
 import { Mascot } from './scene/Mascot'
 import { Curvilinear } from './scene/Curvilinear'
-import { useControls } from 'leva'
+import { OrbitControls } from '@react-three/drei'
+import { button, levaStore, useControls } from 'leva'
 import { addRim, clamp, damp, lerp, LOW_END } from './scene/utils'
 import { scrollState } from './scroll'
 
@@ -37,6 +38,118 @@ function RimLight({ color = '#FFF3DC', intensity = 0.5, power = 4.2 }) {
   return null
 }
 
+/**
+ * โหมดปั้นโมเดล — ทั้งฉากกลายเป็นดินเหนียวสีเทา แสงเป็นสตูดิโอกลาง ๆ
+ *
+ * ฉากจริงมีสีอุ่น + rim light + fog + จอโค้ง ซึ่งกลบรูปทรงจนดูไม่ออกว่าชิ้นไหนเบี้ยว
+ * โหมดนี้ตัดทุกอย่างที่ไม่ใช่ "รูปทรงกับเงา" ออก
+ *
+ * ทาสีทับด้วยการสลับ material (เก็บของเดิมไว้ที่ userData) ไม่ใช่แก้ของเดิม —
+ * material ถูกใช้ร่วมกันหลาย mesh แก้ทีเดียวโดนหมด และย้อนกลับไม่ได้
+ * วนซ้ำเป็นระยะเพราะ Mascot ปั้น mesh ใหม่หลังโหลด GLB เสร็จ (บ่า/ท่อนแขน/นิ้ว/แก้ว)
+ */
+function ClayMode({ enabled }) {
+  const { scene } = useThree()
+  const next = useRef(0)
+  const clay = useMemo(
+    () => new THREE.MeshStandardMaterial({ color: '#b9b6b1', roughness: 0.9, metalness: 0 }),
+    [],
+  )
+  // ผมเทาโทนเข้มกว่าหน่อย — ทาโทนเดียวกับหัวแล้วแผ่นผมท้ายทอยกลืนหายไปกับกล่องหัว
+  const clayHair = useMemo(
+    () => new THREE.MeshStandardMaterial({ color: '#8e8b86', roughness: 0.9, metalness: 0 }),
+    [],
+  )
+
+  // ตาปล่อยสีเดิมอย่างเดียว — เป็นตัวบอกว่าหัวหันไปทางไหน
+  // (ผมเคยเว้นไว้ด้วย แต่ก้อนดำทับหน้าจนอ่านทรงหัวไม่ออก)
+  // ใช้ธง keepColor จาก Mascot ไม่ใช่การเดาจากสี — ผมกับตาสีใกล้กันมาก แยกด้วยสีไม่ได้
+  // เช็คทุกรอบที่กวาด เพราะ Mascot ติดธงหลัง GLB โหลดเสร็จ (ทาไปแล้วก็ย้อนคืนให้)
+  const paintOne = (o) => {
+    if (!o.isMesh || !o.material) return
+    if (o.userData.keepColor) {
+      // คืนของเดิมเฉพาะกรณีที่เราทาเทาไปก่อนหน้าแล้ว — ถ้ามันถือสีอื่นอยู่ (เช่นสี debug แยกชิ้นแขน)
+      // ห้ามแตะ แค่เลิกจำของเดิมไว้ ปล่อยให้เจ้าของสีจัดการเอง
+      if (o.userData.clayFrom) {
+        if (o.material === clay || o.material === clayHair) o.material = o.userData.clayFrom
+        delete o.userData.clayFrom
+      }
+      return
+    }
+    if (o.material === clay || o.material === clayHair) return
+    if (!o.userData.clayFrom) o.userData.clayFrom = o.material
+    o.material = o.userData.clayFrom.color?.getHexString?.() === '232224' ? clayHair : clay
+  }
+
+  useEffect(() => {
+    const paint = () => scene.traverse(paintOne)
+    const restore = () => {
+      scene.traverse((o) => {
+        if (o.userData?.clayFrom) {
+          o.material = o.userData.clayFrom
+          delete o.userData.clayFrom
+        }
+      })
+    }
+    if (enabled) paint()
+    else restore()
+  }, [scene, clay, clayHair, enabled])
+
+  useFrame((_, dt) => {
+    if (!enabled) return
+    next.current -= dt
+    if (next.current > 0) return
+    next.current = 0.5
+    // Mascot ปั้น mesh เพิ่มหลัง GLB โหลดเสร็จ (บ่า/ท่อนแขน/นิ้ว/แก้ว) — กวาดซ้ำเป็นระยะ
+    scene.traverse(paintOne)
+  })
+
+  useEffect(
+    () => () => {
+      clay.dispose()
+      clayHair.dispose()
+    },
+    [clay, clayHair],
+  )
+  return null
+}
+
+/** วางกล้องตั้งต้นให้เห็น "ด้านหน้า" ตอนเข้าโหมดปั้น — ของหน้าเว็บเล็งมาจากด้านหลัง (mascot หันหลังให้) */
+function ClayCam() {
+  const { camera } = useThree()
+  useEffect(() => {
+    camera.position.set(4.2, 3.6, -7.6)
+    camera.fov = 32
+    camera.updateProjectionMatrix()
+    camera.lookAt(0, 2.3, 0.9)
+  }, [camera])
+  return null
+}
+
+/** แสงสตูดิโอสำหรับโหมดปั้น — key หนึ่งดวงให้เงาอ่านทรงได้ + fill กันด้านมืดตัน */
+function ClayLights() {
+  return (
+    <>
+      <ambientLight intensity={0.55} />
+      <hemisphereLight args={['#ffffff', '#8f8f8f', 0.5]} />
+      <directionalLight
+        castShadow
+        position={[6, 11, 7]}
+        intensity={1.9}
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.04}
+        shadow-camera-left={-12}
+        shadow-camera-right={12}
+        shadow-camera-top={12}
+        shadow-camera-bottom={-12}
+        shadow-camera-far={40}
+      />
+      <directionalLight position={[-8, 4, -6]} intensity={0.55} />
+    </>
+  )
+}
+
 /** กล้องเอียงตามเมาส์เล็กน้อย — ให้ฉากมีมิติโดยไม่ต้องหมุนวัตถุ */
 function CameraRig({ strength = 1 }) {
   const { camera } = useThree()
@@ -52,7 +165,8 @@ function CameraRig({ strength = 1 }) {
     camZ: { value: 14.5, min: 8, max: 30, step: 0.25 },
     fov: { value: 24, min: 12, max: 60, step: 1 },
     lookY: { value: 1.9, min: -2, max: 5, step: 0.1 },
-  })
+    // พับเก็บไว้ — แผง debug ยาวจนต้อง scroll หา folder ล่าง ๆ กลุ่มที่ปรับบ่อยควรอยู่บนสุดและกางไว้
+  }, { collapsed: true })
 
   // ปลายทางตอน scroll สุด — วนมาหน้า mascot มุมเฉียง, mascot ชิดซ้าย เหลือที่ว่างขวา
   // หน้าของ mascot ชี้ไปทาง -Z (วัดจากตำแหน่ง mesh ตา) กล้องเลยต้องวนไปฝั่ง -Z
@@ -65,7 +179,7 @@ function CameraRig({ strength = 1 }) {
     focusLookY: { value: 2.25, min: 0, max: 6, step: 0.05 },
     focusLookZ: { value: 0.48, min: -6, max: 6, step: 0.05 },
     focusFov: { value: 24, min: 12, max: 60, step: 1 },
-  })
+  }, { collapsed: true })
 
   // debugger: จูนการขยับตามเมาส์ — ส่วนของกล้อง (ของหัว mascot อยู่ในกลุ่มเดียวกัน ที่ Mascot.jsx)
   const fol = useControls('Follow Cursor', {
@@ -145,10 +259,38 @@ function Lights() {
 }
 
 export function Scene() {
+  // โหมดทำงาน: ปิดสี/บรรยากาศทั้งหมด เหลือแต่ทรงกับเงา — จูนโมเดลได้โดยไม่ถูกสีหลอกตา
+  const { clay, clayScene, clayGrid, clayOrbit } = useControls('Workspace', {
+    // เปิดเองเฉพาะตอน dev — ถ้า default เป็น true ติดไปกับ build เว็บจริงจะกลายเป็นดินเทาทั้งหน้า
+    // (แผง leva ถูกซ่อนตอน production แต่ "ค่า" ยังทำงานอยู่ ปิดเองไม่ได้)
+    clay: { value: import.meta.env.DEV, label: 'โหมดปั้น (เทา)' },
+    // ฉากประกอบยังอยู่ (แค่กลายเป็นเทา) — ปิดได้ถ้าอยากเหลือแต่ตัว mascot กับพื้น
+    clayScene: { value: true, label: 'ฉากประกอบ (ฟ้า/เนิน/ต้นไม้/panel)' },
+    clayGrid: { value: false, label: 'พื้น + กริด (แทนเนิน)' },
+    // scroll ยังคุมกล้องเหมือนหน้าเว็บจริง — เปิดอันนี้เมื่อจะหมุนดูรอบตัวเท่านั้น
+    clayOrbit: { value: false, label: 'กล้องหมุนรอบ (ปิด scroll cam)' },
+    // คัดลอกค่าทุก slider ทุก folder เป็น JSON — จูนเสร็จแล้วแปะกลับมาให้ตั้งเป็น default ได้เลย
+    // อ่านจาก levaStore ตรง ๆ ไม่ใช่จาก useControls ของแต่ละไฟล์ (ค่าอยู่กระจายหลาย component)
+    'คัดลอกค่าทั้งหมด': button(() => {
+      const out = {}
+      for (const [path, input] of Object.entries(levaStore.getData())) {
+        if (input?.type === 'BUTTON' || input?.type === 'FOLDER') continue
+        if (input && 'value' in input) out[path] = input.value
+      }
+      const text = JSON.stringify(out, null, 2)
+      navigator.clipboard?.writeText(text).catch(() => {})
+      console.log(text)
+    }),
+  })
+
   return (
     <Canvas
       shadows="soft"
       dpr={[1, LOW_END ? 1.5 : 2]}
+      // การ์ดขยายเต็มจอระหว่าง scroll (--sp ยุบ padding) ขนาดกล่องจึงเปลี่ยนทุกเฟรม
+      // default ของ R3F หน่วงการวัดไว้ 50ms ตอน scroll → buffer ค้าง aspect เก่า ถูก CSS ยืดใส่กล่องใหม่
+      // ภาพเลยบีบแนวนอนตลอดช่วง scroll แล้วดีดกลับตอนหยุด เหมือนเปลี่ยนเลนส์ — วัดทันทีไม่หน่วง
+      resize={{ scroll: false, debounce: 0 }}
       camera={{ position: [0, 4.1, 14.5], fov: 24, near: 0.1, far: 120 }}
       // ภาพสุดท้ายออกจาก EffectComposer — AA มาจาก MSAA ของ render target ไม่ใช่ของ canvas
       gl={{ antialias: false, powerPreference: 'high-performance' }}
@@ -157,18 +299,39 @@ export function Scene() {
         gl.toneMappingExposure = 1.05
       }}
     >
-      <color attach="background" args={['#F8D9BC']} />
-      <fog attach="fog" args={['#F6CDA8', 30, 64]} />
+      <color attach="background" args={[clay ? '#cfcdc9' : '#F8D9BC']} />
+      {/* fog ในโหมดปั้นทำให้ทรงไกล ๆ จาง อ่านสัดส่วนยาก — ถอดทิ้ง */}
+      {!clay && <fog attach="fog" args={['#F6CDA8', 30, 64]} />}
 
-      <Lights />
-      <CameraRig />
-      <Curvilinear strength={0.06} />
-      <RimLight />
+      {clay ? <ClayLights /> : <Lights />}
+      {/* CameraRig ขับกล้องจาก scroll — ต้องปิดตอน orbit ไม่งั้นสองตัวแย่งกันคุมกล้อง */}
+      {!(clay && clayOrbit) && <CameraRig />}
+      {clay && clayOrbit && <ClayCam />}
+      {clay && clayOrbit && (
+        <OrbitControls makeDefault target={[0, 2.3, 0.9]} enableDamping dampingFactor={0.12} />
+      )}
+      {/* จอโค้งบิดเส้นตรงทั้งฉาก — ปิดตอนปั้น ไม่งั้นแยกไม่ออกว่าโมเดลเบี้ยวเองหรือโดนโค้ง */}
+      <Curvilinear strength={clay ? 0 : 0.06} />
+      {!clay && <RimLight />}
+      <ClayMode enabled={clay} />
 
-      <Sky />
-      <Terrain />
-      <Foliage />
-      <Panels />
+      <group visible={!clay || clayScene}>
+        <Sky />
+        <Terrain />
+        <Foliage />
+        <Panels />
+      </group>
+
+      {/* พื้นเรียบ + กริด แทนเนินทราย — ใช้เช็คว่าฝ่าเท้าแตะพื้นจริงและตัวไม่เอียง */}
+      {clay && clayGrid && !clayScene && (
+        <>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
+            <planeGeometry args={[60, 60]} />
+            <meshStandardMaterial color="#c8c6c2" roughness={1} metalness={0} />
+          </mesh>
+          <gridHelper args={[60, 60, '#9a9894', '#b5b3af']} position={[0, 0, 0]} />
+        </>
+      )}
 
       <Suspense fallback={null}>
         {/* y: ยืดขาตาม comp แล้วฝ่าเท้าลงไปอีก 0.68 หน่วยโมเดล (×0.55 = 0.374) ยกตัวขึ้นชดเชย */}
