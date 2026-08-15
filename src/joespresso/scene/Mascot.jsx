@@ -4,8 +4,10 @@ import { useGLTF } from '@react-three/drei'
 import { useControls } from 'leva'
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
-import { addRim, clamp, damp } from './utils'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+import { addRim, clamp, damp, lerp } from './utils'
 import { scrollState } from '../scroll'
+import { introState } from '../intro'
 
 /** 0..1 พร้อม ease-in-out — ใช้ทำ sub-timeline ในช่วง scroll ของฉาก 2 */
 const seg = (v, a, b) => {
@@ -116,19 +118,6 @@ const LEG_SPLAY = 0.17
 const POSE0 = { elbowX: 0, elbowZ: 0.35, wristX: 0 }
 
 /**
- * แขนถือแก้ว: ต่างจากแขนชี้แค่ "ความยาวท่อน" เท่านั้น หน่วยเป็นเท่าของ F (ความกว้างกำปั้น)
- *
- * หน้าตัด ความโค้ง บ่า — ไม่แตะ ใช้ค่าเดียวกับแขนชี้ทั้งหมด (ดู default ของ rebuildForearm)
- * สองข้างต้องเป็นคนเดียวกัน ต่างกันได้แค่ท่า
- *
- * ที่ความยาวต่างได้เพราะมันคือท่า: แขนชี้ยกเฉียงเข้าหากล้อง ความยาวถูกเปอร์สเปคทีฟย่อ
- * ค่าที่จูนไว้ (0.45/0.58) ให้ปลายนิ้วหยุดตรงเป้าพอดี ส่วนแขนนี้ห้อยขนานระนาบภาพ
- * ยาวเท่าไรตาเห็นเท่านั้น — ค่าของแขนชี้ทำให้มันเป็นท่อนสั้นจู๋ มือค้างอยู่ที่เอว
- * แทนที่จะห้อยพ้นชายเสื้อลงมาตาม comp
- */
-const MUG_ARM = { cuffLenF: 0.95, armLenF: 1.45, outerCorner: 0.5 }
-
-/**
  * จานสีสำหรับโหมด debug แยกชิ้นส่วนแขน — สร้างครั้งเดียวแล้วใช้ซ้ำ
  * เลือกสีที่ต่างกันชัดในภาพเดียว ไม่ใช่ไล่เฉด (ต้องแยกออกแม้ชิ้นเล็กและโดนแสงต่างกัน)
  */
@@ -151,6 +140,15 @@ const HEAD_SCALE = 0.92
 // ตัวช่วยชั่วคราวใน useFrame — ปั้นใหม่ทุกเฟรมคือขยะให้ GC เก็บ 60 ครั้ง/วินาที
 const TMP_Q = new THREE.Quaternion()
 const TMP_E = new THREE.Euler()
+const INTRO_EYE = new THREE.Vector3()
+const INTRO_FACE = new THREE.Vector3()
+/** หันหัวซ้าย-ขวากี่เรเดียนตอนทำท่าสงสัย — 0.3 ≈ 17° พอให้เห็นว่าหันโดยที่ตายังอยู่ในเฟรม */
+/** หันหัวได้ไกลสุดกี่เรเดียน — 0.6 ≈ 34° เกินกว่านี้คอบิดจนดูไม่ใช่คน */
+const INTRO_LOOK_MAX = 0.6
+/** ยิ่งน้อยยิ่งช้า/นุ่ม — 0.55 ใช้เวลาราวหนึ่งวินาทีกว่าจะเข้าที่ */
+const INTRO_LOOK_EASE = 0.55
+/** ตาข้างที่ขยิบตอน intro — ลำดับตาม GLB ข้างไหนก็ได้ ขอให้เป็นข้างเดียวตลอด */
+const WINK_EYE = 0
 const TMP_V = new THREE.Vector3()
 const TMP_V2 = new THREE.Vector3()
 const TMP_Q2 = new THREE.Quaternion()
@@ -357,15 +355,25 @@ export function Mascot({
     // เลื่อน "ท่อนล่างทั้งก้อน" (ท่อนแขน + มือ + นิ้ว) ไปทางด้านหน้าของ mascot
     // ไม่ใช่การหมุน — ใช้จัดให้หน้าตัดโคนท่อนแขนบรรจบกับปลายแขนเสื้อพอดีทั้ง block
     pointArmFwd: { value: 0, min: -1, max: 1, step: 0.01 },
-    // 0 = ใช้ท่าตั้งต้นที่ alignArmAxis จัดให้ (แขนดิ่งแนบตัว) — ค่าเก่า -0.5 เอียงไปหน้า 28.6°
-    mugShoulderX: { value: 0.34, min: -2, max: 1, step: 0.05 },
+    // 0 = ท่าพักที่ cloneMirroredArm จัดให้ (แขนห้อยดิ่งแนบตัว)
+    mugShoulderX: { value: 0, min: -2, max: 1, step: 0.05 },
+    // บิดทั้งแขนรอบแกนตัวเอง — หมุนหน้ากำปั้น/แก้วให้หันเข้า-ออกจากตัว
+    // อยู่กลางลำดับ Euler XYZ ของ three: X กดหน้า-หลังก่อน แล้ว Y ค่อยบิด แล้ว Z กางออกข้าง
+    mugShoulderY: { value: 0, min: -3.1, max: 3.1, step: 0.05 },
     // ท่าพักใน GLB แขนกางออกข้าง — comp ปล่อยแขนแนบตัว ต้องกดลงด้วยแกน Z เหมือนแขนชี้
     mugShoulderZ: { value: 0, min: -3.1, max: 3.1, step: 0.05 },
-    mugElbowX: { value: 0, min: -2.2, max: 0.6, step: 0.05 },
+    // ครบสามแกนเท่าแขนชี้ — ช่วงเท่ากันด้วย (เดิม X ถูกหนีบไว้ที่ 0.6 ตอนที่แขนนี้ยังเป็น
+    // ของ GLB คนละชิ้น ตอนนี้เป็นแขนเดียวกันแล้ว ข้อจำกัดนั้นไม่มีเหตุผลเหลืออยู่)
+    mugElbowX: { value: -0.35, min: -2.2, max: 2.2, step: 0.05 },
+    mugElbowY: { value: 0.1, min: -2.2, max: 2.2, step: 0.05 },
+    mugElbowZ: { value: -0.15, min: -2.2, max: 2.2, step: 0.05 },
     // เลื่อน "ทั้งแขน" ออกจากลำตัว โดยไม่หมุน — ย้ายจุดหมุนไหล่ ชิ้นที่เหลือ (บ่า/แขนเสื้อ/
     // ท่อนแขน/มือ/แก้ว) เป็นลูกของมันจึงตามไปทั้งก้อน คู่กับ pointShoulderOut ของแขนชี้
     // คูณด้วย outward ของแขนข้างนี้ — บวก = ออกห่างลำตัวเสมอ ไม่ต้องจำว่าซ้ายหรือขวา
-    mugArmOut: { value: 0.41, min: -0.3, max: 1.2, step: 0.01, label: 'แขนแก้ว ออกห่างตัว' },
+    mugArmOut: { value: 0.09, min: -0.3, max: 1.2, step: 0.01, label: 'แขนแก้ว ออกห่างตัว' },
+    // เลื่อนทั้งแขนขึ้น-ลง คู่กับ mugArmOut (บวก = ขึ้น) — คนละเรื่องกับ pointShoulderDrop
+    // ของแขนชี้ที่นับเป็น "ลง" เพราะแขนนั้นจูนจากท่ายกลงมา ส่วนแขนนี้อ้างจากท่าห้อย
+    mugArmUp: { value: -0.26, min: -0.6, max: 0.6, step: 0.01, label: 'แขนแก้ว ขึ้น/ลง' },
     // debug: ทาสีชิ้นส่วนแขนแยกกันคนละสี ดูว่าชิ้นไหนคือชิ้นไหน / ทับกันตรงไหน
     armDebug: { value: false, label: 'แยกสีชิ้นแขน' },
     // debug: ลากลูกบอลที่ปลายนิ้วเพื่อเล็งแขน — ปล่อยแล้วค่ามุมไหล่ถูกเขียนกลับลง slider ด้านบน
@@ -694,65 +702,8 @@ export function Mascot({
       return { shoulder, elbow, wrist, outward }
     }
 
-    /**
-     * หมุน group ให้ "เนื้อแขนที่อยู่ข้างใน" ชี้ไปทางที่ต้องการ
-     *
-     * ท่าพักของ GLB กางแขนออกข้าง จุดหมุนกับตัวเนื้อแขนเลยไม่ได้อยู่แกนเดียวกัน
-     * หมุนด้วย Euler ทีละแกนจึงกดแขนให้แนบตัวไม่ได้ (ลองแล้วชันสุดได้แค่ -61°)
-     * วัดทิศจริงของเนื้อแขนก่อน แล้วคิดเป็น quaternion ทีเดียว
-     */
-    /** จุดกึ่งกลาง mesh ของกิ่งหนึ่ง (ข้ามกิ่งลูกที่ระบุ) ในสเปซของ model */
-    const meshCentroid = (group, skip) => {
-      const bb = new THREE.Box3()
-      group.traverse((o) => {
-        if (!o.isMesh || !o.visible) return
-        for (let p = o.parent; p; p = p.parent) if (p === skip) return
-        o.geometry.computeBoundingBox()
-        bb.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld))
-      })
-      return bb.isEmpty() ? null : model.worldToLocal(bb.getCenter(new THREE.Vector3()))
-    }
 
-    /**
-     * แก้มุมไหล่จาก "แกนของเนื้อแขนที่ตาเห็นจริง" ไม่ใช่จากจุดหมุน
-     *
-     * alignRest จัดทิศของ centroid เทียบกับ "จุดหมุน" ซึ่งไม่ตรงกับแกนที่มองเห็น —
-     * ท่าพักของ GLB วางเนื้อแขนเยื้องออกจากข้อต่อ พอหมุนให้ centroid ตั้งตรง
-     * ตัวแกนข้อต่อกลับเอียงไปอีกทางเท่า ๆ กัน แขนเลยยังดูเฉียงอยู่
-     *
-     * ตรงนี้วัดเวกเตอร์ ต้นแขน -> ปลายแขน จาก mesh จริง แล้วหมุนไหล่ทั้งท่อนให้เวกเตอร์นั้น
-     * ไปตรงกับ want (หมุนไหล่ = หมุนทั้งแขนแบบแข็ง ค่าที่ได้จึงแม่นในครั้งเดียว ไม่ต้องวนซ้ำ)
-     */
-    const alignArmAxis = (arm, want) => {
-      arm.shoulder.quaternion.copy(arm.shoulder.userData.rest)
-      arm.elbow.quaternion.copy(arm.elbow.userData.rest)
-      model.updateMatrixWorld(true)
-      const upper = meshCentroid(arm.shoulder, arm.elbow)
-      const fore = meshCentroid(arm.elbow, null)
-      if (!upper || !fore) return
-      const axis = fore.clone().sub(upper).normalize()
-      arm.shoulder.userData.rest.premultiply(
-        new THREE.Quaternion().setFromUnitVectors(axis, want.clone().normalize()),
-      )
-      arm.shoulder.quaternion.copy(arm.shoulder.userData.rest)
-      model.updateMatrixWorld(true)
-    }
 
-    const alignRest = (group, want) => {
-      group.updateMatrixWorld(true)
-      const inv = group.matrixWorld.clone().invert()
-      const bb = new THREE.Box3()
-      group.traverse((o) => {
-        if (!o.isMesh) return
-        o.geometry.computeBoundingBox()
-        bb.union(o.geometry.boundingBox.clone().applyMatrix4(inv.clone().multiply(o.matrixWorld)))
-      })
-      const dir = bb.isEmpty() ? new THREE.Vector3(0, -1, 0) : bb.getCenter(new THREE.Vector3())
-      group.userData.rest = new THREE.Quaternion().setFromUnitVectors(
-        dir.normalize(),
-        want.clone().normalize(),
-      )
-    }
 
     /**
      * ปั้นหัวไหล่ใหม่สำหรับแขนที่ยกชี้
@@ -770,6 +721,270 @@ export function Mascot({
      * bevel = ลบเหลี่ยมบ่ากับแขนเสื้อให้โค้งเข้าหากัน (0 = กล่องเหลี่ยมแบบเดิม)
      * ใช้กับแขนถือแก้วอย่างเดียว — แขนชี้ถูกจูนสัดส่วนไว้แล้ว ไปเปลี่ยนทรงจะรื้อของที่เข้าที่
      */
+    /** กลับด้านสามเหลี่ยมของ geometry (คนละใบกับของเดิมเสมอ — ของเดิมถูกใช้อยู่อีกแขนหนึ่ง) */
+    const flippedGeometry = (geo) => {
+      // clone เฉย ๆ — เรียก toNonIndexed() กับชิ้นที่ไม่มี index อยู่แล้ว three จะเตือนเปล่า ๆ
+      const g = geo.clone()
+      if (g.index) {
+        const a = g.index.array
+        for (let i = 0; i < a.length; i += 3) {
+          const t = a[i]
+          a[i] = a[i + 2]
+          a[i + 2] = t
+        }
+        g.index.needsUpdate = true
+      } else {
+        for (const at of Object.values(g.attributes)) {
+          const n = at.itemSize
+          const arr = at.array
+          for (let i = 0; i < arr.length; i += n * 3) {
+            for (let k = 0; k < n; k++) {
+              const t = arr[i + k]
+              arr[i + k] = arr[i + 2 * n + k]
+              arr[i + 2 * n + k] = t
+            }
+          }
+          at.needsUpdate = true
+        }
+      }
+      return g
+    }
+
+    /**
+     * แขนอีกข้าง = แขนเดิมที่ถูกสะท้อนกระจก ไม่ได้ปั้นขึ้นใหม่
+     *
+     * นี่คือวิธีเดียวที่ทำให้สองแขน "เป็นแขนคู่เดียวกัน" ได้จริง. ก่อนหน้านี้แต่ละข้างถูกปั้น
+     * จาก mesh ของตัวเองใน GLB ซึ่งไม่ได้ mirror กันเป๊ะ — F ต่างกัน 1.6% และจุดแบ่งกลุ่ม
+     * ไหล่/ศอก/ข้อมือ (เกณฑ์ความสูงใน mkArm) ตกคนละที่ ก้อนที่ข้างหนึ่งนับเป็นแขน อีกข้าง
+     * นับเป็นมือ จำนวนชิ้นกับสัดส่วนจึงไม่มีทางตรงกัน แก้ทีละจุดเท่าไรก็ยังต่าง
+     *
+     * สะท้อนแบบ "อบลงในทุก node" ไม่ใช่ scale.x = -1 ที่ราก:
+     *   ทุกกิ่ง  local ใหม่ = M · local เดิม · M   (M = สะท้อนแกน x)  → ยังเป็นการหมุนล้วน
+     *   ทุก mesh geometry สะท้อนด้วย M แล้วกลับลำดับสามเหลี่ยม (ไม่งั้นโดน backface culling)
+     *
+     * ที่ไม่ใช้ scale ลบเพราะ determinant ติดลบทำให้ทุกอย่างที่เป็น "การหมุน" เพี้ยนหมด —
+     * setFromUnitVectors, getWorldQuaternion, การเล็งแขนให้ห้อยลง คิดผิดทั้งชุด (ลองมาแล้ว
+     * ได้แขนกางออกข้างพร้อมแก้วลอย) เมื่ออบลง node ทุกอันเป็น quaternion ปกติ
+     * เครื่องมือเดิมทั้งหมดจึงใช้ได้เหมือนแขนอีกข้างเป๊ะ
+     */
+    const cloneMirroredArm = (src) => {
+      if (!src) return null
+      const shoulder = src.shoulder.clone(true)
+      // clone(true) รักษาลำดับลูกไว้ จับคู่ node เดิม -> node ใหม่ด้วยลำดับ traverse ได้เลย
+      const from = []
+      src.shoulder.traverse((o) => from.push(o))
+      const to = []
+      shoulder.traverse((o) => to.push(o))
+      const map = new Map(from.map((o, i) => [o, to[i]]))
+      const M = new THREE.Matrix4().makeScale(-1, 1, 1)
+      to.forEach((o, i) => {
+        if (o.isMesh) {
+          const g = flippedGeometry(o.geometry)
+          g.applyMatrix4(M)
+          o.geometry = g
+          /**
+           * เอา material "ตัวจริง" ของต้นฉบับมา ไม่ใช่ตัวที่มันถืออยู่ตอนนี้
+           *
+           * ถ้าโหมดปั้นทาเทาไปก่อนแล้ว ตัวที่ถืออยู่คือดินเทา และสำเนาจะถือดินเทาไปด้วย
+           * โดยไม่มี clayFrom ของตัวเอง — ClayMode เห็นว่า "เป็นดินอยู่แล้ว" เลยข้าม
+           * ไม่เคยจดของเดิมไว้ พอปิดโหมดปั้น แขนข้างนี้จึงค้างเป็นสีเทาอยู่ข้างเดียว
+           */
+          o.material = from[i].userData?.clayFrom ?? from[i].material
+        }
+        /**
+         * ล้าง userData ของสำเนาทิ้งก่อนเสมอ
+         *
+         * Object3D.copy ก็อป userData ด้วย JSON.parse(JSON.stringify(...)) — ของที่ไม่ใช่
+         * ข้อมูลล้วนจึงกลายเป็น object เปล่า: Vector3/Quaternion เสียชนิด และที่ร้ายกว่านั้นคือ
+         * `clayFrom` ซึ่งเป็น "material ตัวจริง" กลายเป็น object ธรรมดา พอโหมดปั้นเอาไปคืนค่า
+         * ทั้งฉากก็ล้มทันที (material.customProgramCacheKey is not a function)
+         * สิ่งที่สำเนาต้องใช้จริง ๆ ตั้งเองด้านล่างทีละตัว
+         */
+        o.userData = {}
+        // local ใหม่ = M · local เดิม · M — เท่ากับกลับเครื่องหมาย x ของตำแหน่ง
+        // และกลับเครื่องหมาย y,z ของ quaternion
+        o.position.x = -o.position.x
+        o.quaternion.set(o.quaternion.x, -o.quaternion.y, -o.quaternion.z, o.quaternion.w)
+      })
+
+      const outward = -(src.outward ?? 1)
+      const ud = src.shoulder.userData
+      shoulder.userData = {
+        outward,
+        yoke: ud.yoke ? map.get(ud.yoke) : undefined,
+        cuff: ud.cuff ? { mesh: map.get(ud.cuff.mesh), len: ud.cuff.len } : undefined,
+        armAxis: ud.armAxis ? new THREE.Vector3(-ud.armAxis.x, ud.armAxis.y, ud.armAxis.z) : undefined,
+        len: ud.len,
+      }
+      shoulder.userData.baseX = shoulder.position.x
+      shoulder.userData.baseY = shoulder.position.y
+      shoulder.userData.baseZ = shoulder.position.z
+      model.add(shoulder)
+
+      const elbow = map.get(src.elbow)
+      const wrist = map.get(src.wrist)
+      /**
+       * เหยียดศอกให้ท่อนล่างต่อจากต้นแขนเป็นเส้นเดียว
+       *
+       * identity ใช้ไม่ได้: มุมศอกของ GLB ที่ท่าพักไม่ใช่ "ตรง" มันคือมุมของท่ากางแขนออกข้าง
+       * ตั้ง identity แล้วท่อนล่างเลยพุ่งไปคนละทางกับต้นแขน (แขนพับเข้าลำตัว)
+       *
+       * หมุนจากของจริงแทน: วัดทิศ "จุดหมุนศอก -> กลางเนื้อของท่อนล่าง" แล้วหมุนให้ทิศนั้น
+       * ไปทับแกนต้นแขน (armAxis ซึ่งอยู่ในสเปซของไหล่ = สเปซแม่ของศอกพอดี)
+       */
+      elbow.quaternion.identity()
+      elbow.updateMatrixWorld(true)
+      const lower = new THREE.Box3()
+      elbow.traverse((o) => {
+        if (!o.isMesh || !o.visible) return
+        o.geometry.computeBoundingBox()
+        lower.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld))
+      })
+      const axisLocal = shoulder.userData.armAxis
+      if (!lower.isEmpty() && axisLocal) {
+        const c = elbow.parent.worldToLocal(lower.getCenter(new THREE.Vector3()))
+        const dir = c.sub(elbow.position)
+        if (dir.lengthSq() > 1e-8) {
+          elbow.quaternion.setFromUnitVectors(
+            dir.normalize(),
+            axisLocal.clone().normalize(),
+          )
+        }
+      }
+      elbow.userData.rest = elbow.quaternion.clone()
+      wrist.userData.rest = wrist.quaternion.clone()
+      model.updateMatrixWorld(true)
+      return { shoulder, elbow, wrist, outward }
+    }
+
+    /**
+     * ชิ้นส่วนที่มองเห็นของแขนหนึ่งข้าง เรียง "จากบ่าออกไปหาปลายมือ"
+     *
+     * เรียงตามระยะบนแกนแขนจริง ไม่ใช่ตามลำดับใน scene graph — ลำดับใน graph เป็นของ GLB
+     * (ชิ้นที่ปั้นใหม่ไปต่อท้าย กลุ่มมือมาก่อนแขนเสื้อ) สองแขนจึงเรียงไม่เหมือนกัน
+     * พอเอาไปทาสีทีละ index สีของสองข้างเลื่อนกันคนละชุด เทียบกันไม่ได้เลย ซึ่งเป็น
+     * เหตุผลเดียวที่โหมดแยกสีมีอยู่
+     *
+     * `skip` = กิ่งที่ไม่นับ (แก้วที่ถืออยู่ ไม่ใช่ชิ้นของแขน)
+     */
+    const armParts = (arm, skip) => {
+      if (!arm) return []
+      const axis = arm.shoulder.userData.armAxis
+      const inv = arm.shoulder.matrixWorld.clone().invert()
+      const under = (o, root) => {
+        for (let p = o; p; p = p.parent) if (p === root) return true
+        return false
+      }
+      const list = []
+      arm.shoulder.traverse((o) => {
+        if (!o.isMesh || !o.visible) return
+        if (skip && under(o, skip)) return
+        o.geometry.computeBoundingBox()
+        const c = o.geometry.boundingBox
+          .getCenter(new THREE.Vector3())
+          .applyMatrix4(inv.clone().multiply(o.matrixWorld))
+        list.push({ o, at: axis ? c.dot(axis) : c.length() })
+      })
+      return list.sort((a, b) => a.at - b.at).map((m) => m.o)
+    }
+
+    /**
+     * รวมชิ้นที่อยู่ในกระดูกท่อนเดียวกันและใช้ material เดียวกัน ให้เป็น mesh เดียว
+     *
+     * แก้อาการ "ขอบซ้อนขอบ" ที่ต้นทาง: กล่องหลายใบแทงทะลุกันจะมีผิวด้านในซ้อนกันเสมอ
+     * เห็นเป็นเส้นรอยต่อและมีโอกาส z-fighting ตรงที่หน้าเกือบขนานกัน พอรวมเป็นก้อนเดียว
+     * รอยต่อภายในหายไปจริง ๆ ไม่ใช่แค่ซ่อน — และได้ draw call ลดลงเป็นของแถม
+     *
+     * รวมได้เฉพาะภายใน "ท่อนกระดูกเดียวกัน" (ไหล่ / ศอก / ข้อมือ) เพราะข้อต่อยังต้องหมุนได้
+     * ชิ้นที่ข้าม bone ไปรวมกันจะขยับตามข้อไม่ได้อีก
+     *
+     * ของเดิมไม่ทิ้ง แค่ซ่อนไว้ — โหมดแยกสีชิ้นแขนยังต้องใช้ (ดู useEffect ของ armDebug)
+     */
+    const mergeArm = (arm) => {
+      if (!arm) return []
+      const merged = []
+      const segments = [
+        [arm.shoulder, [arm.elbow]],
+        [arm.elbow, [arm.wrist]],
+        [arm.wrist, []],
+      ]
+      for (const [node, stops] of segments) {
+        node.updateWorldMatrix(true, false)
+        const inv = node.matrixWorld.clone().invert()
+        /** @type {Map<string, {material: THREE.Material, cast: boolean, receive: boolean, geos: THREE.BufferGeometry[], parts: THREE.Mesh[]}>} */
+        const buckets = new Map()
+        node.traverse((o) => {
+          if (!o.isMesh || !o.visible || o.userData.noMerge || o.userData.mergedFrom) return
+          for (let p = o; p; p = p.parent) if (stops.includes(p)) return
+          const key = `${o.material.uuid}|${o.castShadow}|${o.receiveShadow}`
+          const b = buckets.get(key) ?? {
+            material: o.material,
+            cast: o.castShadow,
+            receive: o.receiveShadow,
+            geos: [],
+            parts: [],
+          }
+          o.updateWorldMatrix(true, false)
+          const g = o.geometry.clone()
+          g.applyMatrix4(inv.clone().multiply(o.matrixWorld))
+          b.geos.push(g)
+          b.parts.push(o)
+          buckets.set(key, b)
+        })
+        for (const b of buckets.values()) {
+          // ชิ้นเดียวไม่ต้องรวม — เปลืองหน่วยความจำเปล่า ๆ และไม่มีรอยต่อให้แก้อยู่แล้ว
+          if (b.parts.length < 2) {
+            b.geos.forEach((g) => g.dispose())
+            continue
+          }
+          /**
+           * ตัด attribute ที่ไม่ครบทุกชิ้นออกก่อนรวม
+           *
+           * mergeGeometries คืน null ทันทีถ้าชุด attribute ไม่ตรงกันเป๊ะ — และมันไม่ตรงจริง ๆ:
+           * ชิ้นจาก GLB มีแค่ position,normal ส่วนกล่องที่เราปั้นเองมี uv ติดมาด้วย
+           * ตัว material ของแขนไม่มี texture สักใบ (เช็คแล้ว: map/normalMap/... ว่างหมด)
+           * uv จึงไม่มีใครใช้ ตัดทิ้งได้ ไม่ต้องยัด uv ศูนย์เข้าไปให้เปลืองหน่วยความจำ
+           */
+          const common = b.geos.reduce(
+            (keep, g) => keep.filter((k) => g.attributes[k]),
+            Object.keys(b.geos[0].attributes),
+          )
+          b.geos.forEach((g) => {
+            Object.keys(g.attributes).forEach((k) => {
+              if (!common.includes(k)) g.deleteAttribute(k)
+            })
+          })
+          /**
+           * index ต้อง "มีทุกชิ้น หรือไม่มีเลย" — mergeGeometries ปฏิเสธถ้าปนกัน
+           * ชิ้นจาก GLB มี index ส่วนบางชิ้นที่ปั้นเองไม่มี พอปนกันมันเลยล้มที่ index 2
+           * คลี่ให้ไม่มี index ทั้งหมดง่ายและปลอดภัยที่สุด (จำนวน vertex เพิ่ม แต่ชิ้นพวกนี้
+           * หลักร้อย ไม่ใช่หลักแสน) — ทำเฉพาะตอนปนกันจริง ไม่งั้นเก็บ index เดิมไว้
+           */
+          const mixedIndex = b.geos.some((g) => !g.index)
+          const ready = mixedIndex
+            ? b.geos.map((g) => (g.index ? g.toNonIndexed() : g))
+            : b.geos
+          const geo = mergeGeometries(ready, false)
+          ready.forEach((g, i) => {
+            if (g !== b.geos[i]) g.dispose()
+          })
+          b.geos.forEach((g) => g.dispose())
+          if (!geo) continue
+          const mesh = new THREE.Mesh(geo, b.material)
+          mesh.castShadow = b.cast
+          mesh.receiveShadow = b.receive
+          mesh.userData.mergedFrom = b.parts
+          node.add(mesh)
+          b.parts.forEach((o) => {
+            o.visible = false
+            o.userData.mergedAway = true
+          })
+          merged.push(mesh)
+        }
+      }
+      return merged
+    }
+
     /** กล่องที่ลบเหลี่ยมได้ — bevel = 0 คืนกล่องเหลี่ยมปกติ (รัศมีคิดจากด้านสั้นสุดของชิ้นนั้น) */
     const rounded = (w, h, d, bevel) => {
       const r = Math.min(w, h, d) * Math.min(bevel, 0.49)
@@ -778,30 +993,6 @@ export function Mascot({
         : new THREE.BoxGeometry(w, h, d)
     }
 
-    /**
-     * กล่องที่มนเฉพาะ "มุมบน-ด้านนอก" มุมเดียว — มุมอื่นยังเป็นเหลี่ยมคม
-     *
-     * นี่คือไหล่ด้านนอก: เส้นนอกของแขนเสื้อไหลออกจากไหล่เสื้อแล้วโค้งเข้าหาลำตัว
-     * ไม่ใช่การลบเหลี่ยมทั้งชิ้น (ได้แคปซูล) และไม่ใช่การลบเหลี่ยมที่ตัวเสื้อ (ได้บ่ามน)
-     *
-     * ทำเป็น profile 2 มิติในระนาบ (กว้าง × ยาวตามแกนแขน) แล้ว extrude ตามความลึกลำตัว
-     * — โค้งจึงอยู่บนระนาบที่ตามองเห็นตอนยืนตรง ซึ่งเป็นระนาบเดียวกับที่ comp วาด
-     */
-    const cornerRoundedBox = (w, h, d, r) => {
-      const x = w / 2
-      const y = h / 2
-      const s = new THREE.Shape()
-      s.moveTo(-x, -y)
-      s.lineTo(x, -y)
-      s.lineTo(x, y - r)
-      s.quadraticCurveTo(x, y, x - r, y)
-      s.lineTo(-x, y)
-      s.closePath()
-      const g = new THREE.ExtrudeGeometry(s, { depth: d, bevelEnabled: false, curveSegments: 6 })
-      // ExtrudeGeometry ดันไป +z จาก 0 — เลื่อนกลับให้ศูนย์กลางอยู่ที่จุดกำเนิดเหมือน BoxGeometry
-      g.translate(0, 0, -d / 2)
-      return g
-    }
 
     const rebuildShoulder = (arm, { bevel = 0 } = {}) => {
       if (!arm) return
@@ -971,8 +1162,6 @@ export function Mascot({
         keepLower = true,
         yokeIn = 0.5,
         bevel = 0,
-        // มนเฉพาะมุมบน-ด้านนอกของแขนเสื้อ = ไหล่ด้านนอก (สัดส่วนของความหนาแขนเสื้อ)
-        outerCorner = 0,
         cuffLenF = 0.45,
         armLenF = 0.58,
         thickF = 0.78,
@@ -1077,53 +1266,42 @@ export function Mascot({
       // ของเดิมบ่ากว้าง 0.52 แต่ท่อนแขน 0.59 ไหล่เลยดูเล็กกว่าแขนที่งอกออกมา
       const thick = F * thickF
       const cuffThick = F * cuffThickF
-      const yokeCross = F * yokeCrossF
 
       // 1) ย่อ+หันแขนเสื้อให้วางตามแกน (เดิมเป็นกล่องตั้งฉากกับสเปซไหล่ เอียงคร่อมแกนอยู่)
       cuff.mesh.geometry.dispose()
-      cuff.mesh.geometry =
-        outerCorner > 0
-          ? cornerRoundedBox(cuffThick, cuffLen, cuffThick, cuffThick * outerCorner)
-          : rounded(cuffThick, cuffLen, cuffThick, bevel)
+      cuff.mesh.geometry = rounded(cuffThick, cuffLen, cuffThick, bevel)
       // ปิดรับเงาเฉพาะแขนเสื้อ — ท่อนแขนวางแนบมันจนเงาตัวเองตกลงบนหน้าสัมผัส กลายเป็นลายฟันปลา
       // (shadow map ที่ระยะนี้หยาบเกินกว่าจะแยกสองผิวที่ห่างกันไม่ถึงหนึ่ง texel) ตัวบ่าข้างหลังยังรับเงาปกติ
       cuff.mesh.receiveShadow = false
       cuff.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis)
-      /**
-       * มุมที่มนต้องไปอยู่ "ด้านนอกตัว" — ไม่ใช่ด้านที่หันเข้าซี่โครง
-       *
-       * setFromUnitVectors หมุนแกน Y ไปทับแกนแขน แต่ไม่ได้สัญญาอะไรกับแกน X เลย และแกนแขน
-       * ของท่าห้อยชี้ลงเกือบ -Y ซึ่งเป็นกรณีเกือบ 180° — X จะกลับด้านหรือไม่ก็ได้
-       * จึงวัดเอาจริง ๆ ว่าตอนนี้ X ของชิ้นชี้ไปทางไหน แล้วพลิกรอบแกนแขนถ้าชี้ผิดข้าง
-       * (พลิกรอบ Y ของชิ้นเอง = ยังทาบแกนแขนเหมือนเดิม เสียแค่ด้านซ้าย-ขวา)
-       */
-      if (outerCorner > 0) {
-        const o0 = arm.shoulder.worldToLocal(model.localToWorld(new THREE.Vector3()))
-        const outLocal = arm.shoulder
-          .worldToLocal(model.localToWorld(new THREE.Vector3(arm.outward, 0, 0)))
-          .sub(o0)
-          .normalize()
-        const meshX = new THREE.Vector3(1, 0, 0).applyQuaternion(cuff.mesh.quaternion)
-        if (meshX.dot(outLocal) < 0) {
-          cuff.mesh.quaternion.multiply(
-            new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI),
-          )
-        }
-      }
       cuff.mesh.position.copy(axis).multiplyScalar(cuffStart + cuffLen / 2)
       cuff.len = cuffLen
 
-      // 1b) บ่า: วางบนแกนแขนเหมือนชิ้นอื่น เริ่มจากในลำตัวออกมาซ้อนใต้แขนเสื้อ
+      /**
+       * 1b) บ่า = "ตัวอุดข้างใน" ไม่ใช่ผิวที่เห็น
+       *
+       * หน้าที่มันมีอย่างเดียว: อุดช่องรักแร้ตอนแขนยก ไม่ให้มองทะลุเข้าไปในลำตัว
+       * ดังนั้นทุกด้านของมันต้องจมอยู่ใต้ชิ้นอื่นเสมอ — ปลายในจมในลำตัว ปลายนอกจมใต้แขนเสื้อ
+       * และ "หน้าตัดต้องเล็กกว่าแขนเสื้อ" ด้วย
+       *
+       * ของเดิมหน้าตัด 1.05F ขณะที่แขนเสื้อ 0.95F บ่าจึงอ้วนกว่าตัวที่ควรคลุมมัน 10%
+       * แล้วโผล่ออกมาเป็นแผ่นข้างไหล่ กลายเป็นขอบที่สองในเงา silhouette (เห็นชัดในโหมดแยกสี:
+       * ชิ้นสีแดงยื่นออกมาจากใต้แขนเสื้อทั้งสองข้าง)
+       *
+       * ตอนนี้หนีบด้วยหน้าตัดแขนเสื้อ แล้วหดอีก 4% เป็นระยะเผื่อ — ไม่ใช่ให้เท่ากันพอดี
+       * เพราะสองผิวขนานกันสนิทคือสูตร z-fighting
+       */
       const yoke = arm.shoulder.userData.yoke
       if (yoke) {
         const p = yoke.geometry.parameters
         const yokeLo = -F * yokeIn // จมเข้าไปในลำตัว ปิดข้อต่อ
         const yokeHi = cuffStart + cuffLen * 0.45
         yoke.geometry.dispose()
+        const cross = Math.min(F * yokeCrossF, cuffThick * 0.96)
         // ความลึกบ่ามาจาก bbox ลำตัวที่แปลงเข้าสเปซไหล่ซึ่งหมุนอยู่ — กล่องพองตามแนวทแยง
-        // (แขนห้อยวัดได้ 1.47 ทั้งที่ลำตัวลึกจริง 0.66) หนีบไม่ให้เกินหน้าตัดบ่าเอง
-        const depth = Math.min(p.depth ?? yokeCross, yokeCross * 1.2)
-        yoke.geometry = rounded(yokeCross, yokeHi - yokeLo, depth, bevel)
+        // (แขนห้อยวัดได้ 1.47 ทั้งที่ลำตัวลึกจริง 0.66) หนีบด้วยหน้าตัดแขนเสื้อเช่นกัน
+        const depth = Math.min(p.depth ?? cross, cross)
+        yoke.geometry = rounded(cross, yokeHi - yokeLo, depth, bevel)
         yoke.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis)
         yoke.position.copy(axis).multiplyScalar((yokeLo + yokeHi) / 2)
       }
@@ -1173,6 +1351,8 @@ export function Mascot({
 
       // ท่อนล่างทั้งก้อน = กล่องท่อนแขน + กลุ่มศอก (ซึ่งพามือกับนิ้วไปด้วย)
       // เก็บตำแหน่งตั้งต้นไว้ ให้ slider pointArmFwd เลื่อนทั้งสองชิ้นพร้อมกันเป็นก้อนเดียว
+      // ห้ามรวมกับใคร — slider pointArmFwd เลื่อนชิ้นนี้ทีละชิ้น ถ้าถูกรวมไปแล้วมันจะขยับไม่ได้
+      forearm.userData.noMerge = true
       forearm.userData.base = forearm.position.clone()
       arm.elbow.userData.base = arm.elbow.position.clone()
       if (keepLower) rig.current.pointLower = [forearm, arm.elbow]
@@ -1183,35 +1363,19 @@ export function Mascot({
     // เฉพาะแขนที่ยกชี้ — แขนถือแก้วหมุนไหล่นิดเดียว นิ้วโป้งยังอยู่ด้านในถูกอยู่แล้ว
     mirrorHandGeometry(arms.R)
     const armPoint = mkArm(arms.R)
-    const armMug = mkArm(arms.L)
+    // แขนซ้ายของ GLB ไม่ถูกใช้แล้ว — แขนถือแก้วเป็นสำเนากระจกของแขนชี้ (ดู cloneMirroredArm)
+    // ซ่อนไว้เฉย ๆ ไม่ลบ: มันยังเป็นตัวอ้างอิงเวลาต้องวัดอะไรจากโมเดลต้นฉบับ
+    arms.L.forEach(({ o }) => {
+      o.visible = false
+    })
     rig.current.pointShoulder = armPoint?.shoulder
     rig.current.pointElbow = armPoint?.elbow
     rig.current.pointWrist = armPoint?.wrist
-    rig.current.mugShoulder = armMug?.shoulder
-    rig.current.mugElbow = armMug?.elbow
     // เฉพาะแขนที่ยกชี้ — แขนถือแก้วห้อยลงตามท่าพัก ข้อยังไม่พับ รอยต่อเลยยังตันอยู่เอง
     rebuildShoulder(armPoint)
-    // เฉพาะแขนที่ยกชี้ — แขนถือแก้วห้อยตรงอยู่แล้ว และ alignRest ของมันคิดจากจุดหมุนเดิม
     if (armPoint) {
       centerPivot(armPoint.wrist)
       centerPivot(armPoint.elbow)
-    }
-
-    // แขนถือแก้ว: ห้อยลงแนบลำตัว กางออกนิดเดียวพอให้แก้วไม่จมสะโพก (ตาม comp)
-    // ทิศ "กางออก" ต้องอิงข้างของแขนเอง — แขนนี้อยู่ฝั่ง -x ถ้าใส่ +x จะเหวี่ยงแขนพาดหน้าอก
-    if (armMug) {
-      // ต้นแขนกางออกนิดเดียว (~6°) พอให้พ้นขอบลำตัว — หัวไหล่อยู่ที่ x -0.60 ลำตัวกว้างถึง ±0.71
-      const out = armMug.outward
-      alignRest(armMug.shoulder, new THREE.Vector3(0.1 * out, -1, 0.02))
-      // ท่อนล่างห้อยดิ่งจริง ๆ: want ของศอกอยู่ในสเปซที่ถูกไหล่หมุนไปแล้ว
-      // ถ้าใส่ (0,-1,0) ตรง ๆ มันจะดิ่งเทียบกับไหล่ = เอียงตามไหล่ไปด้วย
-      // ต้องหมุนย้อนมุมไหล่ออกก่อน ปลายแขนจึงตั้งดิ่งเทียบกับตัวจริง ๆ
-      const downUnderShoulder = new THREE.Vector3(0, -1, 0).applyQuaternion(
-        armMug.shoulder.userData.rest.clone().invert(),
-      )
-      alignRest(armMug.elbow, downUnderShoulder)
-      // ปิดท้ายด้วยการจัดแกนเนื้อแขนให้ดิ่งจริง ๆ (ดิ่งสนิท ไม่เผื่อกางออก — โจทย์คือแนบตัว)
-      alignArmAxis(armMug, new THREE.Vector3(0, -1, 0))
     }
 
     // นิ้วชี้ — comp ชี้ด้วยนิ้วเดียว แต่ GLB ปั้นมาเป็นกำปั้นล้วน
@@ -1280,89 +1444,70 @@ export function Mascot({
       }
 
       // รายชื่อชิ้นส่วนแขน เรียงจากบ่าออกไปหาปลายนิ้ว — ใช้กับโหมดทาสีแยกชิ้น (slider 'แยกสีชิ้นแขน')
-      const parts = []
-      if (armPoint.shoulder.userData.yoke) parts.push(armPoint.shoulder.userData.yoke)
-      armPoint.shoulder.traverse((o) => {
-        if (o.isMesh && o.visible) parts.push(o)
-      })
-      rig.current.pointParts = parts
+      rig.current.pointParts = armParts(armPoint)
+      rig.current.pointMerged = mergeArm(armPoint)
     }
 
-    if (armMug) {
-      // ปั้นบ่า/แขนเสื้อ/ท่อนแขนใหม่ด้วยฟังก์ชันชุดเดียวกับแขนชี้ — ชิ้นของ GLB เป็นแผ่นเฉียง
-      // หมุนยังไงก็ไม่เป็นแขนห้อยตรง
-      // ไม่ลบเหลี่ยม — บ่ากับแขนเสื้อเป็นกล่องตัดเหมือนแขนชี้ทุกประการ
-      rebuildShoulder(armMug)
-      /**
-       * บ่า (yoke) ของแขนข้างนี้ไม่ต้องแสดง
-       *
-       * มันคือกล่องที่เอาไว้ "อุด" ข้อต่อตอนแขนยกขึ้น — ยกแล้วลำตัวจะเปิดเป็นช่องตรงรักแร้
-       * แต่แขนข้างนี้ห้อยลงแนบตัว ตัวเสื้อปิดข้อต่อให้อยู่แล้ว กล่องนั้นจึงไม่ได้อุดอะไร
-       * มีแต่โผล่พ้นแนวไหล่เสื้อออกมาเป็นก้อนแปะอยู่บนบ่า (จะลบเหลี่ยมหรือไม่ก็ตาม)
-       */
-      if (armMug.shoulder.userData.yoke) armMug.shoulder.userData.yoke.visible = false
-      centerPivot(armMug.wrist)
-      centerPivot(armMug.elbow)
-      // หันกำปั้นให้ชี้ตามแกนแขน — ขั้นตอนเดียวกับแขนชี้ ต่างแค่แกนมือคำนวณสด ๆ ตรงนี้
-      // (ของแขนชี้ได้มาแถมตอนต่อนิ้ว) ไม่ทำแล้วกำปั้นบิด 40° ตามที่ GLB bake มา เห็นเป็นขั้นบันได
-      const mugHand = handDir(armMug.wrist)
-      if (mugHand) {
-        armMug.wrist.userData.pointDir = mugHand.dir.clone()
-        alignHandToArm(armMug, { pose0: false })
-      }
-      rebuildForearm(armMug, {
-        pose0: false,
-        keepLower: false,
-        yokeIn: 0.06,
-        ...MUG_ARM,
-      })
+    /**
+     * แขนถือแก้ว = สำเนากระจกของแขนชี้ ปั้นทีหลังเพราะต้องรอให้แขนชี้เสร็จก่อน
+     * ชิ้นส่วน สัดส่วน จุดหมุน เหมือนกันทุกอย่างโดยอัตโนมัติ เหลือแค่ตั้ง "ท่า"
+     */
+    const armMug = cloneMirroredArm(armPoint)
+    rig.current.mugShoulder = armMug?.shoulder
+    rig.current.mugElbow = armMug?.elbow
 
-      // ห้อยตรงแนบลำตัว — หมุนไหล่ให้ 'แกนแขนที่เพิ่งปั้น' ดิ่งลงจริง
-      // alignArmAxis ก่อนหน้านี้เล็งจาก centroid ของ mesh GLB (แผ่นเฉียง) พอปั้นชิ้นใหม่เรียงตามแกน
-      // แกนจริงเลยเอียงออกนอกตัว ~13°
-      const armAxis = armMug.shoulder.userData.armAxis
-      if (armAxis) {
-        const axisModel = armAxis.clone().applyQuaternion(armMug.shoulder.quaternion)
-        // เอียงออกนอกตัวนิดเดียวพอให้พ้นสะโพก ไม่ใช่ดิ่ง 100% (แขนจะเสียดลำตัว)
-        const want = new THREE.Vector3(0.05 * armMug.outward, -1, 0).normalize()
-        armMug.shoulder.userData.rest.premultiply(
-          new THREE.Quaternion().setFromUnitVectors(axisModel, want),
-        )
-        armMug.shoulder.quaternion.copy(armMug.shoulder.userData.rest)
+    if (armMug) {
+      /**
+       * ท่าพัก: ห้อยลงแนบลำตัว กางออกนิดเดียวพอให้แก้วไม่จมสะโพก (ตาม comp)
+       *
+       * เล็งจาก "ของจริงที่ตาเห็น" ไม่ใช่จากเลขในสเปซไหน: วัดทิศ ไหล่ -> กลางเนื้อแขนทั้งท่อน
+       * ในพิกัดโลก แล้วหมุนให้ทิศนั้นไปทับทิศที่ต้องการ วิธีนี้ไม่ต้องรู้เลยว่าแขนถูกสะท้อน
+       * มาหรือไม่ และไม่พังถ้าโครงเปลี่ยน — ที่ผ่านมาพลาดเพราะไปคิดเองว่าเวกเตอร์ในสเปซไหน
+       * ต้องกลับเครื่องหมายบ้าง
+       */
+      const aimAt = (node, tip, want) => {
+        model.updateMatrixWorld(true)
+        const origin = node.getWorldPosition(new THREE.Vector3())
+        // เล็งด้วย "กลางเนื้อมือ" เป็นปลายแขนเสมอ ไม่ใช่ centroid ของทั้งกิ่ง —
+        // ทั้งกิ่งมีบ่าซึ่งจมอยู่ในลำตัวถ่วงอยู่ เล็ง centroid แล้วแขนเลยเอียงเข้าหาตัว
+        const box = new THREE.Box3()
+        tip.traverse((o) => {
+          if (!o.isMesh || !o.visible) return
+          o.geometry.computeBoundingBox()
+          box.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld))
+        })
+        if (box.isEmpty()) return
+        const cur = box.getCenter(new THREE.Vector3()).sub(origin)
+        if (cur.lengthSq() < 1e-8) return
+        const parentQ = node.parent.getWorldQuaternion(new THREE.Quaternion())
+        const inv = parentQ.clone().invert()
+        // want ให้มาในสเปซของ model (ที่ outward ±x นิยามไว้) — ต้องแปลงเป็นสเปซโลกก่อน
+        // ตัว mascot ถูกหมุน 180° เวลายืนหันหลัง +x ของ model จึงเป็น -x ของโลก
+        // ข้ามขั้นนี้แล้วแขนไปโผล่อีกข้างของลำตัว (วัดได้ x กลับเครื่องหมายเป๊ะ ๆ)
+        const wantWorld = want.clone().applyQuaternion(model.getWorldQuaternion(new THREE.Quaternion()))
+        // แปลงทั้งสองทิศเข้าสเปซแม่ก่อนค่อยหาการหมุน — quaternion ที่ได้จึงเอาไปคูณ
+        // กับ quaternion ของ node ได้ตรง ๆ
+        const a = cur.applyQuaternion(inv).normalize()
+        const b = wantWorld.applyQuaternion(inv).normalize()
+        node.quaternion.premultiply(new THREE.Quaternion().setFromUnitVectors(a, b))
         model.updateMatrixWorld(true)
       }
 
+      // เอียงออกนอกตัว 0.22 — ดิ่ง 100% แล้วแขนจมอยู่ในเงาลำตัว (ลำตัวกว้างครึ่งหนึ่ง 0.43
+      // ส่วนหัวไหล่อยู่ที่ 0.31 มือจึงต้องออกไปอย่างน้อย ~0.45 ถึงจะพ้นขอบเสื้อ)
+      const down = new THREE.Vector3(0.22 * armMug.outward, -1, 0).normalize()
       /**
-       * ซ่อน "ตอข้อมือ" ที่ GLB ปั้นมาท้ายฝ่ามือ
+       * เล็งสองข้อสลับกันสองรอบ — รอบเดียวไม่พอ
        *
-       * ชิ้นนั้นกว้าง 0.38 ขณะที่ท่อนแขนที่ปั้นใหม่ตาม comp เรียวเหลือ 0.22 มันจึงโผล่ออกมา
-       * เป็นขั้นบันไดข้างข้อมือ — เห็นชัดว่าแขนไม่ใช่ชิ้นเดียวตรงรอยนี้เอง
-       * ตอนท่อนแขนยังอ้วนกว่านี้มันถูกกลืนไปเลยไม่เคยเป็นปัญหา
-       *
-       * หาแบบไม่ต้องรู้ชื่อ mesh: ชิ้นที่อยู่ "หลังสุด" ตามแกนมือ และหลังพ้นฝ่ามือไปแล้ว
-       * กล่องท่อนแขนคลุมช่วงนั้นอยู่ ซ่อนแล้วไม่เหลือรู
+       * จัดไหล่ให้มือดิ่งแล้ว พอไปจัดศอกต่อ มือจะเหวี่ยงออกจากแนวเดิม (จุดหมุนศอกไม่ได้อยู่
+       * บนเส้นไหล่-มือพอดี) วัดจริงแล้วเพี้ยนกลับไป 14° ทำสลับกันอีกรอบก็เข้าที่
        */
-      if (mugHand) {
-        const invW = armMug.wrist.matrixWorld.clone().invert()
-        const dir = mugHand.dir
-        let palm = null
-        const along = []
-        armMug.wrist.traverse((o) => {
-          if (!o.isMesh || !o.visible) return
-          o.geometry.computeBoundingBox()
-          const bb = o.geometry.boundingBox
-            .clone()
-            .applyMatrix4(invW.clone().multiply(o.matrixWorld))
-          const size = bb.getSize(new THREE.Vector3())
-          const at = bb.getCenter(new THREE.Vector3()).dot(dir)
-          const vol = size.x * size.y * size.z
-          const absDir = new THREE.Vector3(Math.abs(dir.x), Math.abs(dir.y), Math.abs(dir.z))
-          if (!palm || vol > palm.vol) palm = { vol, at, len: size.dot(absDir) }
-          along.push({ o, at })
-        })
-        const back = along.reduce((lo, m) => (m.at < lo.at ? m : lo))
-        if (palm && back.at < palm.at - palm.len * 0.4) back.o.visible = false
+      for (let i = 0; i < 2; i++) {
+        aimAt(armMug.elbow, armMug.wrist, down)
+        aimAt(armMug.shoulder, armMug.wrist, down)
       }
+      armMug.shoulder.userData.rest = armMug.shoulder.quaternion.clone()
+      armMug.elbow.userData.rest = armMug.elbow.quaternion.clone()
 
       const mug = makeCoffeeCup()
       // แขวนกับข้อมือ แก้วจะได้ติดไปกับมือทุกท่า (ของเดิมผูกกับข้อศอก พอขยับแขนแล้วหลุดมือ)
@@ -1381,6 +1526,10 @@ export function Mascot({
       mug.userData.grip = hand.isEmpty() ? new THREE.Vector3() : hand.getCenter(new THREE.Vector3())
       mug.position.copy(mug.userData.grip)
       armMug.wrist.add(mug)
+      // แก้วเอียงได้เองตอนยกดื่ม ห้ามถูกรวมเข้ากับมือ
+      mug.traverse((o) => {
+        o.userData.noMerge = true
+      })
       rig.current.mug = mug
 
       /**
@@ -1425,6 +1574,10 @@ export function Mascot({
         ik.target.x += hs.x * 0.16 * armMug.outward
       }
       rig.current.sipIK = ik
+
+      // แก้วไม่นับ มันเป็นของที่ถืออยู่ ไม่ใช่ชิ้นของแขน
+      rig.current.mugParts = armParts(armMug, mug)
+      rig.current.mugMerged = mergeArm(armMug)
     }
 
     headGroup.current = g
@@ -1442,17 +1595,34 @@ export function Mascot({
   }, [model])
 
 
-  // ทาสีแยกชิ้นส่วนแขน — เก็บ material เดิมไว้บน mesh แล้วสลับกลับตอนปิด
+  /**
+   * ทาสีแยกชิ้นส่วนแขน — เก็บ material เดิมไว้บน mesh แล้วสลับกลับตอนปิด
+   *
+   * ทาทั้งสองแขน และ "นับสีใหม่ทีละข้าง" ไม่ใช่ไล่ยาวต่อกัน — ชิ้นลำดับเดียวกันของสองแขน
+   * จึงได้สีเดียวกัน (บ่าแดงทั้งคู่ แขนเสื้อเขียวทั้งคู่) ซึ่งเป็นสิ่งที่ต้องการเวลาเทียบว่า
+   * ข้างไหนมีชิ้นเกิน/ขาด ถ้าไล่สีต่อกันข้ามแขน สีจะเลื่อนกันทั้งชุดและเทียบไม่ได้เลย
+   */
   useEffect(() => {
-    const parts = rig.current.pointParts
-    if (!parts) return
-    parts.forEach((m, i) => {
-      // ถ้าโหมดปั้นทาเทาไปแล้ว material ที่เห็นตอนนี้คือดินเทา ไม่ใช่ของจริง — เอาของจริงจาก clayFrom
-      m.userData.armMat = m.userData.armMat ?? m.userData.clayFrom ?? m.material
-      // กัน ClayMode (App.jsx) ทาเทาทับสี debug ทุกครึ่งวินาที
-      m.userData.keepColor = pose.armDebug
-      m.material = pose.armDebug ? debugMat(i) : m.userData.armMat
+    const lists = [rig.current.pointParts, rig.current.mugParts].filter(Boolean)
+    if (!lists.length) return
+    lists.forEach((parts) => {
+      parts.forEach((m, i) => {
+        // ถ้าโหมดปั้นทาเทาไปแล้ว material ที่เห็นตอนนี้คือดินเทา ไม่ใช่ของจริง — เอาของจริงจาก clayFrom
+        m.userData.armMat = m.userData.armMat ?? m.userData.clayFrom ?? m.material
+        // กัน ClayMode (App.jsx) ทาเทาทับสี debug ทุกครึ่งวินาที
+        m.userData.keepColor = pose.armDebug
+        m.material = pose.armDebug ? debugMat(i) : m.userData.armMat
+        // ชิ้นที่ถูกรวมไปแล้วเท่านั้นที่ต้องซ่อน — ชิ้นที่ไม่มีคู่ให้รวม (เช่นแขนเสื้อกับบ่า
+        // ที่ตั้ง receiveShadow ต่างกันเลยรวมกันไม่ได้) ยังเป็นตัวจริงที่ต้องแสดงตลอด
+        m.visible = pose.armDebug || !m.userData.mergedAway
+      })
     })
+    const merged = [rig.current.pointMerged, rig.current.mugMerged].filter(Boolean)
+    merged.forEach((list) =>
+      list.forEach((m) => {
+        m.visible = !pose.armDebug
+      }),
+    )
   }, [pose.armDebug, model])
 
   // ลากวางแขน (debug) — drag.current = มุมไหล่ที่กำลังลากอยู่, handle = ลูกบอลจับที่ปลายนิ้ว
@@ -1469,6 +1639,8 @@ export function Mascot({
   const blink = useRef({ next: 2, closing: 0 })
   // บีต eyes — ตาโต + ประกาย
   const eyeGrow = useRef(0)
+  // มุมหันหัวช่วง intro — ไต่เข้าหาเป้าด้วย damp จึงต้องเก็บค่าข้ามเฟรม
+  const introLook = useRef(0)
   const eyec = useControls('Eyes (ฉาก 2)', {
     eyesScale: { value: 0.85, min: 0, max: 2.5, step: 0.05, label: 'ตาโตขึ้น (เท่า)' },
     eyesEase: { value: 0.16, min: 0.02, max: 0.5, step: 0.01, label: 'หน่วง' },
@@ -1511,6 +1683,57 @@ export function Mascot({
       headGroup.current.rotation.x =
         fol.headBasePitch + y * fol.headPitch * dir + raise * sipc.sipHeadPitch
       headGroup.current.rotation.z = fol.headBaseRoll - x * fol.headRoll * dir
+
+      /**
+       * intro บีตแรก: หัวต้องตรงเป๊ะ แล้วค่อยหันซ้าย-ขวาแบบสงสัย
+       *
+       * เขียนทับค่าที่เพิ่งคำนวณไป ไม่ใช่บวกเพิ่ม — ท่าตั้งต้นของหัวมี yaw -0.22 กับ roll -0.14
+       * ติดมาด้วย (ท่าเท่ ๆ ของฉากปกติ) บวกทับแล้วยังไงก็ไม่มีทางได้หน้าตรงสนิทตามที่ต้องการ
+       *
+       * ครึ่งแรกของบีตนิ่งสนิทให้กระพริบตา ครึ่งหลังกวาดหัว ซ้าย -> ขวา -> กลับกลาง
+       * แล้วคลายกลับไปหาท่าปกติตอนบีต pull เริ่ม กล้องจะได้ไม่รับช่วงต่อจากหัวที่ค้างเอียง
+       */
+      if (introState.playing && introState.b.pull < 1) {
+        const f = introState.b.face
+        /**
+         * หันหัวไปมอง "ทางที่ crop tool อยู่" — ทางเดียว ช้า ๆ ไม่ใช่กวาดซ้ายขวา
+         *
+         * มุมไม่ได้ตั้งเอง คิดจากตำแหน่งจริงของกรอบในโลก (introState.crop) เทียบกับทิศหน้า
+         * ที่ล็อกไว้ตอนเริ่ม intro — ย้ายกรอบไปไว้ตรงไหน หัวก็ยังหันตามถูกทางเสมอ
+         * หนีบมุมไว้ที่ INTRO_LOOK_MAX กันคอบิดเกินจริงถ้ากรอบอยู่หลังตัว
+         *
+         * ใช้ damp เข้าหาเป้าแทนคีย์เฟรม — ได้ทั้งความช้าและความนุ่มโดยไม่มีจุดกระตุก
+         * และถ้าเฟรมตกก็ยังไปถึงเป้าเท่ากัน (damp คิดจาก dt ไม่ใช่ต่อเฟรม)
+         */
+        const look = introState.close && introState.crop
+        let want = 0
+        if (look) {
+          headGroup.current.getWorldPosition(TMP_V)
+          TMP_V2.copy(introState.crop).sub(TMP_V).setY(0).normalize()
+          const f0 = introState.close.face
+          // มุมเซ็นจาก "ทิศหน้าที่ล็อกไว้" ไปหา "ทิศของกรอบ" รอบแกน Y
+          want = Math.atan2(
+            f0.z * TMP_V2.x - f0.x * TMP_V2.z,
+            f0.x * TMP_V2.x + f0.z * TMP_V2.z,
+          )
+          want = clamp(want, -INTRO_LOOK_MAX, INTRO_LOOK_MAX)
+        }
+        // เริ่มหลังขยิบตาจบ แล้วค่อย ๆ ไต่ไปหาเป้า
+        const turn = f > 0.6 ? want : 0
+        introLook.current = damp(introLook.current, turn, INTRO_LOOK_EASE, dt)
+        const blend = 1 - introState.b.pull
+        headGroup.current.rotation.y = lerp(headGroup.current.rotation.y, introLook.current, blend)
+        headGroup.current.rotation.x = lerp(
+          headGroup.current.rotation.x,
+          Math.abs(introLook.current) * 0.3,
+          blend,
+        )
+        headGroup.current.rotation.z = lerp(
+          headGroup.current.rotation.z,
+          introLook.current * 0.16,
+          blend,
+        )
+      }
     }
     if (root.current) {
       // ลำตัวนิ่ง — หันตามเมาส์เฉพาะหัว
@@ -1568,19 +1791,25 @@ export function Mascot({
     if (r.mugShoulder?.userData.rest) {
       r.mugShoulder.quaternion
         .copy(r.mugShoulder.userData.rest)
-        .multiply(TMP_Q.setFromEuler(TMP_E.set(pose.mugShoulderX, 0, pose.mugShoulderZ)))
+        .multiply(
+          TMP_Q.setFromEuler(
+            TMP_E.set(pose.mugShoulderX, pose.mugShoulderY, pose.mugShoulderZ),
+          ),
+        )
       // เลื่อนทั้งแขนออกจากลำตัว — เขียนจาก base ทุกเฟรม ไม่ใช่บวกสะสม
       const ud = r.mugShoulder.userData
       r.mugShoulder.position.set(
         ud.baseX + (ud.outward ?? 1) * pose.mugArmOut,
-        ud.baseY,
+        ud.baseY + pose.mugArmUp,
         ud.baseZ,
       )
     }
     if (r.mugElbow?.userData.rest) {
       r.mugElbow.quaternion
         .copy(r.mugElbow.userData.rest)
-        .multiply(TMP_Q.setFromEuler(TMP_E.set(pose.mugElbowX, 0, 0)))
+        .multiply(
+          TMP_Q.setFromEuler(TMP_E.set(pose.mugElbowX, pose.mugElbowY, pose.mugElbowZ)),
+        )
     }
 
     // ฉาก 2: IK สองท่อน — พา "จุดจับแก้ว" ไปที่ปาก แล้ว slerp จากท่ายืนไปหาท่านั้นตาม raise
@@ -1675,6 +1904,37 @@ export function Mascot({
       }
       handle.current.visible = pose.armDrag
     }
+    /**
+     * บีต crop: แขนที่ชี้ตามกรอบไปตลอดทาง
+     *
+     * ใช้สูตรเดียวกับโหมดลากแขน (แปลงจุดโลก -> สเปซ model -> quaternion ที่หมุนแกนแขนไปทางนั้น)
+     * ต่างกันแค่จุดเป้าไม่ได้มาจากเมาส์ แต่มาจากตำแหน่งจริงของ crop tool ที่ CropRig รายงานไว้
+     *
+     * blend เข้า/ออกด้วยบีตเอง ไม่ตัดเข้าทันที — แขนกระตุกเข้าท่าใหม่อ่านเป็นบั๊ก
+     * ตัวคูณ 0.85 ปลายทาง: ชี้ให้ "ไปทางนั้น" ไม่ใช่เหยียดตรงเป๊ะไปที่กรอบ ซึ่งดูแข็ง
+     */
+    if (
+      (introState.playing || introState.done) &&
+      introState.crop &&
+      r.pointShoulder?.userData.armAxis &&
+      root.current
+    ) {
+      // ชี้ค้างไว้ตลอดบีต title ด้วย — กรอบยังเป็นสิ่งที่เขากำลัง "จัด" อยู่จนจบ
+      const w = introState.b.crop
+      if (w > 0.001) {
+        const sh = r.pointShoulder.getWorldPosition(TMP_V)
+        TMP_V2.copy(introState.crop).sub(sh).normalize()
+        root.current.getWorldQuaternion(TMP_Q).invert()
+        TMP_V2.applyQuaternion(TMP_Q)
+        TMP_Q.setFromUnitVectors(r.pointShoulder.userData.armAxis, TMP_V2)
+        TMP_E.setFromQuaternion(TMP_Q, 'XYZ')
+        const blend = w * 0.85
+        r.pointShoulder.rotation.x = lerp(r.pointShoulder.rotation.x, TMP_E.x, blend)
+        r.pointShoulder.rotation.y = lerp(r.pointShoulder.rotation.y, TMP_E.y, blend)
+        r.pointShoulder.rotation.z = lerp(r.pointShoulder.rotation.z, TMP_E.z, blend)
+      }
+    }
+
     if (dragging.current && r.pointShoulder?.userData.armAxis && root.current) {
       // ระนาบที่ลากคือระนาบผ่านหัวไหล่ที่หันเข้าหากล้อง — ลากในระนาบจอตรง ๆ ไม่ต้องเดาความลึก
       const sh = r.pointShoulder.getWorldPosition(TMP_V)
@@ -1695,12 +1955,41 @@ export function Mascot({
       }
     }
 
+    /**
+     * intro ต้องรู้ว่า "ตา" กับ "ทิศหน้า" อยู่ตรงไหนในโลก กล้องช่วงประชิดเล็งจากสองค่านี้
+     * เขียนเฉพาะตอน intro ยังเล่นอยู่ — เลิกเล่นแล้วไม่ต้องจ่ายค่าคำนวณทุกเฟรม
+     */
+    if (introState.playing && headGroup.current) {
+      const eyeMeshes = eyes.current
+      if (eyeMeshes?.length) {
+        INTRO_EYE.set(0, 0, 0)
+        eyeMeshes.forEach((o) => INTRO_EYE.add(o.getWorldPosition(TMP_V)))
+        INTRO_EYE.multiplyScalar(1 / eyeMeshes.length)
+        introState.eyes = INTRO_EYE
+      }
+      /**
+       * ทิศหน้าคิดจาก "ตาอยู่หน้าหัว" ไม่ใช่จากแกนของ object
+       *
+       * getWorldDirection คืนแกน +z ของกลุ่มหัว ซึ่งไม่ได้ผูกกับใบหน้าเลย (กลุ่มนี้ถูกสร้าง
+       * ขึ้นมาใหม่แล้ว attach ชิ้นส่วนเข้าไป แกนจึงเป็นของ world ตอนสร้าง) ลองแล้วกล้อง
+       * ไปจ่ออยู่ข้างหัว — วัดจากตาเทียบจุดกลางหัวแทน ได้ทิศที่ตรงกับที่ตามองเสมอ
+       */
+      headGroup.current.getWorldPosition(TMP_V)
+      introState.face = INTRO_FACE.copy(INTRO_EYE).sub(TMP_V).setY(0).normalize()
+    }
+
     // กระพริบตา: ย่อแกน Y ของ mesh ตา
     const b = blink.current
     b.next -= delta
     if (b.next <= 0) {
       b.closing = 0.13
       b.next = 2.4 + Math.random() * 3.6
+    }
+    // ระหว่าง close-up ของ intro ห้ามกระพริบสองตาตามจังหวะสุ่ม — บีตนี้มีท่าของมันเอง
+    // (ขยิบตาข้างเดียว ดูท้ายฟังก์ชัน) กระพริบสุ่มจะไปตัดจังหวะนั้นพอดี
+    if (introState.playing && introState.b.face < 1) {
+      b.closing = 0
+      b.next = Math.max(b.next, 0.8)
     }
     let k = 1
     if (b.closing > 0) {
@@ -1720,18 +2009,36 @@ export function Mascot({
     if (grow > 0.35) k = 1
     const scaleUp = 1 + grow * eyec.eyesScale
 
-    for (const e of eyes.current) {
+    /**
+     * intro: ขยิบตาข้างเดียวแล้วมีประกายเด้งขึ้นที่ตาข้างนั้น
+     *
+     * กระพริบสองตาอ่านเป็น "มีชีวิต" เฉย ๆ ส่วนขยิบข้างเดียวอ่านเป็น "รู้แล้ว เดี๋ยวจัดให้"
+     * ซึ่งเป็นบุคลิกที่ต้องการของฉากเปิด — ประกายใช้ตัวเดียวกับบีต eyes ของ scroll
+     * ไม่ได้ปั้นเพิ่ม แค่สั่งให้เด้งตามจังหวะขยิบ
+     *
+     * ปิดตาแล้วค่อยเปิด: 0.42-0.62 ของบีต face คือช่วงหลับ ประกายโผล่ตอนกำลังลืม
+     */
+    const iFace = introState.playing ? introState.b.face : 0
+    const wink = iFace > 0 ? Math.sin(clamp(seg(iFace, 0.4, 0.62), 0, 1) * Math.PI) : 0
+    const winkPop = seg(iFace, 0.52, 0.78)
+
+    eyes.current.forEach((e, i) => {
       const base = e.userData.baseScale
-      if (!base) continue
+      if (!base) return
+      // ตาที่ขยิบข้างเดียว — เลือกข้างแรกตามลำดับใน GLB มองจากกล้องแล้วเป็นตาขวาของคนดู
+      const ky = i === WINK_EYE ? k * lerp(1, 0.08, wink) : k
       e.scale.x = damp(e.scale.x, base.x * scaleUp, 0.35, dt)
-      e.scale.y = damp(e.scale.y, base.y * scaleUp * k, 0.45, dt)
+      e.scale.y = damp(e.scale.y, base.y * scaleUp * ky, 0.45, dt)
       for (const s of e.userData.sparks ?? []) {
         // โผล่ช้ากว่าตาเล็กน้อยแล้วค่อยเด้งเกินนิดหนึ่ง — ไม่ให้ดูเหมือนแค่ fade in
-        const pop = seg(grow, 0.25, 1) * (1 + 0.12 * Math.sin(seg(grow, 0.25, 1) * Math.PI))
+        const scrollPop = seg(grow, 0.25, 1) * (1 + 0.12 * Math.sin(seg(grow, 0.25, 1) * Math.PI))
+        const introPop =
+          i === WINK_EYE ? winkPop * (1 + 0.35 * Math.sin(winkPop * Math.PI)) : 0
+        const pop = Math.max(scrollPop, introPop)
         s.scale.setScalar(s.userData.baseRadius * pop * scaleUp)
         s.visible = pop > 0.001
       }
-    }
+    })
   })
 
   const endDrag = () => {
