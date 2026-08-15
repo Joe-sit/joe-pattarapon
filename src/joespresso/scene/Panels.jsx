@@ -2,8 +2,10 @@ import { useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useControls } from 'leva'
 import * as THREE from 'three'
+import { introState } from '../intro'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { useDisposable } from './utils'
+import { Slogan } from './Slogan'
 
 /**
  * ดัด geometry ให้ห่อรอบแกนตั้งแบบผนังทรงกระบอก (เว้าเข้าหากล้อง)
@@ -562,8 +564,127 @@ export function FigmaToolbar({ position, rotation = [0, 0, 0], R, params }) {
   )
 }
 
+/**
+ * ขับ crop tool ตามไทม์ไลน์ intro + รายงานพิกัดโลกให้คนอื่นเล็ง
+ *
+ * กรอบถูกวางไว้ในกลุ่มที่ถูกสเกลรอบจุดกล้อง (depth) พิกัดที่เขียนใน JSX จึงไม่ใช่พิกัดโลก
+ * ใครจะเล็งกรอบนี้ (หัว mascot, แขนที่ชี้) ต้องได้ค่าที่ผ่านการแปลงแล้วเท่านั้น จึงอ่านจาก
+ * matrix จริงของกลุ่มทุกเฟรม ไม่ใช่คำนวณซ้ำจากตัวเลขใน JSX
+ *
+ * ตัวกรอบ bake ตำแหน่งลง vertex ไปแล้ว (curveOnScreen) — ขยับด้วย position ของกลุ่มที่ครอบ
+ * และย่อด้วย scale รอบ "จุดกึ่งกลางกรอบ" ไม่ใช่รอบจุดกำเนิด ไม่งั้นย่อแล้วกรอบจะไหลออกนอกจอ
+ */
+function CropRig({ from, children }) {
+  const g = useRef()
+  const centre = useMemo(() => new THREE.Vector3(...from), [from])
+
+  /**
+   * ปลายทางตอนหด = กล่องจริงของสโลแกนในฉาก
+   *
+   * ทั้งกรอบและสโลแกนอยู่ในสเปซเดียวกันแล้ว (ลูกของกลุ่ม panel เหมือนกัน) เลยคิดตรง ๆ ได้
+   * ไม่ต้องยิงรังสีจากกล้องผ่านกล่องข้อความ DOM กลับเข้าฉากแบบเดิม ซึ่งพังทุกครั้งที่
+   * ระนาบอ้างอิงหรือความโค้งของกรอบเปลี่ยน
+   */
+  const solveTitle = () => {
+    const node = g.current
+    const sl = introState.slogan
+    if (!node || !sl || sl.size.x < 1e-4) return null
+    let box = null
+    node.traverse((o) => {
+      if (!o.isMesh || box) return
+      o.geometry.computeBoundingBox()
+      box = o.geometry.boundingBox.getSize(new THREE.Vector3())
+    })
+    if (!box) return null
+    // เผื่อขอบรอบบล็อก — แนวนอนมากกว่าแนวตั้งเล็กน้อยตามแบบ
+    return {
+      sx: (sl.size.x * 1.14) / box.x,
+      sy: (sl.size.y * 1.3) / box.y,
+      at: [sl.centre.x, sl.centre.y],
+    }
+  }
+
+  useFrame((_, delta) => {
+    const node = g.current
+    if (!node) return
+    const dt = Math.min(delta, 0.05)
+    const move = introState.playing || introState.done ? introState.b.crop : 0
+    const k = move * move * (3 - 2 * move)
+    // ปลายทาง = กลางจอเมื่อมองจากกล้องท่าสุดท้าย (คิดไว้ที่ CROP_TO ในสเปซเดียวกับ from)
+    TMP_A.set(
+      lerp(from[0], CROP_TO[0], k),
+      lerp(from[1], CROP_TO[1], k),
+      lerp(from[2], CROP_TO[2], k),
+    ).sub(centre)
+    // บีต title: หดลงมาครอบคำว่า vision — ขนาดปลายทางคิดจากกล่องข้อความจริงบนจอ
+    if (introState.b.title > 0) {
+      const t = solveTitle()
+      if (t) introState.title = t
+    }
+    const shrink = introState.title ?? null
+    const kt = shrink ? easeIO(introState.b.title) : 0
+    const sx = shrink ? lerp(1, shrink.sx, kt) : 1
+    const sy = shrink ? lerp(1, shrink.sy, kt) : 1
+    if (shrink) {
+      TMP_A.x = lerp(TMP_A.x, shrink.at[0] - centre.x, kt)
+      TMP_A.y = lerp(TMP_A.y, shrink.at[1] - centre.y, kt)
+    }
+    // ตำแหน่งของกลุ่ม = จุดที่อยากให้ "กลางกรอบ" ไปอยู่ ลบด้วยจุดกึ่งกลางที่ถูกสเกลแล้ว
+    // (geometry bake จุดกึ่งกลางไว้ที่ centre ไม่ใช่ที่จุดกำเนิดของกลุ่ม)
+    TMP_A.x += centre.x * (1 - sx)
+    TMP_A.y += centre.y * (1 - sy)
+    // หน่วงอีกชั้นให้ลื่น — ค่าบีตเป็นเส้นตรง ถ้าเอาไปใช้ตรง ๆ จะเห็นหัวท้ายแข็ง
+    const a = 1 - Math.exp(-dt / 0.12)
+    node.position.lerp(TMP_A, a)
+    node.scale.set(
+      node.scale.x + (sx - node.scale.x) * a,
+      node.scale.y + (sy - node.scale.y) * a,
+      1,
+    )
+
+    /**
+     * ตอนกรอบหดไปครอบสโลแกน การ์ดที่ลากมาด้วยต้องจางหายไป
+     *
+     * ปลายทางตามแบบคือเหลือแค่กรอบรอบข้อความ ถ้าปล่อยการ์ดไว้มันจะกลายเป็นแผ่นสีทับตัวหนังสือ
+     * เว้นตัวกรอบเอง (renderOrder 10) ไว้ ไม่งั้นเครื่องมือหายไปทั้งชุด
+     */
+    const fade = 1 - easeIO(introState.b.title)
+    node.traverse((o) => {
+      if (!o.isMesh || o.renderOrder === 10) return
+      /**
+       * ต้องโคลน material ก่อนแตะ opacity เสมอ
+       *
+       * โหมดปั้นสลับทุก mesh ไปใช้ material ดินเทา "ก้อนเดียวกันทั้งฉาก" — ลด opacity ตรง ๆ
+       * แล้วทั้งฉากจางหายพร้อมกัน (เจอมาแล้ว: เหลือแต่หัวกับตัวหนังสือลอยอยู่บนจอเปล่า)
+       * ติด keepColor ไว้ด้วย ClayMode จะได้ไม่วนกลับมาทับ material ที่โคลนไว้ทุกครึ่งวินาที
+       */
+      if (!o.userData.fadeOwn) {
+        o.material = o.material.clone()
+        o.userData.fadeOwn = true
+        o.userData.keepColor = true
+        o.userData.baseOpacity = o.material.opacity ?? 1
+      }
+      const m = o.material
+      m.opacity = o.userData.baseOpacity * fade
+      m.transparent = true
+      o.visible = m.opacity > 0.002
+    })
+
+    if (!introState.crop) introState.crop = new THREE.Vector3()
+    node.getWorldPosition(introState.crop)
+    // จุดที่แขนต้องเล็งคือ "กลางกรอบ" ไม่ใช่จุดกำเนิดของกลุ่ม — บวกกลับด้วยจุดกึ่งกลางที่สเกลแล้ว
+    introState.crop.add(
+      TMP_B.set(centre.x * node.scale.x, centre.y * node.scale.y, centre.z)
+        .applyQuaternion(node.getWorldQuaternion(TMP_Q))
+        .multiplyScalar(node.parent.getWorldScale(TMP_C).x || 1),
+    )
+  })
+
+  return <group ref={g}>{children}</group>
+}
+
 /** กรอบเลือก + จุดจับ 4 มุม — วางบนจอโค้งใบเดียวกับ panel */
-function SelectionBox({ position, size = [4.6, 1.9], color = '#7C5CFC', curve = 1, eyeZ = 14.5 }) {
+function SelectionBox({ position, size = [4.6, 1.9], color = '#7C5CFC', curve = 1, eyeZ = 14.5, overlay = false }) {
   const [w, h] = size
   const hw = w / 2
   const hh = h / 2
@@ -596,9 +717,20 @@ function SelectionBox({ position, size = [4.6, 1.9], color = '#7C5CFC', curve = 
 
   // ไม่ใส่ position ที่ group: curveOnScreen ยุบ position ลง vertex ไปแล้ว
   // (ใส่ซ้ำ = เลื่อนสองเท่า กรอบเลยหลุดออกไปจากการ์ดที่ควรครอบ)
+  /**
+   * overlay = วาดทับทุกอย่างเสมอ (ปิด depth test) ใช้กับกรอบที่ทำหน้าที่เป็น "เครื่องมือ"
+   * ไม่ใช่วัตถุในฉาก — กรอบ crop วิ่งไปครอบคำที่อยู่หน้าสุด แต่ตัวมันลอยอยู่ลึกกว่าตัว mascot
+   * ถ้าเปิด depth test ตามปกติ ครึ่งขวาของกรอบจะหายเข้าไปหลังตัวละคร
+   */
   return (
-    <mesh geometry={frame}>
-      <meshBasicMaterial color={color} toneMapped={false} side={THREE.DoubleSide} />
+    <mesh geometry={frame} renderOrder={overlay ? 10 : 0}>
+      <meshBasicMaterial
+        color={color}
+        toneMapped={false}
+        side={THREE.DoubleSide}
+        depthTest={!overlay}
+        depthWrite={!overlay}
+      />
     </mesh>
   )
 }
@@ -607,6 +739,29 @@ function SelectionBox({ position, size = [4.6, 1.9], color = '#7C5CFC', curve = 
 const CAM0 = [0, 4.1, 14.5]
 
 const TOOLBAR_POS = [-5.5, 0.2, -2.2]
+
+/** ที่อยู่ตั้งต้นของ crop tool (สเปซในกลุ่ม panel) */
+const CROP_FROM = [-5.0, 2.3, -3.45]
+/**
+ * ปลายทางกลางจอ — คิดจากรังสีกล้องท่าสุดท้าย ไม่ได้กะ
+ *
+ * กล้องอยู่ที่ CAM0 มองไปที่ (0, 1.9, 0) จุดบนรังสีนั้นที่ระดับความลึกเดิมของกรอบ
+ * (z = -3.45 ในสเปซนี้) คือ y = 1.38 — วางตรงนี้แล้วกรอบอยู่กลางเฟรมพอดี
+ */
+const CROP_TO = [0, 1.38, -3.45]
+
+/**
+ * ที่อยู่ของสโลแกน — กลางบนของฉาก ช่วงฟ้าเหนือหัว mascot ที่ว่างอยู่
+ * ระดับความลึกเดียวกับกรอบ crop กรอบจะได้ครอบได้พอดีโดยไม่ต้องคิดเปอร์สเปคทีฟ
+ */
+const SLOGAN_AT = [0, 3.15, -3.45]
+
+const TMP_A = new THREE.Vector3()
+const TMP_B = new THREE.Vector3()
+const TMP_C = new THREE.Vector3()
+const TMP_Q = new THREE.Quaternion()
+const easeIO = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
+const lerp = (a, b, t) => a + (b - a) * t
 
 /**
  * วาง toolbar ให้แนบ "จอโค้ง" ใบเดียวกับ panel
@@ -665,19 +820,6 @@ export function Panels() {
         opacity={0.92}
         rows={[{ y: 0, w: 1.2, h: 0.22, color: '#FFFFFF', opacity: 0.55 }]}
       />
-      <CurvedPanel
-        curve={screenCurve}
-        eyeZ={CAM0[2]}
-        position={[-5.0, 2.3, -3.6]}
-        rotation={[0, 0.22, 0]}
-        size={[3.4, 2.1]}
-        color="#FFFFFF"
-        opacity={0.5}
-        rows={[
-          { y: 0.24, w: 2.5, h: 0.5, color: '#5B4BE8', opacity: 0.9 },
-          { y: -0.3, w: 2.1, h: 0.1, color: '#5B4BE8', opacity: 0.5 },
-        ]}
-      />
 
       {/* ขวา */}
       <CurvedPanel
@@ -712,7 +854,33 @@ export function Panels() {
           { y: -0.3, x: 0.6, w: 2.0, h: 0.18, color: '#FFFFFF' },
         ]}
       />
-          <SelectionBox position={[-5.0, 2.3, -3.45]} size={[3.7, 2.3]} curve={screenCurve} eyeZ={CAM0[2]} />
+          {/*
+            กรอบ crop ไม่โค้งตามจอเหมือน panel ใบอื่น (curve = 0)
+            เพราะมันต้อง "ย้ายที่" ได้ตามไทม์ไลน์ intro — curveOnScreen ดัด vertex รอบตาโดยอิง
+            ตำแหน่งตอนสร้าง พอย้ายไปที่อื่นความโค้งที่ bake ไว้จะผิดที่ กรอบบิดเป็นสี่เหลี่ยมคางหมู
+            (เห็นชัดตอนมันไปครอบคำว่า vision) แบนแล้วย้าย/ย่อได้ตรงตามที่คำนวณทุกกรณี
+          */}
+          {/* สโลแกนอยู่ในสเปซเดียวกับกรอบ crop — กรอบจึงคิดขนาด/ตำแหน่งจากกล่องของมันได้ตรง ๆ
+              โดยไม่ต้องแปลงข้ามระบบพิกัด (เมื่อก่อนอ่านกล่องจาก DOM แล้วยิงรังสีกลับเข้าฉาก) */}
+          <Slogan position={SLOGAN_AT} />
+          <CropRig from={CROP_FROM}>
+            {/* การ์ดที่ถูกกรอบเลือกอยู่ = ของชิ้นเดียวกับเครื่องมือ ต้องถูกลากไปด้วยกัน
+                curve 0 เหมือนกรอบ: ทั้งคู่ย้ายที่ ความโค้งที่ bake ไว้ตอนสร้างจะผิดที่ทันที */}
+            <CurvedPanel
+              curve={0}
+              eyeZ={CAM0[2]}
+              position={[-5.0, 2.3, -3.6]}
+              rotation={[0, 0.22, 0]}
+              size={[3.4, 2.1]}
+              color="#FFFFFF"
+              opacity={0.5}
+              rows={[
+                { y: 0.24, w: 2.5, h: 0.5, color: '#5B4BE8', opacity: 0.9 },
+                { y: -0.3, w: 2.1, h: 0.1, color: '#5B4BE8', opacity: 0.5 },
+              ]}
+            />
+            <SelectionBox position={CROP_FROM} size={[3.7, 2.3]} curve={0} eyeZ={CAM0[2]} overlay />
+          </CropRig>
         </group>
       </group>
     </>

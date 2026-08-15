@@ -11,6 +11,15 @@ import { OrbitControls } from '@react-three/drei'
 import { button, levaStore, useControls } from 'leva'
 import { addRim, clamp, damp, lerp, LOW_END } from './scene/utils'
 import { BEATS, scrollState } from './scroll'
+import { introState, tickIntro } from './intro'
+
+/** จุดสำรอง เผื่ออ่านตำแหน่งตาจาก mascot ไม่ทัน (เฟรมแรกสุด) — วัดจากโมเดลจริง */
+const INTRO_EYES = new THREE.Vector3(0, 2.55, 1.05)
+const INTRO_FACE = new THREE.Vector3(0, 0, 1)
+const CLOSE_P = new THREE.Vector3()
+/** cubic in-out — ออกตัวช้ากว่าและเข้าจอดนุ่มกว่า smoothstep */
+const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
+const PIVOT = new THREE.Vector3()
 import { setSceneReady } from '@/stores/ready'
 
 /** ใส่ rim light ให้วัตถุทึบทั้งฉาก — ขอบติดแสงขาวนวล (layer 09) */
@@ -151,6 +160,18 @@ function ClayLights() {
   )
 }
 
+/**
+ * ตัวเดินเวลาของ intro — มีตัวเดียวในฉาก
+ *
+ * อยู่ใน Canvas เพราะต้องเดินด้วย delta ของ render loop เดียวกับทุกอย่างที่มันขับ
+ * (ถ้าใช้ setInterval ฝั่ง DOM เวลาจะเดินคนละนาฬิกากับกล้อง เห็นเป็นกระตุกตอนเฟรมตก)
+ * priority -1 = เดินก่อนใครในเฟรมนั้น คนอื่นจะได้อ่านค่าบีตของเฟรมนี้ ไม่ใช่ของเฟรมที่แล้ว
+ */
+function IntroClock() {
+  useFrame((_, delta) => tickIntro(Math.min(delta, 0.05)), -1)
+  return null
+}
+
 /** กล้องเอียงตามเมาส์เล็กน้อย — ให้ฉากมีมิติโดยไม่ต้องหมุนวัตถุ */
 function CameraRig({ strength = 1 }) {
   const { camera } = useThree()
@@ -240,7 +261,63 @@ function CameraRig({ strength = 1 }) {
       camera.position.lerp(look.current, z * zm.zoomIn)
     }
 
-    const fov = lerp(cam.fov, fc.focusFov, k) - z * zm.zoomFov
+    let fov = lerp(cam.fov, fc.focusFov, k) - z * zm.zoomFov
+
+    /**
+     * intro: เริ่มจากหน้าตรงระยะประชิด แล้วถอยออกพร้อมกวาดรอบตัวไปหามุมสุดท้าย
+     *
+     * ไม่ lerp ตำแหน่งเป็นเส้นตรง — เส้นตรงจากหน้าไปหลังจะ "ทะลุ" ตัว mascot
+     * และภาพที่ได้คือกล้องพุ่งผ่านตัวไป ไม่ใช่กวาดรอบ จึงแปลงเป็นพิกัดเชิงขั้วรอบแกน Y
+     * ที่จุดกลางตัว แล้ว lerp มุม/รัศมี/ความสูงแยกกัน — ได้ทางเดินเป็นส่วนโค้ง
+     *
+     * ทิศหน้าอ่านจาก mascot จริง (introState.face) ไม่ได้ตั้งเอง ตัวมันหมุน 180° ตอนยืนหันหลัง
+     * ถ้าเขียนทิศตายตัวไว้ วันที่เปลี่ยนท่ายืนกล้องจะไปจ่อท้ายทอย
+     */
+    if (introState.playing) {
+      // ล็อกจุดตา/ทิศหน้าครั้งเดียวตอนเฟรมแรกที่ mascot รายงานเข้ามา — ดูคอมเมนต์ที่ introState.close
+      if (!introState.close && introState.eyes && introState.face) {
+        introState.close = {
+          eye: introState.eyes.clone(),
+          face: introState.face.clone(),
+        }
+      }
+      const e = introState.close?.eye ?? INTRO_EYES
+      const face = introState.close?.face ?? INTRO_FACE
+      // ระยะประชิด: ห่างจากตาออกมาทางด้านหน้าเท่านี้ พอให้เห็นตาสองข้างเต็มเฟรม
+      /**
+       * ระยะประชิดไม่ได้นิ่ง — ดันเข้าหาหน้าตลอดบีตแรก
+       *
+       * ตอนสปแลชเปิดรูออก ฉากข้างหลังต้องกำลังเคลื่อนอยู่แล้ว ไม่งั้นรูบานไปเจอภาพนิ่ง
+       * แล้วค่อยขยับ ซึ่งอ่านเป็นสองจังหวะ ดันจาก 3.6 เข้าไป 2.45 ระหว่างบีต face
+       * ตัวอักษรที่กำลังถอยออกกับฉากที่กำลังเข้ามาเดินสวนกัน = พารัลแลกซ์
+       */
+      // ease แบบ cubic-in-out นุ่มกว่า smoothstep ตรงหัวและท้าย — ทั้งบีตนี้เป็นการเคลื่อนช้า
+      // อยู่แล้ว จุดที่ตาจับได้คือตอนเริ่มกับตอนหยุด
+      const push = easeInOut(introState.b.face)
+      CLOSE_P.copy(e).addScaledVector(face, lerp(3.6, 2.45, push))
+      const kk = easeInOut(introState.b.pull)
+      // จุดหมุนของการกวาด — ใต้ตาลงมาหน่อย ให้ส่วนโค้งอ้อมรอบลำตัว ไม่ใช่รอบหัว
+      PIVOT.set(0, e.y - 0.9, 0)
+      const a0 = Math.atan2(CLOSE_P.x - PIVOT.x, CLOSE_P.z - PIVOT.z)
+      const a1 = Math.atan2(camera.position.x - PIVOT.x, camera.position.z - PIVOT.z)
+      // เลือกทางที่สั้นกว่าเสมอ ไม่งั้นบางเฟรมกล้องกวาดอ้อมโลก
+      let da = a1 - a0
+      while (da > Math.PI) da -= Math.PI * 2
+      while (da < -Math.PI) da += Math.PI * 2
+      const r0 = Math.hypot(CLOSE_P.x - PIVOT.x, CLOSE_P.z - PIVOT.z)
+      const r1 = Math.hypot(camera.position.x - PIVOT.x, camera.position.z - PIVOT.z)
+      const ang = a0 + da * kk
+      const rad = lerp(r0, r1, kk)
+      camera.position.set(
+        PIVOT.x + Math.sin(ang) * rad,
+        lerp(CLOSE_P.y, camera.position.y, kk),
+        PIVOT.z + Math.cos(ang) * rad,
+      )
+      look.current.lerpVectors(e, look.current, kk)
+      // ระยะประชิดต้องแคบกว่าเดิม ไม่งั้นหน้าจะบวมแบบเลนส์ไวด์
+      fov = lerp(20, fov, kk)
+    }
+
     if (Math.abs(camera.fov - fov) > 0.01) {
       camera.fov = fov
       camera.updateProjectionMatrix()
@@ -469,6 +546,7 @@ export function Scene() {
 
       {clay ? <ClayLights /> : <Lights />}
       {/* CameraRig ขับกล้องจาก scroll — ต้องปิดตอน orbit ไม่งั้นสองตัวแย่งกันคุมกล้อง */}
+      <IntroClock />
       {!(clay && clayOrbit) && <CameraRig />}
       {clay && clayOrbit && <ClayCam />}
       {clay && clayOrbit && (

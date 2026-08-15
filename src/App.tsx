@@ -17,6 +17,7 @@ const ToolbarWorkspace = lazy(() => import('@/joespresso/ToolbarWorkspace'))
 import { SITE } from '@/config/site'
 import { setEyeOpen, setIntroDone } from '@/stores/intro'
 import { useSceneReady } from '@/stores/ready'
+import { startIntro } from '@/joespresso/intro'
 import { useT } from '@/i18n/store'
 
 function Footer() {
@@ -97,6 +98,7 @@ export function App() {
             onDone={finishSplash}
             ready={sceneReady}
             onIntroDone={() => setLettersDone(true)}
+            onOpenStart={startIntro}
           />
         ) : landedOn === '/mascot' ? (
           <JoeSplash onDone={finishSplash} />
