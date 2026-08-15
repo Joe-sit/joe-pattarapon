@@ -29,6 +29,13 @@ type JoeLettersSplashProps = {
    * ใน 7 วินาที เฟรมแย่สุด 4.1 วินาที เทียบกับหน้าเปล่าที่ได้ 113 เฟรม)
    */
   onIntroDone?: () => void
+  /**
+   * รูเริ่มเปิดแล้ว — ยิงตอน "เริ่ม" เปิด ไม่ใช่ตอนจบ
+   *
+   * ฉากข้างหลังต้องเริ่มขยับพร้อมกับที่รูบาน คนดูถึงจะรู้สึกว่าพุ่งเข้าไปในฉาก
+   * ถ้ารอให้สปแลชหายก่อนค่อยเริ่ม ภาพที่ได้คือรูเปิดไปเจอ "ภาพนิ่ง" แล้วค่อยขยับ
+   */
+  onOpenStart?: () => void
 }
 
 /**
@@ -48,13 +55,43 @@ const PETALS = [
 const INK = '#FD5000'
 const PAPER = '#F1F0EE'
 
-export function JoeLettersSplash({ onDone, ready = true, onIntroDone }: JoeLettersSplashProps) {
+/** กลางตัว O ในพิกัด viewBox — กลีบทั้งสี่วางล้อมจุดนี้ */
+const O_CENTRE = { x: 122, y: 42 }
+/** รัศมีกลีบแต่ละใบ — ต้องตรงกับ <ellipse> ในมาร์กอัป หน้ากากถึงจะทับกลีบส้มได้พอดี */
+const PETAL_R = [
+  { rx: 15.1684, ry: 18.4624 },
+  { rx: 15.1684, ry: 18.4624 },
+  { rx: 14.1752, ry: 19.4078 },
+  { rx: 14.1752, ry: 19.4078 },
+]
+
+/**
+ * รัศมีจานดำในหน้ากาก หน่วย viewBox
+ *
+ * ไม่ใช่ขนาดของรู — รูคือ "จานนี้ลบด้วยกลีบทั้งสี่" ซึ่งได้รูปสี่แฉกของช่องกลางตัว O
+ * จานต้องใหญ่พอจะกินถึงขอบในของกลีบทุกใบ (กลีบไกลสุดขอบในอยู่ที่ ~23 จากจุดกลาง)
+ * ใหญ่เกินไปก็ไม่เป็นไร ส่วนที่เกินถูกกลีบขาวทับกลับหมด
+ */
+const O_DISC = 24
+
+export function JoeLettersSplash({
+  onDone,
+  ready = true,
+  onIntroDone,
+  onOpenStart,
+}: JoeLettersSplashProps) {
   const scene = useRef<HTMLDivElement>(null)
+  // ชั้นกระดาษ แยกจากตัวอักษร เพราะชั้นนี้ตัวเดียวที่โดนเจาะรู
+  const holeGroup = useRef<SVGGElement>(null)
+  const maskDisc = useRef<SVGCircleElement>(null)
+  const maskPetals = useRef<(SVGEllipseElement | null)[]>([])
   // onDone อาจเป็นฟังก์ชันใหม่ทุก render ของพ่อ — ถ้าใส่ใน deps ไทม์ไลน์จะถูกสร้างใหม่กลางทาง
   const done = useRef(onDone)
   done.current = onDone
   const introDone = useRef(onIntroDone)
   introDone.current = onIntroDone
+  const openStart = useRef(onOpenStart)
+  openStart.current = onOpenStart
   // ไทม์ไลน์ประกอบตัวอักษรเล่นจบแล้วหรือยัง — แยกจาก "ฉากพร้อม" คนละเรื่องกัน
   const [built, setBuilt] = useState(false)
   const [waited, setWaited] = useState(false)
@@ -142,17 +179,101 @@ export function JoeLettersSplash({ onDone, ready = true, onIntroDone }: JoeLette
    * เปิดออกเมื่อครบสองอย่าง: ตัวอักษรประกอบเสร็จ และฉากข้างหลังพร้อม
    * อันไหนเสร็จทีหลังเป็นตัวกำหนดจังหวะ — โหลดเร็วก็ไม่ตัดแอนิเมชันทิ้ง
    * โหลดช้าก็ค้างโลโก้ไว้แทนที่จะเปิดไปเจอจอเปล่า
+   *
+   * ท่าเปิด: มุดเข้าไปใน "ช่องกลางตัว O"
+   *
+   * พื้นกระดาษไม่ได้จางออก — มันถูกเจาะรูตรงกลางตัว O แล้วรูนั้นบานออกจนกินทั้งจอ
+   * ฉาก 3D ที่ mount รออยู่ข้างหลังจึงโผล่มาทางรูนั้นตั้งแต่วินาทีแรก ไม่ใช่โผล่ทีเดียว
+   * ตอนสปแลชหาย พร้อมกันนั้นตัวอักษรถูกซูมเข้าโดยยึดจุดเดียวกับรู — ตาจึงอ่านว่า
+   * "กล้องพุ่งเข้าไปในตัว O" ไม่ใช่ "โลโก้ขยายแล้วหายไป"
+   *
+   * เจาะด้วย mask ที่เป็น radial-gradient หยุดคมสองสต็อป ไม่ใช่ clip-path เพราะ
+   * ตัวเลขที่ต้องขยับมีตัวเดียว (รัศมี) และเป็น CSS variable ที่ gsap ทวีนได้ตรง ๆ
+   * ทั้งชั้นวิ่งบน compositor ไม่ต้อง reflow ทุกเฟรม
    */
   useEffect(() => {
     const root = scene.current
-    if (!root || !built || !(ready || waited)) return
-    const tl = gsap.timeline({ onComplete: () => done.current() })
-    tl.to(root.querySelector('#sp-letters-scene'), {
-      opacity: 0,
-      duration: 0.4,
-      ease: 'power1.in',
+    const hole = holeGroup.current
+    const svg = root?.querySelector<SVGSVGElement>('#sp-letters-scene')
+    if (!root || !hole || !svg || !built || !(ready || waited)) return
+
+    // จุดกลางตัว O ในพิกัดจอ — คิดจาก matrix จริงของ SVG ไม่ใช่จากขนาดที่เดาเอา
+    // (ตัว svg กว้างตาม clamp() ของ viewport ย่อ/ขยายจอแล้วเลขเปลี่ยนทุกครั้ง)
+    const ctm = svg.getScreenCTM()
+    const p = svg.createSVGPoint()
+    p.x = O_CENTRE.x
+    p.y = O_CENTRE.y
+    const at = ctm ? p.matrixTransform(ctm) : { x: innerWidth / 2, y: innerHeight / 2 }
+    const unit = ctm ? Math.abs(ctm.a) : 1
+    // รัศมีที่ต้องบานถึงเพื่อกลืนทั้งจอ = ระยะจากจุดนั้นไปมุมที่ไกลที่สุด
+    const far = Math.hypot(
+      Math.max(at.x, innerWidth - at.x),
+      Math.max(at.y, innerHeight - at.y),
+    )
+
+    // วางกลีบใน mask ให้ทับกลีบส้มบนจอพอดี — ตำแหน่ง/มุมสุดท้ายอ่านจาก PETALS ชุดเดียวกับที่
+    // ไทม์ไลน์ประกอบตัวอักษรใช้ ตอนถึงจังหวะนี้กลีบเข้าที่หมดแล้ว
+    PETALS.forEach((petal, i) => {
+      const el = maskPetals.current[i]
+      if (!el) return
+      el.setAttribute('cx', `${at.x + (petal.cx - O_CENTRE.x) * unit}`)
+      el.setAttribute('cy', `${at.y + (petal.cy - O_CENTRE.y) * unit}`)
+      // เผื่อกลีบในหน้ากากอ้วนกว่ากลีบจริง 3% — ขอบสองชั้นไม่มีทางตรงกันเป๊ะระดับพิกเซล
+      // ไม่เผื่อแล้วจะเห็นเส้นเทาบาง ๆ เล็ดออกมาตามขอบกลีบ
+      el.setAttribute('rx', `${PETAL_R[i].rx * unit * 1.03}`)
+      el.setAttribute('ry', `${PETAL_R[i].ry * unit * 1.03}`)
+      el.setAttribute(
+        'transform',
+        `rotate(${petal.rot} ${at.x + (petal.cx - O_CENTRE.x) * unit} ${at.y + (petal.cy - O_CENTRE.y) * unit})`,
+      )
     })
-    tl.to(root, { opacity: 0, duration: 0.5, ease: 'power1.inOut' }, 0.2)
+    const disc = maskDisc.current
+    disc?.setAttribute('cx', `${at.x}`)
+    disc?.setAttribute('cy', `${at.y}`)
+    disc?.setAttribute('r', `${O_DISC * unit}`)
+
+    /**
+     * รูกับตัวอักษรถูกขับด้วยตัวเลขตัวเดียวกัน (zoom)
+     *
+     * ในหน้ากากมีวงกลมดำหนึ่งใบกับกลีบขาวสี่กลีบทับอยู่ — ส่วนที่เหลือเป็นดำ
+     * จึงเป็น "ช่องว่างกลางตัว O" เป๊ะ ๆ ทั้งสี่แฉก ไม่ใช่วงกลม แล้วทั้งกลุ่มถูกซูมด้วย
+     * สเกลเดียวกับตัวอักษร รูจึงบานออกโดยคงรูปช่องของตัว O ไว้ตลอดทาง
+     *
+     * ถ้าแยกกันทวีน รูจะโตเร็วกว่าที่ตัว O ขยาย เห็นเป็นวงกลมเทากินทับกลีบส้ม
+     */
+    const box = svg.getBoundingClientRect()
+    const zoom = { z: 1 }
+    openStart.current?.()
+    /**
+     * รูต้องบานจนคลุมจอ "ก่อน" ไทม์ไลน์จบ แล้วค้างไว้อีกครู่
+     *
+     * ของเดิมรูถึงขอบจอพอดีวินาทีที่ splash ถูกถอดออก ภาพเลยตัดห้วน — กำลังพุ่งอยู่ดี ๆ
+     * ก็เปลี่ยนเป็นฉากเต็มจอทันที ให้เวลาส่วนสุดท้ายเป็นฉากล้วน ๆ ตาจะได้ตามทัน
+     */
+    const tl = gsap.timeline({ onComplete: () => done.current() })
+    tl.to(
+      zoom,
+      {
+        z: (far * 1.25) / (O_DISC * unit),
+        duration: 1.05,
+        ease: 'power2.in',
+        onUpdate: () => {
+          hole.setAttribute(
+            'transform',
+            `translate(${at.x} ${at.y}) scale(${zoom.z}) translate(${-at.x} ${-at.y})`,
+          )
+          gsap.set(svg, {
+            scale: zoom.z,
+            transformOrigin: `${at.x - box.left}px ${at.y - box.top}px`,
+          })
+        },
+      },
+      0,
+    )
+    // ตัวอักษรจางท้าย ๆ เท่านั้น — จางเร็วกว่านี้แล้วจะเห็นเป็นโลโก้หายไปเฉย ๆ
+    tl.to(svg, { opacity: 0, duration: 0.3, ease: 'power1.in' }, 0.68)
+    // ช่วงท้ายไม่มีอะไรให้ดูนอกจากฉาก — ทวีนหลอกไว้กันไทม์ไลน์จบก่อนเวลา
+    tl.to({ hold: 0 }, { hold: 1, duration: 0.35 }, 1.05)
     return () => {
       tl.kill()
     }
@@ -165,18 +286,59 @@ export function JoeLettersSplash({ onDone, ready = true, onIntroDone }: JoeLette
         position: 'fixed',
         inset: 0,
         zIndex: 9999,
-        background: PAPER,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
       }}
     >
+      {/*
+        พื้นกระดาษ + หน้ากากรูปช่องตัว O
+
+        รู = "จานดำ ลบด้วยกลีบขาวสี่กลีบ" จึงได้รูปสี่แฉกของช่องกลางตัว O ไม่ใช่วงกลม
+        ตอนยังไม่เปิดฉาก จานมีรัศมี 0 = ไม่มีรู กระดาษบังทั้งจอตามปกติ
+        พิกัดทุกตัวเป็นพิกเซล (svg ไม่มี viewBox) ตัวเลขจริงถูกเซ็ตตอนเริ่มเปิดฉาก
+        เพราะต้องอ่านจากขนาดจริงของตัวอักษรบนจอ
+      */}
+      <svg
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+        aria-hidden
+      >
+        <defs>
+          <mask id="sp-hole-mask" maskUnits="userSpaceOnUse">
+            <rect x="0" y="0" width="100%" height="100%" fill="#fff" />
+            <g ref={holeGroup}>
+              <circle ref={maskDisc} cx="0" cy="0" r="0" fill="#000" />
+              {PETALS.map((_, i) => (
+                <ellipse
+                  key={i}
+                  ref={(el) => {
+                    maskPetals.current[i] = el
+                  }}
+                  cx="0"
+                  cy="0"
+                  rx="0"
+                  ry="0"
+                  fill="#fff"
+                />
+              ))}
+            </g>
+          </mask>
+        </defs>
+        <rect x="0" y="0" width="100%" height="100%" fill={PAPER} mask="url(#sp-hole-mask)" />
+      </svg>
       <svg
         id="sp-letters-scene"
         viewBox="-10 -10 259 104"
         xmlns="http://www.w3.org/2000/svg"
         aria-label="Joe"
-        style={{ width: 'clamp(200px, 40vw, 480px)', height: 'auto', overflow: 'hidden' }}
+        // position: relative — ชั้นกระดาษเป็น absolute ซึ่งวาดทีหลังเนื้อหาในโฟลว์เสมอ
+        // ไม่ตั้งอันนี้ ตัวอักษรจะถูกกระดาษทับจนมองไม่เห็นทั้งแอนิเมชัน
+        style={{
+          position: 'relative',
+          width: 'clamp(200px, 40vw, 480px)',
+          height: 'auto',
+          overflow: 'hidden',
+        }}
       >
         <defs>
           <clipPath id="sp-e-reveal">
