@@ -11,6 +11,7 @@ import { OrbitControls } from '@react-three/drei'
 import { button, levaStore, useControls } from 'leva'
 import { addRim, clamp, damp, lerp, LOW_END } from './scene/utils'
 import { BEATS, scrollState } from './scroll'
+import { setSceneReady } from '@/stores/ready'
 
 /** ใส่ rim light ให้วัตถุทึบทั้งฉาก — ขอบติดแสงขาวนวล (layer 09) */
 function RimLight({ color = '#FFF3DC', intensity = 0.5, power = 4.2 }) {
@@ -306,6 +307,35 @@ function SceneFill() {
   return null
 }
 
+/**
+ * บอกสปแลชว่าฉากพร้อมแล้ว — ต้องอยู่ "ข้างใน" <Suspense> เท่านั้น
+ *
+ * ที่นี่ mount ได้ก็ต่อเมื่อทุก promise ในขอบเขตนั้น resolve ครบ (GLB ของ mascot)
+ * ซึ่งเป็นสัญญาณที่ไม่กำกวม ต่างจาก useProgress().active ที่เป็นเท็จได้ระหว่างช่วงว่าง
+ *
+ * โหลดเสร็จยังไม่พอ — เฟรมแรกที่ material ถูกใช้จริงจะไปค้างรอ compile shader
+ * (ฉากนี้ทุกชิ้นเป็น PBR + rim light ที่ฉีด onBeforeCompile เข้าไป) compileAsync
+ * ดันงานนั้นมาทำตอนสปแลชยังบังอยู่ คนดูจึงไม่เห็นเฟรมแรกกระตุก
+ */
+function SceneReady() {
+  const { gl, scene, camera } = useThree()
+  useEffect(() => {
+    let alive = true
+    const done = () => alive && setSceneReady()
+    // compileAsync มีตั้งแต่ three r152 — กันไว้เผื่อ renderer ที่ไม่มีให้
+    if (typeof gl.compileAsync === 'function') {
+      gl.compileAsync(scene, camera).then(done, done)
+    } else {
+      gl.compile(scene, camera)
+      done()
+    }
+    return () => {
+      alive = false
+    }
+  }, [gl, scene, camera])
+  return null
+}
+
 function Lights() {
   return (
     <>
@@ -445,7 +475,9 @@ export function Scene() {
         <OrbitControls makeDefault target={[0, 2.3, 0.9]} enableDamping dampingFactor={0.12} />
       )}
       {/* จอโค้งบิดเส้นตรงทั้งฉาก — ปิดตอนปั้น ไม่งั้นแยกไม่ออกว่าโมเดลเบี้ยวเองหรือโดนโค้ง */}
-      <Curvilinear strength={clay ? 0 : 0.06} />
+      {/* ความโค้งตอนพักเป็น 0 — งานโค้งของฉากนิ่งไปอยู่ที่ screenCurve ของ panel แล้ว
+          เลนส์ตัวนี้เหลือหน้าที่เดียวคือบีบขอบภาพตอนบีต zoom (lensPunch) */}
+      <Curvilinear strength={0} />
       {/* ฉากกลืนเป็นสีเดียว — ปิดตอนปั้น (โหมดปั้นถอด fog ออกอยู่แล้ว) */}
       {!clay && <SceneFill />}
       {!clay && <RimLight />}
@@ -472,6 +504,8 @@ export function Scene() {
       <Suspense fallback={null}>
         {/* y: ยืดขาตาม comp แล้วฝ่าเท้าลงไปอีก 0.68 หน่วยโมเดล (×0.55 = 0.374) ยกตัวขึ้นชดเชย */}
         <Mascot position={[0, 2.61, 0.9]} scale={0.55} rotation={[0, -0.32, 0]} facingAway />
+        {/* อยู่ในขอบเขตเดียวกับ Mascot — mount ได้แปลว่า GLB มาครบแล้ว */}
+        <SceneReady />
       </Suspense>
 
       {/* <ContactShadows

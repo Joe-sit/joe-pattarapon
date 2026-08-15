@@ -3,6 +3,7 @@ import { Routes, Route, useLocation } from 'react-router'
 import Lenis from '@studio-freight/lenis'
 import { SplashScreen } from '@/components/SplashScreen'
 import { JoeSplash } from '@/components/JoeSplash'
+import { JoeLettersSplash } from '@/components/JoeLettersSplash'
 import { NavBar } from '@/components/NavBar'
 import { ThemePicker } from '@/components/ThemePicker'
 import { AnchorNav } from '@/components/AnchorNav'
@@ -15,6 +16,7 @@ const JoespressoPage = lazy(() => import('@/joespresso/Page'))
 const ToolbarWorkspace = lazy(() => import('@/joespresso/ToolbarWorkspace'))
 import { SITE } from '@/config/site'
 import { setEyeOpen, setIntroDone } from '@/stores/intro'
+import { useSceneReady } from '@/stores/ready'
 import { useT } from '@/i18n/store'
 
 function Footer() {
@@ -32,6 +34,10 @@ function Footer() {
 
 export function App() {
   const [showSplash, setShowSplash] = useState(true)
+  // ฉาก 3D ของ joespresso รายงานตัวเองว่าโหลด+compile เสร็จ — สปแลชรออันนี้
+  const sceneReady = useSceneReady()
+  // ตัวอักษรของสปแลชเล่นจบหรือยัง — ใช้เป็นสัญญาณว่า "เริ่มโหลดฉากได้แล้ว"
+  const [lettersDone, setLettersDone] = useState(false)
   const location = useLocation()
   // ครอบหน้าลูกด้วย (/joespresso/toolbar) — กลุ่มนี้มี layout ของตัวเอง ไม่ใช้ shell ของเว็บ
   const isJoespresso = location.pathname.startsWith('/joespresso')
@@ -42,6 +48,18 @@ export function App() {
   const [landedOn] = useState(() =>
     typeof window === 'undefined' ? '/' : window.location.pathname,
   )
+  /**
+   * กั้นไม่ให้ฉาก 3D เริ่ม mount จนกว่าตัวอักษรจะเล่นจบ
+   *
+   * โหลดพร้อมกันแล้วแอนิเมชันกระตุกหนัก — การแตก GLB, ปั้น geometry ของ mascot
+   * และ compile shader ทำบน main thread ทั้งหมด rAF ของ gsap เลยโดนอด
+   * ยอมให้รวมเวลานานขึ้นแทน เพื่อให้ช่วงที่คนดูจ้องอยู่ลื่นจริง
+   *
+   * กั้นเฉพาะตอนเปิดเว็บมาลงที่ /joespresso — เดินเข้ามาทีหลังไม่เกี่ยว
+   */
+  const holdScene =
+    showSplash && landedOn.startsWith('/joespresso') && !lettersDone
+
   const finishSplash = () => {
     setShowSplash(false)
     setIntroDone()
@@ -72,8 +90,15 @@ export function App() {
           opens onto the hero's own scene, and the mascot page has no such scene
           to open onto. */}
       {showSplash &&
-        !landedOn.startsWith('/joespresso') &&
-        (landedOn === '/mascot' ? (
+        (landedOn.startsWith('/joespresso') ? (
+          /* ฉาก 3D ของ joespresso ไม่มี "ตา" ให้เปิดออก และการ์ด hero ก็ยังโหลด three อยู่
+             ตอนนั้น — ใช้สปแลชตัวอักษรคั่นแทน (port จาก branch 2026) */
+          <JoeLettersSplash
+            onDone={finishSplash}
+            ready={sceneReady}
+            onIntroDone={() => setLettersDone(true)}
+          />
+        ) : landedOn === '/mascot' ? (
           <JoeSplash onDone={finishSplash} />
         ) : (
           <SplashScreen onEyeOpen={setEyeOpen} onDone={finishSplash} />
@@ -81,12 +106,14 @@ export function App() {
 
       {/* /joespresso = ฉาก 3D เต็มจอ มี layout/nav ของตัวเอง — ไม่ใช้ shell ของเว็บ */}
       {isJoespresso ? (
+        holdScene ? null : (
         <Suspense fallback={null}>
           <Routes>
             <Route path="/joespresso" element={<JoespressoPage />} />
             <Route path="/joespresso/toolbar" element={<ToolbarWorkspace />} />
           </Routes>
         </Suspense>
+        )
       ) : (
         <>
           <NavBar />
