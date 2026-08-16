@@ -170,17 +170,21 @@ const TMP_Q2 = new THREE.Quaternion()
 const AIM_DEF = new THREE.Quaternion()
 const AIM_DIR = new THREE.Vector3()
 /**
- * ท่าเท้าสะเอวตอนชี้จบ — มุมที่ "บวกเพิ่ม" จากท่าปกติของแต่ละข้อ ไม่ใช่มุมสัมบูรณ์
- * (ท่าปกติมาจาก slider ที่จูนไว้ ถ้าเขียนทับด้วยเลขตายตัวแล้ววันหลังขยับ slider ท่านี้จะหลุด)
- * ไหล่กางออกนอกตัวนิดหน่อย ศอกงอเข้าหาเอว
+ * ท่าเท้าสะเอวตอนชี้จบ — บอกเป็น "ปลายทางของกำปั้น" ไม่ใช่มุมข้อต่อ
+ *
+ * HIP_TARGET = จุดวางกำปั้น วัดจากหัวไหล่ เป็นสัดส่วนของ "ความยาวแขนทั้งเส้น" (L1+L2)
+ * [เข้าใน/ออกนอกตัว, ลง, หน้า] — ผูกกับความยาวแขนเพราะนั่นคือสิ่งที่กำหนดว่าเอื้อมถึงแค่ไหน
+ * เคยผูกกับกล่องลำตัวแล้วพลาด: กล่องนั้นกว้างกว่าตัวจริงเกือบเท่าตัว จุดเอวเลยไปโผล่นอกลำตัว
+ * แขนก็เหยียดตรงออกข้างแทนที่จะงอ (IK หนีบระยะไว้ที่เอื้อมสุด)
+ * HIP_ELBOW = ทิศที่ศอกกางออกไป (x คูณด้านของแขนเอง) กางออกข้างและไปด้านหลัง
  */
-const HIP_SHOULDER = [0, 0, -0.6]
-const HIP_ELBOW = [1.9, 0, 0]
-const HIP_Q = new THREE.Quaternion()
+const HIP_TARGET = [-0.12, -0.7, -0.06]
+const HIP_ELBOW = [1, -0.18, -0.8]
 
 // จูนท่าสะเอวสด ๆ ตอน dev — แก้ค่าในอาเรย์แล้วเห็นผลเฟรมถัดไป ไม่ต้อง reload
 if (import.meta.env.DEV && typeof window !== 'undefined') {
-  window.__hip = { shoulder: HIP_SHOULDER, elbow: HIP_ELBOW }
+  // ik ถูกเติมตอนสร้างแขน — ไว้อ่านความยาวท่อน/กล่องลำตัวตอนหาว่าท่าเพี้ยนเพราะอะไร
+  window.__hip = { target: HIP_TARGET, elbow: HIP_ELBOW, ik: null }
 }
 const IK_T = new THREE.Vector3()
 const IK_D = new THREE.Vector3()
@@ -1472,6 +1476,38 @@ export function Mascot({
         )
       }
 
+      /**
+       * ท่าเท้าสะเอว — โจทย์แบบเดียวกับท่ายกแก้ว จึงแก้ด้วยเครื่องมือเดียวกัน (IK สองท่อน)
+       *
+       * ของเดิมเป็นออฟเซ็ต Euler สามตัวที่บวกทับท่าชี้ ซึ่งจูนไม่ลง: ข้อต่อของแขนนี้ไม่ได้อยู่บน
+       * แกนเนื้อแขน เพิ่มมุมศอกทีละนิดแล้วกำปั้นเหวี่ยงออกข้างตัวแทนที่จะเข้าหาเอว
+       *
+       * เขียนใหม่เป็นโจทย์ที่ตรงกับสิ่งที่ตาเห็นจริง: "เอากำปั้นไปวางที่เอว แล้วให้ศอกกางออกหลัง"
+       * เหลือค่าที่ต้องจูนแค่จุดเอวกับทิศกางศอก ซึ่งอ่านออกจากภาพได้ทันทีว่าต้องขยับทางไหน
+       */
+      model.updateMatrixWorld(true)
+      // จุดจับ = กลางกำปั้น (ไม่นับนิ้วที่ต่อยื่นออกไป ไม่งั้นจุดจับเลื่อนไปอยู่ปลายนิ้ว)
+      const invW = armPoint.wrist.matrixWorld.clone().invert()
+      const fist = new THREE.Box3()
+      armPoint.wrist.traverse((o) => {
+        if (!o.isMesh || !o.visible || o === rig.current.pointFinger) return
+        o.geometry.computeBoundingBox()
+        fist.union(o.geometry.boundingBox.clone().applyMatrix4(invW.clone().multiply(o.matrixWorld)))
+      })
+      if (!fist.isEmpty()) {
+        const gripW = armPoint.wrist.localToWorld(fist.getCenter(new THREE.Vector3()))
+        const vE = armPoint.elbow.worldToLocal(gripW.clone())
+        // เก็บแค่ "ของคงที่ของโครง" — จุดเอวจริงคิดตอน useFrame จาก HIP_TARGET (จูนสดได้)
+        rig.current.hipIK = {
+          u: armPoint.elbow.position.clone().normalize(), // ทิศต้นแขนในสเปซไหล่
+          L1: armPoint.elbow.position.length(),
+          v: vE.clone().normalize(), // ทิศศอก -> กำปั้น ในสเปซศอก
+          L2: vE.length(),
+          out: armPoint.outward ?? 1,
+        }
+        if (import.meta.env.DEV && window.__hip) window.__hip.ik = rig.current.hipIK
+      }
+
       // รายชื่อชิ้นส่วนแขน เรียงจากบ่าออกไปหาปลายนิ้ว — ใช้กับโหมดทาสีแยกชิ้น (slider 'แยกสีชิ้นแขน')
       rig.current.pointParts = armParts(armPoint)
       rig.current.pointMerged = mergeArm(armPoint)
@@ -2021,27 +2057,37 @@ export function Mascot({
       /**
        * ชี้จบแล้วเท้าสะเอว — ท่าภูมิใจกับงานที่เพิ่งจัดเสร็จ
        *
-       * สร้างจากท่าแนบลำตัวที่มีอยู่แล้ว (tucked) บวกกางไหล่ออกนิดหน่อย แล้วงอศอกเข้าหาเอว
-       * ไม่ได้ปั้นท่าใหม่ทั้งดุ้น — ปลายทางจึงยังอยู่ใกล้ท่าตั้งต้นของฉากสอง ไม่สะดุดตอนเริ่ม scroll
+       * IK สองท่อนชุดเดียวกับท่ายกแก้ว: บอกแค่ "กำปั้นไปอยู่ที่เอว ศอกกางไปทางหลัง"
+       * แล้วให้มันหามุมไหล่/ศอกเอง — สั่งเป็นมุมออยเลอร์ตรง ๆ ไม่ได้ เพราะข้อต่อของแขนนี้
+       * ไม่ได้อยู่บนแกนเนื้อแขน เพิ่มมุมศอกทีละนิดแล้วกำปั้นเหวี่ยงออกข้างแทนที่จะเข้าหาเอว
        *
        * ไล่ด้วย release ตัวเดียวกับที่หรี่น้ำหนักการชี้ลง สองท่าจึงคาบเกี่ยวกันพอดี ไม่ตัดวูบ
        */
-      if (release > 0.001) {
-        const tucked = r.pointShoulder.userData.tucked
-        if (tucked) {
-          HIP_Q.copy(tucked).multiply(TMP_Q.setFromEuler(TMP_E.set(...HIP_SHOULDER)))
-          r.pointShoulder.quaternion.slerp(HIP_Q, release)
-        }
-        if (r.pointElbow) {
-          HIP_Q.setFromEuler(
-            TMP_E.set(
-              pose.pointElbowX + HIP_ELBOW[0],
-              pose.pointElbowY + HIP_ELBOW[1],
-              pose.pointElbowZ + HIP_ELBOW[2],
-            ),
-          )
-          r.pointElbow.quaternion.slerp(HIP_Q, release)
-        }
+      if (release > 0.001 && r.hipIK && r.pointElbow) {
+        const ik = r.hipIK
+        const reach = ik.L1 + ik.L2
+        // อ่านค่าจากอาเรย์ทุกเฟรม ไม่ใช่ตอนสร้าง — จูนสดตอน dev ได้ และไม่มีค่าซ้ำสองที่
+        IK_T.copy(r.pointShoulder.position).add(
+          TMP_V2.set(HIP_TARGET[0] * ik.out, HIP_TARGET[1], HIP_TARGET[2]).multiplyScalar(reach),
+        )
+        IK_D.copy(IK_T).sub(r.pointShoulder.position)
+        const D = clamp(IK_D.length(), Math.abs(ik.L1 - ik.L2) + 1e-3, ik.L1 + ik.L2 - 1e-3)
+        IK_U.copy(IK_D).normalize()
+        IK_P.set(HIP_ELBOW[0] * ik.out, HIP_ELBOW[1], HIP_ELBOW[2])
+          .normalize()
+          .addScaledVector(IK_U, -IK_P.dot(IK_U))
+        if (IK_P.lengthSq() < 1e-6) IK_P.set(0, -1, 0).addScaledVector(IK_U, -IK_U.y)
+        IK_P.normalize()
+        const a = Math.acos(clamp((ik.L1 * ik.L1 + D * D - ik.L2 * ik.L2) / (2 * ik.L1 * D), -1, 1))
+        IK_UP.copy(IK_U).multiplyScalar(Math.cos(a)).addScaledVector(IK_P, Math.sin(a))
+        IK_FW.copy(IK_T)
+          .sub(r.pointShoulder.position)
+          .addScaledVector(IK_UP, -ik.L1)
+          .normalize()
+        IK_QS.setFromUnitVectors(ik.u, IK_UP)
+        IK_QE.setFromUnitVectors(ik.v, IK_FW.applyQuaternion(TMP_Q2.copy(IK_QS).invert()))
+        r.pointShoulder.quaternion.slerp(IK_QS, release)
+        r.pointElbow.quaternion.slerp(IK_QE, release)
       }
     }
 
