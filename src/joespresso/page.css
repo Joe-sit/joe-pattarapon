@@ -12,7 +12,7 @@
   --jp-fill: #2b1a12;
   /* รางสกรอลล์ — บีตทั้งหมดถูกซอยจากความสูงนี้ตามสัดส่วนใน BEATS (scroll.js)
      แก้ตรงนี้ = ทุกบีตยืด/หดพร้อมกัน ถ้าจะยืดเฉพาะบีตเดียวให้ไปแก้ช่วงในตารางแทน
-     เดิม 420vh ตอนมีสองบีต — เรื่องยาวขึ้นเป็นหกบีตแล้ว ต้องมีรางให้เล่า */
+     เดิม 420vh ตอนมีสองบีต — เรื่องยาวขึ้นเป็นเจ็ดบีตแล้ว ต้องมีรางให้เล่า */
   height: 780vh;
   background: #fff;
   font-family: var(--jp-font-sans);
@@ -206,6 +206,286 @@
 @media (prefers-reduced-motion: reduce) {
   .jp-next {
     transform: none;
+  }
+}
+
+/* ---- ฉาก 2: What I do ----
+
+   วางในครึ่งขวาที่ฉากเว้นไว้ — กล้องพา mascot ไปกินครึ่งซ้ายตลอดช่วงยกแก้วดื่ม
+   ครึ่งขวาเลยว่างอยู่แล้วโดยไม่ต้องขยับอะไรในฉาก 3D
+
+   ทุกอย่างในบล็อกนี้คิดจากตัวเลขเดียว (--b-about) จึงไม่ต้องมี observer/timer
+   และถอยกลับเองได้ตอนสกรอลล์ขึ้น — ต่างจากต้นแบบที่เป็น tween ซึ่งสกรอลล์แค่ "สั่งเล่น"
+
+   --p = "หัวคลื่น" ที่กวาดผ่านคำที่ i = 0..n-1
+   คูณด้วย (n + span) ไม่ใช่ n เฉย ๆ เพราะคำสุดท้ายต้องมีที่ให้ค่อย ๆ ขึ้นจนครบก่อนบีตจบ */
+.jp-what {
+  --span: 3.2;
+  --p: calc(var(--b-about, 0) * (var(--n) + var(--span)));
+  /* หมอกสีเอสเปรสโซกลืนทั้งฉากตอนบีต fill — ของสีเข้มต้องออกไปก่อนพื้นจะมืดตาม */
+  --gone: clamp(0, var(--b-fill, 0) / 0.45, 1);
+  /* แผงคลี่ตามหลังหัวข้อ ไม่ใช่พร้อมกัน — อ่านหัวข้อจบแล้วค่อยมีของมาให้ดูต่อ */
+  --open: clamp(0, calc((var(--b-about, 0) - 0.34) / 0.3), 1);
+
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: clamp(14px, 2.4vh, 26px);
+  /* ครึ่งขวา: เว้นซ้ายไว้ครึ่งจอให้ mascot แล้วดันเข้ามาจากขอบขวาอีกที */
+  padding: 0 clamp(24px, 5vw, 72px) 0 50%;
+  text-align: left;
+  color: var(--jp-ink);
+  /* ตัว section ไม่รับเมาส์ (ฉาก 3D อยู่ข้างหลังและยังลากได้) เปิดเฉพาะแผงที่ต้องกดจริง */
+  pointer-events: none;
+  opacity: calc(1 - var(--gone));
+}
+
+.jp-what-title {
+  margin: 0;
+  font-family: var(--jp-font-display);
+  font-weight: 600;
+  font-size: clamp(34px, 4.4vw, 64px);
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+}
+
+/* ขึ้นบรรทัดใหม่โดยไม่ตัดสาย span — <br> ระหว่าง inline-block ทำให้ระยะคำเพี้ยนไปหนึ่งช่อง */
+.jp-what-break {
+  display: block;
+  height: 0;
+}
+
+/* กองแผงซ้อนกัน สูงคงที่ — แผงที่ถูก hover ขยายแล้วอีกใบหดลง ผลรวมจึงไม่ดันเลย์เอาต์
+   (flex-grow เป็นตัวแบ่ง ไม่ใช่ height: auto ซึ่งจะกระตุกตอนเนื้อหาข้างในเปลี่ยนความสูง) */
+.jp-what-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(100%, 470px);
+  height: clamp(300px, 52vh, 430px);
+  /* คลี่ลงมาพร้อมโปร่งใสจาง ๆ ตาม --open */
+  opacity: var(--open);
+  transform: translateY(calc((1 - var(--open)) * 26px));
+}
+
+.jp-what-card {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  padding: clamp(16px, 2vw, 24px);
+  transition: flex-grow 0.5s ease;
+  pointer-events: auto;
+}
+
+/* แผงที่กำลังดูอยู่กินพื้นที่สองเท่าของอีกใบ — hover สำหรับเมาส์,
+   focus-within สำหรับคีย์บอร์ดกับจอสัมผัส (ปุ่มลูกศรข้างในเป็นตัวรับ focus) */
+.jp-what-card:hover,
+.jp-what-card:focus-within {
+  flex-grow: 2.6;
+}
+
+/* กรอบเส้นประ: คลี่ออกจากกึ่งกลางตาม --open แทนที่จะโผล่มาทั้งกรอบ
+   แยกเป็น span ของตัวเอง ไม่ใช่ border ของการ์ด — จะได้ scale กรอบโดยไม่ลากเนื้อหาไปด้วย */
+.jp-what-frame {
+  position: absolute;
+  inset: 0;
+  border: 1px dashed color-mix(in srgb, var(--jp-ink) 34%, transparent);
+  transform: scaleX(var(--open));
+  transform-origin: center;
+}
+
+/* ฉากมุมสี่มุม — เหมือนกรอบเลือกวัตถุในโปรแกรมออกแบบ
+   (ต้นแบบใช้ keyframes หน่วงเวลา ของเราผูกกับตำแหน่งสกรอลล์แทน จะได้ย้อนกลับได้)
+
+   ตำแหน่งวิ่งตามขอบกรอบด้วยสูตรเดียวกับที่กรอบใช้ scale — ไม่ใช่ transform เพราะ scaleX
+   จะบีบตัวฉากให้แบนไปด้วย ระหว่างคลี่ฉากมุมจึงเคยลอยค้างอยู่นอกกรอบ */
+.jp-what-card::before,
+.jp-what-card::after,
+.jp-what-corner::before,
+.jp-what-corner::after {
+  content: '';
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--jp-ink);
+  opacity: clamp(0, calc((var(--open) - 0.55) / 0.45), 1);
+}
+
+.jp-what-card::before {
+  top: -1px;
+  left: calc(50% - var(--open) * 50% - 1px);
+  border-right: none;
+  border-bottom: none;
+}
+.jp-what-corner::before {
+  top: -1px;
+  right: calc(50% - var(--open) * 50% - 1px);
+  border-left: none;
+  border-bottom: none;
+}
+.jp-what-card::after {
+  bottom: -1px;
+  left: calc(50% - var(--open) * 50% - 1px);
+  border-top: none;
+  border-right: none;
+}
+.jp-what-corner::after {
+  bottom: -1px;
+  right: calc(50% - var(--open) * 50% - 1px);
+  border-left: none;
+  border-top: none;
+}
+
+.jp-what-in {
+  height: 100%;
+  overflow: hidden;
+}
+
+.jp-what-in h3 {
+  margin: 0;
+  font-family: var(--jp-font-display);
+  font-size: clamp(20px, 1.8vw, 26px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* แผงที่ยุบอยู่ตัดคำอย่างตั้งใจสองบรรทัด — ปล่อยให้ overflow กินเองจะได้บรรทัดที่โดนเฉือนครึ่ง
+   ซึ่งอ่านเป็นบั๊กมากกว่าเป็นบทคัดย่อ */
+.jp-what-in p {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin: 6px 0 0;
+  max-width: 36ch;
+  font-size: clamp(12px, 1vw, 14px);
+  line-height: 1.5;
+  opacity: 0.72;
+}
+
+.jp-what-card:hover .jp-what-in p,
+.jp-what-card:focus-within .jp-what-in p {
+  -webkit-line-clamp: 3;
+}
+
+/* รายละเอียดชั้นสอง — เห็นเฉพาะแผงที่กำลังดูอยู่ ไม่งั้นสองแผงแย่งกันพูดพร้อมกัน */
+.jp-what-more {
+  margin-top: 14px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.jp-what-card:hover .jp-what-more,
+.jp-what-card:focus-within .jp-what-more {
+  opacity: 1;
+  transform: none;
+}
+
+.jp-what-more h4 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.45;
+}
+
+.jp-what-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jp-what-tags li {
+  padding: 2px 9px;
+  border: 1px solid color-mix(in srgb, var(--jp-ink) 28%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--jp-ink) 7%, transparent);
+  font-size: clamp(11px, 0.9vw, 13px);
+}
+
+/* ลูกศรมุมล่างขวา — กลับหัวเมื่อแผงกางออก บอกว่ากดแล้วยุบกลับได้ */
+.jp-what-arrow {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--jp-ink) 45%, transparent);
+  background: none;
+  cursor: pointer;
+  opacity: clamp(0, calc((var(--open) - 0.55) / 0.45), 1);
+}
+
+.jp-what-arrow span {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  border-left: 1px solid var(--jp-ink);
+  border-bottom: 1px solid var(--jp-ink);
+  transform: translate(-50%, -50%) rotate(-45deg);
+  transition: transform 0.5s ease;
+}
+
+.jp-what-card:hover .jp-what-arrow span,
+.jp-what-card:focus-within .jp-what-arrow span {
+  transform: translate(-50%, -20%) rotate(-225deg);
+}
+
+.jp-word {
+  /* ระยะที่คำนี้ขึ้นมาแล้ว 0..1 — หัวคลื่นถึงตัวมันเมื่อไหร่ก็เริ่มนับตอนนั้น */
+  --w: clamp(0, calc((var(--p) - var(--i)) / var(--span)), 1);
+
+  display: inline-block;
+  margin-right: 0.28em;
+  opacity: var(--w);
+  /* ยกขึ้นจากใต้บรรทัดพร้อมเบลอจาง ๆ — เหมือนคำเพิ่งโฟกัสติด ไม่ใช่แค่ติดสวิตช์ */
+  transform: translateY(calc((1 - var(--w)) * 0.42em));
+  filter: blur(calc((1 - var(--w)) * 6px));
+  will-change: opacity, transform;
+}
+
+/* บรรทัดสุดท้ายไม่ต้องเว้นท้าย ไม่งั้นข้อความดูเยื้องซ้ายทั้งย่อหน้า */
+.jp-word:last-child {
+  margin-right: 0;
+}
+
+/* จอแคบไม่มี "ครึ่งขวา" ให้ยืน — กล้องเดียวกันนี้ mascot กินเต็มจอ
+   ย้ายลงไปอยู่ท้ายจอแทน ซึ่งเป็นส่วนที่ตัวละครบังน้อยที่สุดตลอดช่วงยกแก้ว */
+@media (max-width: 860px) {
+  .jp-what {
+    /* เว้นท้ายจอไว้เยอะ — มุมล่างมีไอคอนโซเชียลกับบรรทัดที่อยู่ยืนอยู่ก่อนแล้ว */
+    padding: 0 20px 22%;
+    justify-content: flex-end;
+  }
+  .jp-what-stack {
+    width: 100%;
+    height: clamp(240px, 36vh, 320px);
+  }
+  /* แผงที่ยุบอยู่บนจอแคบเหลือที่แค่บรรทัดเดียวจริง ๆ — สองบรรทัดจะโดนขอบเฉือน */
+  .jp-what-in p {
+    -webkit-line-clamp: 1;
+  }
+  .jp-what-card:hover .jp-what-in p,
+  .jp-what-card:focus-within .jp-what-in p {
+    -webkit-line-clamp: 3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jp-word {
+    transform: none;
+    filter: none;
   }
 }
 

@@ -27,6 +27,47 @@ const SOCIAL = [
   { name: 'Instagram', Icon: InstagramIcon, href: '#' },
 ]
 
+/** หัวข้อของ section 2 — คำโผล่ทีละคำ ส่วนแผงด้านล่างค่อยคลี่ตามทีหลัง */
+const WHAT_TITLE = ['What', 'I do']
+
+/**
+ * สองแผงของ "What I do"
+ *
+ * ทุกอย่างในนี้ตรวจสอบได้จากตัวโปรเจกต์เอง ไม่ได้แต่งขึ้น:
+ * tags ของ Develop มาจาก dependencies จริงใน package.json ส่วน Design อ้างจากวิธีทำงานของ repo นี้
+ * (ไฟล์ Figma ชื่อ Joespresso + mascot ที่ปั้นด้วยโค้ดใน src/sections/mascot ไม่ได้ import โมเดลมา)
+ * ถ้ามีข้อความจริงของตัวเองแล้วแก้ที่ตารางนี้ที่เดียว — จำนวนแผง/แท็กคิดตามเอง
+ */
+const WHAT = [
+  {
+    id: 'develop',
+    title: 'Develop',
+    desc: 'React and TypeScript on Vite, with the 3D work in react-three-fiber.',
+    tags: ['React', 'TypeScript', 'Three.js', 'R3F', 'GSAP', 'Tailwind'],
+  },
+  {
+    id: 'design',
+    title: 'Design',
+    desc: 'Drawn in Figma, then built in code — this mascot is geometry, not an imported model.',
+    tags: ['Figma', 'Design systems', '3D scenes', 'Motion'],
+  },
+]
+
+/** จำนวนคำของหัวข้อ — ใช้เป็นตัวหารของจังหวะทยอยโผล่ */
+const WHAT_WORDS = WHAT_TITLE.join(' ').split(' ').length
+
+/**
+ * ตัดข้อความเป็นคำ ๆ แล้วติดหมายเลขลำดับไว้ให้ CSS
+ * start = ลำดับของคำแรกในชุดนี้ (นับต่อกันทั้ง section ไม่ใช่เริ่มใหม่ทุกบรรทัด)
+ */
+function Words({ text, start }) {
+  return text.split(' ').map((w, i) => (
+    <span className="jp-word" key={`${start + i}-${w}`} style={{ '--i': start + i }}>
+      {w}
+    </span>
+  ))
+}
+
 export default function Page() {
   const socialRef = useRef(null)
 
@@ -181,6 +222,54 @@ export default function Page() {
                 (ดู SceneFill ใน App.jsx) เหลือแค่บรรทัดส่งต่อที่ลอยขึ้นมาทีหลัง */}
             <section className="jp-next" aria-label="Next">
               <h2 className="jp-next-title">I turn coffee into works</h2>
+            </section>
+
+            {/* ฉาก 2 — "What I do" ในครึ่งขวาที่กล้องเว้นไว้ ขับด้วยบีต about ตัวเดียว
+                หัวข้อขึ้นทีละคำ แล้วแผงค่อยคลี่ตาม; ทำใน CSS ล้วนเพราะบีตมาเป็นตัวแปร CSS อยู่แล้ว
+                (ให้ React มายุ่งจะ re-render ทุกเฟรมที่สกรอลล์)
+
+                กางแผงเป็น hover ล้วน ๆ ไม่มี state — จอสัมผัสไม่มี hover จึงเปิดด้วย :focus-within
+                ผ่านปุ่มข้างใน ซึ่งได้ keyboard เข้ามาฟรีด้วย (moncy ต้องเขียน JS toggle class เอง) */}
+            <section
+              className="jp-what"
+              id="about"
+              aria-label="What I do"
+              style={{ '--n': WHAT_WORDS }}
+            >
+              <h2 className="jp-what-title">
+                <Words text={WHAT_TITLE[0]} start={0} />
+                <span className="jp-what-break" />
+                <Words text={WHAT_TITLE[1]} start={WHAT_TITLE[0].split(' ').length} />
+              </h2>
+
+              <div className="jp-what-stack">
+                {WHAT.map((card, i) => (
+                  <article className="jp-what-card" key={card.id} style={{ '--c': i }}>
+                    <span className="jp-what-frame" aria-hidden="true" />
+                    <span className="jp-what-corner" aria-hidden="true" />
+                    <div className="jp-what-in">
+                      <h3>{card.title}</h3>
+                      <p>{card.desc}</p>
+                      <div className="jp-what-more">
+                        <h4>Skillset &amp; tools</h4>
+                        <ul className="jp-what-tags">
+                          {card.tags.map((t) => (
+                            <li key={t}>{t}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                    {/* ปุ่มจริง ไม่ใช่ div — เป็นตัวรับ focus ที่กางแผงบนคีย์บอร์ดกับจอสัมผัส */}
+                    <button
+                      className="jp-what-arrow"
+                      type="button"
+                      aria-label={`${card.title} — skillset and tools`}
+                    >
+                      <span aria-hidden="true" />
+                    </button>
+                  </article>
+                ))}
+              </div>
             </section>
           </div>
         </main>
