@@ -4,6 +4,7 @@ import { Scene } from './App'
 import { Logo } from './Logo'
 import { GithubIcon, InstagramIcon, LinkedinIcon } from './Icons'
 import { BEATS, resetBeats, updateBeats } from './scroll'
+import { introState } from './intro'
 import './page.css'
 
 /**
@@ -71,6 +72,33 @@ export default function Page() {
       anim?.cancel()
       ul.removeEventListener('pointerenter', onEnter)
       ul.removeEventListener('pointerleave', onLeave)
+    }
+  }, [])
+
+  /**
+   * เปิดฉากหลังสปแลชส่งไม้ต่อ — กรอบการ์ดคลี่ออก แล้วแถบเมนูโผล่ขึ้นมาจากใต้การ์ด
+   *
+   * ขับด้วยนาฬิกาของ intro ไม่ใช่ timer ของตัวเอง: สปแลชกับฉากเดินด้วยเวลาเดียวกันอยู่แล้ว
+   * (startIntro ถูกเรียกตอนรูเริ่มเปิด) ถ้าตั้งเวลาแยกจะเลื่อนหลุดกันทันทีที่เฟรมตก
+   *
+   * ค่าออกมาเป็น CSS variable ตัวเดียว (--jp-open) ให้ CSS เอาไปกระจายเอง — ไม่ต้อง re-render
+   * React ทุกเฟรมตลอดช่วงเปิดฉาก
+   */
+  useEffect(() => {
+    const s = document.documentElement.style
+    const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v)
+    let frame = 0
+    const tick = () => {
+      // เริ่มนับหลังสปแลชถอดออก (ซูมยาว 1.4 วิ) แล้วคลี่ต่ออีก 1.1 วิ
+      const k = clamp01((introState.t - 1.35) / 1.1)
+      // ease-out: ออกตัวเร็วแล้วคลายเข้าที่ — ตรงข้ามกับการซูมที่เร่งขึ้นเรื่อย ๆ ก่อนหน้า
+      s.setProperty('--jp-open', String(1 - Math.pow(1 - k, 3)))
+      frame = requestAnimationFrame(tick)
+    }
+    tick()
+    return () => {
+      cancelAnimationFrame(frame)
+      s.removeProperty('--jp-open')
     }
   }, [])
 
