@@ -166,6 +166,22 @@ const TMP_V = new THREE.Vector3()
 const TMP_V2 = new THREE.Vector3()
 const TMP_Q2 = new THREE.Quaternion()
 // IK ท่ายกแก้วดื่ม (ฉาก 2)
+// เล็งแขนชี้: ท่าตั้งต้นกับแกนแขนของท่านั้น
+const AIM_DEF = new THREE.Quaternion()
+const AIM_DIR = new THREE.Vector3()
+/**
+ * ท่าเท้าสะเอวตอนชี้จบ — มุมที่ "บวกเพิ่ม" จากท่าปกติของแต่ละข้อ ไม่ใช่มุมสัมบูรณ์
+ * (ท่าปกติมาจาก slider ที่จูนไว้ ถ้าเขียนทับด้วยเลขตายตัวแล้ววันหลังขยับ slider ท่านี้จะหลุด)
+ * ไหล่กางออกนอกตัวนิดหน่อย ศอกงอเข้าหาเอว
+ */
+const HIP_SHOULDER = [0, 0, -0.6]
+const HIP_ELBOW = [1.9, 0, 0]
+const HIP_Q = new THREE.Quaternion()
+
+// จูนท่าสะเอวสด ๆ ตอน dev — แก้ค่าในอาเรย์แล้วเห็นผลเฟรมถัดไป ไม่ต้อง reload
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  window.__hip = { shoulder: HIP_SHOULDER, elbow: HIP_ELBOW }
+}
 const IK_T = new THREE.Vector3()
 const IK_D = new THREE.Vector3()
 const IK_U = new THREE.Vector3()
@@ -1966,19 +1982,66 @@ export function Mascot({
       r.pointShoulder?.userData.armAxis &&
       root.current
     ) {
-      // ชี้ค้างไว้ตลอดบีต title ด้วย — กรอบยังเป็นสิ่งที่เขากำลัง "จัด" อยู่จนจบ
-      const w = introState.b.crop
+      /**
+       * ชี้จนสโลแกนขึ้นเกินครึ่ง แล้วค่อยลดแขนลงแนบลำตัว
+       *
+       * งานของแขนคือ "พากรอบมาครอบคำ" พอคำขึ้นครบและกรอบเข้าที่แล้ว มือที่ยังค้างชี้อยู่กลาง
+       * อากาศไม่ได้เล่าอะไรต่อ แถมชี้ไปทางเดียวกับที่คนดูกำลังอ่าน = แย่งสายตาจากตัวหนังสือ
+       *
+       * ท่าแนบลำตัวใช้ตัวเดียวกับตอน scroll เข้าฉากสอง (userData.tucked) ไม่ได้ปั้นท่าใหม่ —
+       * ปลายทางของ intro จะได้ต่อกับท่าตั้งต้นของฉากถัดไปพอดี ไม่มีสะดุดตอนเริ่ม scroll
+       */
+      const release = smooth01((introState.b.title - 0.5) / 0.45)
+      const w = introState.b.crop * (1 - release)
       if (w > 0.001) {
         const sh = r.pointShoulder.getWorldPosition(TMP_V)
         TMP_V2.copy(introState.crop).sub(sh).normalize()
         root.current.getWorldQuaternion(TMP_Q).invert()
         TMP_V2.applyQuaternion(TMP_Q)
-        TMP_Q.setFromUnitVectors(r.pointShoulder.userData.armAxis, TMP_V2)
-        TMP_E.setFromQuaternion(TMP_Q, 'XYZ')
-        const blend = w * 0.85
-        r.pointShoulder.rotation.x = lerp(r.pointShoulder.rotation.x, TMP_E.x, blend)
-        r.pointShoulder.rotation.y = lerp(r.pointShoulder.rotation.y, TMP_E.y, blend)
-        r.pointShoulder.rotation.z = lerp(r.pointShoulder.rotation.z, TMP_E.z, blend)
+
+        /**
+         * เหวี่ยง "ต่อจากท่าตั้งต้น" ไม่ใช่เขียนทับท่าทั้งดุ้น
+         *
+         * ของเดิมเอา setFromUnitVectors(armAxis, want) มาใส่เป็นมุมของไหล่ตรง ๆ ซึ่งได้ทิศถูก
+         * แต่ทิ้งการบิดรอบแกนแขนของท่าตั้งต้นไปทั้งหมด (pointShoulderZ 1.55 หายไป) แขนจึงพลิก
+         * หงายท้องแขนขึ้นฟ้าทุกครั้งที่ขยับ ทั้งที่ควรแค่ "ชี้ไปอีกทาง" ด้วยท่าเดิม
+         *
+         * คิดใหม่เป็นสองชั้น: q_def = ท่าตั้งต้น, แล้วหาส่วนเหวี่ยงที่พาแกนแขน "ของท่าตั้งต้น"
+         * ไปยังเป้า ส่วนเหวี่ยงแบบ shortest-arc ไม่ใส่การบิดรอบแกนที่มันหมุนไปเลย
+         * คูณกลับเป็น q_swing * q_def จึงได้ทิศใหม่โดยที่การบิดของแขนยังเท่าท่าตั้งต้นเป๊ะ
+         */
+        AIM_DEF.setFromEuler(
+          TMP_E.set(pose.pointShoulderX, pose.pointShoulderY, pose.pointShoulderZ, 'XYZ'),
+        )
+        AIM_DIR.copy(r.pointShoulder.userData.armAxis).applyQuaternion(AIM_DEF)
+        TMP_Q.setFromUnitVectors(AIM_DIR, TMP_V2).multiply(AIM_DEF)
+        // slerp ไม่ใช่ lerp ทีละแกนออยเลอร์ — ออยเลอร์สามแกนวิ่งแยกกันจะบิดผ่านท่าที่ไม่มีอยู่จริง
+        r.pointShoulder.quaternion.slerp(TMP_Q, w * 0.85)
+      }
+      /**
+       * ชี้จบแล้วเท้าสะเอว — ท่าภูมิใจกับงานที่เพิ่งจัดเสร็จ
+       *
+       * สร้างจากท่าแนบลำตัวที่มีอยู่แล้ว (tucked) บวกกางไหล่ออกนิดหน่อย แล้วงอศอกเข้าหาเอว
+       * ไม่ได้ปั้นท่าใหม่ทั้งดุ้น — ปลายทางจึงยังอยู่ใกล้ท่าตั้งต้นของฉากสอง ไม่สะดุดตอนเริ่ม scroll
+       *
+       * ไล่ด้วย release ตัวเดียวกับที่หรี่น้ำหนักการชี้ลง สองท่าจึงคาบเกี่ยวกันพอดี ไม่ตัดวูบ
+       */
+      if (release > 0.001) {
+        const tucked = r.pointShoulder.userData.tucked
+        if (tucked) {
+          HIP_Q.copy(tucked).multiply(TMP_Q.setFromEuler(TMP_E.set(...HIP_SHOULDER)))
+          r.pointShoulder.quaternion.slerp(HIP_Q, release)
+        }
+        if (r.pointElbow) {
+          HIP_Q.setFromEuler(
+            TMP_E.set(
+              pose.pointElbowX + HIP_ELBOW[0],
+              pose.pointElbowY + HIP_ELBOW[1],
+              pose.pointElbowZ + HIP_ELBOW[2],
+            ),
+          )
+          r.pointElbow.quaternion.slerp(HIP_Q, release)
+        }
       }
     }
 
