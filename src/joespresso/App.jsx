@@ -10,6 +10,7 @@ import { Curvilinear } from './scene/Curvilinear'
 import { OrbitControls } from '@react-three/drei'
 import { button, levaStore, useControls } from 'leva'
 import { addRim, clamp, damp, lerp, LOW_END } from './scene/utils'
+import { modeState } from './mode'
 import { BEATS, scrollState } from './scroll'
 import { introState, tickIntro } from './intro'
 
@@ -338,9 +339,24 @@ function CameraRig({ strength = 1 }) {
  * far คือตัวหลัก: ลากจากระยะปกติเข้ามาจนสั้นกว่าระยะกล้อง-ตัวละคร ทุกอย่างจึงจมสีหมด
  */
 const FILL_COLOR = new THREE.Color('#2B1A12')
+
+/**
+ * ค่าหมอก/พื้นหลัง "ท่าพัก" ของฉากในเฟรมนี้ — DevGrade เขียน SceneFill อ่าน
+ *
+ * สองตัวนี้เขียนหมอกทับกันทุกเฟรม เดิม SceneFill จำค่าตั้งต้นไว้ครั้งเดียวตอน mount แล้วเขียนทับ
+ * ทุกเฟรมจากค่านั้น ผลคือหมอกกลางคืนของ DevGrade ถูกลบทิ้งทุกเฟรม ฟ้ากลางคืนเลยยังโดนหมอก
+ * สีส้มของกลางวันกลืนอยู่ (เห็นเป็นฉากสีน้ำตาลหม่นทั้งที่ไฟเปลี่ยนเป็นสีจันทร์แล้ว)
+ * ตอนนี้ SceneFill รับ "ท่าพัก" จากตรงนี้ทุกเฟรมแทน แล้วค่อยเอาเอฟเฟกต์ของตัวเองไปทับ
+ */
+const FOG_REST = {
+  near: 30,
+  far: 64,
+  fog: new THREE.Color('#F6CDA8'),
+  bg: new THREE.Color('#F8D9BC'),
+}
+
 function SceneFill() {
   const { scene } = useThree()
-  const base = useRef(null)
   const fill = useRef(0)
 
   const f = useControls('Fill (ฉาก 2)', {
@@ -353,20 +369,8 @@ function SceneFill() {
   useFrame((_, delta) => {
     const fog = scene.fog
     // โหมดปั้นถอด fog ออก — ไม่มีอะไรให้กลืน ข้ามไป
-    if (!fog) {
-      base.current = null
-      return
-    }
-    // จำค่าตั้งต้นไว้ครั้งเดียว เพื่อคืนกลับได้เป๊ะตอน scroll ย้อนขึ้น
-    if (!base.current) {
-      base.current = {
-        near: fog.near,
-        far: fog.far,
-        fog: fog.color.clone(),
-        bg: scene.background?.isColor ? scene.background.clone() : null,
-      }
-    }
-    const b = base.current
+    if (!fog) return
+    const b = FOG_REST
     const dt = Math.min(delta, 0.05)
     fill.current = damp(fill.current, Math.max(scrollState.b.fill, f.fillPreview), f.fillEase, dt)
     const t = fill.current
@@ -379,7 +383,7 @@ function SceneFill() {
     fog.far = b.far * Math.pow(f.fillFar / b.far, v)
     fog.color.copy(b.fog).lerp(FILL_COLOR, v)
     // พื้นหลังต้องไปสีเดียวกับหมอก ไม่งั้นขอบฟ้ายังเป็นสีส้มค้างอยู่หลังม่าน
-    if (b.bg) scene.background.copy(b.bg).lerp(FILL_COLOR, v)
+    if (scene.background?.isColor) scene.background.copy(b.bg).lerp(FILL_COLOR, v)
   })
   return null
 }
@@ -413,36 +417,151 @@ function SceneReady() {
   return null
 }
 
+/**
+ * โทนของโหมด dev — ทุกค่าที่ DevGrade ไล่ไปหา
+ *
+ * ไม่ได้ทำเป็น "ฉากอีกชุด" แต่เป็นการเกรดฉากเดิม: ลดแสง เปลี่ยนสีไฟเป็นเย็น ดึงหมอกเข้ามาใกล้
+ * และหรี่ exposure ของทั้งภาพ ของทุกชิ้นในฉากจึงมืดลงพร้อมกันโดยไม่ต้องแตะ material ของใครเลย
+ * (ยกเว้นฟ้ากับดวงอาทิตย์ ซึ่งเป็น basic material ปิด tone mapping ไว้ — Sky จัดการตัวเอง)
+ */
+export const DEV_GRADE = {
+  /**
+   * ไม่หรี่จนดำ — 0.32 เคยลองแล้วได้ฉากสีน้ำตาลขุ่นเพราะสีตั้งต้นของฉากเป็นชุดอุ่นทั้งชุด
+   * กลางคืนของจริงยัง "อ่านออก" ว่ามีสี แค่สีนั้นเป็นสีคราม ปล่อยความสว่างไว้แล้วไปเปลี่ยนที่
+   * "สีของแสง" แทน (ไฟทุกดวงเป็นแสงจันทร์สีน้ำเงินม่วง) ฉากจึงเป็นกลางคืน ไม่ใช่ภาพมืด
+   */
+  exposure: [1.05, 0.8],
+  fogColor: ['#F6CDA8', '#3A40AE'],
+  fogNear: [30, 30],
+  fogFar: [64, 72],
+  background: ['#F8D9BC', '#3A40AE'],
+  // ambient = แสงฟ้ากลางคืนที่ตกลงมาทั่ว ๆ สีครามอมม่วงตามฟ้า
+  ambient: { i: [0.95, 0.9], c: ['#FFE4D2', '#8087F0'] },
+  hemi: { i: [0.7, 0.85], sky: ['#FFDDC0', '#A3ABFF'], ground: ['#7BA184', '#3A4192'] },
+  // key = ดวงจันทร์ ย้ายไปอยู่ฝั่งเดียวกับดวงจันทร์บนฟ้า (ซ้ายบน) แสงขาวอมฟ้า เย็นและคม
+  key: { i: [2.6, 2.2], c: ['#FFD9A8', '#D6DDFF'], pos: [[1.5, 8.5, -13], [-7, 9, -10]] },
+  fill: { i: [1.0, 0.6], c: ['#FFDFC8', '#8E99E8'] },
+  // ขอบเย็นฝั่งซ้าย แรงขึ้นตอนกลางคืน = ขอบรับแสงจันทร์
+  cool: { i: [0.3, 0.75], c: ['#D9C8FF', '#AFB9FF'] },
+}
+
+
+/**
+ * ไล่ฉากทั้งใบไปมาระหว่าง design กับ dev
+ *
+ * ไล่ทีละเฟรมด้วย damp ไม่ใช่สลับทันที — กดปุ่มแล้วไฟค่อย ๆ หรี่ลงอ่านเป็น "เปลี่ยนโหมด"
+ * ส่วนการตัดวูบเดียวอ่านเป็นภาพกระตุก โดยเฉพาะตอน exposure กระโดด
+ *
+ * เขียนค่าลงวัตถุ three ตรง ๆ (ไฟ หมอก renderer) ไม่ผ่าน state ของ React — โหมดเปลี่ยนไม่กี่ครั้ง
+ * แต่ค่าระหว่างทางเปลี่ยนทุกเฟรม ถ้าใช้ state จะ re-render ทั้งฉากทุกเฟรมตลอดช่วงเปลี่ยนโหมด
+ */
+function DevGrade({ lights }) {
+  const { gl, scene } = useThree()
+  const m = useRef(0)
+  const A = useMemo(() => new THREE.Color(), [])
+  const B = useMemo(() => new THREE.Color(), [])
+
+  useFrame((_, delta) => {
+    const dt = Math.min(delta, 0.05)
+    m.current = damp(m.current, modeState.dev ? 1 : 0, 0.35, dt)
+    const k = m.current
+    const num = ([a, b]) => lerp(a, b, k)
+    const col = (target, [a, b]) => target.copy(A.set(a)).lerp(B.set(b), k)
+
+    gl.toneMappingExposure = num(DEV_GRADE.exposure)
+    // เขียน "ท่าพัก" ไว้ให้ SceneFill เอาไปเป็นฐาน แล้วเขียนลงฉากเองด้วยเผื่อเฟรมที่ SceneFill ไม่ทำงาน
+    FOG_REST.near = num(DEV_GRADE.fogNear)
+    FOG_REST.far = num(DEV_GRADE.fogFar)
+    col(FOG_REST.fog, DEV_GRADE.fogColor)
+    col(FOG_REST.bg, DEV_GRADE.background)
+    if (scene.fog) {
+      scene.fog.color.copy(FOG_REST.fog)
+      scene.fog.near = FOG_REST.near
+      scene.fog.far = FOG_REST.far
+    }
+    if (scene.background?.isColor) scene.background.copy(FOG_REST.bg)
+
+    const { ambient, hemi, key, fill, cool } = lights
+    if (ambient.current) {
+      ambient.current.intensity = num(DEV_GRADE.ambient.i)
+      col(ambient.current.color, DEV_GRADE.ambient.c)
+    }
+    if (hemi.current) {
+      hemi.current.intensity = num(DEV_GRADE.hemi.i)
+      col(hemi.current.color, DEV_GRADE.hemi.sky)
+      col(hemi.current.groundColor, DEV_GRADE.hemi.ground)
+    }
+    for (const [ref, spec] of [
+      [key, DEV_GRADE.key],
+      [fill, DEV_GRADE.fill],
+      [cool, DEV_GRADE.cool],
+    ]) {
+      if (!ref.current) continue
+      ref.current.intensity = num(spec.i)
+      col(ref.current.color, spec.c)
+      // ไฟดวงที่ย้ายที่ได้ (key) — กลางวันแสงมาจากดวงอาทิตย์หลังขวา กลางคืนมาจากดวงจันทร์ซ้ายบน
+      if (spec.pos) {
+        const [a, b] = spec.pos
+        ref.current.position.set(lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k))
+      }
+    }
+  })
+  return null
+}
+
 function Lights() {
+  const lights = {
+    ambient: useRef(),
+    hemi: useRef(),
+    key: useRef(),
+    fill: useRef(),
+    cool: useRef(),
+  }
   return (
     <>
-      {/* เงานุ่มด้วย PCFSoft (shadows="soft" ที่ Canvas) — PCSS ของ drei ใช้กับ three r182 ไม่ได้แล้ว
+      <DevGrade lights={lights} />
+      {/* เงานุ่มด้วย VSM (ตั้งที่ Canvas) — PCSS ของ drei ใช้กับ three r182 ไม่ได้แล้ว
           (shadow map เปลี่ยนเป็น depth texture, unpackRGBAToDepth ใช้ไม่ได้ → shader ทึบทั้งฉาก compile พัง) */}
 
       {/* ambient อุ่นแรงขึ้น — ref โดมเรืองแสงฟุ้ง เงาไม่จม */}
-      <ambientLight intensity={0.95} color="#FFE4D2" />
-      <hemisphereLight args={['#FFDDC0', '#7BA184', 0.7]} />
+      <ambientLight ref={lights.ambient} intensity={0.95} color="#FFE4D2" />
+      <hemisphereLight ref={lights.hemi} args={['#FFDDC0', '#7BA184', 0.7]} />
 
       {/* key — ย้อนแสงจากตำแหน่งดวงอาทิตย์ (หลังบน) เงาทอดยาวเข้าหากล้อง
           normalBias กัน shadow acne — ลายขั้นบันไดเห็นชัดมากตอนกล้อง focus เข้าใกล้หน้า */}
       <directionalLight
+        ref={lights.key}
         castShadow
         position={[1.5, 8.5, -13]}
         intensity={2.6}
         color="#FFD9A8"
         shadow-mapSize={LOW_END ? [1024, 1024] : [2048, 2048]}
-        shadow-bias={-0.0005}
-        shadow-normalBias={0.05}
-        shadow-camera-left={-18}
-        shadow-camera-right={18}
-        shadow-camera-top={18}
-        shadow-camera-bottom={-18}
-        shadow-camera-far={60}
+        /**
+         * VSM เท่านั้นที่เบลอเงาได้จริง — PCFSoft อ่านค่า shadow.radius ไม่สนใจเลย
+         * (ความนุ่มของมันมาจากการสุ่ม 5 จุดรอบ texel เท่านั้น ขอบเลยเป็นขั้นบันไดตามความละเอียด
+         * ของ shadow map) radius/blurSamples ข้างล่างจึงมีผลก็ต่อเมื่อ renderer เป็น VSM
+         */
+        shadow-radius={LOW_END ? 2 : 3.5}
+        shadow-blurSamples={LOW_END ? 8 : 12}
+        // VSM เก็บค่าเป็นโมเมนต์ ไม่ใช่ความลึกดิบ — bias แบบ PCF ใช้ไม่ได้ ต้องเป็น 0
+        shadow-bias={0}
+        shadow-normalBias={0.02}
+        /**
+         * กรอบแคบลงจาก ±18 เหลือ ±11: shadow map ใบเดิม 2048 ปูบนพื้นที่เล็กลง = ความละเอียด
+         * ต่อหน่วยเพิ่มเกือบสองเท่า (57 -> 93 texel/หน่วย) ขอบเงาจึงเนียนขึ้นโดยไม่ต้องเพิ่ม map
+         * ±11 ยังคลุมตัวละคร พุ่มไม้รอบตัว และเนินที่เงาไปตกได้ครบ
+         */
+        shadow-camera-left={-11}
+        shadow-camera-right={11}
+        shadow-camera-top={11}
+        shadow-camera-bottom={-11}
+        shadow-camera-near={1}
+        shadow-camera-far={42}
       />
       {/* fill หน้า — bounce อุ่นจากฝั่งกล้อง ไม่ให้ด้านหน้าจมมืด */}
-      <directionalLight position={[-5, 4, 13]} intensity={1.0} color="#FFDFC8" />
+      <directionalLight ref={lights.fill} position={[-5, 4, 13]} intensity={1.0} color="#FFDFC8" />
       {/* fill เย็นจาง ๆ จากซ้าย เพิ่มมิติ */}
-      <directionalLight position={[-11, 2, -2]} intensity={0.3} color="#D9C8FF" />
+      <directionalLight ref={lights.cool} position={[-11, 2, -2]} intensity={0.3} color="#D9C8FF" />
     </>
   )
 }
@@ -499,9 +618,10 @@ function useCoveredFrameloop() {
 export function Scene() {
   // โหมดทำงาน: ปิดสี/บรรยากาศทั้งหมด เหลือแต่ทรงกับเงา — จูนโมเดลได้โดยไม่ถูกสีหลอกตา
   const { clay, clayScene, clayGrid, clayOrbit } = useControls('Workspace', {
-    // เปิดเองเฉพาะตอน dev — ถ้า default เป็น true ติดไปกับ build เว็บจริงจะกลายเป็นดินเทาทั้งหน้า
-    // (แผง leva ถูกซ่อนตอน production แต่ "ค่า" ยังทำงานอยู่ ปิดเองไม่ได้)
-    clay: { value: import.meta.env.DEV, label: 'โหมดปั้น (เทา)' },
+    // ปิดไว้ — งานปั้นทรงจบแล้ว ตอนนี้จูนสี/แสง/จังหวะ ซึ่งต้องเห็นของจริง
+    // (ถ้า default เป็น true ยังติดไปกับ build เว็บจริงด้วย: แผง leva ถูกซ่อนตอน production
+    //  แต่ "ค่า" ยังทำงานอยู่ ผู้ใช้ปิดเองไม่ได้ — เปิดได้เฉพาะจากแผงตอน dev)
+    clay: { value: false, label: 'โหมดปั้น (เทา)' },
     // ฉากประกอบยังอยู่ (แค่กลายเป็นเทา) — ปิดได้ถ้าอยากเหลือแต่ตัว mascot กับพื้น
     clayScene: { value: true, label: 'ฉากประกอบ (ฟ้า/เนิน/ต้นไม้/panel)' },
     clayGrid: { value: false, label: 'พื้น + กริด (แทนเนิน)' },
@@ -526,7 +646,8 @@ export function Scene() {
   return (
     <Canvas
       frameloop={frameloop}
-      shadows="soft"
+      // VSM = เงาเบลอได้จริงตาม shadow.radius (ดูคอมเมนต์ที่ไฟ key)
+      shadows={{ type: THREE.VSMShadowMap }}
       dpr={[1, LOW_END ? 1.5 : 2]}
       // การ์ดขยายเต็มจอระหว่าง scroll (--sp ยุบ padding) ขนาดกล่องจึงเปลี่ยนทุกเฟรม
       // default ของ R3F หน่วงการวัดไว้ 50ms ตอน scroll → buffer ค้าง aspect เก่า ถูก CSS ยืดใส่กล่องใหม่
