@@ -145,8 +145,21 @@ const INTRO_FACE = new THREE.Vector3()
 /** หันหัวซ้าย-ขวากี่เรเดียนตอนทำท่าสงสัย — 0.3 ≈ 17° พอให้เห็นว่าหันโดยที่ตายังอยู่ในเฟรม */
 /** หันหัวได้ไกลสุดกี่เรเดียน — 0.6 ≈ 34° เกินกว่านี้คอบิดจนดูไม่ใช่คน */
 const INTRO_LOOK_MAX = 0.6
-/** ยิ่งน้อยยิ่งช้า/นุ่ม — 0.55 ใช้เวลาราวหนึ่งวินาทีกว่าจะเข้าที่ */
-const INTRO_LOOK_EASE = 0.55
+/**
+ * สปริงของคอ — คนหันหัวแล้ว "เลยนิดแล้วตกลงที่" ไม่ใช่ไหลเข้าหาเป้าแล้วหยุดสนิท
+ * damp เข้าเป้าตรง ๆ (แบบเดิม) ได้ความนุ่มแต่ไม่มีน้ำหนัก อ่านเป็นหัวหุ่นที่ถูกหมุนด้วยมอเตอร์
+ *
+ * K = ความแข็ง (เร็วแค่ไหนถึงเป้า) ZETA < 1 = ยอมให้เลยเป้า 1 ครั้งเล็ก ๆ ก่อนตกลงที่
+ */
+const NECK_K = 26
+const NECK_ZETA = 0.62
+/** คอตามหัวช้ากว่านิดหน่อย — ใช้ค่าที่ตามหลังนี้ปั่นการก้ม/เอียง ให้ท่าไม่ขยับพร้อมกันทั้งก้อน */
+const NECK_LAG = 0.14
+/** หนีบ 0..1 แล้วลบหัวท้ายให้เรียบ — ใช้เป็น "เกต" ที่ไม่กระตุกตอนเปิด/ปิด */
+const smooth01 = (t) => {
+  const k = t < 0 ? 0 : t > 1 ? 1 : t
+  return k * k * (3 - 2 * k)
+}
 /** ตาข้างที่ขยิบตอน intro — ลำดับตาม GLB ข้างไหนก็ได้ ขอให้เป็นข้างเดียวตลอด */
 const WINK_EYE = 0
 const TMP_V = new THREE.Vector3()
@@ -1639,8 +1652,10 @@ export function Mascot({
   const blink = useRef({ next: 2, closing: 0 })
   // บีต eyes — ตาโต + ประกาย
   const eyeGrow = useRef(0)
-  // มุมหันหัวช่วง intro — ไต่เข้าหาเป้าด้วย damp จึงต้องเก็บค่าข้ามเฟรม
+  // มุมหันหัวช่วง intro — เป็นสปริง จึงต้องเก็บทั้งมุม ความเร็ว และมุมที่คอตามหลัง
   const introLook = useRef(0)
+  const introLookV = useRef(0)
+  const introLookLag = useRef(0)
   const eyec = useControls('Eyes (ฉาก 2)', {
     eyesScale: { value: 0.85, min: 0, max: 2.5, step: 0.05, label: 'ตาโตขึ้น (เท่า)' },
     eyesEase: { value: 0.16, min: 0.02, max: 0.5, step: 0.01, label: 'หน่วง' },
@@ -1718,19 +1733,51 @@ export function Mascot({
           )
           want = clamp(want, -INTRO_LOOK_MAX, INTRO_LOOK_MAX)
         }
-        // เริ่มหลังขยิบตาจบ แล้วค่อย ๆ ไต่ไปหาเป้า
-        const turn = f > 0.6 ? want : 0
-        introLook.current = damp(introLook.current, turn, INTRO_LOOK_EASE, dt)
-        const blend = 1 - introState.b.pull
+        /**
+         * เริ่มหันตอน "กล้องกำลังจะถอย" — ท้ายบีต face ไม่ใช่กลางบีต
+         *
+         * เดิมเริ่มที่ f > 0.6 (ราววินาทีที่ 2) หัวหันจบไปแล้วตั้งนานกว่ากล้องจะขยับ
+         * สองท่าเลยเป็นคนละเรื่องกัน ขยับให้ทับกัน: หัวเริ่มหันตอนบีต face เหลืออีกนิดเดียว
+         * แล้วยังหันค้างต่อไปในช่วงต้นของ pull — กล้องถอยออกมาเจอหัวที่กำลังหันอยู่
+         *
+         * ใช้เกตแบบไต่ (smoothstep) ไม่ใช่สวิตช์ ปลายทางของสปริงจึงไม่กระตุกตอนถึงจังหวะ
+         */
+        const gate = smooth01((f - 0.78) / 0.22)
+        const turn = want * gate
+
+        /**
+         * คอเป็นสปริง ไม่ใช่ตัวไล่เข้าหาเป้า
+         *
+         * ของเดิม damp เข้าเป้าแล้วจอดสนิท = ไม่มีน้ำหนัก ของจริงหัวจะเลยเป้านิดหนึ่งแล้วตกลงที่
+         * (ZETA 0.62 เลยราว 8%) ท่าเริ่มก็ออกช้ากว่าเพราะต้องเร่งความเร็วขึ้นมาก่อน
+         */
+        const w = NECK_K
+        introLookV.current += (turn - introLook.current) * w * dt
+        introLookV.current -= introLookV.current * 2 * Math.sqrt(w) * NECK_ZETA * dt
+        introLook.current += introLookV.current * dt
+        // ค่าที่ตามหลังอยู่ครึ่งจังหวะ — ใช้ปั่นการเอียง/ก้ม ท่าจะได้ไม่มาพร้อมกันทั้งก้อน
+        introLookLag.current = damp(introLookLag.current, introLook.current, NECK_LAG, dt)
+
+        /**
+         * ปล่อยหัวคืนท่าปกติช้ากว่าเดิม — เดิม blend = 1 - b.pull คือคืนตั้งแต่กล้องเริ่มขยับ
+         * ท่าหันเลยถูกลบทิ้งกลางคัน คราวนี้ค้างไว้ต้น pull แล้วค่อยคลายช่วง 35%-85%
+         */
+        const blend = 1 - smooth01((introState.b.pull - 0.35) / 0.5)
         headGroup.current.rotation.y = lerp(headGroup.current.rotation.y, introLook.current, blend)
+        /**
+         * ก้ม/เงย: คางตกนิดตอนกำลังหมุน (คนหันหัวเร็ว ๆ คางจะทิ้งลงก่อนแล้วค่อยยกกลับ)
+         * แล้วค้างเงยขึ้นเล็กน้อยตอนหันค้างอยู่ ใช้ความเร็วของสปริงเป็นตัวบอกว่า "กำลังหมุนอยู่"
+         */
+        const spin = Math.min(1, Math.abs(introLookV.current) / 1.6)
         headGroup.current.rotation.x = lerp(
           headGroup.current.rotation.x,
-          Math.abs(introLook.current) * 0.3,
+          Math.abs(introLookLag.current) * 0.22 - spin * 0.1,
           blend,
         )
+        // เอียงคอตามทางที่หัน ใช้ค่าที่ตามหลัง — เอียงมาทีหลังการหมุนเล็กน้อย
         headGroup.current.rotation.z = lerp(
           headGroup.current.rotation.z,
-          introLook.current * 0.16,
+          introLookLag.current * 0.2,
           blend,
         )
       }
