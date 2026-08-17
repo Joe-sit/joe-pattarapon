@@ -261,12 +261,18 @@ export default function Page() {
                         <h3>{card.title}</h3>
                       </span>
                     </header>
-                    <p className="jp-what-desc">{card.desc}</p>
-                    <ul className="jp-what-tags">
-                      {card.tags.map((t) => (
-                        <li key={t}>{t}</li>
-                      ))}
-                    </ul>
+                    {/* ตัวเนื้อยุบด้วย grid-template-rows 0fr -> 1fr (ไม่ใช่ max-height ที่ต้องเดาความสูง)
+                        ใบที่ไม่ได้ดูอยู่จึงเหลือแค่แถวหัว แล้วใบถัดไปเลื่อนขึ้นมาซ้อนพอดี */}
+                    <div className="jp-what-body">
+                      <div className="jp-what-body-in">
+                        <p className="jp-what-desc">{card.desc}</p>
+                        <ul className="jp-what-tags">
+                          {card.tags.map((t) => (
+                            <li key={t}>{t}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
                     {/* ปุ่มจริง ไม่ใช่ div — เป็นตัวรับ focus ที่ยกการ์ดขึ้นมาบนคีย์บอร์ดกับจอสัมผัส */}
                     <button
                       className="jp-what-pick"

@@ -269,7 +269,7 @@
 
 /* กองแผงซ้อนกัน สูงคงที่ — แผงที่ถูก hover ขยายแล้วอีกใบหดลง ผลรวมจึงไม่ดันเลย์เอาต์
    (flex-grow เป็นตัวแบ่ง ไม่ใช่ height: auto ซึ่งจะกระตุกตอนเนื้อหาข้างในเปลี่ยนความสูง) */
-/* กองการ์ดตามคอมป์ — ใบบนตรง ใบล่างเอียง 4.65° เหลื่อมขึ้นมาซ้อนกัน
+/* กองการ์ดตามคอมป์ — ใบที่กำลังดูกางเต็ม ใบอื่นเหลือแค่แถวหัว แล้วใบถัดไปซ้อนทับขึ้นมา
    ซ้อนด้วย margin ลบ ไม่ใช่ absolute — ความสูงกองยังคิดจากเนื้อหาจริง ไม่ต้องตั้งเลขตายตัว */
 .jp-what-stack {
   display: flex;
@@ -285,27 +285,51 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: clamp(14px, 1.6vw, 24px);
   padding: clamp(20px, 2.2vw, 32px);
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: clamp(28px, 2.8vw, 40px);
   background: #fff;
   pointer-events: auto;
-  /* ใบที่สองเอียงและเหลื่อมขึ้นไปทับใบแรก — --c คือลำดับใบ (0, 1, ...) */
-  margin-top: calc(var(--c) * -22px);
-  transform: rotate(calc(var(--c) * 4.65deg));
-  transform-origin: 30% 0;
-  transition: transform 0.42s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.42s ease;
+  /* ใบถัดไปเลื่อนขึ้นมาซ้อนใบก่อนหน้า มุมมนเลยเหลื่อมกันเป็นชั้น — --c คือลำดับใบ (0, 1, ...) */
+  margin-top: calc(var(--c) * -28px);
   z-index: calc(1 + var(--c));
+  box-shadow: 0 -14px 30px -22px rgba(60, 30, 10, 0.35);
 }
 
-/* ชี้ที่ใบไหน ใบนั้นตั้งตรงและยกขึ้นมาข้างหน้า — ใบล่างซ้อนทับข้อความใบบนอยู่ ต้องมีทางอ่านทั้งสองใบ
-   focus-within เผื่อคีย์บอร์ด/จอสัมผัส (ปุ่มโปร่งใสเต็มการ์ดเป็นตัวรับ focus) */
+/* ใบที่กำลังดูอยู่ขึ้นมาหน้าสุด (เงาของใบถัดไปจะได้ไม่พาดทับหัวข้อมัน) */
 .jp-what-card:hover,
 .jp-what-card:focus-within {
-  transform: rotate(0deg) translateY(-8px);
-  box-shadow: 0 18px 40px -24px rgba(60, 30, 10, 0.45);
   z-index: 5;
+}
+
+/* ยุบ/กางด้วย grid-template-rows — 0fr ไม่ต้องรู้ความสูงล่วงหน้าเหมือน max-height
+   และ transition ได้จริงต่างจาก height: auto */
+.jp-what-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.jp-what-body-in {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 1.6vw, 24px);
+  overflow: hidden;
+  /* ระยะห่างจากแถวหัวอยู่ที่นี่ ไม่ใช่ gap ของการ์ด — gap จะค้างอยู่ตอนยุบ กลายเป็นช่องว่างลอย */
+  padding-top: clamp(14px, 1.6vw, 24px);
+}
+
+/* ตั้งต้น: ใบล่างสุดกางอยู่ (ตามคอมป์) ใบอื่นเหลือแค่หัว */
+.jp-what-card:last-child .jp-what-body,
+.jp-what-card:hover .jp-what-body,
+.jp-what-card:focus-within .jp-what-body {
+  grid-template-rows: 1fr;
+}
+
+/* พอชี้ใบไหน ใบนั้นกาง ใบอื่นยุบ — รวมถึงใบล่างสุดที่กางไว้ตั้งแต่แรก */
+.jp-what-stack:hover .jp-what-card:not(:hover) .jp-what-body,
+.jp-what-stack:focus-within .jp-what-card:not(:focus-within) .jp-what-body {
+  grid-template-rows: 0fr;
 }
 
 .jp-what-head {
@@ -427,14 +451,9 @@
   .jp-what-stack {
     width: 100%;
   }
-  /* จอแคบไม่มีที่ให้การ์ดเอียงซ้อนกัน วางเรียงลงมาตรง ๆ แทน */
+  /* จอแคบซ้อนน้อยลง มุมมนใหญ่เต็ม ๆ จะกินหัวข้อของใบล่าง */
   .jp-what-card {
-    margin-top: 10px;
-    transform: none;
-  }
-  .jp-what-card:hover,
-  .jp-what-card:focus-within {
-    transform: translateY(-4px);
+    margin-top: calc(var(--c) * -18px);
   }
   /* แท็กเต็มชุดกินพื้นที่เกินครึ่งจอ — เหลือไว้สามอันแรกพอบอกขอบเขตงาน */
   .jp-what-tags li:nth-child(n + 4) {
