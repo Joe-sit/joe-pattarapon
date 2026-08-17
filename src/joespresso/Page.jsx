@@ -40,16 +40,23 @@ const WHAT_TITLE = ['What', 'I do']
  */
 const WHAT = [
   {
-    id: 'develop',
-    title: 'Develop',
-    desc: 'React and TypeScript on Vite, with the 3D work in react-three-fiber.',
-    tags: ['React', 'TypeScript', 'Three.js', 'R3F', 'GSAP', 'Tailwind'],
+    id: 'design',
+    kicker: 'UI/UX',
+    title: 'Design',
+    // ไอคอนเป็นไฟล์ที่ export จาก Figma โดยตรง ไม่ได้วาด path เอง
+    icon: '/icons/pointer.svg',
+    tone: '#fd5000',
+    desc: 'Transforming abstract idea into high-fidelity wireframe.',
+    tags: ['User Research', 'User-centered Design', 'Wireframe', 'Prototype', 'User Testing'],
   },
   {
-    id: 'design',
-    title: 'Design',
-    desc: 'Drawn in Figma, then built in code — this mascot is geometry, not an imported model.',
-    tags: ['Figma', 'Design systems', '3D scenes', 'Motion'],
+    id: 'develop',
+    kicker: 'Front-end',
+    title: 'Develop',
+    icon: '/icons/prompt.svg',
+    tone: '#a996eb',
+    desc: 'React and TypeScript on Vite, with the 3D work in react-three-fiber.',
+    tags: ['React', 'TypeScript', 'Three.js', 'R3F', 'Vite', 'Motion'],
   },
 ]
 
@@ -244,29 +251,28 @@ export default function Page() {
 
               <div className="jp-what-stack">
                 {WHAT.map((card, i) => (
-                  <article className="jp-what-card" key={card.id} style={{ '--c': i }}>
-                    <span className="jp-what-frame" aria-hidden="true" />
-                    <span className="jp-what-corner" aria-hidden="true" />
-                    <div className="jp-what-in">
-                      <h3>{card.title}</h3>
-                      <p>{card.desc}</p>
-                      <div className="jp-what-more">
-                        <h4>Skillset &amp; tools</h4>
-                        <ul className="jp-what-tags">
-                          {card.tags.map((t) => (
-                            <li key={t}>{t}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                    {/* ปุ่มจริง ไม่ใช่ div — เป็นตัวรับ focus ที่กางแผงบนคีย์บอร์ดกับจอสัมผัส */}
+                  <article className="jp-what-card" key={card.id} style={{ '--c': i, '--tone': card.tone }}>
+                    <header className="jp-what-head">
+                      <span className="jp-what-icon" aria-hidden="true">
+                        <img src={card.icon} alt="" />
+                      </span>
+                      <span className="jp-what-name">
+                        <span className="jp-what-kicker">{card.kicker}</span>
+                        <h3>{card.title}</h3>
+                      </span>
+                    </header>
+                    <p className="jp-what-desc">{card.desc}</p>
+                    <ul className="jp-what-tags">
+                      {card.tags.map((t) => (
+                        <li key={t}>{t}</li>
+                      ))}
+                    </ul>
+                    {/* ปุ่มจริง ไม่ใช่ div — เป็นตัวรับ focus ที่ยกการ์ดขึ้นมาบนคีย์บอร์ดกับจอสัมผัส */}
                     <button
-                      className="jp-what-arrow"
+                      className="jp-what-pick"
                       type="button"
-                      aria-label={`${card.title} — skillset and tools`}
-                    >
-                      <span aria-hidden="true" />
-                    </button>
+                      aria-label={`${card.kicker} ${card.title} — skillset and tools`}
+                    />
                   </article>
                 ))}
               </div>

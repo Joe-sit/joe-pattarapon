@@ -247,10 +247,18 @@
 .jp-what-title {
   margin: 0;
   font-family: var(--jp-font-display);
-  font-weight: 600;
-  font-size: clamp(34px, 4.4vw, 64px);
-  line-height: 1.04;
+  /* 96px / Bold ตามคอมป์ ตัวอักษรขาวบนฉากสีอุ่น */
+  font-weight: 700;
+  font-size: clamp(40px, 6.6vw, 96px);
+  line-height: 1.02;
   letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+/* คำสุดท้าย ("do") เป็นสีส้มแบรนด์ตามคอมป์ */
+.jp-what-title .jp-word:last-child {
+  color: #fd5000;
 }
 
 /* ขึ้นบรรทัดใหม่โดยไม่ตัดสาย span — <br> ระหว่าง inline-block ทำให้ระยะคำเพี้ยนไปหนึ่งช่อง */
@@ -261,185 +269,133 @@
 
 /* กองแผงซ้อนกัน สูงคงที่ — แผงที่ถูก hover ขยายแล้วอีกใบหดลง ผลรวมจึงไม่ดันเลย์เอาต์
    (flex-grow เป็นตัวแบ่ง ไม่ใช่ height: auto ซึ่งจะกระตุกตอนเนื้อหาข้างในเปลี่ยนความสูง) */
+/* กองการ์ดตามคอมป์ — ใบบนตรง ใบล่างเอียง 4.65° เหลื่อมขึ้นมาซ้อนกัน
+   ซ้อนด้วย margin ลบ ไม่ใช่ absolute — ความสูงกองยังคิดจากเนื้อหาจริง ไม่ต้องตั้งเลขตายตัว */
 .jp-what-stack {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: min(100%, 470px);
-  height: clamp(300px, 52vh, 430px);
+  width: min(100%, 473px);
   /* คลี่ลงมาพร้อมโปร่งใสจาง ๆ ตาม --open */
   opacity: var(--open);
   transform: translateY(calc((1 - var(--open)) * 26px));
 }
 
+/* การ์ดขาวขอบมน 40 ตามคอมป์ (บอร์เดอร์ 1px ดำ 10% ไม่ใช่เงา — คอมป์วางบนพื้นครีมทึบ) */
 .jp-what-card {
   position: relative;
-  flex: 1 1 0;
-  min-height: 0;
-  padding: clamp(16px, 2vw, 24px);
-  transition: flex-grow 0.5s ease;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 1.6vw, 24px);
+  padding: clamp(20px, 2.2vw, 32px);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: clamp(28px, 2.8vw, 40px);
+  background: #fff;
   pointer-events: auto;
+  /* ใบที่สองเอียงและเหลื่อมขึ้นไปทับใบแรก — --c คือลำดับใบ (0, 1, ...) */
+  margin-top: calc(var(--c) * -22px);
+  transform: rotate(calc(var(--c) * 4.65deg));
+  transform-origin: 30% 0;
+  transition: transform 0.42s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.42s ease;
+  z-index: calc(1 + var(--c));
 }
 
-/* แผงที่กำลังดูอยู่กินพื้นที่สองเท่าของอีกใบ — hover สำหรับเมาส์,
-   focus-within สำหรับคีย์บอร์ดกับจอสัมผัส (ปุ่มลูกศรข้างในเป็นตัวรับ focus) */
+/* ชี้ที่ใบไหน ใบนั้นตั้งตรงและยกขึ้นมาข้างหน้า — ใบล่างซ้อนทับข้อความใบบนอยู่ ต้องมีทางอ่านทั้งสองใบ
+   focus-within เผื่อคีย์บอร์ด/จอสัมผัส (ปุ่มโปร่งใสเต็มการ์ดเป็นตัวรับ focus) */
 .jp-what-card:hover,
 .jp-what-card:focus-within {
-  flex-grow: 2.6;
+  transform: rotate(0deg) translateY(-8px);
+  box-shadow: 0 18px 40px -24px rgba(60, 30, 10, 0.45);
+  z-index: 5;
 }
 
-/* กรอบเส้นประ: คลี่ออกจากกึ่งกลางตาม --open แทนที่จะโผล่มาทั้งกรอบ
-   แยกเป็น span ของตัวเอง ไม่ใช่ border ของการ์ด — จะได้ scale กรอบโดยไม่ลากเนื้อหาไปด้วย */
-.jp-what-frame {
-  position: absolute;
-  inset: 0;
-  border: 1px dashed color-mix(in srgb, var(--jp-ink) 34%, transparent);
-  transform: scaleX(var(--open));
-  transform-origin: center;
+.jp-what-head {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 1.6vw, 24px);
 }
 
-/* ฉากมุมสี่มุม — เหมือนกรอบเลือกวัตถุในโปรแกรมออกแบบ
-   (ต้นแบบใช้ keyframes หน่วงเวลา ของเราผูกกับตำแหน่งสกรอลล์แทน จะได้ย้อนกลับได้)
-
-   ตำแหน่งวิ่งตามขอบกรอบด้วยสูตรเดียวกับที่กรอบใช้ scale — ไม่ใช่ transform เพราะ scaleX
-   จะบีบตัวฉากให้แบนไปด้วย ระหว่างคลี่ฉากมุมจึงเคยลอยค้างอยู่นอกกรอบ */
-.jp-what-card::before,
-.jp-what-card::after,
-.jp-what-corner::before,
-.jp-what-corner::after {
-  content: '';
-  position: absolute;
-  width: 9px;
-  height: 9px;
-  border: 2px solid var(--jp-ink);
-  opacity: clamp(0, calc((var(--open) - 0.55) / 0.45), 1);
+/* ช่องไอคอนสีตามการ์ด — 84px ตามคอมป์ ย่อลงตามจอ */
+.jp-what-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: clamp(58px, 5.8vw, 84px);
+  height: clamp(58px, 5.8vw, 84px);
+  border-radius: clamp(16px, 1.7vw, 24px);
+  background: var(--tone);
 }
 
-.jp-what-card::before {
-  top: -1px;
-  left: calc(50% - var(--open) * 50% - 1px);
-  border-right: none;
-  border-bottom: none;
-}
-.jp-what-corner::before {
-  top: -1px;
-  right: calc(50% - var(--open) * 50% - 1px);
-  border-left: none;
-  border-bottom: none;
-}
-.jp-what-card::after {
-  bottom: -1px;
-  left: calc(50% - var(--open) * 50% - 1px);
-  border-top: none;
-  border-right: none;
-}
-.jp-what-corner::after {
-  bottom: -1px;
-  right: calc(50% - var(--open) * 50% - 1px);
-  border-left: none;
-  border-top: none;
+.jp-what-icon img {
+  width: 48%;
+  height: 48%;
 }
 
-.jp-what-in {
-  height: 100%;
-  overflow: hidden;
+.jp-what-name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
-.jp-what-in h3 {
+.jp-what-kicker {
+  font-family: var(--jp-font-display);
+  font-weight: 500;
+  font-size: clamp(15px, 1.6vw, 24px);
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.jp-what-card h3 {
   margin: 0;
   font-family: var(--jp-font-display);
-  font-size: clamp(20px, 1.8vw, 26px);
-  font-weight: 600;
+  font-weight: 700;
+  font-size: clamp(24px, 2.7vw, 40px);
+  line-height: 1;
   letter-spacing: -0.01em;
-}
-
-/* แผงที่ยุบอยู่ตัดคำอย่างตั้งใจสองบรรทัด — ปล่อยให้ overflow กินเองจะได้บรรทัดที่โดนเฉือนครึ่ง
-   ซึ่งอ่านเป็นบั๊กมากกว่าเป็นบทคัดย่อ */
-.jp-what-in p {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  margin: 6px 0 0;
-  max-width: 36ch;
-  font-size: clamp(12px, 1vw, 14px);
-  line-height: 1.5;
-  opacity: 0.72;
-}
-
-.jp-what-card:hover .jp-what-in p,
-.jp-what-card:focus-within .jp-what-in p {
-  -webkit-line-clamp: 3;
-}
-
-/* รายละเอียดชั้นสอง — เห็นเฉพาะแผงที่กำลังดูอยู่ ไม่งั้นสองแผงแย่งกันพูดพร้อมกัน */
-.jp-what-more {
-  margin-top: 14px;
-  opacity: 0;
-  transform: translateY(6px);
-  transition: opacity 0.35s ease, transform 0.35s ease;
-}
-.jp-what-card:hover .jp-what-more,
-.jp-what-card:focus-within .jp-what-more {
-  opacity: 1;
-  transform: none;
-}
-
-.jp-what-more h4 {
-  margin: 0 0 6px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.16em;
   text-transform: uppercase;
-  opacity: 0.45;
+  color: #000;
 }
 
+.jp-what-desc {
+  margin: 0;
+  font-weight: 500;
+  font-size: clamp(15px, 1.6vw, 24px);
+  line-height: 1.25;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+/* ยาเม็ดแท็ก — พื้นสีครีมเดียวกับพื้นหลังในคอมป์ ตัดกับการ์ดขาว */
 .jp-what-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: clamp(8px, 1vw, 16px);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .jp-what-tags li {
-  padding: 2px 9px;
-  border: 1px solid color-mix(in srgb, var(--jp-ink) 28%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--jp-ink) 7%, transparent);
-  font-size: clamp(11px, 0.9vw, 13px);
+  padding: 8px 16px;
+  border-radius: 100px;
+  background: #e2d7cb;
+  font-weight: 500;
+  font-size: clamp(12px, 1.05vw, 16px);
+  line-height: 1.2;
+  color: rgba(0, 0, 0, 0.6);
 }
 
-/* ลูกศรมุมล่างขวา — กลับหัวเมื่อแผงกางออก บอกว่ากดแล้วยุบกลับได้ */
-.jp-what-arrow {
+/* ปุ่มโปร่งใสคลุมทั้งใบ — มีไว้รับ focus อย่างเดียว ไม่มีภาพของตัวเอง */
+.jp-what-pick {
   position: absolute;
-  right: 14px;
-  bottom: 14px;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 1px solid color-mix(in srgb, var(--jp-ink) 45%, transparent);
+  inset: 0;
+  border: 0;
+  border-radius: inherit;
   background: none;
   cursor: pointer;
-  opacity: clamp(0, calc((var(--open) - 0.55) / 0.45), 1);
 }
 
-.jp-what-arrow span {
-  position: absolute;
-  top: 40%;
-  left: 50%;
-  width: 9px;
-  height: 9px;
-  border-left: 1px solid var(--jp-ink);
-  border-bottom: 1px solid var(--jp-ink);
-  transform: translate(-50%, -50%) rotate(-45deg);
-  transition: transform 0.5s ease;
-}
-
-.jp-what-card:hover .jp-what-arrow span,
-.jp-what-card:focus-within .jp-what-arrow span {
-  transform: translate(-50%, -20%) rotate(-225deg);
+.jp-what-pick:focus-visible {
+  outline: 2px solid var(--tone);
+  outline-offset: 3px;
 }
 
 .jp-word {
@@ -470,15 +426,19 @@
   }
   .jp-what-stack {
     width: 100%;
-    height: clamp(240px, 36vh, 320px);
   }
-  /* แผงที่ยุบอยู่บนจอแคบเหลือที่แค่บรรทัดเดียวจริง ๆ — สองบรรทัดจะโดนขอบเฉือน */
-  .jp-what-in p {
-    -webkit-line-clamp: 1;
+  /* จอแคบไม่มีที่ให้การ์ดเอียงซ้อนกัน วางเรียงลงมาตรง ๆ แทน */
+  .jp-what-card {
+    margin-top: 10px;
+    transform: none;
   }
-  .jp-what-card:hover .jp-what-in p,
-  .jp-what-card:focus-within .jp-what-in p {
-    -webkit-line-clamp: 3;
+  .jp-what-card:hover,
+  .jp-what-card:focus-within {
+    transform: translateY(-4px);
+  }
+  /* แท็กเต็มชุดกินพื้นที่เกินครึ่งจอ — เหลือไว้สามอันแรกพอบอกขอบเขตงาน */
+  .jp-what-tags li:nth-child(n + 4) {
+    display: none;
   }
 }
 
