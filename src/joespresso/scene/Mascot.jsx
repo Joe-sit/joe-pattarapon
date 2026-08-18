@@ -160,8 +160,15 @@ const smooth01 = (t) => {
   const k = t < 0 ? 0 : t > 1 ? 1 : t
   return k * k * (3 - 2 * k)
 }
-/** ตาข้างที่ขยิบตอน intro — ลำดับตาม GLB ข้างไหนก็ได้ ขอให้เป็นข้างเดียวตลอด */
-const WINK_EYE = 0
+/**
+ * เพดานมุมก้ม/เงยของหัว (rad) — กันคางจมลงไปในคอเสื้อ
+ *
+ * หัวเป็นกล่องหมุนรอบจุดต่อคอ ไม่มีคอจริงยืดตาม พอหลายระบบก้มพร้อมกัน
+ * (ก้มดูแก้วตอน sip 0.3 + เหลียวมองก้ม 0.14 + ตามเมาส์ 0.28) มุมรวมทะลุ 0.4+
+ * ครึ่งหน้าก็มุดหายเข้าไปในเสื้อ — หนีบผลรวมสุดท้ายไว้ที่นี่ที่เดียว แหล่งไหนจะบวกมาเท่าไรก็ตาม
+ */
+const HEAD_PITCH_LIM = 0.3
+
 const TMP_V = new THREE.Vector3()
 const TMP_V2 = new THREE.Vector3()
 const TMP_Q2 = new THREE.Quaternion()
@@ -169,23 +176,9 @@ const TMP_Q2 = new THREE.Quaternion()
 // เล็งแขนชี้: ท่าตั้งต้นกับแกนแขนของท่านั้น
 const AIM_DEF = new THREE.Quaternion()
 const AIM_DIR = new THREE.Vector3()
-/**
- * ท่าเท้าสะเอวตอนชี้จบ — บอกเป็น "ปลายทางของกำปั้น" ไม่ใช่มุมข้อต่อ
- *
- * HIP_TARGET = จุดวางกำปั้น วัดจากหัวไหล่ เป็นสัดส่วนของ "ความยาวแขนทั้งเส้น" (L1+L2)
- * [เข้าใน/ออกนอกตัว, ลง, หน้า] — ผูกกับความยาวแขนเพราะนั่นคือสิ่งที่กำหนดว่าเอื้อมถึงแค่ไหน
- * เคยผูกกับกล่องลำตัวแล้วพลาด: กล่องนั้นกว้างกว่าตัวจริงเกือบเท่าตัว จุดเอวเลยไปโผล่นอกลำตัว
- * แขนก็เหยียดตรงออกข้างแทนที่จะงอ (IK หนีบระยะไว้ที่เอื้อมสุด)
- * HIP_ELBOW = ทิศที่ศอกกางออกไป (x คูณด้านของแขนเอง) กางออกข้างและไปด้านหลัง
- */
-const HIP_TARGET = [-0.12, -0.7, -0.06]
-const HIP_ELBOW = [1, -0.18, -0.8]
-
-// จูนท่าสะเอวสด ๆ ตอน dev — แก้ค่าในอาเรย์แล้วเห็นผลเฟรมถัดไป ไม่ต้อง reload
-if (import.meta.env.DEV && typeof window !== 'undefined') {
-  // ik ถูกเติมตอนสร้างแขน — ไว้อ่านความยาวท่อน/กล่องลำตัวตอนหาว่าท่าเพี้ยนเพราะอะไร
-  window.__hip = { target: HIP_TARGET, elbow: HIP_ELBOW, ik: null }
-}
+// ท่าห้อยแขนหลังชี้ (tuck): ทิศห้อยจาก slider + แกนแขน normalize แล้ว
+const TUCK_V = new THREE.Vector3()
+const TUCK_AXIS = new THREE.Vector3()
 const IK_T = new THREE.Vector3()
 const IK_D = new THREE.Vector3()
 const IK_U = new THREE.Vector3()
@@ -354,6 +347,17 @@ export function Mascot({
 
   // debugger: จูนท่าทางทุกข้อต่อสด ๆ
   // debugger: หัวหันตามเมาส์ — อยู่กลุ่มเดียวกับของกล้องใน App.jsx (leva รวม folder ชื่อเดียวกันให้)
+  // idle: ลมหายใจ + โยกตัวเบา ๆ ให้ตัวละครดู "ยังมีชีวิต" ตอนไม่มีอะไรขยับ (ref: chaingpt.org)
+  const idle = useControls('Idle', {
+    idleAmp: { value: 2, min: 0, max: 3, step: 0.05, label: 'แรงขยับ' },
+    idleBreath: { value: 0.8, min: 0.1, max: 1.6, step: 0.01, label: 'จังหวะหายใจ (Hz)' },
+    idleGlance: { value: 2, min: 0, max: 3, step: 0.05, label: 'เหลียวมอง' },
+  }, { collapsed: true })
+
+  // เหลียวมองรอบ ๆ: จุดตั้งต้น (fx/fy) -> เป้า (tx/ty) เล่นเป็นรอบ ๆ ด้วย ease in-out
+  // (damp ใช้ไม่ได้กับงานนี้ — มันออกตัวพรวดแล้วค่อยเบา ได้ครึ่งเดียวของ ease in-out)
+  const glance = useRef({ fx: 0, fy: 0, tx: 0, ty: 0, x: 0, y: 0, start: 0, dur: 1, next: 2 })
+
   const fol = useControls('Follow Cursor', {
     headYaw: { value: 0.55, min: 0, max: 1.5, step: 0.01, label: 'หัว ซ้ายขวา' },
     headPitch: { value: 0.28, min: 0, max: 1.2, step: 0.01, label: 'หัว ก้มเงย' },
@@ -412,6 +416,50 @@ export function Mascot({
     // debug: ลากลูกบอลที่ปลายนิ้วเพื่อเล็งแขน — ปล่อยแล้วค่ามุมไหล่ถูกเขียนกลับลง slider ด้านบน
     armDrag: { value: false, label: 'ลากวางแขน' },
   }))
+
+  /**
+   * ท่า "หลังชี้เสร็จ" — แขนชี้ลดลงมาห้อยแนบตัว ใช้ทั้งตอนจบ intro และตอน scroll เข้าฉาก 2
+   * (เป็น userData.tucked ตัวเดียวกันทั้งสองทาง ปั้นใหม่จาก slider ทุกเฟรม จูนได้สด ๆ)
+   * ศอก/ข้อมือเป็น "ส่วนเพิ่ม" จากท่าชี้ ไล่ตามน้ำหนักการหุบแขน — น้ำหนัก 0 คือท่าชี้เดิมเป๊ะ
+   */
+  const tuk = useControls('Tuck (ท่าหลังชี้)', {
+    // บังคับน้ำหนักหุบแขนตรง ๆ ไว้จูนโดยไม่ต้อง scroll/รอ intro — 0 = ปล่อยตามฉาก
+    tuckPreview: { value: 0, min: 0, max: 1, step: 0.01, label: 'ดูท่า (บังคับหุบ)' },
+    // ทิศห้อยของทั้งแขน: กางออกนอกตัว (บวก = ออก ไม่ต้องจำซ้ายขวา) / เหวี่ยงไปหน้า-หลัง
+    tuckOut: { value: 0.24, min: -0.5, max: 1, step: 0.01, label: 'กางออกข้าง' },
+    tuckFwd: { value: 0, min: -0.8, max: 0.8, step: 0.01, label: 'แขนไปหน้า/หลัง' },
+    // บิดทั้งแขนรอบแกนห้อยของตัวเอง — หมุนหน้ากำปั้นเข้า-ออกจากตัว
+    tuckTwist: { value: 0.95, min: -3.1, max: 3.1, step: 0.05, label: 'บิดรอบแกนแขน' },
+    tuckElbowX: { value: 0, min: -2.2, max: 2.2, step: 0.05, label: 'ศอกเพิ่ม X' },
+    tuckElbowY: { value: 0, min: -2.2, max: 2.2, step: 0.05, label: 'ศอกเพิ่ม Y' },
+    tuckElbowZ: { value: 0, min: -2.2, max: 2.2, step: 0.05, label: 'ศอกเพิ่ม Z' },
+    // เลื่อน "ทั้งแขน" (ย้ายจุดหมุนไหล่ ทุกชิ้นตามไปทั้งก้อน) — ไม่ใช่การหมุน
+    // คู่กับ mugArmOut/mugArmUp ของแขนถือแก้ว บวก = ออกนอกตัว / ขึ้น
+    tuckArmOut: { value: 0.22, min: -0.3, max: 1.2, step: 0.01, label: 'ทั้งแขน ออกห่างตัว' },
+    tuckArmUp: { value: 0, min: -0.6, max: 0.6, step: 0.01, label: 'ทั้งแขน ขึ้น/ลง' },
+    tuckArmFwd: { value: 0, min: -0.6, max: 0.6, step: 0.01, label: 'ทั้งแขน หน้า/หลัง' },
+    tuckWristX: { value: 0, min: -2.2, max: 2.2, step: 0.05, label: 'ข้อมือเพิ่ม X' },
+    tuckWristY: { value: 0, min: -2.2, max: 2.2, step: 0.05, label: 'ข้อมือเพิ่ม Y' },
+    tuckWristZ: { value: 0, min: -2.2, max: 2.2, step: 0.05, label: 'ข้อมือเพิ่ม Z' },
+  }, { collapsed: true })
+
+  /**
+   * ท่านั่งทำงานของฉาก 2 — นั่งสตูล พิมพ์ MacBook บนโต๊ะ (WorkDesk.jsx คือฉากรอบตัว)
+   * ไล่ตามบีต focus ตัวเดียวกับหุบแขน: กล้องถึงที่ = นั่งเข้าที่พอดี
+   * ทุกค่าเป็น "ส่วนเพิ่ม" จากท่ายืน คูณน้ำหนักนั่ง — น้ำหนัก 0 คือยืนเป๊ะ ฉาก 1 ไม่กระทบ
+   */
+  const sit = useControls('Sit (ฉาก 2)', {
+    sitOn: { value: true, label: 'เปิดท่านั่ง' },
+    sitPreview: { value: 0, min: 0, max: 1, step: 0.01, label: 'ดูท่า (บังคับนั่ง)' },
+    sitDown: { value: 0.78, min: 0, max: 2, step: 0.01, label: 'ตัวลง (หน่วยโลก)' },
+    sitBack: { value: 0.3, min: -1, max: 1.5, step: 0.01, label: 'ตัวถอยหลัง' },
+    sitHip: { value: -1.35, min: -2, max: 2, step: 0.05, label: 'สะโพก งอ' },
+    sitKnee: { value: 1.5, min: -2.2, max: 2.2, step: 0.05, label: 'เข่า งอ' },
+    sitAnkle: { value: 0.1, min: -1.2, max: 1.2, step: 0.05, label: 'ข้อเท้า' },
+    // แขนชี้กลายเป็นแขนพิมพ์งาน — ต่อจากท่าห้อย (tuck) อีกชั้น
+    sitArmX: { value: -0.55, min: -2, max: 2, step: 0.05, label: 'แขน เหวี่ยงไปหน้า' },
+    sitElbowX: { value: 0.7, min: -2.2, max: 2.2, step: 0.05, label: 'ศอก งอรับคีย์บอร์ด' },
+  }, { collapsed: true })
 
   /**
    * ขา — ข้อละ 3 แกนเหมือนแขน + เลื่อนทั้งขาออกจากลำตัว
@@ -1476,38 +1524,6 @@ export function Mascot({
         )
       }
 
-      /**
-       * ท่าเท้าสะเอว — โจทย์แบบเดียวกับท่ายกแก้ว จึงแก้ด้วยเครื่องมือเดียวกัน (IK สองท่อน)
-       *
-       * ของเดิมเป็นออฟเซ็ต Euler สามตัวที่บวกทับท่าชี้ ซึ่งจูนไม่ลง: ข้อต่อของแขนนี้ไม่ได้อยู่บน
-       * แกนเนื้อแขน เพิ่มมุมศอกทีละนิดแล้วกำปั้นเหวี่ยงออกข้างตัวแทนที่จะเข้าหาเอว
-       *
-       * เขียนใหม่เป็นโจทย์ที่ตรงกับสิ่งที่ตาเห็นจริง: "เอากำปั้นไปวางที่เอว แล้วให้ศอกกางออกหลัง"
-       * เหลือค่าที่ต้องจูนแค่จุดเอวกับทิศกางศอก ซึ่งอ่านออกจากภาพได้ทันทีว่าต้องขยับทางไหน
-       */
-      model.updateMatrixWorld(true)
-      // จุดจับ = กลางกำปั้น (ไม่นับนิ้วที่ต่อยื่นออกไป ไม่งั้นจุดจับเลื่อนไปอยู่ปลายนิ้ว)
-      const invW = armPoint.wrist.matrixWorld.clone().invert()
-      const fist = new THREE.Box3()
-      armPoint.wrist.traverse((o) => {
-        if (!o.isMesh || !o.visible || o === rig.current.pointFinger) return
-        o.geometry.computeBoundingBox()
-        fist.union(o.geometry.boundingBox.clone().applyMatrix4(invW.clone().multiply(o.matrixWorld)))
-      })
-      if (!fist.isEmpty()) {
-        const gripW = armPoint.wrist.localToWorld(fist.getCenter(new THREE.Vector3()))
-        const vE = armPoint.elbow.worldToLocal(gripW.clone())
-        // เก็บแค่ "ของคงที่ของโครง" — จุดเอวจริงคิดตอน useFrame จาก HIP_TARGET (จูนสดได้)
-        rig.current.hipIK = {
-          u: armPoint.elbow.position.clone().normalize(), // ทิศต้นแขนในสเปซไหล่
-          L1: armPoint.elbow.position.length(),
-          v: vE.clone().normalize(), // ทิศศอก -> กำปั้น ในสเปซศอก
-          L2: vE.length(),
-          out: armPoint.outward ?? 1,
-        }
-        if (import.meta.env.DEV && window.__hip) window.__hip.ik = rig.current.hipIK
-      }
-
       // รายชื่อชิ้นส่วนแขน เรียงจากบ่าออกไปหาปลายนิ้ว — ใช้กับโหมดทาสีแยกชิ้น (slider 'แยกสีชิ้นแขน')
       rig.current.pointParts = armParts(armPoint)
       rig.current.pointMerged = mergeArm(armPoint)
@@ -1841,6 +1857,8 @@ export function Mascot({
 
     // apply ท่าจาก rig controls
     const r = rig.current
+    // น้ำหนักหุบแขนรวม (scroll ฉาก 2 / จบ intro / slider preview) — ใช้ไล่ศอก+ข้อมือส่วนเพิ่มท้ายเฟรม
+    let tuckW = 0
     if (r.pointShoulder) {
       // ระหว่างลาก ใช้มุมจาก drag แทน slider — เขียนลง slever ทุกเฟรมจะ re-render React 60 ครั้ง/วิ
       const d = drag.current
@@ -1856,9 +1874,20 @@ export function Mascot({
       //
       // ลากวางแขนอยู่ (drag) ไม่หุบ — กำลังจูนท่าชี้อยู่
       tuck.current = damp(tuck.current, scrollState.b.focus, sipc.sipEase, dt)
+      // ปั้นทิศห้อยใหม่จาก slider ทุกเฟรม (แทนค่าคงที่ตอน build) — จูนท่าหลังชี้ได้สด ๆ
+      if (ud.armAxis && ud.tucked) {
+        TUCK_V.set(tuk.tuckOut * (ud.outward ?? 1), -1, -tuk.tuckFwd).normalize()
+        ud.tucked.setFromUnitVectors(TUCK_AXIS.copy(ud.armAxis).normalize(), TUCK_V)
+        if (tuk.tuckTwist)
+          ud.tucked.premultiply(TMP_Q2.setFromAxisAngle(TUCK_V, tuk.tuckTwist))
+      }
       if (ud.tucked && !d) {
-        const t = seg(tuck.current, 0, sipc.sipTuckEnd) * sipc.sipTuck
+        const t = Math.max(
+          seg(tuck.current, 0, sipc.sipTuckEnd) * sipc.sipTuck,
+          tuk.tuckPreview,
+        )
         if (t > 0.0001) r.pointShoulder.quaternion.slerp(ud.tucked, t)
+        tuckW = t
       }
       // out = ทิศออกนอกตัวของแขนข้างนี้ (+x หรือ -x), หน้า = -z ในสเปซ model
       r.pointShoulder.position.set(
@@ -2028,7 +2057,9 @@ export function Mascot({
        * ปลายทางของ intro จะได้ต่อกับท่าตั้งต้นของฉากถัดไปพอดี ไม่มีสะดุดตอนเริ่ม scroll
        */
       const release = smooth01((introState.b.title - 0.5) / 0.45)
-      const w = introState.b.crop * (1 - release)
+      // smooth01 ให้แขนออกตัวนุ่มและเข้าจอดนุ่ม — กรอบ crop ใช้ smoothstep อยู่แล้ว (Panels)
+      // ถ้าแขนเชิงเส้นแต่กรอบ ease สองอย่างจะถึงปลายทางคนละจังหวะ อ่านเป็นแขนแข็งทื่อ
+      const w = smooth01(introState.b.crop) * (1 - release)
       if (w > 0.001) {
         const sh = r.pointShoulder.getWorldPosition(TMP_V)
         TMP_V2.copy(introState.crop).sub(sh).normalize()
@@ -2055,39 +2086,74 @@ export function Mascot({
         r.pointShoulder.quaternion.slerp(TMP_Q, w * 0.85)
       }
       /**
-       * ชี้จบแล้วเท้าสะเอว — ท่าภูมิใจกับงานที่เพิ่งจัดเสร็จ
+       * ชี้จบแล้วลดแขนลงแนบลำตัวเฉย ๆ — ไม่เท้าเอวแล้ว
        *
-       * IK สองท่อนชุดเดียวกับท่ายกแก้ว: บอกแค่ "กำปั้นไปอยู่ที่เอว ศอกกางไปทางหลัง"
-       * แล้วให้มันหามุมไหล่/ศอกเอง — สั่งเป็นมุมออยเลอร์ตรง ๆ ไม่ได้ เพราะข้อต่อของแขนนี้
-       * ไม่ได้อยู่บนแกนเนื้อแขน เพิ่มมุมศอกทีละนิดแล้วกำปั้นเหวี่ยงออกข้างแทนที่จะเข้าหาเอว
+       * ใช้ userData.tucked ตัวเดียวกับตอน scroll เข้าฉากสอง ไม่ปั้นท่าใหม่:
+       * ปลายทางของ intro กับท่าตั้งต้นของฉากถัดไปเป็นท่าเดียวกันเป๊ะ scroll ต่อแล้วไม่มีสะดุด
+       * ศอกไม่ต้องสั่ง — มุมชี้ (Z 0.35) คืองอนิด ๆ ตามธรรมชาติของแขนห้อยอยู่แล้ว
        *
        * ไล่ด้วย release ตัวเดียวกับที่หรี่น้ำหนักการชี้ลง สองท่าจึงคาบเกี่ยวกันพอดี ไม่ตัดวูบ
        */
-      if (release > 0.001 && r.hipIK && r.pointElbow) {
-        const ik = r.hipIK
-        const reach = ik.L1 + ik.L2
-        // อ่านค่าจากอาเรย์ทุกเฟรม ไม่ใช่ตอนสร้าง — จูนสดตอน dev ได้ และไม่มีค่าซ้ำสองที่
-        IK_T.copy(r.pointShoulder.position).add(
-          TMP_V2.set(HIP_TARGET[0] * ik.out, HIP_TARGET[1], HIP_TARGET[2]).multiplyScalar(reach),
+      if (release > 0.001 && r.pointShoulder.userData.tucked) {
+        r.pointShoulder.quaternion.slerp(r.pointShoulder.userData.tucked, release)
+        tuckW = Math.max(tuckW, release)
+      }
+    }
+
+    /**
+     * ท่านั่งทำงาน (ฉาก 2) — น้ำหนักแยกจาก tuckW: tuck เกิดตอนจบ intro ด้วย (ยังยืนอยู่)
+     * ส่วนนั่งเกิดจาก scroll เท่านั้น (tuck.current คือบีต focus ที่หน่วงแล้ว) + slider preview
+     */
+    const sitW = sit.sitOn
+      ? Math.max(smooth01(tuck.current), sit.sitPreview)
+      : 0
+    if (sitW > 0.001 && root.current) {
+      // เขียนจาก prop ทุกเฟรม ไม่บวกสะสม — ถอยหลัง = +z โลก (mascot หันหน้า -z)
+      root.current.position.y = position[1] - sit.sitDown * sitW
+      root.current.position.z = position[2] + sit.sitBack * sitW
+      for (const k of ['L', 'R']) {
+        const hip = r[`hip${k}`]
+        if (hip) hip.rotation.x += sit.sitHip * sitW
+        const knee = r[`knee${k}`]
+        if (knee) knee.rotation.x += sit.sitKnee * sitW
+        const ankle = r[`ankle${k}`]
+        if (ankle) ankle.rotation.x += sit.sitAnkle * sitW
+      }
+      // แขนพิมพ์งาน: หมุนเพิ่มต่อจากท่าห้อย (ไหล่เป็น quaternion — คูณต่อท้าย)
+      if (r.pointShoulder) {
+        r.pointShoulder.quaternion.multiply(
+          TMP_Q.setFromEuler(TMP_E.set(sit.sitArmX * sitW, 0, 0)),
         )
-        IK_D.copy(IK_T).sub(r.pointShoulder.position)
-        const D = clamp(IK_D.length(), Math.abs(ik.L1 - ik.L2) + 1e-3, ik.L1 + ik.L2 - 1e-3)
-        IK_U.copy(IK_D).normalize()
-        IK_P.set(HIP_ELBOW[0] * ik.out, HIP_ELBOW[1], HIP_ELBOW[2])
-          .normalize()
-          .addScaledVector(IK_U, -IK_P.dot(IK_U))
-        if (IK_P.lengthSq() < 1e-6) IK_P.set(0, -1, 0).addScaledVector(IK_U, -IK_U.y)
-        IK_P.normalize()
-        const a = Math.acos(clamp((ik.L1 * ik.L1 + D * D - ik.L2 * ik.L2) / (2 * ik.L1 * D), -1, 1))
-        IK_UP.copy(IK_U).multiplyScalar(Math.cos(a)).addScaledVector(IK_P, Math.sin(a))
-        IK_FW.copy(IK_T)
-          .sub(r.pointShoulder.position)
-          .addScaledVector(IK_UP, -ik.L1)
-          .normalize()
-        IK_QS.setFromUnitVectors(ik.u, IK_UP)
-        IK_QE.setFromUnitVectors(ik.v, IK_FW.applyQuaternion(TMP_Q2.copy(IK_QS).invert()))
-        r.pointShoulder.quaternion.slerp(IK_QS, release)
-        r.pointElbow.quaternion.slerp(IK_QE, release)
+      }
+      if (r.pointElbow) r.pointElbow.rotation.x += sit.sitElbowX * sitW
+    }
+
+    // ศอก/ข้อมือส่วนเพิ่มของท่าห้อยแขน — additive จากท่าชี้ ไล่ตามน้ำหนักหุบแขน
+    // ต้องอยู่หลังบล็อก intro เพราะ tuckW เพิ่งรู้ค่าสุดท้ายตรงนั้น
+    if (tuckW > 0.001) {
+      if (r.pointShoulder) {
+        // เลื่อนทั้งแขน — บวกทับตำแหน่งที่ set จาก base ไว้แล้วต้นเฟรม จึงไม่สะสมข้ามเฟรม
+        // หน้า = -z ในสเปซ model เหมือน pointShoulderFwd
+        const ud = r.pointShoulder.userData
+        r.pointShoulder.position.x += (ud.outward ?? 1) * tuk.tuckArmOut * tuckW
+        r.pointShoulder.position.y += tuk.tuckArmUp * tuckW
+        r.pointShoulder.position.z -= tuk.tuckArmFwd * tuckW
+      }
+      if (r.pointElbow) {
+        r.pointElbow.rotation.x += tuk.tuckElbowX * tuckW
+        r.pointElbow.rotation.y += tuk.tuckElbowY * tuckW
+        r.pointElbow.rotation.z += tuk.tuckElbowZ * tuckW
+      }
+      if (r.pointWrist) {
+        r.pointWrist.quaternion.multiply(
+          TMP_Q.setFromEuler(
+            TMP_E.set(
+              tuk.tuckWristX * tuckW,
+              tuk.tuckWristY * tuckW,
+              tuk.tuckWristZ * tuckW,
+            ),
+          ),
+        )
       }
     }
 
@@ -2134,6 +2200,81 @@ export function Mascot({
       introState.face = INTRO_FACE.copy(INTRO_EYE).sub(TMP_V).setY(0).normalize()
     }
 
+    /**
+     * idle — ชั้นบนสุดของการจัดท่า บวกทับหลังทุกระบบ (ชี้/ดื่ม/แนบตัว) จัดเสร็จแล้ว
+     *
+     * สูตร: คลื่น sine หลายลูกที่ความถี่ไม่เป็นเท่าตัวกัน (0.55 / 0.83 / ลมหายใจ) เฟสต่างกัน
+     * ผลรวมเลยไม่วนซ้ำเป็นแพตเทิร์นให้ตาจับได้ — ดูเป็นการทรงตัวของคนยืน ไม่ใช่ metronome
+     *
+     * ทุกอย่างเป็นการหมุนจุดหมุนที่มีอยู่แล้ว ไม่มีการเลื่อนตำแหน่ง — เท้ายังปักอยู่ใน
+     * รอยเท้าบนทราย (ยกตัวขึ้นลงแบบหุ่นลอยของ chaingpt ไม่ได้ เท้าจะหลุดจากหลุม)
+     */
+    if (idle.idleAmp > 0 && !dragging.current) {
+      const t = state.clock.elapsedTime
+      const amp = idle.idleAmp
+      const breath = Math.sin(t * idle.idleBreath * Math.PI * 2)
+      const s1 = Math.sin(t * 0.55 + 1.3)
+      const s2 = Math.sin(t * 0.83 + 4.1)
+
+      /**
+       * เหลียวมองนู่นนี่ — ส่วนที่ทำให้ "ดูมีชีวิต" จริง (ลมหายใจอย่างเดียวจางเกินกว่าตาจะจับ)
+       *
+       * ทุก 2-5 วิ จับสลากจุดมองใหม่: ส่วนใหญ่เหลียวไปด้านข้าง (สูงสุด ~26°) บางครั้งกลับมามองตรง
+       * แล้วค่อย ๆ damp หัวไปหาเป้า — ได้จังหวะ "เหลือบ -> จ้องค้าง -> เหลือบต่อ" แบบคนจริง
+       * ไม่ใช่แกว่งไปมาต่อเนื่อง ตอนกำลังยกแก้วดื่ม (raise) พักการเหลียว — ก้มดูแก้วสิของจริง
+       */
+      const g = glance.current
+      if (t > g.next) {
+        g.fx = g.x
+        g.fy = g.y
+        if (Math.random() < 0.3) {
+          g.tx = 0
+          g.ty = 0
+        } else {
+          g.tx = (Math.random() * 2 - 1) * 0.45
+          g.ty = (Math.random() * 2 - 1) * 0.14
+        }
+        g.start = t
+        g.dur = 0.9 + Math.random() * 0.6 // ความเร็วหันไม่เท่ากันทุกรอบ
+        g.next = t + 2 + Math.random() * 3
+      }
+      // ease in-out ต่อรอบ: ออกตัวช้า เร่งกลางทาง เข้าจอดช้า — จังหวะหันหัวของคนจริง
+      const gp = smooth01((t - g.start) / g.dur)
+      g.x = g.fx + (g.tx - g.fx) * gp
+      g.y = g.fy + (g.ty - g.fy) * gp
+      const gw = idle.idleGlance * (1 - raise)
+
+      // ลำตัวโยกรอบแกนตั้งช้า ๆ + หันตามทิศที่เหลียวนิดหน่อย (คนหันหน้าแรง ๆ ไหล่หันตามเสมอ)
+      if (root.current)
+        root.current.rotation.y += (s1 * 0.014 + s2 * 0.006) * amp + g.x * 0.16 * gw * dir
+      // หัว: เหลียวตามเป้า + เชิดตามลมหายใจ + เอียงคอช้า ๆ (บวกทับการหันตามเมาส์ ไม่ได้แทนที่)
+      if (headGroup.current) {
+        headGroup.current.rotation.y += g.x * gw * dir
+        headGroup.current.rotation.x += breath * 0.011 * amp + g.y * gw
+        headGroup.current.rotation.z += s2 * 0.007 * amp - g.x * 0.14 * gw * dir
+      }
+      // ไหล่สองข้างขยับตามลมหายใจ คนละเฟสกันนิดหน่อย — พร้อมกันเป๊ะจะดูเป็นหุ่นกลไก
+      if (r.pointShoulder) {
+        TMP_Q.setFromEuler(TMP_E.set(breath * 0.010 * amp, 0, s1 * 0.008 * amp))
+        r.pointShoulder.quaternion.multiply(TMP_Q)
+      }
+      if (r.mugShoulder) {
+        TMP_Q.setFromEuler(
+          TMP_E.set(Math.sin(t * idle.idleBreath * Math.PI * 2 + 0.7) * 0.010 * amp, 0, s2 * 0.008 * amp),
+        )
+        r.mugShoulder.quaternion.multiply(TMP_Q)
+      }
+    }
+
+    // หนีบมุมก้ม/เงยรวมของหัว "หลังทุกระบบเขียนเสร็จ" — ห้ามหัวจมคอเสื้อไม่ว่าจะบวกกันมากี่ทาง
+    if (headGroup.current) {
+      headGroup.current.rotation.x = clamp(
+        headGroup.current.rotation.x,
+        -HEAD_PITCH_LIM,
+        HEAD_PITCH_LIM,
+      )
+    }
+
     // กระพริบตา: ย่อแกน Y ของ mesh ตา
     const b = blink.current
     b.next -= delta
@@ -2141,8 +2282,8 @@ export function Mascot({
       b.closing = 0.13
       b.next = 2.4 + Math.random() * 3.6
     }
-    // ระหว่าง close-up ของ intro ห้ามกระพริบสองตาตามจังหวะสุ่ม — บีตนี้มีท่าของมันเอง
-    // (ขยิบตาข้างเดียว ดูท้ายฟังก์ชัน) กระพริบสุ่มจะไปตัดจังหวะนั้นพอดี
+    // ระหว่าง close-up ของ intro ห้ามกระพริบตามจังหวะสุ่ม — บีตนี้มีกระพริบของมันเอง
+    // (จังหวะเดียว calm ดูท้ายฟังก์ชัน) กระพริบสุ่มจะไปซ้อนจังหวะนั้นพอดี
     if (introState.playing && introState.b.face < 1) {
       b.closing = 0
       b.next = Math.max(b.next, 0.8)
@@ -2166,31 +2307,24 @@ export function Mascot({
     const scaleUp = 1 + grow * eyec.eyesScale
 
     /**
-     * intro: ขยิบตาข้างเดียวแล้วมีประกายเด้งขึ้นที่ตาข้างนั้น
+     * intro: กระพริบสองตาช้า ๆ ครั้งเดียวตอน close-up — calm ไม่ขยิบข้างเดียว ไม่มีประกาย
+     * (ของเดิมขยิบตาข้างเดียว + ประกายเด้ง อ่านเป็นเล่นใหญ่เกินโทนที่ต้องการ)
      *
-     * กระพริบสองตาอ่านเป็น "มีชีวิต" เฉย ๆ ส่วนขยิบข้างเดียวอ่านเป็น "รู้แล้ว เดี๋ยวจัดให้"
-     * ซึ่งเป็นบุคลิกที่ต้องการของฉากเปิด — ประกายใช้ตัวเดียวกับบีต eyes ของ scroll
-     * ไม่ได้ปั้นเพิ่ม แค่สั่งให้เด้งตามจังหวะขยิบ
-     *
-     * ปิดตาแล้วค่อยเปิด: 0.42-0.62 ของบีต face คือช่วงหลับ ประกายโผล่ตอนกำลังลืม
+     * envelope เป็น sin เต็มลูกช่วง 0.4-0.62 ของบีต face — หลับแล้วลืมนุ่ม ๆ จังหวะเดียว
+     * ปิดไม่สนิท (เหลือ 0.12 เท่ากระพริบสุ่ม) ให้อ่านเป็นกระพริบ ไม่ใช่หลับ
      */
     const iFace = introState.playing ? introState.b.face : 0
-    const wink = iFace > 0 ? Math.sin(clamp(seg(iFace, 0.4, 0.62), 0, 1) * Math.PI) : 0
-    const winkPop = seg(iFace, 0.52, 0.78)
+    const iBlink = iFace > 0 ? Math.sin(clamp(seg(iFace, 0.4, 0.62), 0, 1) * Math.PI) : 0
 
-    eyes.current.forEach((e, i) => {
+    eyes.current.forEach((e) => {
       const base = e.userData.baseScale
       if (!base) return
-      // ตาที่ขยิบข้างเดียว — เลือกข้างแรกตามลำดับใน GLB มองจากกล้องแล้วเป็นตาขวาของคนดู
-      const ky = i === WINK_EYE ? k * lerp(1, 0.08, wink) : k
+      const ky = k * lerp(1, 0.12, iBlink)
       e.scale.x = damp(e.scale.x, base.x * scaleUp, 0.35, dt)
       e.scale.y = damp(e.scale.y, base.y * scaleUp * ky, 0.45, dt)
       for (const s of e.userData.sparks ?? []) {
         // โผล่ช้ากว่าตาเล็กน้อยแล้วค่อยเด้งเกินนิดหนึ่ง — ไม่ให้ดูเหมือนแค่ fade in
-        const scrollPop = seg(grow, 0.25, 1) * (1 + 0.12 * Math.sin(seg(grow, 0.25, 1) * Math.PI))
-        const introPop =
-          i === WINK_EYE ? winkPop * (1 + 0.35 * Math.sin(winkPop * Math.PI)) : 0
-        const pop = Math.max(scrollPop, introPop)
+        const pop = seg(grow, 0.25, 1) * (1 + 0.12 * Math.sin(seg(grow, 0.25, 1) * Math.PI))
         s.scale.setScalar(s.userData.baseRadius * pop * scaleUp)
         s.visible = pop > 0.001
       }

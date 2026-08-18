@@ -3,7 +3,11 @@ import { Leva } from 'leva'
 import { Scene } from './App'
 import { Logo } from './Logo'
 import { GithubIcon, InstagramIcon, LinkedinIcon } from './Icons'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { BEATS, resetBeats, updateBeats } from './scroll'
+
+gsap.registerPlugin(ScrollTrigger)
 import { introState } from './intro'
 import './page.css'
 
@@ -151,20 +155,35 @@ export default function Page() {
   }, [])
 
   // scroll → บีต: ลำดับและความยาวของเรื่องอยู่ในตาราง BEATS ที่ scroll.js
-  // ที่นี่ทำแค่แปลงตำแหน่ง scroll เป็น 0..1 แล้วโยนเข้า updateBeats
+  // ScrollTrigger เป็นคนวัดตำแหน่ง (progress 0..1 ตลอดราง .jp-scroll) แทน listener มือ —
+  // ได้ refresh ตอน resize/rotate ฟรี และซิงก์กับ Lenis ผ่าน ticker เดียวกัน (ดู App.tsx)
+  // ปลายทางยังเป็น updateBeats เหมือนเดิม: DOM อ่านตัวแปร --b-* / Canvas อ่าน scrollState.b
   useEffect(() => {
-    const onScroll = () => {
-      const range = document.documentElement.scrollHeight - window.innerHeight
-      const raw = range > 0 ? window.scrollY / range : 0
-      const s = document.documentElement.style
+    const s = document.documentElement.style
+    const write = (raw) => {
       for (const [k, v] of updateBeats(raw)) s.setProperty(k, v)
     }
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
+    // รางถูกหดสั้นลง (520vh) ให้ไปถึง section ถัดไปเร็วขึ้น — แลกกับล้อหนึ่งคลิกกินเรื่องเยอะขึ้น
+    // จึงไม่เขียนบีตตรง ๆ แต่ scrub ผ่าน tween: ค่าบีตวิ่งตามตำแหน่งจริงแบบหน่วง 0.6 วิ
+    // ภาพเลยไหลถึงที่เดียวกันอย่างนุ่มแทนที่จะกระโดดเป็นขั้นตามจังหวะล้อ
+    const proxy = { raw: 0 }
+    const tween = gsap.to(proxy, {
+      raw: 1,
+      ease: 'none',
+      onUpdate: () => write(proxy.raw),
+    })
+    const st = ScrollTrigger.create({
+      trigger: '.jp-scroll',
+      start: 'top top',
+      end: 'bottom bottom',
+      animation: tween,
+      scrub: 0.6,
+    })
+    write(st.progress) // ค่าเฟรมแรก — เข้าหน้ามาแบบมี #hash ก็ได้ตำแหน่งถูกทันที
     return () => {
-      window.removeEventListener('scroll', onScroll)
+      st.kill()
+      tween.kill()
       resetBeats()
-      const s = document.documentElement.style
       for (const [name] of BEATS) s.removeProperty(`--b-${name}`)
     }
   }, [])

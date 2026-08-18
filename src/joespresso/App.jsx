@@ -6,6 +6,7 @@ import { Terrain } from './scene/Terrain'
 import { Foliage } from './scene/Foliage'
 import { Panels } from './scene/Panels'
 import { Mascot } from './scene/Mascot'
+import { WorkDesk } from './scene/WorkDesk'
 import { Curvilinear } from './scene/Curvilinear'
 import { OrbitControls } from '@react-three/drei'
 import { button, levaStore, useControls } from 'leva'
@@ -195,12 +196,12 @@ function CameraRig({ strength = 1 }) {
   // หน้าของ mascot ชี้ไปทาง -Z (วัดจากตำแหน่ง mesh ตา) กล้องเลยต้องวนไปฝั่ง -Z
   // แล้วเยื้อง ~30° ให้ได้มุม 3/4; เป้ามองเยื้องขวา+ต่ำกว่าหัว เพื่อดันตัวไปซ้ายและหัวขึ้นบน
   const fc = useControls('Focus Cam', {
-    focusX: { value: 2.48, min: -8, max: 8, step: 0.1 },
-    focusY: { value: 2.87, min: 0, max: 8, step: 0.1 },
-    focusZ: { value: -4.12, min: -12, max: 12, step: 0.1 },
-    focusLookX: { value: -0.85, min: -5, max: 5, step: 0.05 },
-    focusLookY: { value: 2.25, min: 0, max: 6, step: 0.05 },
-    focusLookZ: { value: 0.48, min: -6, max: 6, step: 0.05 },
+    focusX: { value: 2.9, min: -8, max: 8, step: 0.1 },
+    focusY: { value: 2.35, min: 0, max: 8, step: 0.1 },
+    focusZ: { value: -5.2, min: -12, max: 12, step: 0.1 },
+    focusLookX: { value: -0.35, min: -5, max: 5, step: 0.05 },
+    focusLookY: { value: 1.55, min: 0, max: 6, step: 0.05 },
+    focusLookZ: { value: 0.84, min: -6, max: 6, step: 0.05 },
     focusFov: { value: 24, min: 12, max: 60, step: 1 },
   }, { collapsed: true })
 
@@ -703,6 +704,8 @@ export function Scene() {
       <Suspense fallback={null}>
         {/* y: ยืดขาตาม comp แล้วฝ่าเท้าลงไปอีก 0.68 หน่วยโมเดล (×0.55 = 0.374) ยกตัวขึ้นชดเชย */}
         <Mascot position={[0, 2.61, 0.9]} scale={0.55} rotation={[0, -0.32, 0]} facingAway />
+        {/* มุมทำงานฉาก 2 — โผล่ตอนบีต focus พร้อมกับที่ mascot นั่งลง */}
+        <WorkDesk />
         {/* อยู่ในขอบเขตเดียวกับ Mascot — mount ได้แปลว่า GLB มาครบแล้ว */}
         <SceneReady />
       </Suspense>

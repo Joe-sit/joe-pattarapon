@@ -6,6 +6,7 @@ import { introState } from '../intro'
 import { scrollState } from '../scroll'
 import { toggleDevMode, useDevMode } from '../mode'
 import { addRim, useDisposable } from './utils'
+// eslint-disable-next-line no-unused-vars -- ถูก comment ไว้ชั่วคราว (ดูจุด mount)
 import { Slogan } from './Slogan'
 
 /**
@@ -200,11 +201,20 @@ function CurvedPanel({
    */
   const glassMat = useMemo(() => {
     if (!glass) return null
+    /**
+     * transmission ของ three แทน opacity จาง ๆ: renderer เรนเดอร์ฉากหลังลง RT (mipmapped)
+     * แล้วผิวกระจกสุ่มอ่าน mip ตาม roughness — ของหลังแผ่นจึง "เบลอจริง" ไม่ใช่แค่ซีดลง
+     * RT ใบเดียวแชร์กันทุกวัตถุ transmissive ต่อเฟรม ถูกกว่า MeshTransmissionMaterial
+     * ของ drei (ที่เปิด FBO แยกต่อ material) มาก
+     */
     const m = new THREE.MeshPhysicalMaterial({
       color,
       transparent: true,
-      opacity: 0.46,
-      roughness: 0.4,
+      opacity: 1,
+      transmission: 0.88,
+      thickness: 0.35,
+      ior: 1.15,
+      roughness: 0.62,
       roughnessMap: frost,
       metalness: 0,
       clearcoat: 1,
@@ -797,20 +807,45 @@ export function FigmaToolbar({ position, rotation = [0, 0, 0], R, params }) {
  * offset = ระยะที่ "เริ่มต้น" ห่างจากที่ของมัน (พิกัดในกลุ่ม panel) ให้พ้นเฟรมไปเลย
  * delay/span = ช่วงของบีต pull ที่ชิ้นนี้ใช้ ทยอยกันไม่ให้เข้าพร้อมกันทั้งแผง
  */
-function UiEnter({ offset, delay = 0, span = 0.45, children }) {
+function UiEnter({ offset, delay = 0, span = 0.55, children }) {
   const g = useRef()
   useFrame(() => {
     const node = g.current
     if (!node) return
     /**
-     * ยังไม่เคยเล่น intro = อยู่ที่ของมันเลย (1) ไม่ใช่ 0
+     * ยังไม่เคยเล่น intro / เล่นจบแล้ว = อยู่ที่ของมันเลย (1) ไม่ใช่ 0
      * เข้าหน้านี้ตรง ๆ โดยไม่ผ่านสปแลช intro ไม่เดิน ถ้าใช้ 0 แผง UI จะค้างอยู่นอกจอถาวร
+     *
+     * ไทม์ไลน์อิงวินาทีของ intro ตรง ๆ ไม่อิงบีต pull เหมือนเดิม:
+     * เริ่มตอนกล้องหันมาได้ครึ่งทาง (กลางบีต pull = 4.95s) แล้วลากยาวถึง 9.4s
+     * (เข้าไปในบีต title) — ช้ากว่าเดิมและจบทีหลัง แผงยังทยอยลอยเข้าตอนสโลแกนเริ่มขึ้น
      */
-    const p = introState.playing || introState.done ? introState.b.pull : 1
-    const k = Math.min(1, Math.max(0, (p - delay) / span))
-    // ออกตัวเร็วแล้วค่อย ๆ เข้าที่ — ของที่ "ไถลมาหยุด" อ่านเป็นของมีน้ำหนัก
+    const p = introState.playing
+      ? Math.min(1, Math.max(0, (introState.t - 4.95) / (9.4 - 4.95)))
+      : 1
+    // กันชิ้นท้าย ๆ วิ่งไม่จบ: delay + span ต้องไม่เกินความยาวบีต
+    const sp = Math.min(span, 1 - delay)
+    const k = Math.min(1, Math.max(0, (p - delay) / sp))
+    // ออกตัวเร็วแล้วค่อย ๆ เข้าจอด — ของที่ "ไถลมาหยุด" อ่านเป็นของมีน้ำหนัก
     const e = 1 - Math.pow(1 - k, 3)
-    node.position.set(offset[0] * (1 - e), offset[1] * (1 - e), offset[2] * (1 - e))
+    /**
+     * บินเข้าตามแกน x ของ "จอโค้ง" ใบเดียวกับที่ panel วางอยู่ — ไม่ใช่สไลด์เส้นตรง
+     *
+     * ทางเดินคือการกวาดรอบแกนตั้งที่ผ่านตา (CAM0 — จุดเดียวกับที่ curveOnScreen ใช้ม้วนจอ):
+     * หมุนทั้งกลุ่มรอบ pivot นั้น panel จึงไถลมาตามผิวทรงกระบอกของจอพอดีเป๊ะ
+     * และหน้าแผ่นหันตาม tangent ของ curve เองตลอดทาง ไม่ต้องสั่งหมุนแยก
+     *
+     * ระยะ x เดิมของ offset ถูกตีความเป็นความยาวส่วนโค้ง (หาร ~รัศมีจอ) — เครื่องหมาย
+     * กลับด้านเพราะหมุนกลุ่มไปทางบวกพาของใน "หน้าจอ" ไปทางลบ
+     */
+    const a = (-offset[0] / 10) * (1 - e)
+    const ex = CAM0[0]
+    const ez = CAM0[2]
+    node.rotation.y = a
+    const c = Math.cos(a)
+    const sn = Math.sin(a)
+    // หมุนรอบจุดที่ไม่ใช่ origin: pos = pivot - R_y(a) * pivot
+    node.position.set(ex - (c * ex + sn * ez), 0, ez - (-sn * ex + c * ez))
   })
   return <group ref={g}>{children}</group>
 }
@@ -1068,6 +1103,7 @@ const CROP_TO = [0, 1.38, -3.45]
  * ที่อยู่ของสโลแกน — กลางบนของฉาก ช่วงฟ้าเหนือหัว mascot ที่ว่างอยู่
  * ระดับความลึกเดียวกับกรอบ crop กรอบจะได้ครอบได้พอดีโดยไม่ต้องคิดเปอร์สเปคทีฟ
  */
+// eslint-disable-next-line no-unused-vars -- สโลแกนถูก comment ไว้ชั่วคราว ตำแหน่งเก็บไว้เผื่อเปิดคืน
 const SLOGAN_AT = [0, 3.15, -3.45]
 
 const TMP_A = new THREE.Vector3()
@@ -1169,7 +1205,9 @@ export function Panels() {
           */}
           {/* สโลแกนอยู่ในสเปซเดียวกับกรอบ crop — กรอบจึงคิดขนาด/ตำแหน่งจากกล่องของมันได้ตรง ๆ
               โดยไม่ต้องแปลงข้ามระบบพิกัด (เมื่อก่อนอ่านกล่องจาก DOM แล้วยิงรังสีกลับเข้าฉาก) */}
-          <Slogan position={SLOGAN_AT} />
+          {/* ปิดสโลแกนไว้ก่อน (หน้า /2026 มีพาดหัวเดียวกันใน DOM แล้ว ซ้ำกัน)
+              กรอบ crop รับมือ null ได้: introState.title ไม่ถูกเซ็ต กรอบแค่ไม่หดไปครอบคำ */}
+          {/* <Slogan position={SLOGAN_AT} /> */}
           {/* crop tool ต้องเข้าที่ก่อนบีต crop เริ่ม (= 37% ของบีต pull) ไม่งั้นมันจะไถลเข้าฉาก
               พร้อมกับที่กำลังออกเดินไปกลางจอ สองการเคลื่อนที่ทับกันจนอ่านไม่ออกว่าอะไรพาไป
               (CropRig อ่านพิกัดโลกจริงทุกเฟรม การมี UiEnter คั่นจึงไม่ทำให้แขนเล็งผิด) */}

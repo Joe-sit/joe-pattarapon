@@ -12,8 +12,9 @@
   --jp-fill: #2b1a12;
   /* รางสกรอลล์ — บีตทั้งหมดถูกซอยจากความสูงนี้ตามสัดส่วนใน BEATS (scroll.js)
      แก้ตรงนี้ = ทุกบีตยืด/หดพร้อมกัน ถ้าจะยืดเฉพาะบีตเดียวให้ไปแก้ช่วงในตารางแทน
-     เดิม 420vh ตอนมีสองบีต — เรื่องยาวขึ้นเป็นเจ็ดบีตแล้ว ต้องมีรางให้เล่า */
-  height: 780vh;
+     780vh ตอนแรกลากยาวไป — กว่าจะถึง What I do ต้องปั่นล้อหลายรอบ
+     หดเหลือ 520 แล้วชดเชยความกระชากด้วย scrub (Page.jsx) ให้ค่าบีตไหลตามหลังล้อแบบหน่วง */
+  height: 520vh;
   background: #fff;
   font-family: var(--jp-font-sans);
   -webkit-font-smoothing: antialiased;
@@ -231,12 +232,13 @@
   inset: 0;
   z-index: 4;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: clamp(14px, 2.4vh, 26px);
-  /* ครึ่งขวา: เว้นซ้ายไว้ครึ่งจอให้ mascot แล้วดันเข้ามาจากขอบขวาอีกที */
-  padding: 0 clamp(24px, 5vw, 72px) 0 50%;
+  /* ตามคอมป์: หัวข้อชิดซ้าย การ์ดชิดขวา mascot ยืนคั่นกลาง (กล้องเว้นกลางล่างไว้ให้)
+     ระยะซ้าย 169/1440 ≈ 11.7vw ขวา 72px — space-between กางสองฝั่งออกจากกันเอง */
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(14px, 2.4vw, 26px);
+  padding: 0 clamp(24px, 5vw, 72px) 0 clamp(28px, 11.7vw, 169px);
   text-align: left;
   color: var(--jp-ink);
   /* ตัว section ไม่รับเมาส์ (ฉาก 3D อยู่ข้างหลังและยังลากได้) เปิดเฉพาะแผงที่ต้องกดจริง */
@@ -245,7 +247,9 @@
 }
 
 .jp-what-title {
-  margin: 0;
+  /* คอมป์วางหัวข้อไว้ช่วงบนของเฟรม (top 197/1033 ≈ 19%) ไม่ใช่กึ่งกลาง — และพ้นทรงผม mascot */
+  align-self: flex-start;
+  margin: 19vh 0 0;
   font-family: var(--jp-font-display);
   /* 96px / Bold ตามคอมป์ ตัวอักษรขาวบนฉากสีอุ่น */
   font-weight: 700;
@@ -274,7 +278,8 @@
 .jp-what-stack {
   display: flex;
   flex-direction: column;
-  width: min(100%, 473px);
+  flex: none;
+  width: min(46%, 473px);
   /* คลี่ลงมาพร้อมโปร่งใสจาง ๆ ตาม --open */
   opacity: var(--open);
   transform: translateY(calc((1 - var(--open)) * 26px));
@@ -445,6 +450,8 @@
 @media (max-width: 860px) {
   .jp-what {
     /* เว้นท้ายจอไว้เยอะ — มุมล่างมีไอคอนโซเชียลกับบรรทัดที่อยู่ยืนอยู่ก่อนแล้ว */
+    flex-direction: column;
+    align-items: flex-start;
     padding: 0 20px 22%;
     justify-content: flex-end;
   }
