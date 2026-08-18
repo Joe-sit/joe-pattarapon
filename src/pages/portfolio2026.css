@@ -1,0 +1,25 @@
+/* ป้าย mono + block cursor เขียวกะพริบ — ภาษาเดียวกับ eyebrow ของ githubuniverse.com
+   (ของเขา: ข้อความ mono ถูกพิมพ์ทีละตัว แล้วบล็อกเขียว 10px กะพริบค้างท้ายบรรทัด) */
+
+.v2-eyebrow {
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: -0.01em;
+}
+
+.v2-caret {
+  display: inline-block;
+  width: 0.55em;
+  height: 0.95em;
+  margin-left: 0.45ch;
+  vertical-align: baseline;
+  transform: translateY(0.12em);
+  background: #08872b;
+  /* steps(1) = ตัด ไม่เฟด — caret ของ terminal จริงไม่เฟด */
+  animation: v2-blink 1.06s steps(1) infinite;
+}
+
+@keyframes v2-blink {
+  50% {
+    opacity: 0;
+  }
+}

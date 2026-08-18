@@ -1,6 +1,11 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, useLocation } from 'react-router'
 import Lenis from '@studio-freight/lenis'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+
+// ScrollTrigger คือตัวขับ scroll animation ของทั้งเว็บ (หน้า /joespresso อ่านผ่านมัน)
+gsap.registerPlugin(ScrollTrigger)
 import { SplashScreen } from '@/components/SplashScreen'
 import { JoeSplash } from '@/components/JoeSplash'
 import { JoeLettersSplash } from '@/components/JoeLettersSplash'
@@ -10,6 +15,7 @@ import { AnchorNav } from '@/components/AnchorNav'
 import { HomePage } from '@/pages/HomePage'
 import { MascotPage } from '@/pages/MascotPage'
 import { NotPortedPage } from '@/pages/NotPortedPage'
+import { Portfolio2026Page } from '@/pages/Portfolio2026Page'
 // ฉาก 3D หนัก (three.js) — lazy แยก chunk ไม่ถ่วงหน้าอื่น
 const JoespressoPage = lazy(() => import('@/joespresso/Page'))
 // workspace ปั้นทรง toolbar ของฉาก joespresso — ใช้ three เหมือนกัน แยก chunk เช่นกัน
@@ -42,6 +48,8 @@ export function App() {
   const location = useLocation()
   // ครอบหน้าลูกด้วย (/joespresso/toolbar) — กลุ่มนี้มี layout ของตัวเอง ไม่ใช้ shell ของเว็บ
   const isJoespresso = location.pathname.startsWith('/joespresso')
+  // เวอร์ชันสองของหน้าแรก (layout ตาราง) — มี header ของตัวเอง ไม่ใช้ NavBar/Footer ของ shell
+  const isV2 = location.pathname === '/2026'
 
   // Which splash plays is decided by where the visitor landed, not by where
   // they are now — it runs once, on load, and reading `location` live would
@@ -58,8 +66,9 @@ export function App() {
    *
    * กั้นเฉพาะตอนเปิดเว็บมาลงที่ /joespresso — เดินเข้ามาทีหลังไม่เกี่ยว
    */
-  const holdScene =
-    showSplash && landedOn.startsWith('/joespresso') && !lettersDone
+  // /2026 ฝังฉาก 3D ใบเดียวกัน — ใช้สปแลช/การกั้น mount ชุดเดียวกับ /joespresso
+  const landedOn3D = landedOn.startsWith('/joespresso') || landedOn === '/2026'
+  const holdScene = showSplash && landedOn3D && !lettersDone
 
   const finishSplash = () => {
     setShowSplash(false)
@@ -71,13 +80,17 @@ export function App() {
 
     // `smooth` / `resetNativeScroll` from the Vue version are not Lenis 1.x options.
     const lenis = new Lenis({ duration: 1, smoothWheel: true })
-    let frame = requestAnimationFrame(function raf(time) {
-      lenis.raf(time)
-      frame = requestAnimationFrame(raf)
-    })
+
+    // สูตรผูก Lenis กับ GSAP: Lenis เดินด้วย ticker ของ gsap (นาฬิกาเดียวกับทุก tween)
+    // แล้วแจ้ง ScrollTrigger ทุกครั้งที่ตำแหน่งเลื่อนขยับ — ไม่ต้องมี rAF loop ของตัวเอง
+    lenis.on('scroll', ScrollTrigger.update)
+    const raf = (time: number) => lenis.raf(time * 1000) // ticker ให้วินาที Lenis กินมิลลิวินาที
+    gsap.ticker.add(raf)
+    // ปิด lag smoothing — มันหยุดนาฬิกาตอนเฟรมตก แล้ว Lenis จะกระโดดตามหลังชดเชย
+    gsap.ticker.lagSmoothing(0)
 
     return () => {
-      cancelAnimationFrame(frame)
+      gsap.ticker.remove(raf)
       lenis.destroy()
     }
   }, [])
@@ -91,7 +104,7 @@ export function App() {
           opens onto the hero's own scene, and the mascot page has no such scene
           to open onto. */}
       {showSplash &&
-        (landedOn.startsWith('/joespresso') ? (
+        (landedOn3D ? (
           /* ฉาก 3D ของ joespresso ไม่มี "ตา" ให้เปิดออก และการ์ด hero ก็ยังโหลด three อยู่
              ตอนนั้น — ใช้สปแลชตัวอักษรคั่นแทน (port จาก branch 2026) */
           <JoeLettersSplash
@@ -106,8 +119,10 @@ export function App() {
           <SplashScreen onEyeOpen={setEyeOpen} onDone={finishSplash} />
         ))}
 
-      {/* /joespresso = ฉาก 3D เต็มจอ มี layout/nav ของตัวเอง — ไม่ใช้ shell ของเว็บ */}
-      {isJoespresso ? (
+      {isV2 ? (
+        holdScene ? null : <Portfolio2026Page />
+      ) : /* /joespresso = ฉาก 3D เต็มจอ มี layout/nav ของตัวเอง — ไม่ใช้ shell ของเว็บ */
+      isJoespresso ? (
         holdScene ? null : (
         <Suspense fallback={null}>
           <Routes>
