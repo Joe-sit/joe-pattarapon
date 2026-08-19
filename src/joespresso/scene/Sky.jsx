@@ -22,7 +22,8 @@ const NIGHT_SKY = [
 const SUN_DIM = 0.03
 
 /** ผนังไล่สีด้านหลังทั้งฉาก + ดวงอาทิตย์ + เมฆ */
-export function Sky() {
+/** sunAt — ตำแหน่งดวงอาทิตย์ทางเลือก (หน้า /2026 ย้ายไปมุมขวาบนของ view ที่แพนขวา) */
+export function Sky({ sunAt }) {
   const bg = useMemo(
     () =>
       gradientTexture([
@@ -58,7 +59,7 @@ export function Sky() {
 
       {/* ดวงจันทร์ขึ้นแทนที่ดวงอาทิตย์ตรงตำแหน่งเดิม — เยื้องซ้ายนิดเดียวให้เสี้ยวไม่ทับขอบดวงอาทิตย์
           (เคยวางไว้มุมซ้ายบน แล้วมันไปโผล่หลังก้อนเมฆ มองไม่เห็นเลยทั้งดวง) */}
-      <Sun position={[1.2, 6.2, -22]} radius={4.2} />
+      <Sun position={sunAt ?? [1.2, 6.2, -22]} radius={4.2} />
       <Moon position={[-2.6, 5.2, -21]} radius={2.2} />
 
       <Cloud position={[-4.6, 4.4, -14]} scale={1} />

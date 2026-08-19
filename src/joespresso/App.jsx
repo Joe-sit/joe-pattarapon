@@ -175,7 +175,13 @@ function IntroClock() {
 }
 
 /** กล้องเอียงตามเมาส์เล็กน้อย — ให้ฉากมีมิติโดยไม่ต้องหมุนวัตถุ */
-function CameraRig({ strength = 1 }) {
+/**
+ * lookShift — โหมด /2026: แพนเป้ามองของกล้องไปทางขวาของฉาก (หน่วยโลก แกน x)
+ * ตำแหน่งกล้องเท่าเดิม เปลี่ยนแต่ทิศเล็ง — ทั้งฉากจึงเลื่อนซ้ายในเฟรม mascot ไปอยู่
+ * ฝั่งซ้าย ช่องขวาเปิดให้กลุ่ม panel ที่หันขวา  intro ยังเริ่มจ่อหน้าเหมือนเดิม
+ * (ช่วงประชิด lerp เป้ามองจากตาจริง แล้วค่อยคลายมาหาเป้าที่แพนแล้วตอนถอยออก)
+ */
+function CameraRig({ strength = 1, lookShift = 0 }) {
   const { camera } = useThree()
   const target = useRef({ x: 0, y: 0 })
   const cur = useRef({ x: 0, y: 0 })
@@ -257,6 +263,8 @@ function CameraRig({ strength = 1 }) {
 
     look.current.set(lerp(0, fc.focusLookX, k), lerp(cam.lookY, fc.focusLookY, k), lerp(0, fc.focusLookZ, k))
     look.current.y += z * zm.zoomRise
+    // แพนไปขวาของฉาก — ผ่อนลงตอน focus ฉาก 2 (เป้ามองของฉากนั้นจูนไว้เฉพาะแล้ว)
+    look.current.x += lookShift * (1 - k)
 
     // ดันกล้องเข้าหาเป้ามองตามสัดส่วนของระยะที่เหลือ — ใกล้แค่ไหนก็ไม่ทะลุ
     if (z > 0.0001) {
@@ -616,7 +624,11 @@ function useCoveredFrameloop() {
   return covered ? 'never' : 'always'
 }
 
-export function Scene() {
+/**
+ * faceRight — โหมดของหน้า /2026: mascot หันไปทางขวาของเฟรม (yaw กลับด้านจากปกติ)
+ * และกลุ่ม panel ลอยเลื่อนไปฝั่งขวาตาม ให้องค์ประกอบชี้เข้าหาคอลัมน์ข้อความ
+ */
+export function Scene({ faceRight = false }) {
   // โหมดทำงาน: ปิดสี/บรรยากาศทั้งหมด เหลือแต่ทรงกับเงา — จูนโมเดลได้โดยไม่ถูกสีหลอกตา
   const { clay, clayScene, clayGrid, clayOrbit } = useControls('Workspace', {
     // ปิดไว้ — งานปั้นทรงจบแล้ว ตอนนี้จูนสี/แสง/จังหวะ ซึ่งต้องเห็นของจริง
@@ -669,7 +681,7 @@ export function Scene() {
       {clay ? <ClayLights /> : <Lights />}
       {/* CameraRig ขับกล้องจาก scroll — ต้องปิดตอน orbit ไม่งั้นสองตัวแย่งกันคุมกล้อง */}
       <IntroClock />
-      {!(clay && clayOrbit) && <CameraRig />}
+      {!(clay && clayOrbit) && <CameraRig lookShift={faceRight ? 2.2 : 0} />}
       {clay && clayOrbit && <ClayCam />}
       {clay && clayOrbit && (
         <OrbitControls makeDefault target={[0, 2.3, 0.9]} enableDamping dampingFactor={0.12} />
@@ -684,10 +696,11 @@ export function Scene() {
       <ClayMode enabled={clay} />
 
       <group visible={!clay || clayScene}>
-        <Sky />
+        <Sky sunAt={faceRight ? [9.5, 9, -22] : undefined} />
         <Terrain />
         <Foliage />
-        <Panels />
+        {/* กล้องแพนขวา (lookShift) กินระยะ shift เดิม — ชดเชยเพิ่มให้กลุ่มยังอยู่ฝั่งขวาของเฟรม */}
+        <Panels shiftX={faceRight ? 4 : 0} />
       </group>
 
       {/* พื้นเรียบ + กริด แทนเนินทราย — ใช้เช็คว่าฝ่าเท้าแตะพื้นจริงและตัวไม่เอียง */}
@@ -703,7 +716,12 @@ export function Scene() {
 
       <Suspense fallback={null}>
         {/* y: ยืดขาตาม comp แล้วฝ่าเท้าลงไปอีก 0.68 หน่วยโมเดล (×0.55 = 0.374) ยกตัวขึ้นชดเชย */}
-        <Mascot position={[0, 2.61, 0.9]} scale={0.55} rotation={[0, -0.32, 0]} facingAway />
+        <Mascot
+          position={[0, 2.61, 0.9]}
+          scale={0.55}
+          rotation={[0, faceRight ? -0.9 : -0.32, 0]}
+          facingAway
+        />
         {/* มุมทำงานฉาก 2 — โผล่ตอนบีต focus พร้อมกับที่ mascot นั่งลง */}
         <WorkDesk />
         {/* อยู่ในขอบเขตเดียวกับ Mascot — mount ได้แปลว่า GLB มาครบแล้ว */}

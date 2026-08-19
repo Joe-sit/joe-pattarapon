@@ -164,6 +164,18 @@ function roundedAlphaTex(w, h, r) {
   return tex
 }
 
+/**
+ * เครื่องมือที่เลือกอยู่บน toolbar — แชร์เป็น mutable state แบบ introState
+ * (อ่านใน event handler ทุกครั้งที่กด ไม่ต้อง re-render อะไรตอนสลับเครื่องมือ)
+ * 'cursor' = โหมดเลือก/ลาก panel ได้เหมือน canvas ของ Figma
+ */
+export const toolState = { tool: 'cursor' }
+
+const DRAG_P = new THREE.Vector3()
+const DRAG_D = new THREE.Vector3()
+const DRAG_N = new THREE.Vector3()
+const DRAG_M = new THREE.Matrix4()
+
 function CurvedPanel({
   position,
   rotation = [0, 0, 0],
@@ -186,6 +198,9 @@ function CurvedPanel({
 }) {
   const ref = useRef()
   const hovered = useRef(false)
+  // ลากด้วยเครื่องมือ cursor: ระนาบลากตั้งฉากกล้องผ่านจุดที่จับ + offset สะสม (local)
+  const drag = useRef(null)
+  const off = useRef(new THREE.Vector3())
   const [w, h] = size
 
   const alpha = useMemo(() => roundedAlphaTex(w, h, corner), [w, h, corner])
@@ -318,9 +333,10 @@ function CurvedPanel({
     const o = ref.current
     const c = built.center
     const e = built.toEye
-    o.position.x = THREE.MathUtils.damp(o.position.x, c.x + e.x * lift, 7.7, dt)
-    o.position.y = THREE.MathUtils.damp(o.position.y, c.y + e.y * lift, 7.7, dt)
-    o.position.z = THREE.MathUtils.damp(o.position.z, c.z + e.z * lift, 7.7, dt)
+    const g = off.current
+    o.position.x = THREE.MathUtils.damp(o.position.x, c.x + e.x * lift + g.x, 7.7, dt)
+    o.position.y = THREE.MathUtils.damp(o.position.y, c.y + e.y * lift + g.y, 7.7, dt)
+    o.position.z = THREE.MathUtils.damp(o.position.z, c.z + e.z * lift + g.z, 7.7, dt)
     const s = hovered.current ? 1.04 : 1
     o.scale.x = THREE.MathUtils.damp(o.scale.x, s, 7.7, dt)
     o.scale.y = THREE.MathUtils.damp(o.scale.y, s, 7.7, dt)
@@ -334,22 +350,64 @@ function CurvedPanel({
       onPointerOver={(e) => {
         e.stopPropagation()
         hovered.current = true
-        document.body.style.cursor = 'pointer'
+        document.body.style.cursor = toolState.tool === 'cursor' ? 'grab' : 'pointer'
       }}
       onPointerOut={() => {
         hovered.current = false
-        document.body.style.cursor = ''
+        if (!drag.current) document.body.style.cursor = ''
+      }}
+      onPointerDown={(e) => {
+        // ลากได้เฉพาะเครื่องมือ cursor — เครื่องมืออื่นปล่อยเหตุการณ์ผ่านไปตามปกติ
+        if (toolState.tool !== 'cursor') return
+        e.stopPropagation()
+        e.target.setPointerCapture?.(e.pointerId)
+        // ระนาบลากตั้งฉากทิศกล้อง ผ่านจุดที่จับ — panel เลื่อนขนานจอ ระยะลึกคงเดิม
+        e.camera.getWorldDirection(DRAG_N)
+        drag.current = {
+          plane: new THREE.Plane().setFromNormalAndCoplanarPoint(DRAG_N.clone(), e.point),
+          start: e.point.clone(),
+          base: off.current.clone(),
+        }
+        document.body.style.cursor = 'grabbing'
+      }}
+      onPointerMove={(e) => {
+        const d = drag.current
+        if (!d) return
+        e.stopPropagation()
+        if (!e.ray.intersectPlane(d.plane, DRAG_P)) return
+        // delta โลก -> local ของ parent (กลุ่ม panel ถูกสเกล depth 1.25 รอบกล้อง)
+        DRAG_D.copy(DRAG_P).sub(d.start)
+        const parent = ref.current?.parent
+        if (parent) {
+          parent.updateWorldMatrix(true, false)
+          DRAG_M.copy(parent.matrixWorld).invert().setPosition(0, 0, 0)
+          DRAG_D.applyMatrix4(DRAG_M)
+        }
+        off.current.copy(d.base).add(DRAG_D)
+      }}
+      onPointerUp={(e) => {
+        if (!drag.current) return
+        drag.current = null
+        e.target.releasePointerCapture?.(e.pointerId)
+        document.body.style.cursor = hovered.current ? 'grab' : ''
       }}
     >
       <mesh geometry={built.body}>
         {glass ? (
           <primitive object={glassMat} attach="material" />
         ) : (
+          /**
+           * การ์ดเกือบทึบ (opacity ≥ 0.8) ตัดขอบมนด้วย alphaTest แทน alpha blending —
+           * วัตถุ transparent ถูกกันออกจาก buffer หักเหของกระจก (transmission ของ three
+           * เรนเดอร์เฉพาะ pass ทึบ) ลากการ์ดไปหลังการ์ดกระจกแล้วจะหายวับทั้งใบ
+           * เข้า pass ทึบแล้วมองทะลุกระจกเห็นตามจริง ขอบมนยังคมเหมือนเดิม (alpha แทบไบนารี)
+           */
           <meshStandardMaterial
             color={color}
-            transparent
+            transparent={opacity < 0.8}
             opacity={opacity}
             alphaMap={alpha}
+            alphaTest={opacity < 0.8 ? 0 : 0.45}
             roughness={0.35}
             metalness={0}
             side={THREE.DoubleSide}
@@ -773,7 +831,11 @@ export function FigmaToolbar({ position, rotation = [0, 0, 0], R, params }) {
           x={p.tileStart + i * p.tileGap}
           type={t}
           active={active === i}
-          onClick={() => setActive(i)}
+          onClick={() => {
+            setActive(i)
+            // แชร์ให้ CurvedPanel รู้ว่าโหมดลากเปิดอยู่ไหม (cursor เท่านั้นที่ลากได้)
+            toolState.tool = TOOLS[i]
+          }}
           R={bend}
           p={p}
         />
@@ -1134,12 +1196,45 @@ function toolbarOnScreen([x, y, z], k, [ex, , ez]) {
   }
 }
 
-export function Panels() {
+/**
+ * shiftX เลื่อนทั้งกลุ่ม panel ไปด้านข้าง "ตามส่วนโค้งของจอ" — หน้า /2026 ใช้ดันกลุ่ม
+ * ไปฝั่งขวาให้ล้อกับ mascot ที่หันขวา
+ * ไม่ใช่เลื่อนแนวตรง: หมุนทั้งกลุ่มรอบแกนตั้งที่ผ่านตากล้อง (สเปซเดียวกับ UiEnter)
+ * ทุกใบจึงไถลไปตามผิวจอโค้งเดิม ความโค้งที่ bake ไว้ยังหันเข้าหาตาถูกทิศ
+ * มุม = ระยะโค้ง / ~รัศมีจอ (10) เครื่องหมายลบ = เนื้อหาหน้ากล้องไถลไปทางขวา
+ */
+export function Panels({ shiftX = 0 }) {
+  const arc = -shiftX / 10
+  // กระจกด้าน: มี shift = องค์ประกอบหันขวา — เส้นทางเข้าของ crop ต้องกลับด้านด้วย
+  const flip = shiftX > 0
+  const cropFrom = useMemo(
+    () => (flip ? [-CROP_FROM[0], CROP_FROM[1], CROP_FROM[2]] : CROP_FROM),
+    [flip],
+  )
+  /**
+   * พิกัด "หลังไถลตามจอโค้ง" — หมุนรอบแกนตั้งที่ตากล้อง
+   *
+   * ใช้เป็นตำแหน่งจริงของ panel แทนการหมุนทั้งกลุ่มทีหลัง: ความโค้ง/มุมหันถูก bake
+   * จากตำแหน่งปลายทางเลย (เดิมหมุนกลุ่มหลัง bake — ผิวโค้งเลยตื้นกว่าที่ตำแหน่งใหม่ควรเป็น
+   * เพราะสูตร bake คิดจาก x ก่อนหมุน) มุมหันของใบก็ต้องบวก arc ตามด้วย
+   */
+  const onArc = ([x, y, z]) => {
+    if (!flip) return [x, y, z]
+    const c = Math.cos(arc)
+    const s = Math.sin(arc)
+    const dx = x - CAM0[0]
+    const dz = z - CAM0[2]
+    return [CAM0[0] + c * dx + s * dz, y, CAM0[2] - s * dx + c * dz]
+  }
+  const yawArc = flip ? arc : 0
   // debugger: ความโค้งของ "จอ" ที่ panel ทุกใบวางอยู่ — 0 แบน, 1 โค้งเต็มตามระยะจริง
   // แกนโค้งอยู่ที่ตาคนดู ทุกใบจึงโค้งตามส่วนโค้งเดียวกัน ไม่ใช่ต่างคนต่างม้วน
-  const { screenCurve } = useControls('Curve Perspective', {
+  const { screenCurve: baseCurve } = useControls('Curve Perspective', {
     screenCurve: { value: 1.6, min: 0, max: 2.5, step: 0.05, label: 'ความโค้งจอ' },
   })
+  // view หันขวา (/2026): มองจอโค้งจากมุมเฉียง ความโค้งเท่าเดิมอ่านตื้นกว่าตอน front view —
+  // อัดเพิ่มให้ดีกรีที่ "เห็น" ใกล้เคียงกัน
+  const screenCurve = flip ? baseCurve * 1.3 : baseCurve
   // debugger: ดันชั้น panel ให้ลึกเข้าไปในฉาก
   // ขยายทั้งกลุ่มรอบ "จุดกล้อง" — ระยะกับขนาดโตพร้อมกัน ภาพบนจอจึงเท่าเดิมเป๊ะ
   // แต่ตัว panel ถอยไปอยู่หลังพุ่มไม้จริง ๆ พุ่มกับสันเนินเลยบังฐาน panel ให้เอง
@@ -1163,15 +1258,15 @@ export function Panels() {
             offset ผลักออกด้านที่ใกล้ขอบเฟรมที่สุดของชิ้นนั้น ทางที่สั้นที่สุดที่จะพ้นจอ
           */}
           <UiEnter offset={[-7, 0, 0]} delay={0.08}>
-            <FigmaToolbar {...toolbarOnScreen(TOOLBAR_POS, screenCurve, CAM0)} />
+            <FigmaToolbar {...toolbarOnScreen(onArc(TOOLBAR_POS), screenCurve, CAM0)} />
           </UiEnter>
       {/* ซ้าย */}
       <UiEnter offset={[-6, 2.2, 0]} delay={0.2}>
       <CurvedPanel
         curve={screenCurve}
         eyeZ={CAM0[2]}
-        position={[-5.9, 4.2, -6]}
-        rotation={[0, 0.32, 0]}
+        position={onArc([-5.9, 4.2, -6])}
+        rotation={[0, 0.32 + yawArc, 0]}
         size={[2.4, 1.5]}
         color="#F2604A"
         opacity={0.92}
@@ -1184,8 +1279,8 @@ export function Panels() {
       <CurvedPanel
         curve={screenCurve}
         eyeZ={CAM0[2]}
-        position={[5.6, 4.4, -5.4]}
-        rotation={[0, -0.3, 0]}
+        position={onArc([5.6, 4.4, -5.4])}
+        rotation={[0, -0.3 + yawArc, 0]}
         size={[3.6, 2.2]}
         color="#6C4BE8"
         opacity={0.88}
@@ -1211,15 +1306,22 @@ export function Panels() {
           {/* crop tool ต้องเข้าที่ก่อนบีต crop เริ่ม (= 37% ของบีต pull) ไม่งั้นมันจะไถลเข้าฉาก
               พร้อมกับที่กำลังออกเดินไปกลางจอ สองการเคลื่อนที่ทับกันจนอ่านไม่ออกว่าอะไรพาไป
               (CropRig อ่านพิกัดโลกจริงทุกเฟรม การมี UiEnter คั่นจึงไม่ทำให้แขนเล็งผิด) */}
-          <UiEnter offset={[-7, 0, 0]} delay={0} span={0.3}>
-          <CropRig from={CROP_FROM} box={cropBox}>
+          {/* โหมด shiftX (หน้า /2026 ตัวหันขวา): crop เข้าจากขอบขวาแทนซ้าย — หัวกับแขน
+              ของ mascot เล็งจากตำแหน่งจริงของกรอบ (introState.crop) จึงหัน/ชี้ขวาตาม
+              ทั้ง intro ไม่ติดท่าหันซ้ายของฉากเดิม */}
+          {/* ชุด crop เป็นแผ่นแบน (curve 0) — หมุนรอบตาได้ตรง ๆ ไม่มีผิวโค้งให้ผิด
+              ใช้แทนการแปลงพิกัดรายจุด เพราะ CROP_TO/เส้นทางเดินอยู่ใน CropRig */}
+          <group position={CAM0} rotation={[0, yawArc, 0]}>
+          <group position={[-CAM0[0], -CAM0[1], -CAM0[2]]}>
+          <UiEnter offset={[flip ? 7 : -7, 0, 0]} delay={0} span={0.3}>
+          <CropRig from={cropFrom} box={cropBox}>
             {/* การ์ดที่ถูกกรอบเลือกอยู่ = ของชิ้นเดียวกับเครื่องมือ ต้องถูกลากไปด้วยกัน
                 curve 0 เหมือนกรอบ: ทั้งคู่ย้ายที่ ความโค้งที่ bake ไว้ตอนสร้างจะผิดที่ทันที */}
             <CurvedPanel
               curve={0}
               eyeZ={CAM0[2]}
-              position={[-5.0, 2.3, -3.6]}
-              rotation={[0, 0.22, 0]}
+              position={[flip ? 5.0 : -5.0, 2.3, -3.6]}
+              rotation={[0, flip ? -0.22 : 0.22, 0]}
               size={[3.4, 2.1]}
               color="#FFFFFF"
               opacity={0.5}
@@ -1233,6 +1335,8 @@ export function Panels() {
               (อยู่ในกลุ่มนั้นเมื่อไร ก็จะโดน transform ของการ์ดยืดตามไปด้วย ซึ่งคือปัญหาเดิม) */}
           <CropFrame box={cropBox} />
           </UiEnter>
+          </group>
+          </group>
         </group>
       </group>
       {/*
@@ -1243,7 +1347,12 @@ export function Panels() {
         ที่ใหม่ 17 หน่วย จึงย่อพิกัดกับขนาดลงด้วยสัดส่วน 17/22 ทั้งชุด ไม่งั้นย้ายมาข้างหน้าแล้ว
         มันจะใหญ่ขึ้นเองจนบังตัวละคร
       */}
-      <UiEnter offset={[7, 0, 0]} delay={0.44}>
+      {/* การ์ดกระจกอยู่นอกกลุ่ม depth — หมุนรอบตาเองด้วยมุมเดียวกัน
+          โหมด flip: ไม่หมุนตาม arc แต่ย้ายไปชิดขอบซ้ายของ view ที่แพนขวาแทน (ตำแหน่ง mirror
+          ด้านล่าง) — เข้าฉากจากซ้ายด้วย */}
+      <group position={CAM0} rotation={[0, flip ? 0 : arc, 0]}>
+      <group position={[-CAM0[0], -CAM0[1], -CAM0[2]]}>
+      <UiEnter offset={[flip ? -7 : 7, 0, 0]} delay={0.44}>
         <ScrollExit>
         <CurvedPanel
           glass
@@ -1254,10 +1363,10 @@ export function Panels() {
            * ที่ระยะนี้ (ห่างกล้อง 17 หน่วย, fov 24) ขอบขวาของเฟรมอยู่ราว x = 5.7 บนจอ 16:10
            * วางกลางการ์ดไว้เลยขอบไปนิดเดียว ส่วนที่เกินจึงถูกตัด แต่ยังเหลือเนื้อให้อ่านออก
            */
-          position={[6.0, 1.9, -2.5]}
+          position={flip ? [-2.0, 1.9, -2.5] : [6.0, 1.9, -2.5]}
           // เอียงเพิ่มจากท่าหันหน้าเข้าหาตา (ดู built ของ glass) ไม่ใช่มุมสัมบูรณ์ —
           // เอียงนิดเดียวพอให้เห็นสันด้านข้าง ถ้าหันตรงเป๊ะจะเห็นแต่หน้าแบน ๆ
-          rotation={[0, -0.34, 0]}
+          rotation={[0, flip ? 0.34 : -0.34, 0]}
           size={[4.3, 3.3]}
           corner={0.34}
           color="#FFFFFF"
@@ -1272,6 +1381,8 @@ export function Panels() {
         />
         </ScrollExit>
       </UiEnter>
+      </group>
+      </group>
     </>
   )
 }

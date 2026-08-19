@@ -308,7 +308,8 @@ function Legs({ rig }) {
         >
           <mesh position={[0, 0, 0.14]} castShadow receiveShadow>
             <boxGeometry args={[0.6, 0.34, 0.9]} />
-            <meshStandardMaterial color={BOOT} roughness={1} metalness={0} />
+            {/* หนังรองเท้ากึ่งเงา — ภาษาเดียวกับ roughness ตามวัสดุของตัว GLB */}
+            <meshStandardMaterial color={BOOT} roughness={0.5} metalness={0} />
           </mesh>
           <mesh position={[0, -0.21, 0.14]} castShadow receiveShadow>
             <boxGeometry args={[0.64, 0.09, 0.94]} />
@@ -523,7 +524,11 @@ export function Mascot({
       let m = matCache.get(key)
       if (!m) {
         m = src.clone()
-        m.roughness = 1
+        // ความด้านตามวัสดุจริง ไม่ใช่ 1 เหมาเข่ง: ผมมันเงา ผิวคนกึ่งด้าน ผ้าเสื้อด้านสุด
+        // — แสง key เดียวกันจะอ่านต่างกันตามเนื้อวัสดุ ตัวละครมีมิติขึ้นทั้งตัว
+        const hex = hexOf(src)
+        m.roughness =
+          hex === HEX.hair ? 0.42 : hex === HEX.skin || hex === HEX.neck ? 0.6 : 0.88
         m.metalness = 0
         // rim เฉพาะ standard material: shader ใช้ normal/vViewPosition ซึ่ง MeshBasicMaterial ไม่มี
         // ถ้าฉีดใส่ shader จะ compile ไม่ผ่าน แล้ว mesh นั้นจะไม่ถูกวาดเลย (แต่ยังทอดเงาได้)
@@ -604,11 +609,12 @@ export function Mascot({
       const hairMat = parts.hair[0]
         ? (parts.hair[0].userData.clayFrom ?? parts.hair[0].material)
         : new THREE.MeshStandardMaterial({ color: '#282729', roughness: 1, metalness: 0 })
+      // ก้อนเดียวจบ — ลึกพอให้ท้ายทอยทุย แต่ไม่แยกชั้น block ให้อ่านเป็นขั้นบันได
       const back = new THREE.Mesh(
-        new THREE.BoxGeometry(hs.x * 1.04, hs.y * 1.02, hs.z * 0.3),
+        new THREE.BoxGeometry(hs.x * 1.04, hs.y * 1.02, hs.z * 0.62),
         hairMat,
       )
-      back.position.set(hc.x, hc.y + hs.y * 0.02, hc.z - hs.z * 0.42)
+      back.position.set(hc.x, hc.y + hs.y * 0.02, hc.z - hs.z * 0.56)
       back.castShadow = back.receiveShadow = true
       back.name = 'BackHair'
       parts.head.add(back)
