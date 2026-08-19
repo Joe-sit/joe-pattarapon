@@ -23,3 +23,61 @@
     opacity: 0;
   }
 }
+
+/* ปุ่ม CTA แบบ githubuniverse: rest เขียวเรียบ hover ค่อยโชว์ชั้นการ์ดสีซ้อนใต้
+   (box-shadow 4 ชั้นบน ::after) + เขียวเข้มขึ้น + ยกขึ้นขวา — สี/จังหวะถอดจากเว็บจริง */
+.v2-cta {
+  position: relative;
+  /* ขัง ::after (z-index -1) ไว้ใน stacking context ของปุ่มเอง — ไม่งั้นมันมุดไปหลังพื้น cell */
+  isolation: isolate;
+  background: #08872b;
+  border-radius: 8px;
+  transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+  cursor: pointer;
+}
+.v2-cta::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 8px;
+  box-shadow: none;
+  transition: box-shadow 0.2s ease-in-out;
+}
+.v2-cta:hover {
+  transform: translate(2px, -2px);
+}
+.v2-cta:hover::after {
+  box-shadow:
+    #bba00a -1px 2px 0 0,
+    #5fed83 -2px 4px 0 0,
+    #583af7 -3px 6px 0 0,
+    #c05200 -4px 8px 0 0;
+}
+
+/* enter ของ headline: โผล่จากล่างขึ้นมาหลังฉากในกรอบเล่นไปแล้วพักหนึ่ง —
+   ให้คนดูเห็น motion ไล่เป็นลำดับ ไม่ใช่ทุกอย่างพรึ่บพร้อมกัน */
+/* แถบ Open to work: เลื่อนซ้ายไม่รู้จบ — เนื้อในมีสองชุดเหมือนกันเป๊ะ เลื่อนครบครึ่ง
+   (= หนึ่งชุดเต็ม) แล้ววนกลับ 0 ภาพต่อเนียนไม่มีสะดุด */
+.v2-marquee {
+  display: flex;
+  width: max-content;
+  animation: v2-marquee 18s linear infinite;
+}
+@keyframes v2-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.v2-rise {
+  opacity: 0;
+  transform: translateY(30px);
+  transition:
+    opacity 0.85s cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 0.85s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.v2-rise.is-in {
+  opacity: 1;
+  transform: none;
+}
