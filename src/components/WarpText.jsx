@@ -110,15 +110,28 @@ void main() {
   vec2 split = splitDir * uRefraction * 0.16 * (0.35 + lens * 1.65);
 
   vec4 base = sampleText(displaced);
+  // แก้จากต้นทาง: alpha ต้องมาจาก base เท่านั้น
+  // ต้นทางเอา max ของทั้งสาม sample = ขยายรูปร่างออกไปกว้างกว่าตัวอักษรจริง แล้วในวงที่ขยายนั้น
+  // R (จาก +split) กับ B (จาก -split) หลุดออกนอกหมึกเป็น 0 เหลือแต่ G → จุดเขียวอมดำเกาะขอบ
+  // เห็นชัดมากบนตัวอักษรสีอิ่ม (แดงล้วน) เพราะแต่ละช่องสีต่างกันสุดขั้ว
+  // ใช้ base.a รูปร่างจึงเท่าตัวอักษรจริง refraction เหลือเป็นเหลื่อมสีบาง ๆ "ใน" ขอบตามที่ควร
   float r = sampleText(displaced + split).r;
   float g = base.g;
   float b = sampleText(displaced - split).b;
-  float a = max(max(sampleText(displaced + split).a, base.a), sampleText(displaced - split).a);
+  float a = base.a;
 
   vec3 color = vec3(r, g, b) + lens * base.a * 0.055;
   fragColor = vec4(color, a);
 }
 `;
+
+// วาดตัวอักษรลงเท็กซ์เจอร์ใหญ่กว่าที่แสดงจริงกี่เท่า — ย่อกลับตอนวาดผ่าน mipmap = AA
+// ในกริดหน้านี้กล่อง headline สูงแค่ ~66px ถ้า rasterize เท่าขนาดจริงขอบจะแตกทันทีที่ shader บิด
+const SUPERSAMPLE = 2;
+
+// ขอบเผื่อรอบกล่อง คิดเป็นสัดส่วนของความสูงกล่อง — canvas จริงจึงใหญ่กว่ากล่องด้านละเท่านี้
+// ต้องมากกว่าระยะบิดสูงสุดของ shader (pointerStrength * 4.5% ของความสูง canvas) ไม่งั้นยังโดนตัดอยู่ดี
+const BLEED = 0.5;
 
 const getFontValue = value => (typeof value === 'number' ? `${value}px` : value);
 
@@ -144,7 +157,7 @@ const drawLine = (ctx, line, x, y, letterSpacing, align) => {
   });
 };
 
-const buildTextCanvas = ({ container, width, height, dpr, props }) => {
+const buildTextCanvas = ({ container, width, height, dpr, pad = 0, props }) => {
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.floor(width * dpr));
   canvas.height = Math.max(1, Math.floor(height * dpr));
@@ -194,8 +207,10 @@ const buildTextCanvas = ({ container, width, height, dpr, props }) => {
 
   // ต้นทางเผื่อขอบไว้เยอะ (86%/78%) เพราะออกแบบเป็นบล็อกกลางจอ — ที่นี่เป็นคำในกริด
   // ต้องเต็มกล่องเท่าที่เป็นได้ ระยะบิดของ shader ราว 0.4% ของกล่อง เผื่อไว้เท่านั้นพอ
-  const maxWidth = width * 0.995;
-  const maxHeight = height * 0.99;
+  // ตัวอักษรพอดี "กล่องใน" (หักขอบเผื่อ pad ออกทั้งสี่ด้าน) — ขนาดตัวอักษรจึงเท่าเดิม
+  // ไม่ว่าจะเผื่อขอบไว้เท่าไร ส่วนที่เผื่อมีไว้ให้พิกเซลที่ถูกบิดออกนอกคำมีที่ยืน ไม่โดนตัด
+  const maxWidth = (width - pad * 2) * 0.995;
+  const maxHeight = (height - pad * 2) * 0.99;
   const widest = Math.max(...lines.map(line => measureLine(ctx, line, letterSpacing)), 1);
   const blockHeight = Math.max(lineHeight * lines.length, 1);
   const fit = Math.min(1, maxWidth / widest, maxHeight / blockHeight);
@@ -208,7 +223,7 @@ const buildTextCanvas = ({ container, width, height, dpr, props }) => {
   }
 
   const startY = height / 2 - (lineHeight * (lines.length - 1)) / 2;
-  const startX = props.align === 'left' ? 0 : width / 2;
+  const startX = props.align === 'left' ? pad : width / 2;
   lines.forEach((line, index) =>
     drawLine(ctx, line, startX, startY + index * lineHeight, letterSpacing, props.align),
   );
@@ -221,18 +236,24 @@ const WRAP_STYLE = {
   display: 'block',
   width: '100%',
   height: '100%',
-  overflow: 'hidden',
+  // ไม่ clip: canvas ถูกขยายเลยขอบกล่องออกไปด้านละ BLEED เพื่อรองรับพิกเซลที่ shader บิดออกมา
+  // ถ้า hidden ส่วนที่ยืดออกตอน hover จะโดนตัดหายเป็นเส้นตรงตรงขอบกล่อง
+  overflow: 'visible',
   isolation: 'isolate',
   borderRadius: 'inherit'
 };
 
+// shader คิดทุกระยะเป็นสัดส่วนของ canvas ซึ่งตอนนี้ใหญ่กว่ากล่องที่ตาเห็น (1 + 2*BLEED) เท่า
+// หารกลับตรงนี้ ค่า prop จึงยังหมายถึง "สัดส่วนของกล่องที่เห็น" เหมือนเดิม — เพิ่ม BLEED แล้ว
+// ความแรงของ effect ไม่เปลี่ยนตาม
 const syncUniforms = (program, props) => {
   const uniforms = program.uniforms;
-  uniforms.uWarpStrength.value = props.warpStrength;
+  const k = 1 + BLEED * 2;
+  uniforms.uWarpStrength.value = props.warpStrength / k;
   uniforms.uWarpScale.value = props.warpScale;
   uniforms.uSpeed.value = props.speed;
-  uniforms.uPointerInfluence.value = props.pointerInfluence;
-  uniforms.uPointerStrength.value = props.pointerStrength;
+  uniforms.uPointerInfluence.value = props.pointerInfluence / k;
+  uniforms.uPointerStrength.value = props.pointerStrength / k;
   uniforms.uRefraction.value = props.refraction;
   uniforms.uRipple.value = props.ripple ? 1 : 0;
 };
@@ -357,16 +378,19 @@ export const WarpText = ({
     gl.clearColor(0, 0, 0, 0);
     const canvas = gl.canvas;
     canvas.style.position = 'absolute';
-    canvas.style.inset = '0';
-    canvas.style.width = '100%';
-    canvas.style.height = '100%';
+    // ตำแหน่ง/ขนาดจริงตั้งใน resize() — canvas ล้นออกนอกกล่องด้านละ BLEED
     canvas.style.display = 'block';
+    // canvas ล้นออกนอกกล่องด้านละ BLEED — ถ้ามันรับเมาส์เอง (หรือปล่อยอีเวนต์ bubble ขึ้น container)
+    // เมาส์ที่ออกนอกคำไปแล้วจะยังนับว่า hover อยู่อีกตั้ง BLEED รอบด้าน ปิดไปเลย ให้ container รับคนเดียว
+    canvas.style.pointerEvents = 'none';
     canvas.setAttribute('aria-hidden', 'true');
     container.appendChild(canvas);
 
     texture = new Texture(gl, {
-      generateMipmaps: false,
-      minFilter: gl.LINEAR,
+      // เท็กซ์เจอร์ถูก rasterize ที่ SS เท่าของขนาดจริง (ดูค่า SUPERSAMPLE) — ย่อลงตอนวาด
+      // ต้องมี mipmap ไม่งั้น LINEAR อ่านแค่ 4 texel จาก 16 ขอบจะเป็นขั้นบันได
+      generateMipmaps: true,
+      minFilter: gl.LINEAR_MIPMAP_LINEAR,
       magFilter: gl.LINEAR,
       wrapS: gl.CLAMP_TO_EDGE,
       wrapT: gl.CLAMP_TO_EDGE
@@ -385,11 +409,11 @@ export const WarpText = ({
         uPointer: { value: new Float32Array([0.5, 0.5]) },
         uPointerActive: { value: 0 },
         uTime: { value: 0 },
-        uWarpStrength: { value: propsRef.current.warpStrength },
+        uWarpStrength: { value: propsRef.current.warpStrength / (1 + BLEED * 2) },
         uWarpScale: { value: propsRef.current.warpScale },
         uSpeed: { value: propsRef.current.speed },
-        uPointerInfluence: { value: propsRef.current.pointerInfluence },
-        uPointerStrength: { value: propsRef.current.pointerStrength },
+        uPointerInfluence: { value: propsRef.current.pointerInfluence / (1 + BLEED * 2) },
+        uPointerStrength: { value: propsRef.current.pointerStrength / (1 + BLEED * 2) },
         uRefraction: { value: propsRef.current.refraction },
         uRipple: { value: propsRef.current.ripple ? 1 : 0 },
         uMotion: { value: reduceMotion ? 0 : 1 }
@@ -414,12 +438,14 @@ export const WarpText = ({
       const rect = container.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
 
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2) * SUPERSAMPLE;
+      const pad = rect.height * BLEED;
       const textCanvas = buildTextCanvas({
         container,
-        width: rect.width,
-        height: rect.height,
+        width: rect.width + pad * 2,
+        height: rect.height + pad * 2,
         dpr,
+        pad,
         props: propsRef.current
       });
       texture.image = textCanvas;
@@ -433,7 +459,10 @@ export const WarpText = ({
       if (rect.width <= 0 || rect.height <= 0) return;
 
       renderer.dpr = Math.min(window.devicePixelRatio || 1, 2);
-      renderer.setSize(rect.width, rect.height);
+      const pad = rect.height * BLEED;
+      renderer.setSize(rect.width + pad * 2, rect.height + pad * 2);
+      canvas.style.left = `${-pad}px`;
+      canvas.style.top = `${-pad}px`;
       program.uniforms.uResolution.value[0] = gl.drawingBufferWidth;
       program.uniforms.uResolution.value[1] = gl.drawingBufferHeight;
       rasterize();
@@ -441,7 +470,7 @@ export const WarpText = ({
 
     const onPointerMove = event => {
       if (event.pointerType === 'touch') return;
-      const rect = canvas.getBoundingClientRect();
+      const rect = canvas.getBoundingClientRect();  // พิกัด uv อิง canvas (กล่อง + BLEED) ตามที่ shader ใช้
       if (rect.width <= 0 || rect.height <= 0) return;
       pointer.tx = (event.clientX - rect.left) / rect.width;
       pointer.ty = 1 - (event.clientY - rect.top) / rect.height;
@@ -487,7 +516,9 @@ export const WarpText = ({
 
       pointer.x += (targetX - pointer.x) * damping;
       pointer.y += (targetY - pointer.y) * damping;
-      pointer.active += ((pointer.activeTarget > 0 ? 1 : 0.18) - pointer.active) * 0.06;
+      // ต้นทางพักไว้ที่ 0.18 — เลนส์จึงยังทำงาน 18% แล้วเดินวนตาม idle ต่อทั้งที่เมาส์ออกจากคำไปแล้ว
+      // ที่นี่ให้ดับสนิท: ไม่ hover = ไม่มีเลนส์ เหลือแต่คลื่น fbm ที่เป็นผิวพื้นของ effect
+      pointer.active += ((pointer.activeTarget > 0 ? 1 : 0) - pointer.active) * 0.06;
 
       program.uniforms.uPointer.value[0] = pointer.x;
       program.uniforms.uPointer.value[1] = pointer.y;
@@ -514,8 +545,8 @@ export const WarpText = ({
     );
     intersectionObserver.observe(container);
 
-    canvas.addEventListener('pointermove', onPointerMove);
-    canvas.addEventListener('pointerleave', onPointerLeave);
+    container.addEventListener('pointermove', onPointerMove);
+    container.addEventListener('pointerleave', onPointerLeave);
     canvas.addEventListener('webglcontextlost', onContextLost, false);
     document.addEventListener('visibilitychange', onVisibility);
     mediaQuery?.addEventListener('change', onReducedMotion);
@@ -531,8 +562,8 @@ export const WarpText = ({
       if (raf) cancelAnimationFrame(raf);
       resizeObserver?.disconnect();
       intersectionObserver?.disconnect();
-      canvas.removeEventListener('pointermove', onPointerMove);
-      canvas.removeEventListener('pointerleave', onPointerLeave);
+      container.removeEventListener('pointermove', onPointerMove);
+      container.removeEventListener('pointerleave', onPointerLeave);
       canvas.removeEventListener('webglcontextlost', onContextLost);
       document.removeEventListener('visibilitychange', onVisibility);
       mediaQuery?.removeEventListener('change', onReducedMotion);
