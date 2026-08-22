@@ -81,3 +81,77 @@
   opacity: 1;
   transform: none;
 }
+
+/* ปลายไทม์ไลน์: mascot ชะโงกออกมาจากหลังขอบการ์ด + ป้าย open-to-work/
+   เวทีถูก overflow-hidden ตัดขอบขวา ตัวจึงโผล่มาแค่ครึ่งเดียวเหมือนแอบมอง
+   absolute ล้วน แถวเส้นเวลาจึงยังสูงเท่าหมุด 12px */
+.v2-peek {
+  position: absolute;
+  right: 0;
+  bottom: calc(50% + 10px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  width: clamp(110px, 10.5vw, 155px);
+  pointer-events: none;
+}
+
+.v2-peek-stage {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: clamp(120px, 11.5vw, 170px);
+  /* ตัดที่ขอบขวา = ขอบการ์ด แล้วดันตัวออกไปนอกกรอบนิดหน่อย ให้อ่านว่าโผล่มาจากข้างหลัง */
+  overflow: hidden;
+  animation: v2-peek-in 5.5s ease-in-out infinite;
+}
+
+/* ป้ายภาษาเดียวกับ eyebrow ของหน้า: mono + บล็อกเขียว ไม่ใช่ pill กลม ๆ */
+.v2-peek-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid #d2d9d5;
+  background: #fff;
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: clamp(11px, 0.9vw, 13px);
+  letter-spacing: -0.01em;
+  color: rgba(0, 0, 0, 0.55);
+  white-space: nowrap;
+}
+
+.v2-peek-dot {
+  width: 8px;
+  height: 8px;
+  background: #08872b;
+  /* กะพริบจังหวะเดียวกับ caret ของ eyebrow — ตัวเรียกสายตาเบา ๆ */
+  animation: v2-blink 1.06s steps(1) infinite;
+}
+
+/* ชะโงกเข้า-ถอยกลับช้า ๆ ไม่ใช่ลอยตลอดเวลา */
+@keyframes v2-peek-in {
+  0%,
+  12% {
+    transform: translateX(16%);
+  }
+  32%,
+  68% {
+    transform: translateX(0);
+  }
+  88%,
+  100% {
+    transform: translateX(16%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v2-peek-stage {
+    animation: none;
+    transform: translateX(6%);
+  }
+  .v2-peek-dot {
+    animation: none;
+  }
+}

@@ -1,6 +1,7 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { Fragment, lazy, Suspense, useEffect, useRef, useState } from 'react'
 import './portfolio2026.css'
 import { Leva } from 'leva'
+import { Card, CardSwap } from '@/components/CardSwap'
 import { SITE } from '@/config/site'
 import { useIntroDone } from '@/stores/intro'
 // โลโก้ตัวที่รับ color ได้ (ตัวใน components/ ตายตัวเป็นสีอ่อนสำหรับ NavBar พื้นเข้ม)
@@ -13,14 +14,24 @@ import promptMark from '@/assets/v2/prompt-mark.svg'
 import quoteMark from '@/assets/v2/quote-mark.svg'
 import buildingMosaic from '@/assets/v2/building-mosaic.png'
 import mosaicBand from '@/assets/v2/mosaic-band.svg'
+import chartBarIcon from '@/assets/v2/icon-chart-bar.svg'
+import homeHealthIcon from '@/assets/v2/icon-home-health.svg'
+import logoSit from '@/assets/v2/logo-sit.png'
+import logoKmutt from '@/assets/v2/logo-kmutt.png'
+import bmsOffice from '@/assets/v2/bms-office.png'
 import githubIcon from '@/assets/github-142_svgrepo.com.svg'
 import linkedinIcon from '@/assets/linkedin_svgrepo.com.svg'
-import instagramIcon from '@/assets/instagram_svgrepo.com.svg'
 
 // ฉาก 3D ของ /joespresso ทั้งใบ + การ์ด mascot ตัวเดียวกับฉาก — chunk หนัก แยกโหลด
 const JoeScene = lazy(() => import('@/joespresso/App').then((m) => ({ default: m.Scene })))
 const MascotCard = lazy(() =>
   import('@/joespresso/MascotCard').then((m) => ({ default: m.MascotCard })),
+)
+const StackKeys = lazy(() =>
+  import('@/sections/stack/StackKeys').then((m) => ({ default: m.StackKeys })),
+)
+const MascotPeek = lazy(() =>
+  import('@/joespresso/MascotPeek').then((m) => ({ default: m.MascotPeek })),
 )
 
 /**
@@ -43,19 +54,139 @@ const CELL = `${BORDER} bg-[#e8edec]`
 
 // ค่าที่ใช้ซ้ำหลายจุด — แก้ที่เดียว
 const GUTTER = 'clamp(16px,4.44vw,96px)'
+// เส้นตั้งของ header อยู่ "ใน" เซลล์ริม (border-box) = ช่วง [GUTTER-1, GUTTER]
+// ส่วน border-left ของ <main> เริ่มที่ขอบ margin พอดี = [GUTTER, GUTTER+1] — เหลื่อมกัน 1px
+// ดึงเข้ามาหนึ่งพิกเซล ทั้งสองเส้นจึงทับกันสนิท (วิธีเดียวกับ -ml-px ที่ใช้ต่อเซลล์ใน header)
+const GUTTER_LINE = `calc(${GUTTER} - 1px)`
 const HEADER_H = '74px'
-const PAD = 'p-[clamp(1rem,1.4vw,2rem)]'
+const PAD = 'p-[clamp(1rem,1.67vw,2rem)]'
+// หนึ่งจอเต็ม = ความสูง viewport ลบแถบบน — ทุก section ใช้ค่าเดียวกันนี้ ไม่ต่างคนต่างเดา
+// svh (ไม่ใช่ vh) เพราะบนมือถือแถบ URL ยุบ/ยืด แล้ว vh จะกระโดด
+// h = บังคับพอดีจอ (แถวที่ยืดได้), min-h = อย่างน้อยหนึ่งจอ แต่โตตามเนื้อหาได้ ไม่ตัดทิ้ง
+// จอเล็ก (<lg) ไม่บีบเลย ปล่อยไหลยาว — เนื้อหาสูงกว่าจอเตี้ย ๆ อยู่แล้ว
+const SCREEN_H = 'lg:h-[calc(100svh-74px)]'
+const SCREEN_MIN = 'lg:min-h-[calc(100svh-74px)]'
+// ช่องว่างระหว่าง "เรื่อง" คนละเรื่อง — ในเรื่องเดียวกันแถวยังชนกันเส้นเดียวเหมือนเดิม (-mt-px)
+const GAP_Y = 'mt-[clamp(1.5rem,3vw,3rem)]'
 const BODY_TEXT = 'text-[clamp(0.9375rem,1.05vw,1.375rem)]'
 
 // ไอคอนชุดนี้เป็นเวอร์ชันสำหรับพื้นเข้ม — ปรับลงพื้นอ่อนด้วย filter คนละแบบ:
 // github เป็นวงกลมขาว+ตัวดำ ต้อง invert (ได้กลมดำ+ตัวขาวตาม design) ที่เหลือ glyph ขาวล้วน ทาดำพอ
+const GITHUB_URL = 'https://github.com/Joe-sit'
+
 const SOCIALS = [
-  { name: 'GitHub', icon: githubIcon, href: 'https://github.com/Joe-sit', filter: 'invert' },
+  { name: 'GitHub', icon: githubIcon, href: GITHUB_URL, filter: 'invert' },
   { name: 'LinkedIn', icon: linkedinIcon, href: SITE.linkedIn, filter: 'darken' },
-  { name: 'Instagram', icon: instagramIcon, href: SITE.instagram, filter: 'darken' },
 ]
 
-const NAV = ['What I Do', 'Experiences', 'Works']
+// เมนู header -> id ของ section จริงในหน้า (เลื่อนไปเองแบบ smooth ตอนกด)
+const NAV = [
+  { label: 'What I Do', id: 'what-i-do' },
+  { label: 'Experiences', id: 'experiences' },
+  { label: 'Works', id: 'works' },
+]
+
+/** เลื่อนไปหัว section โดยเว้นที่ให้แถบบนที่ลอยทับอยู่ */
+function scrollToSection(id: string) {
+  const el = document.getElementById(id)
+  if (!el) return
+  const y = el.getBoundingClientRect().top + window.scrollY - Number.parseInt(HEADER_H, 10)
+  window.scrollTo({ top: y, behavior: 'smooth' })
+}
+
+/**
+ * ไทม์ไลน์เส้นทางงาน (comp 12563:216-244)
+ *
+ * `at` = ป้ายแท็บข้างล่าง ส่วน `role`/`org` คือหมุดบนเส้น — หมุดสุดท้ายเป็นปัจจุบัน
+ * จึงยังไม่มีข้อความกำกับในคอมพ์ เส้นหลังหมุดนั้นเป็นสีเทา (ยังไม่ถึง)
+ */
+type Stop = {
+  at: string
+  role: string
+  org: string
+  /** เนื้อการ์ดของช่วงนั้น — มีเฉพาะช่วงที่มีของจริง ไม่มีก็ปล่อยว่าง ไม่แต่งขึ้นมา */
+  credential?: string
+  logos?: { src: string; alt: string }[]
+  quote?: string
+  photo?: { src: string; alt: string }
+}
+
+const JOURNEY: Stop[] = [
+  {
+    at: '@SIT',
+    role: 'B.Sc. Information Technology',
+    org: 'Second Class Honors',
+    credential: 'B.Sc. Information Technology',
+    logos: [
+      { src: logoSit, alt: 'School of Information Technology' },
+      { src: logoKmutt, alt: 'KMUTT' },
+    ],
+    quote: 'This valuable 4 years gave me a solid foundation of software development.',
+    photo: { src: bmsOffice, alt: 'บรรยากาศห้องประชุมของทีม' },
+  },
+  { at: '@APPMAN', role: 'Internship UX/UI Designer', org: 'AppMan Co,. Ltd.' },
+  { at: '@BMS', role: 'Full-time UX/UI Designer', org: 'Bangkok Medical Software Co,. Ltd.' },
+]
+
+/**
+ * โมเสกมุมขวาล่างของการ์ดคำพูด — บันไดไต่ขึ้นทางขวา
+ *
+ * แถวล่างสุดยาวสุด (สี่ช่อง) ไล่สั้นลงเรื่อย ๆ จนเหลือช่องเดียวบนสุดชิดขวา
+ * เรียงจากบนลงล่างตามลำดับที่วาด ไม่ใช่จากล่างขึ้นบน
+ */
+const MOSAIC_ROWS = [
+  ['#235f8c'],
+  ['#235f8c', '#0091be'],
+  ['#235f8c', '#0091be', '#898986'],
+  ['#235f8c', '#0091be', '#898986', '#c9c9c9'],
+]
+
+/**
+ * งานเด่น — เลื่อนลงแล้วใบใหม่ทับใบเดิมไปเรื่อย ๆ จนหมดรายการ (sticky ซ้อนชั้น)
+ *
+ * ตอนนี้มีของจริงใบเดียว เติมใบใหม่ในอาร์เรย์นี้แล้วการซ้อนทำงานเองทันที
+ * ไม่ใส่งานสมมติมาถ่วงจำนวนให้เห็นเอฟเฟกต์ — จำนวนใบต้องเท่างานที่ทำจริง
+ *
+ * blurb แยกเป็นสามท่อนเพราะชื่อหน่วยงานต้องเป็นสีเขียวตามคอมพ์ (12563:307-363)
+ */
+const WORKS: Work[] = [
+  {
+    eyebrow: 'What I Do',
+    title: 'Health Dashboards',
+    tags: ['Data Visualization', 'UX/UI Design'],
+    blurb: {
+      before: 'Collaborated with the ',
+      org: 'Ministry of Public Health',
+      after: ' to design and develop interactive dashboards.',
+    },
+    stats: [
+      { icon: chartBarIcon, value: '+1M', note: 'Transforming 1M+ health records into actionable insights.' },
+      { icon: homeHealthIcon, value: '200+', note: 'Hospital accessible health dashboard' },
+    ],
+    href: SITE.resumeUrl,
+    // ยังไม่มีภาพหน้าจอจริง — คอมพ์เองก็เป็นกล่องเปล่าซ้อนกันสามใบ ใส่โทนไว้ก่อน
+    shots: ['#ffffff', '#e3e3e3', '#9a9a9a'],
+  },
+  // ---- ตั้งแต่ตรงนี้ลงไปเป็น "ของปลอมชั่วคราว" ที่ขอมาให้ดูโครงสาระบัญ+การซ้อนการ์ด ----
+  // ยังไม่ใช่งานจริง: ไม่มีตัวเลข ไม่มีลิงก์ ไม่มีชื่อหน่วยงาน เพราะไม่รู้ของจริง
+  // ได้ข้อมูลจริงเมื่อไรแทนที่ทั้งก้อน แล้วลบ mock: true ออก
+  { mock: true, eyebrow: 'What I Do', title: 'Hospital Queue App', tags: ['Mobile', 'UX/UI Design'], shots: ['#ffffff', '#e3e3e3', '#9a9a9a'] },
+  { mock: true, eyebrow: 'What I Do', title: 'Claim Automation', tags: ['Design System', 'Frontend'], shots: ['#ffffff', '#e3e3e3', '#9a9a9a'] },
+  { mock: true, eyebrow: 'What I Do', title: 'Telemedicine Portal', tags: ['Web App', 'Research'], shots: ['#ffffff', '#e3e3e3', '#9a9a9a'] },
+] satisfies Work[]
+
+type Work = {
+  eyebrow: string
+  title: string
+  tags: string[]
+  shots: string[]
+  /** true = ตัวอย่างชั่วคราว ยังไม่ใช่งานจริง */
+  mock?: true
+  blurb?: { before: string; org: string; after: string }
+  stats?: { icon: string; value: string; note: string }[]
+  href?: string
+}
+
 
 /**
  * ป้ายเล็กแบบ githubuniverse.com: ตัว mono ถูก "พิมพ์" ทีละตัวตอนเลื่อนมาเห็น
@@ -171,6 +302,11 @@ function NavItem({ label, href }: { label: string; href: string }) {
   return (
     <a
       href={href}
+      onClick={(e) => {
+        // กันการกระโดดของ anchor: Lenis คุมตำแหน่ง scroll จริงอยู่ ต้องสั่งเลื่อนเอง
+        e.preventDefault()
+        scrollToSection(href.slice(1))
+      }}
       onMouseLeave={scramble}
       className={`${CELL} group relative -ml-px flex flex-1 items-center pl-[clamp(1.25rem,2.2vw,3rem)] text-[16px] font-normal text-[#292a2e] transition-colors duration-[400ms] hover:bg-[#f2f5f3] max-md:hidden`}
     >
@@ -185,16 +321,11 @@ function NavItem({ label, href }: { label: string; href: string }) {
 
 export function Portfolio2026Page() {
   /**
-   * ลำดับการเปิดหน้า: สปแลชออก -> ฉาก 3D ในกรอบเล่น intro ไปพักหนึ่ง -> headline ค่อยลอยขึ้น
-   * คนดูจะได้มีจังหวะไล่ดูทีละอย่าง ไม่ใช่ทุกอย่างโชว์พร้อมกันตั้งแต่เฟรมแรก
+   * headline ขึ้นทันทีที่สปแลชจบ — ไม่หน่วงรอ intro ของฉากอีกต่อ
+   * (ทรานซิชัน v2-rise ยังอยู่ จึงยังลอยขึ้นให้เห็นจังหวะ แค่เริ่มนับตั้งแต่วินาทีที่สปแลชปิด)
    */
   const splashDone = useIntroDone()
-  const [headlineIn, setHeadlineIn] = useState(false)
-  useEffect(() => {
-    if (!splashDone) return
-    const t = setTimeout(() => setHeadlineIn(true), 1600)
-    return () => clearTimeout(t)
-  }, [splashDone])
+  const headlineIn = splashDone
 
   /**
    * header หลบตอนเลื่อนลง โผล่ตอนเลื่อนขึ้น — sticky ไว้ (ที่ว่างในเลย์เอาต์คงเดิม
@@ -202,6 +333,65 @@ export function Portfolio2026Page() {
    * ขยับเกิน 6px ค่อยตัดสินทิศ — กัน jitter จาก trackpad แกว่งทีละพิกเซล
    */
   const [headerHidden, setHeaderHidden] = useState(false)
+  // ช่วงงานที่เลือกอยู่ (แท็บใต้ไทม์ไลน์) — การ์ดข้างล่างเป็นเนื้อของช่วงนี้
+  const [stop, setStop] = useState(0)
+  // mascot ที่แอบมองปลายไทม์ไลน์: mount ครั้งเดียวตอนเลื่อนมาถึง (canvas ใบที่สามของหน้า
+  // ไม่ควรเกิดตั้งแต่โหลด) แล้วหยุด frameloop เมื่อออกนอกจอ
+  const peekRef = useRef<HTMLSpanElement | null>(null)
+  const [peekIn, setPeekIn] = useState(false)
+  const [peekMounted, setPeekMounted] = useState(false)
+  const current = JOURNEY[stop]
+  // ใบงานที่กำลังอยู่บนสุดของกอง — สาระบัญในแผงส้ม (ที่ปักหมุดอยู่ใบเดียว) อ่านค่านี้
+  // แป้นสแตกท้ายหน้า: canvas ใบที่สี่ของหน้า — เกิดตอนเลื่อนมาถึงเท่านั้น ไม่ใช่ตั้งแต่โหลด
+  const stackRef = useRef<HTMLElement | null>(null)
+  const [stackMounted, setStackMounted] = useState(false)
+  const workRefs = useRef<(HTMLDivElement | null)[]>([])
+  const [activeWork, setActiveWork] = useState(0)
+
+  useEffect(() => {
+    const els = workRefs.current.filter(Boolean) as HTMLDivElement[]
+    if (els.length === 0) return
+    // ใบที่ "โผล่มากที่สุด" คือใบที่กำลังดู — ใบล่างที่ยังไม่ขึ้นมาจะโดนใบบนทับอยู่
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting && e.intersectionRatio > 0.55) {
+            setActiveWork(Number((e.target as HTMLElement).dataset.work))
+          }
+        }
+      },
+      { threshold: [0.55, 0.9] },
+    )
+    els.forEach((el) => io.observe(el))
+    return () => io.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const el = stackRef.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) setStackMounted(true)
+      },
+      { rootMargin: '200px' },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const el = peekRef.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      ([e]) => {
+        setPeekIn(e.isIntersecting)
+        if (e.isIntersecting) setPeekMounted(true)
+      },
+      { rootMargin: '200px' },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
   useEffect(() => {
     let last = window.scrollY
     const onScroll = () => {
@@ -235,8 +425,8 @@ export function Portfolio2026Page() {
           <Logo width={93} height={32} className="" />
         </div>
         <nav className="-ml-px flex flex-1 items-stretch">
-          {NAV.map((label) => (
-            <NavItem key={label} label={label} href="#what-i-do" />
+          {NAV.map((item) => (
+            <NavItem key={item.id} label={item.label} href={`#${item.id}`} />
           ))}
           <a
             href={SITE.resumeUrl}
@@ -258,11 +448,12 @@ export function Portfolio2026Page() {
           แถว hero เป็น flex-1 กินที่ที่เหลือ — จอเล็กเลิกบีบ ปล่อยไหลยาวตามเนื้อหา */}
       <main
         className="flex flex-col border-x border-[#d2d9d5] lg:h-[calc(100svh-74px)] lg:min-h-[38rem]"
-        style={{ marginInline: GUTTER }}
+        style={{ marginInline: GUTTER_LINE }}
       >
         {/* headline rev ใหม่ (12542:76): VISION ตัว outline | INTO เล็ก + EXPERIENCES แดงซ้อนกันฝั่งขวา
             ตัวอักษรทั้งสามเป็น vector จาก Figma (ฟอนต์ custom) — สัดส่วนกว้างอิงคอมพ์ 1312:
-            VISION 580 = 44%, คอลัมน์ขวา 643 = 49% ที่เหลือเป็นช่องไฟ */}
+            VISION 580 = 44.2% ช่องไฟ 1.85% คอลัมน์ขวากินที่เหลือทั้งหมด (53.95%)
+            รวมสามค่าต้องได้ 100% พอดี ไม่งั้นคอลัมน์ขวาจะไม่ชนเส้นกริดฝั่งขวา */}
         <section className="shrink-0 px-[clamp(1rem,1.85vw,2.5rem)] py-[clamp(0.75rem,1.7vw,2.25rem)]">
           {/* ความสูงแถวมาจากคอลัมน์ขวา (INTO + EXPERIENCES) — VISION ยืดตาม (items-stretch)
               ก้น ascii จึงบรรจบเท่าก้น EXPERIENCES พอดีทุกขนาดจอ ไม่ต้อง fix อัตราส่วน */}
@@ -275,7 +466,7 @@ export function Portfolio2026Page() {
               <AsciiText text="VISION" asciiFontSize={10} planeBaseHeight={24} color="#1868db" />
             </span>
             {/* คำละจังหวะ: VISION ขึ้นก่อน แล้ว INTO ตาม แล้ว EXPERIENCES ปิดท้าย */}
-            <span className="flex w-[49%] flex-col gap-[clamp(0.5rem,1.7vw,2rem)] pt-[0.3%]">
+            <span className="flex w-[53.95%] flex-col gap-[clamp(0.5rem,1.7vw,2rem)] pt-[0.3%]">
               <img
                 src={intoMark}
                 alt="into"
@@ -295,18 +486,20 @@ export function Portfolio2026Page() {
                     color="#EF4343"
                     fontSize="400px"
                     fontWeight={800}
-                    letterSpacing="-0.02em"
-                    // ปิดการแยกช่องสี: ตัวอักษรแดงล้วน พอ R ถูกเลื่อนคนละทางกับ B
-                    // ขอบจะเหลือแค่ G/B = คราบเขียวอมดำ ไม่ใช่เงาบิดอย่างที่ตั้งใจ
-                    refraction={0}
-                    // speed 0 = ไม่มี drift พื้นหลัง — ผิวนิ่ง ขยับเฉพาะตอนเมาส์เข้าใกล้
-                    speed={0}
-                    // กล่อง headline เตี้ยกว่า demo มาก (66px vs 430px) — ระยะบิดคิดเป็นสัดส่วน
-                    // ความสูงกล่อง ต้องอัดชดเชยให้คลื่นเทียบขนาดตัวอักษรเท่า demo (~1.5% ของ glyph)
-                    warpStrength={0.45}
-                    // กล่องเตี้ยเท่าความสูงตัวอักษรพอดี — lineHeight ต้องใกล้ cap height
-                    // ไม่งั้นความสูงบรรทัดไปกินโควตาแล้วคำย่อจนไม่เต็มความกว้าง
-                    lineHeight={0.74}
+                    letterSpacing="-0.01em"
+                    // ตัวหนังสือถูกย่อให้พอดีกล่องด้วย min(กว้าง, สูง) — ถ้า lineHeight สูงไป
+                    // แกนสูงจะเป็นตัวบีบก่อน คำเลยไม่เต็มความกว้าง ลดลงจน "กว้าง" เป็นตัวบีบแทน
+                    lineHeight={0.72}
+                    warpStrength={0.08}
+                    warpScale={1.7}
+                    speed={0.55}
+                    // เลนส์ตอนเมาส์เข้าใกล้: shader คิดระยะบิดเป็นสัดส่วนของกล่อง (คูณคงที่ 0.045)
+                    // กล่องนี้สูงแค่ ~66px ค่า demo (0.38) จึงขยับได้ราว 1px เดียว = มองไม่เห็น
+                    // ของ demo กล่องสูง 430px เลยพอ — ที่นี่ต้องดันเกิน 1 ให้ได้ระยะเท่ากันในพิกเซลจริง
+                    pointerInfluence={1}
+                    pointerStrength={5.5}
+                    refraction={0.018}
+                    ripple
                     align="left"
                   />
                 )}
@@ -364,13 +557,13 @@ export function Portfolio2026Page() {
                 ))}
               </div>
             </div>
-            {/* Get in Touch — ปุ่มเขียวชั้นสีซ้อนแบบ githubuniverse (comp 12542:172) + social */}
+            {/* Send me an email — ปุ่มเขียวชั้นสีซ้อนแบบ githubuniverse (comp 12542:172) + social */}
             <div className={`${CELL} -mt-px flex items-center justify-between gap-4 ${PAD}`}>
               <a
                 href={`mailto:${SITE.email}`}
                 className="v2-cta flex h-[clamp(3.25rem,5vw,4.5rem)] w-[54%] items-center gap-2 pl-[clamp(1.25rem,2.2vw,2rem)] text-[clamp(1.05rem,1.4vw,1.25rem)] font-semibold text-white"
               >
-                Get in Touch
+                Send me an email
                 <img src={arrowOutward} alt="" className="size-6" />
               </a>
               <div className="flex gap-[clamp(1rem,1.5vw,2rem)]">
@@ -415,22 +608,24 @@ export function Portfolio2026Page() {
         </div>
       </div>
 
-      <main className="border-x border-[#d2d9d5]" style={{ marginInline: GUTTER }}>
+      <main className="border-x border-[#d2d9d5]" style={{ marginInline: GUTTER_LINE }}>
         {/* แถวหัว section: Pixels & Logic | ป้าย joe.skills() (comp 12546:158862) */}
-        <section id="pixels-logic" className="flex items-stretch max-lg:flex-col">
-          <div className={`${CELL} min-h-[clamp(7rem,13.75vw,12.5rem)] flex-[0.82] ${PAD}`}>
+        {/* หัวเรื่อง + การ์ดใหญ่ นับเป็นจอเดียวกัน: หัวสูงตามเนื้อหา การ์ดกินที่ที่เหลือ */}
+        <div className={`flex flex-col ${SCREEN_H}`}>
+        <section id="pixels-logic" className="flex shrink-0 items-stretch max-lg:flex-col">
+          <div className={`${CELL} min-h-[clamp(7rem,13.75vw,12.5rem)] min-w-0 shrink-0 basis-[45.05%] ${PAD}`}>
             <p className="text-[clamp(1.35rem,1.95vw,2.25rem)] font-medium text-black">
               Pixels &amp; Logic
             </p>
           </div>
-          <div className={`${CELL} -ml-px flex flex-1 items-end justify-end ${PAD} max-lg:ml-0 max-lg:-mt-px`}>
+          <div className={`${CELL} -ml-px flex min-w-0 flex-1 items-end justify-end ${PAD} max-lg:ml-0 max-lg:-mt-px`}>
             <p className={`${BODY_TEXT} font-medium text-black/50`}>joe.skills()</p>
           </div>
         </section>
 
         {/* แถวการ์ด: Coding | mascot 3D ตัวเดียวกับฉากหลัก + โมเสกพิกเซล (comp 12546:158827) */}
-        <section id="what-i-do" className="-mt-px flex items-stretch max-lg:flex-col">
-          <div className={`${CELL} relative flex min-h-[clamp(18rem,25vw,22.5rem)] flex-[0.82] flex-col ${PAD}`}>
+        <section id="what-i-do" className="-mt-px flex min-h-0 flex-1 items-stretch max-lg:flex-col">
+          <div className={`${CELL} relative flex min-h-[18rem] min-w-0 shrink-0 basis-[45.05%] lg:min-h-0 flex-col ${PAD}`}>
             <p className={`${BODY_TEXT} font-medium text-[#666]`}>
               <Eyebrow text="What I Do" />
             </p>
@@ -448,13 +643,321 @@ export function Portfolio2026Page() {
             />
           </div>
           {/* mascot ต้องเป็น 3D ตัวจริง (GLB clone ต่อ instance) — ใช้รูปเฉพาะครึ่ง tiles ขวา */}
-          <div className={`${CELL} relative -ml-px flex flex-1 overflow-hidden max-lg:ml-0 max-lg:-mt-px max-lg:min-h-[18rem]`}>
+          <div className={`${CELL} relative -ml-px flex min-w-0 flex-1 overflow-hidden max-lg:ml-0 max-lg:-mt-px max-lg:min-h-[18rem]`}>
             <div className="relative w-1/2">
               <Suspense fallback={null}>
                 <MascotCard />
               </Suspense>
             </div>
             <img src={buildingMosaic} alt="" className="w-1/2 object-cover object-right" />
+          </div>
+        </section>
+        </div>
+
+        {/* เส้นทางงาน — ไทม์ไลน์ + แท็บ + การ์ดสรุป นับเป็นจอเดียว (comp 12567:642 สูง 775
+            โดยการ์ดกิน 374) ระยะห่างในนี้ล็อกตามคอมพ์ ไม่ใช่ยืดหาร — ส่วนที่เหลือไปอยู่ที่การ์ด */}
+        <div className={`${GAP_Y} flex flex-col ${SCREEN_MIN}`}>
+        <section id="experiences" className={`${CELL} flex shrink-0 flex-col ${PAD}`}>
+          <div className={`flex flex-wrap items-center gap-2 ${BODY_TEXT} font-medium text-black/50`}>
+            <span>experiences</span>
+            <span>/</span>
+            <span>internship</span>
+            <span>/</span>
+            <span>full-time</span>
+            <span>/</span>
+            <span className="inline-flex items-center gap-2">
+              +2yrs exp
+              <span className="inline-block size-[0.85em] bg-[#008a15]" />
+            </span>
+          </div>
+
+          <p className="mt-[clamp(2rem,5.56vw,5rem)] text-[clamp(1.35rem,1.95vw,2.25rem)] font-medium text-black">
+            my-design-journey/
+          </p>
+
+          {/*
+            เส้นเวลา: หมุดสี่จุดวางบนเส้นเดียว ระยะเท่ากันด้วย grid ไม่ใช่พิกัดตายตัว
+            ช่วงสุดท้าย (หลังหมุดที่สี่) เป็นสีเทา — ยังไม่ถึง จึงไม่ทาเขียว
+          */}
+          <div className="mt-[clamp(1.5rem,3.96vw,3.6rem)]">
+            {/* เส้นวิ่งเต็มความกว้างการ์ด ไม่อยู่ในกรอบ padding (คอมพ์เริ่มที่ x=65 = ขอบเซลล์)
+                หัวเส้นมีตอเขียว 32px ก่อนหมุดแรก ท้ายเส้นเป็นเทายาว 446 = 1.69 เท่าของช่วง 264 */}
+            <div className="relative -mx-[calc(clamp(1rem,1.67vw,2rem)+1px)] flex items-center">
+              <span className="h-0.5 w-[clamp(1rem,2.22vw,2rem)] bg-[#008a15]" />
+              {JOURNEY.map((j) => (
+                <Fragment key={j.at}>
+                  {/* ป้ายห้อยใต้หมุดแบบ absolute — ขอบซ้ายป้ายตรงกับขอบซ้ายหมุดเสมอ
+                      ไม่ว่าเส้นจะยืดเท่าไร (กริดแยกจะเลื่อนไม่ตรงเพราะหัวเส้นมีตอ 32px) */}
+                  <span className="relative size-3 shrink-0 rounded-full bg-[#008a15]">
+                    <span className="absolute left-0 top-[calc(100%_+_clamp(0.5rem,0.83vw,0.75rem))] flex w-[clamp(10rem,15.35vw,14rem)] flex-col gap-4">
+                      <span className={`${BODY_TEXT} font-medium text-black`}>{j.role}</span>
+                      <span className="whitespace-nowrap text-[clamp(0.8125rem,0.95vw,1.125rem)] font-medium text-black/50">
+                        {j.org}
+                      </span>
+                    </span>
+                  </span>
+                  <span className="h-0.5 flex-1 bg-[#008a15]" />
+                </Fragment>
+              ))}
+              {/* หมุดสุดท้าย = อนาคต ยังไม่ถึง จึงเป็นวงกลมกลวง */}
+              <span className="size-3 shrink-0 rounded-full border-2 border-[#008a15] bg-[#e8edec]" />
+              <span className="h-0.5 flex-[1.69] bg-[#d2d9d5]" />
+              {/* ปลายทางฝั่งขวา = ช่วงต่อไปที่ยังไม่เกิด — mascot ชะโงกออกมาจากหลังขอบการ์ด
+                  พร้อมป้าย open-to-work/ ตัวจริงเป็น 3D ตัวเดียวกับฉากหลัก ไม่ใช่รูปนิ่ง
+                  ลอยอยู่เหนือเส้น วางแบบ absolute แถวเส้นเวลาจึงยังสูงเท่าหมุด (12px) */}
+              <span className="v2-peek" ref={peekRef}>
+                <span className="v2-peek-stage">
+                  {peekMounted ? (
+                    <Suspense fallback={null}>
+                      <MascotPeek active={peekIn} />
+                    </Suspense>
+                  ) : null}
+                </span>
+                <span className="v2-peek-badge">
+                  open-to-work/
+                  <span className="v2-peek-dot" />
+                </span>
+              </span>
+            </div>
+            {/* เผื่อที่ให้ป้ายที่ห้อยอยู่ (absolute จึงไม่ดันความสูงเอง) */}
+            <div className="h-[clamp(3.75rem,5.4vw,4.5rem)]" />
+          </div>
+
+          {/* แท็บที่ทำงาน — ใบแรกเป็นใบที่เลือกอยู่: พื้นขาว ขีดเขียวบนหัว
+              ก้นแท็บต้องชนการ์ดข้างล่างพอดี (เป็นแท็บของการ์ดนั้น ไม่ใช่ปุ่มลอย) —
+              ลบ padding ล่าง+ซ้ายของ section ทิ้งด้วย margin ติดลบเท่า PAD
+              (ขอบซ้ายแท็บใบแรกต้องตรงกับขอบซ้ายการ์ดข้างล่าง) */}
+          <div className="mt-[clamp(1.25rem,2.15vw,1.95rem)] -mb-[clamp(1rem,1.67vw,2rem)] -ml-[calc(clamp(1rem,1.67vw,2rem)+1px)] flex flex-wrap">
+            {JOURNEY.map((j, i) => (
+              <button
+                key={j.at}
+                type="button"
+                aria-pressed={i === stop}
+                onClick={() => setStop(i)}
+                className={`-ml-px flex h-[clamp(3.5rem,5vw,4.5rem)] w-[clamp(9rem,13.9vw,12.5rem)] cursor-pointer items-center justify-between px-[clamp(1rem,1.7vw,1.5rem)] transition-colors first:ml-0 ${
+                  i === stop
+                    ? 'border-t-2 border-[#008a15] bg-white'
+                    : `${BORDER} bg-[#f3f5f3] hover:bg-white`
+                }`}
+              >
+                <span className={`${BODY_TEXT} font-semibold text-[#292a2e]`}>{j.at}</span>
+                <span
+                  className={`size-3 rounded-full ${i === stop ? 'bg-[#008a15]' : 'border border-[#d2d9d5] bg-[#e8edec]'}`}
+                />
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* การ์ดสรุปของช่วงที่เลือกจากแท็บ: คำพูด + โมเสก | ภาพจริงจากที่ทำงาน (comp 12568:813)
+            ช่วงที่ยังไม่มีคำพูด/โลโก้/รูปจริง เว้นว่างไว้ตรง ๆ ไม่ใส่ของสมมติมาแทน */}
+        <section className="-mt-px flex flex-1 items-stretch max-lg:flex-col">
+          <div className={`${CELL} flex flex-[0.49] flex-col bg-white`}>
+            <div className={`${BORDER} flex min-h-[clamp(4rem,5.5vw,5rem)] items-center justify-between gap-4 border-x-0 border-t-0 ${PAD}`}>
+              <p className={`${BODY_TEXT} font-medium text-black/50`}>{current.credential ?? current.role}</p>
+              <span className="flex shrink-0 items-center gap-4">
+                {current.logos?.map((l) => (
+                  <img key={l.src} src={l.src} alt={l.alt} className="h-8 w-auto" />
+                ))}
+              </span>
+            </div>
+            {/* คอมพ์ 12567:691 ให้ padding แค่บนกับซ้าย — โมเสกจึงชนมุมขวาล่างของการ์ดพอดี
+                ส่วนตัวคำพูดกันขวาด้วย padding ของตัวเองเท่า PAD */}
+            <div className="relative flex flex-1 flex-col justify-between overflow-hidden pl-[clamp(1rem,1.67vw,2rem)] pt-[clamp(1rem,1.67vw,2rem)]">
+              <div className="pr-[clamp(1rem,1.67vw,2rem)]">
+                {current.quote ? (
+                  <>
+                    <img src={quoteMark} alt="" className="h-[clamp(1.2rem,1.86vw,1.7rem)] w-auto" />
+                    <p className="mt-2 text-[clamp(1.35rem,1.95vw,1.75rem)] font-medium leading-[normal] text-black">
+                      {current.quote}
+                    </p>
+                  </>
+                ) : (
+                  <p className={`${BODY_TEXT} font-medium text-black/50`}>{current.org}</p>
+                )}
+              </div>
+              {/* โมเสกชิดมุมขวาล่าง — สี่เหลี่ยมด้านเท่า ไล่เป็นขั้นบันได */}
+              <div className="mt-8 flex flex-col items-end self-end">
+                {MOSAIC_ROWS.map((row, r) => (
+                  <div className="flex" key={r}>
+                    {row.map((c, i) => (
+                      <span
+                        key={`${r}-${i}`}
+                        className="block size-[clamp(1.1rem,2.15vw,2rem)]"
+                        style={{ background: c }}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className={`${CELL} -ml-px flex-[0.51] overflow-hidden max-lg:ml-0 max-lg:-mt-px max-lg:min-h-[16rem]`}>
+            {current.photo ? (
+              <img
+                src={current.photo.src}
+                alt={current.photo.alt}
+                className="size-full min-h-[16rem] object-cover"
+              />
+            ) : null}
+          </div>
+        </section>
+
+        </div>
+
+        {/* งานเด่น (comp 12563:307-363)
+            แผงส้มซ้าย = สาระบัญ ปักหมุดอยู่กับที่ตลอดช่วง section
+            ฝั่งขวาเท่านั้นที่ซ้อน: เลื่อนลงแล้วใบถัดไปขึ้นมาทับใบก่อนหน้าที่ปักไว้ จนหมดรายการ */}
+        <section id="works" className={`${GAP_Y} flex items-start max-lg:flex-col`}>
+          <div
+            className={`${BORDER} flex flex-[0.32] flex-col justify-between self-stretch bg-[#fd5000] ${PAD} lg:sticky lg:h-[calc(100svh-74px)] max-lg:w-full`}
+            style={{ top: HEADER_H }}
+          >
+            <p className="whitespace-nowrap text-[clamp(1.4rem,2.9vw,3rem)] font-medium text-white">
+              highlights-work/
+            </p>
+
+            {/* สาระบัญ + ตัวชี้ว่ากำลังดูใบไหน (activeWork มาจาก IntersectionObserver ข้างล่าง) */}
+            <ol className="my-[clamp(1.5rem,3vw,2.5rem)] flex flex-col">
+              {WORKS.map((item, j) => (
+                <li
+                  key={item.title}
+                  aria-current={j === activeWork ? 'true' : undefined}
+                  className={`relative border-t border-white/25 last:border-b ${
+                    j === activeWork ? 'text-white' : 'text-white/55'
+                  }`}
+                >
+                  <span className="relative flex items-center gap-3 py-[clamp(0.6rem,1.1vw,0.9rem)] transition-colors duration-300">
+                    <span
+                      className={`size-2.5 shrink-0 transition-colors duration-300 ${j === activeWork ? 'bg-white' : 'border border-white/55'}`}
+                    />
+                    <span className="v2-eyebrow text-[clamp(0.7rem,0.8vw,0.85rem)]">
+                      {String(j + 1).padStart(2, '0')}
+                    </span>
+                    <span className={`${BODY_TEXT} ${j === activeWork ? 'font-semibold' : 'font-medium'}`}>
+                      {item.title}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="flex h-[clamp(2.75rem,3.6vw,3.25rem)] w-fit cursor-pointer items-center gap-2 rounded-lg bg-white px-[clamp(1rem,1.5vw,1.5rem)] text-[clamp(0.85rem,1vw,1.05rem)] font-semibold text-[#fd5000] transition-transform duration-200 hover:-translate-y-0.5"
+            >
+              Explore more work
+              <img
+                src={arrowOutward}
+                alt=""
+                className="size-5 [filter:invert(38%)_sepia(85%)_saturate(4000%)_hue-rotate(6deg)]"
+              />
+            </a>
+          </div>
+
+          <div className="-ml-px flex flex-1 flex-col self-stretch max-lg:ml-0 max-lg:w-full">
+            {WORKS.map((w, i) => (
+              <div
+                key={w.title}
+                ref={(el) => {
+                  workRefs.current[i] = el
+                }}
+                data-work={i}
+                className={`${BORDER} flex gap-[clamp(1rem,2vw,2.5rem)] overflow-hidden bg-white p-[clamp(1.25rem,2.8vw,2.5rem)] lg:sticky lg:h-[calc(100svh-74px)] max-lg:-mt-px max-lg:flex-col`}
+                style={{ top: HEADER_H, zIndex: i + 1 }}
+              >
+                <div className="flex w-[clamp(16rem,23.3vw,21rem)] shrink-0 flex-col lg:my-auto max-lg:w-full">
+                  <p className={`${BODY_TEXT} font-medium text-[#666]`}>{w.eyebrow}</p>
+                  <p className="mt-3 text-[clamp(1.6rem,2.5vw,2.25rem)] font-medium text-black">
+                    {w.title}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-4">
+                    {w.tags.map((t) => (
+                      <span
+                        key={t}
+                        className="rounded-lg bg-[#d2d9d4] px-3 py-2 text-[clamp(0.8125rem,0.95vw,1rem)] font-medium text-black"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                  {w.blurb ? (
+                    <p className="mt-[clamp(1.5rem,2.6vw,2.3rem)] text-[clamp(0.8125rem,0.95vw,1rem)] font-medium text-[#666]">
+                      {w.blurb.before}
+                      <span className="font-semibold text-[#1b7f37]">{w.blurb.org}</span>
+                      {w.blurb.after}
+                    </p>
+                  ) : null}
+                  {/* ตัวเลขผลงาน — สองแถวชนกัน ขอบร่วมกันเส้นเดียว (mb -1px) */}
+                  <div className="mt-[clamp(1rem,1.7vw,1.5rem)] flex flex-col">
+                    {(w.stats ?? []).map((st) => (
+                      <div
+                        key={st.value}
+                        className={`${BORDER} -mb-px flex items-center gap-6 bg-white p-4 last:mb-0`}
+                      >
+                        <span className="flex w-[6rem] shrink-0 items-center gap-2">
+                          <img src={st.icon} alt="" className="size-7" />
+                          <span className="text-[clamp(1.15rem,1.65vw,1.5rem)] font-semibold text-[#1b7f37]">
+                            {st.value}
+                          </span>
+                        </span>
+                        <p className="flex-1 text-[clamp(0.7rem,0.85vw,0.85rem)] font-medium text-[#666]">
+                          {st.note}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  {w.href ? (
+                    <a
+                      href={w.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-[clamp(1.25rem,2.2vw,2rem)] flex h-14 w-full max-w-[18rem] cursor-pointer items-center gap-2 rounded-lg bg-[#008a15] pl-8 text-[clamp(0.9rem,1.05vw,1.25rem)] font-semibold text-white transition-colors duration-[400ms] hover:bg-[#0d6731]"
+                    >
+                      Read story
+                      <img src={arrowOutward} alt="" className="size-6" />
+                    </a>
+                  ) : null}
+                </div>
+                {/* กองการ์ดโชว์งาน (CardSwap ของ reactbits) — ยังไม่มีภาพหน้าจอจริง */}
+                <div className="relative min-h-[18rem] flex-1 self-center lg:aspect-[1.35] lg:min-h-0 max-lg:min-h-[14rem]">
+                  <CardSwap
+                    width="86%"
+                    height="78%"
+                    cardDistance={34}
+                    verticalDistance={38}
+                    skewAmount={5}
+                    delay={4200}
+                    pauseOnHover
+                    easing="power"
+                  >
+                    {w.shots.map((bg) => (
+                      <Card key={bg} style={{ background: bg }} />
+                    ))}
+                  </CardSwap>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* สแตกที่ใช้จริง — บ่อลูกบอลฟิสิกส์ ชื่อเทคโนโลยีอยู่บนผิวลูก ลากเมาส์เขี่ยได้
+            (ref: moncy.dev) mount ตอนเลื่อนมาถึงเท่านั้น แล้วหยุดฟิสิกส์เมื่อออกนอกจอ */}
+        <section id="stack" ref={stackRef} className={`${CELL} ${GAP_Y} relative overflow-hidden ${SCREEN_MIN}`}>
+          <p className={`absolute inset-x-0 top-[clamp(2rem,5vw,4.5rem)] z-10 text-center text-[clamp(2rem,5.5vw,5rem)] font-medium uppercase text-black/80`}>
+            my-stack/
+          </p>
+          {/* กรอบของ canvas ต้องมีความสูงจริง — r3f ใส่ inline style ทับ (position:relative,
+              height:100%) ถ้าให้ Canvas เป็นตัว absolute เอง เปอร์เซ็นต์จะอ้างกับความสูง auto
+              ของ section แล้วยุบเหลือ ~150px (เคยเจอมาแล้วรอบหนึ่ง) */}
+          <div className="absolute inset-0">
+            {stackMounted ? (
+              <Suspense fallback={null}>
+                <StackKeys />
+              </Suspense>
+            ) : null}
           </div>
         </section>
 
@@ -464,6 +967,81 @@ export function Portfolio2026Page() {
 
       {/* แถบโมเสกพิกเซลปิดท้ายหน้า — เต็มความกว้างจอ (comp 12546:158878) */}
       <img src={mosaicBand} alt="" aria-hidden className="block w-full" />
+
+      {/*
+        footer ภาษาเดียวกับ githubuniverse: โลโก้ตัวเบ้อเริ่มกินความกว้างทั้งแถบ แล้วใต้ลงมา
+        เป็นแถวข้อมูลตัวเล็กคั่นด้วยเส้นกริดชุดเดียวกับทั้งหน้า ปิดท้ายด้วยบรรทัด mono
+        แบบพิมพ์คำสั่ง (ของเขาเป็น `echo "bug-bash-game/" >> .gitignore`)
+        ที่นี่ใช้คำที่หน้าอื่นใช้อยู่แล้ว (joe.skills() / my-design-journey/) จะได้เป็นเสียงเดียวกัน
+      */}
+      <footer
+        className="border-x border-t border-[#d2d9d5] bg-[#e8edec] text-[#292a2e]"
+        style={{ marginInline: GUTTER_LINE }}
+      >
+        {/* แถวพาดหัวยักษ์ — ที่ของ githubuniverse เป็นเวิร์ดมาร์ก ที่นี่เป็นประโยคปิดท้าย
+            ขนาดผูก vw ให้กินความกว้างแถบพอดีทุกจอ ไม่ตัดคำ (คำถามหนึ่งประโยคต้องอยู่บรรทัดเดียว) */}
+        <div className={`${BORDER} flex items-end justify-between gap-6 overflow-hidden ${PAD}`}>
+          <p className="whitespace-nowrap text-[clamp(1.5rem,7.4vw,7rem)] font-semibold leading-none tracking-[-0.02em] text-[#292a2e]">
+            WHAT&rsquo;S YOUR VISION
+          </p>
+          <p className="v2-eyebrow shrink-0 text-[clamp(0.75rem,0.95vw,1rem)] text-black/50">
+            joe.contact()
+          </p>
+        </div>
+
+        {/* แถวลิงก์: อีเมลจริง + เรซูเม่ + โซเชียล ไม่มีลิงก์หลอก */}
+        <div className="-mt-px flex items-stretch max-lg:flex-col">
+          <a
+            href={`mailto:${SITE.email}`}
+            className={`${CELL} flex flex-1 items-center gap-3 ${PAD} ${BODY_TEXT} font-medium transition-colors duration-200 hover:bg-[#f2f5f3]`}
+          >
+            {SITE.email}
+            <img src={arrowOutward} alt="" className="size-5" />
+          </a>
+          <a
+            href={SITE.resumeUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={`${CELL} -ml-px flex items-center gap-3 ${PAD} ${BODY_TEXT} font-medium transition-colors duration-200 hover:bg-[#f2f5f3] max-lg:ml-0 max-lg:-mt-px`}
+          >
+            Resume
+            <img src={arrowOutward} alt="" className="size-5" />
+          </a>
+          <div className={`${CELL} -ml-px flex items-center gap-[clamp(1rem,1.5vw,2rem)] ${PAD} max-lg:ml-0 max-lg:-mt-px`}>
+            {SOCIALS.map((so) => (
+              <a
+                key={so.name}
+                href={so.href}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={so.name}
+                className="transition-opacity duration-200 hover:opacity-60"
+              >
+                <img
+                  src={so.icon}
+                  alt=""
+                  className={`size-7 ${so.filter === 'invert' ? 'invert' : '[filter:brightness(0)]'}`}
+                />
+              </a>
+            ))}
+          </div>
+        </div>
+
+        {/* แถวล่างสุด: ลิขสิทธิ์ + ที่อยู่ + บรรทัด mono ปิดท้าย */}
+        <div className="-mt-px flex items-stretch max-lg:flex-col">
+          <p className={`${CELL} flex flex-1 items-center ${PAD} text-[clamp(0.75rem,0.95vw,1rem)] font-medium text-black/50`}>
+            © {SITE.copyrightYear} {SITE.name}
+          </p>
+          <p className={`${CELL} -ml-px flex items-center gap-2 ${PAD} text-[clamp(0.75rem,0.95vw,1rem)] font-medium text-black/50 max-lg:ml-0 max-lg:-mt-px`}>
+            Bangkok, TH
+            <span className="inline-block size-[0.7em] bg-[#008a15]" />
+          </p>
+          <p className={`${CELL} v2-eyebrow -ml-px flex items-center whitespace-nowrap ${PAD} text-[clamp(0.75rem,0.95vw,1rem)] text-black/50 max-lg:ml-0 max-lg:-mt-px`}>
+            echo "my-design-journey/" &gt;&gt; README.md
+            <span className="v2-caret" aria-hidden />
+          </p>
+        </div>
+      </footer>
     </div>
   )
 }

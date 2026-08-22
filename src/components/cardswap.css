@@ -1,0 +1,20 @@
+/* CardSwap (พอร์ตจาก reactbits) — ชื่อคลาสมี prefix กันชนกับของอื่นในโปรเจกต์
+   ตัวคอนเทนเนอร์เป็นเวที 3D ส่วนการ์ดถูก gsap จัดตำแหน่งทั้งหมด CSS แค่ให้หน้าตา */
+.v2-cardswap {
+  position: relative;
+  perspective: 1200px;
+  overflow: visible;
+}
+
+.v2-swap-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 12px;
+  border: 1px solid #000;
+  background: #fff;
+  transform-style: preserve-3d;
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}

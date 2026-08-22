@@ -28,7 +28,10 @@
   body {
     margin: 0;
     padding: 0;
-    overflow-x: hidden;
+    /* clip ไม่ใช่ hidden: hidden ทำให้ html/body กลายเป็น scroll container แล้ว
+       position: sticky เกาะ viewport ไม่ได้ทั้งหน้า (การ์ดงานเด่นซ้อนชั้นต้องใช้)
+       clip กันล้นแนวนอนได้เหมือนกันโดยไม่สร้าง scroll container */
+    overflow-x: clip;
     background-color: var(--color-paper);
     font-family: var(--font-sans);
   }

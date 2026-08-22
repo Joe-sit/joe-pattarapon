@@ -8,6 +8,8 @@ type LogoProps = {
 export function Logo({ width = 93, height = 32, className }: LogoProps) {
   return (
     <svg
+      // ปล่อยให้คลาสคุมขนาดได้ (footer ใช้ w-full) — attribute width/height ตายตัวจะชนะ CSS
+      // เฉพาะตอนไม่มีคลาสกำหนดขนาด จึงยังปลอดภัยกับที่เรียกใช้เดิมทั้งหมด
       width={width}
       height={height}
       viewBox="-10 -10 259 104"
