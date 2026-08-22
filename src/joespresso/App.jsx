@@ -328,6 +328,18 @@ function CameraRig({ strength = 1, lookShift = 0 }) {
       fov = lerp(20, fov, kk)
     }
 
+    // dev only: ส่องค่ากล้องจริงจากข้างนอก (headless/คอนโซล) เวลาจูนเฟรม
+    if (import.meta.env.DEV) {
+      window.__cam = {
+        pos: [camera.position.x, camera.position.y, camera.position.z].map((v) => +v.toFixed(2)),
+        look: [look.current.x, look.current.y, look.current.z].map((v) => +v.toFixed(2)),
+        fov: +fov.toFixed(1),
+        aspect: +camera.aspect.toFixed(2),
+        intro: introState.playing,
+        beats: { ...scrollState.b },
+      }
+    }
+
     if (Math.abs(camera.fov - fov) > 0.01) {
       camera.fov = fov
       camera.updateProjectionMatrix()

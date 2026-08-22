@@ -338,6 +338,13 @@ export function Mascot({
   rotation = [0, 0, 0],
   /** true = หันหลังให้กล้อง (หัวยังหันตามเมาส์) */
   facingAway = false,
+  /**
+   * ทับค่าจาก slider เฉพาะ instance นี้ — ใช้กับตัวที่ต้องอยู่คนละท่ากับฉากหลัก
+   * (เช่น mascot ที่แอบมองปลายไทม์ไลน์ ต้องเกาะขอบ+เอียงหัว ส่วนตัวในฉากยังชี้เหมือนเดิม)
+   * slider ยังคุมตัวอื่นได้ตามปกติ ค่าที่ไม่ได้ override ก็ยังไหลตาม slider
+   */
+  poseOverride = null,
+  followOverride = null,
 }) {
   const { scene } = useGLTF(MODEL)
   const root = useRef()
@@ -359,7 +366,7 @@ export function Mascot({
   // (damp ใช้ไม่ได้กับงานนี้ — มันออกตัวพรวดแล้วค่อยเบา ได้ครึ่งเดียวของ ease in-out)
   const glance = useRef({ fx: 0, fy: 0, tx: 0, ty: 0, x: 0, y: 0, start: 0, dur: 1, next: 2 })
 
-  const fol = useControls('Follow Cursor', {
+  const folSliders = useControls('Follow Cursor', {
     headYaw: { value: 0.55, min: 0, max: 1.5, step: 0.01, label: 'หัว ซ้ายขวา' },
     headPitch: { value: 0.28, min: 0, max: 1.2, step: 0.01, label: 'หัว ก้มเงย' },
     headRoll: { value: 0.09, min: 0, max: 0.6, step: 0.01, label: 'หัว เอียง' },
@@ -370,7 +377,12 @@ export function Mascot({
     headBasePitch: { value: 0, min: -0.6, max: 0.6, step: 0.01, label: 'หัว ก้มตั้งต้น' },
   })
 
-  const [pose, setPose] = useControls('Rig', () => ({
+  const fol = useMemo(
+    () => (followOverride ? { ...folSliders, ...followOverride } : folSliders),
+    [folSliders, followOverride],
+  )
+
+  const [poseSliders, setPose] = useControls('Rig', () => ({
     // 1.55 rad = แขนทำมุม ~38° กับแนวนอน ตรงตาม comp (ของเดิม 2.35 = 81° เกือบตั้งฉาก)
     pointShoulderZ: { value: 1.55, min: 0, max: 3.1, step: 0.05 },
     pointShoulderX: { value: 0.4, min: -2.5, max: 1.5, step: 0.05 },
@@ -417,6 +429,12 @@ export function Mascot({
     // debug: ลากลูกบอลที่ปลายนิ้วเพื่อเล็งแขน — ปล่อยแล้วค่ามุมไหล่ถูกเขียนกลับลง slider ด้านบน
     armDrag: { value: false, label: 'ลากวางแขน' },
   }))
+
+  // อ่านทุกเฟรมใน useFrame — ผสมครั้งเดียวต่อการเปลี่ยนค่า ไม่ใช่ทุกเฟรม
+  const pose = useMemo(
+    () => (poseOverride ? { ...poseSliders, ...poseOverride } : poseSliders),
+    [poseSliders, poseOverride],
+  )
 
   /**
    * ท่า "หลังชี้เสร็จ" — แขนชี้ลดลงมาห้อยแนบตัว ใช้ทั้งตอนจบ intro และตอน scroll เข้าฉาก 2

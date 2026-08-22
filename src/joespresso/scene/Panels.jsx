@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useControls } from 'leva'
 import * as THREE from 'three'
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { introState } from '../intro'
 import { scrollState } from '../scroll'
 import { toggleDevMode, useDevMode } from '../mode'
@@ -165,6 +166,103 @@ function roundedAlphaTex(w, h, r) {
 }
 
 /**
+ * หน้าจอ wireframe ที่กำลังถูกออกแบบอยู่ — วาดครั้งเดียวลง canvas แล้วแปะเป็น map
+ *
+ * ทำไมเป็นเท็กซ์เจอร์ ไม่ใช่ mesh ต่อชิ้น: wireframe หนึ่งใบมีกล่อง/เส้น/หมุดเป็นสิบชิ้น
+ * ถ้าแยก mesh ก็คือ draw call เป็นสิบต่อการ์ดหนึ่งใบ ทั้งที่มันแบนและไม่ขยับ วาดใส่ canvas
+ * ใบเดียวจบในหนึ่ง draw call และคมกว่าเพราะเส้นถูกวาดที่ความละเอียดของเท็กซ์เจอร์
+ *
+ * องค์ประกอบเลือกให้อ่านออกว่า "งานที่ทำค้างอยู่": โครงยังเป็นกล่องเปล่ากับเส้นแทนข้อความ
+ * มีกล่องรูปกากบาทแบบ placeholder และมีชิ้นหนึ่งถูกเลือกอยู่ (กรอบฟ้า + หมุดสี่มุม)
+ */
+function wireframeTex(w, h) {
+  const W = 1024
+  const H = Math.max(256, Math.round((W * h) / w))
+  const c = document.createElement('canvas')
+  c.width = W
+  c.height = H
+  const ctx = c.getContext('2d')
+  const u = W / 100 // หน่วยสัมพัทธ์ ไม่ผูกกับพิกเซลจริง
+
+  ctx.fillStyle = '#F4F5F7'
+  ctx.fillRect(0, 0, W, H)
+
+  const line = (x, y, ww, hh, color = '#C7CBD4') => {
+    ctx.fillStyle = color
+    ctx.fillRect(x * u, y * u, ww * u, hh * u)
+  }
+  const box = (x, y, ww, hh, color = '#B9BFCC') => {
+    ctx.strokeStyle = color
+    ctx.lineWidth = Math.max(1.5, u * 0.22)
+    ctx.strokeRect(x * u, y * u, ww * u, hh * u)
+  }
+
+  // แถบหัวหน้าต่าง + จุดสามจุด
+  line(0, 0, 100, 7, '#E4E7EC')
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = '#C7CBD4'
+    ctx.beginPath()
+    ctx.arc((4 + i * 4) * u, 3.5 * u, 1.1 * u, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // แถบข้าง = รายการเลเยอร์ที่ยังไม่ตั้งชื่อ
+  line(0, 7, 22, 100, '#ECEEF2')
+  for (let i = 0; i < 6; i++) line(3, 12 + i * 6, 14 - (i % 3) * 3, 1.6)
+
+  // กล่องรูปแบบ placeholder — กากบาททแยงมุมตามธรรมเนียม wireframe
+  const bx = 27
+  const by = 12
+  const bw = 44
+  const bh = 26
+  box(bx, by, bw, bh)
+  ctx.strokeStyle = '#C7CBD4'
+  ctx.lineWidth = Math.max(1, u * 0.16)
+  ctx.beginPath()
+  ctx.moveTo(bx * u, by * u)
+  ctx.lineTo((bx + bw) * u, (by + bh) * u)
+  ctx.moveTo((bx + bw) * u, by * u)
+  ctx.lineTo(bx * u, (by + bh) * u)
+  ctx.stroke()
+
+  // บรรทัดข้อความจำลอง + ปุ่ม
+  line(bx, by + bh + 5, 30, 2.4)
+  line(bx, by + bh + 10, 40, 1.8)
+  line(bx, by + bh + 14, 24, 1.8)
+  ctx.fillStyle = '#C7CBD4'
+  ctx.beginPath()
+  ctx.roundRect(bx * u, (by + bh + 20) * u, 16 * u, 6 * u, 1.4 * u)
+  ctx.fill()
+
+  // การ์ดฝั่งขวาที่ "กำลังถูกเลือก" — กรอบฟ้า + หมุดสี่มุม สีเดียวกับ activeColor ของ toolbar
+  const sx = 76
+  const sy = 12
+  const sw = 20
+  const sh = 34
+  box(sx, sy, sw, sh, '#D3D7DE')
+  ctx.strokeStyle = '#0C8CE9'
+  ctx.lineWidth = Math.max(1.5, u * 0.26)
+  ctx.strokeRect(sx * u, sy * u, sw * u, sh * u)
+  const hs = 1.5
+  for (const [hx, hy] of [
+    [sx, sy],
+    [sx + sw, sy],
+    [sx, sy + sh],
+    [sx + sw, sy + sh],
+  ]) {
+    ctx.fillStyle = '#FFFFFF'
+    ctx.fillRect((hx - hs / 2) * u, (hy - hs / 2) * u, hs * u, hs * u)
+    ctx.strokeRect((hx - hs / 2) * u, (hy - hs / 2) * u, hs * u, hs * u)
+  }
+
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping
+  tex.anisotropy = 4
+  return tex
+}
+
+/**
  * เครื่องมือที่เลือกอยู่บน toolbar — แชร์เป็น mutable state แบบ introState
  * (อ่านใน event handler ทุกครั้งที่กด ไม่ต้อง re-render อะไรตอนสลับเครื่องมือ)
  * 'cursor' = โหมดเลือก/ลาก panel ได้เหมือน canvas ของ Figma
@@ -195,6 +293,8 @@ function CurvedPanel({
    * และกด samples/resolution ให้ต่ำ เพราะภาพที่หักเหแล้วมันเบลออยู่แล้ว ไม่มีใครดูออก
    */
   glass = false,
+  /** ภาพที่แปะบนหน้าการ์ด (ใช้กับ wireframe ที่กำลังออกแบบอยู่) */
+  map = null,
 }) {
   const ref = useRef()
   const hovered = useRef(false)
@@ -404,6 +504,7 @@ function CurvedPanel({
            */
           <meshStandardMaterial
             color={color}
+            map={map ?? undefined}
             transparent={opacity < 0.8}
             opacity={opacity}
             alphaMap={alpha}
@@ -869,6 +970,153 @@ export function FigmaToolbar({ position, rotation = [0, 0, 0], R, params }) {
  * offset = ระยะที่ "เริ่มต้น" ห่างจากที่ของมัน (พิกัดในกลุ่ม panel) ให้พ้นเฟรมไปเลย
  * delay/span = ช่วงของบีต pull ที่ชิ้นนี้ใช้ ทยอยกันไม่ให้เข้าพร้อมกันทั้งแผง
  */
+/**
+ * ทรงเรขาลอย ๆ + ปุ่มลอย แทนแผงสีส้มใบเดิมที่ฝั่งซ้าย
+ *
+ * แผงเดิมเป็นสี่เหลี่ยมทึบใบใหญ่ อ่านเป็น "กล่อง" มากกว่าเป็นชิ้นส่วนของงานออกแบบ
+ * ชุดนี้เล่าเรื่องเดียวกับ toolbar/crop frame ที่มีอยู่แล้ว — ของในโปรแกรมออกแบบที่ลอยอยู่รอบตัว
+ *
+ * ทุกชิ้นลอยด้วยนาฬิกาเดียวกัน ต่างกันแค่ phase — ไม่มี state ไม่มี timer
+ * แอมพลิจูดคิดเป็นหน่วยฉาก และคาบเป็นวินาที จังหวะจึงเท่ากันทุก framerate
+ */
+const FLOATIES = [
+  // [x, y, z] รอบจุดยึด, ชนิดทรง, สี, ขนาด, phase, คาบลอย (วินาที)
+  // กระจายทั่วครึ่งซ้ายของเฟรม ไม่ใช่กองรวมเป็นกระจุก — ตั้งใจให้ระยะห่าง/ความลึกไม่เท่ากัน
+  // ชิ้นใหญ่อยู่หน้า ชิ้นเล็กถอยหลัง สายตาจึงอ่านเป็นของลอยในอากาศจริง ไม่ใช่สติกเกอร์แปะระนาบเดียว
+  // สี่ชิ้นพอ — เยอะกว่านี้แย่งสายตากับ toolbar/แผงข้อมูลที่เป็นเนื้อเรื่องจริงของฉาก
+  // ม่วงกับกล่องเหลืองสลับที่กัน (ตำแหน่งเท่านั้น ขนาด/จังหวะลอยยังติดไปกับทรงเดิม)
+  [[-3.6, -2.4, 0.4], 'ico', '#7C5CFC', 1.15, 0.0, 5.2],
+  [[2.6, 1.6, -1.2], 'torus', '#14AE5C', 1.0, 1.7, 6.4],
+  [[-2.4, 0.4, 1.2], 'box', '#F5C33B', 1.1, 3.1, 4.6],
+  [[3.4, -1.2, 0.6], 'sphere', '#F2A0C0', 0.95, 2.3, 5.9],
+]
+
+/** ทรงโครงลวด — เส้นขอบล้วน ไม่มีผิว ตัดกับชิ้นทึบให้ภาพไม่ตันไปทั้งกลุ่ม */
+const WIRES = [
+  // สีเข้มพอจะเห็นบนพื้นฟ้า/ทรายอ่อน — ขาวล้วนจมหายไปกับพื้นหลัง
+  // เหลือใบเดียว: กรอบเส้นสองใบซ้อนกันอ่านเป็นเส้นยุ่ง ไม่ใช่ทรง
+  [[-0.6, -0.9, 2.2], 'box', '#5A5B7A', 1.7, 1.2, 7.4],
+]
+
+function FloatShape({ position, geometry, color, size, phase, period, spin, wire = false }) {
+  const ref = useRef()
+  useFrame(({ clock }) => {
+    const node = ref.current
+    if (!node) return
+    const t = clock.elapsedTime
+    // ลอยขึ้นลงรอบตำแหน่งตั้งต้น — amp คงที่ในหน่วยฉาก ไม่ผูกกับ framerate
+    node.position.y = position[1] + Math.sin((t / period) * Math.PI * 2 + phase) * 0.16
+    node.rotation.x = phase + t * spin * 0.6
+    node.rotation.y = phase * 1.7 + t * spin
+  })
+  if (wire) {
+    return (
+      <lineSegments ref={ref} position={position} geometry={geometry} scale={size}>
+        <lineBasicMaterial color={color} transparent opacity={0.75} toneMapped={false} />
+      </lineSegments>
+    )
+  }
+  return (
+    <mesh ref={ref} position={position} geometry={geometry} scale={size}>
+      <meshStandardMaterial color={color} roughness={0.42} metalness={0.05} />
+    </mesh>
+  )
+}
+
+/**
+ * ปุ่มลอย: แผ่นมนหนา ๆ กับแถบสองเส้นบนหน้าปุ่ม
+ *
+ * เป็นของประกอบฉาก ไม่ใช่ปุ่มจริง — จึงไม่รับเมาส์และไม่เปลี่ยน cursor
+ * (กติกาในโปรเจกต์: อะไรที่กดได้ต้องเป็น pointer ของที่กดไม่ได้ก็ต้องไม่หลอกว่ากดได้)
+ */
+function FloatButton({ position, rotation, color, phase }) {
+  const ref = useRef()
+  const slab = useMemo(
+    () => roundedSlabGeometry({ w: 2.9, h: 1.0, r: 0.5, depth: 0.3, bevel: 0.06 }),
+    [],
+  )
+  useDisposable(slab)
+  useFrame(({ clock }) => {
+    const node = ref.current
+    if (!node) return
+    const t = clock.elapsedTime
+    node.position.y = position[1] + Math.sin((t / 5.8) * Math.PI * 2 + phase) * 0.13
+    // เอียงสลับซ้ายขวาช้า ๆ ให้รู้ว่ามันลอย ไม่ใช่แปะติดกับจอ
+    node.rotation.z = rotation[2] + Math.sin((t / 9) * Math.PI * 2 + phase) * 0.06
+  })
+  return (
+    <group ref={ref} position={position} rotation={rotation}>
+      <mesh geometry={slab}>
+        <meshStandardMaterial color={color} roughness={0.38} metalness={0.04} />
+      </mesh>
+      {/* แถบบนหน้าปุ่ม — ภาษาเดียวกับ rows ของ CurvedPanel ใบอื่น ไม่ใส่ข้อความปลอม */}
+      <mesh position={[-0.3, 0, 0.17]}>
+        <planeGeometry args={[1.2, 0.19]} />
+        <meshBasicMaterial color="#FFFFFF" transparent opacity={0.85} toneMapped={false} />
+      </mesh>
+      <mesh position={[0.88, 0, 0.17]}>
+        <circleGeometry args={[0.145, 24]} />
+        <meshBasicMaterial color="#FFFFFF" transparent opacity={0.7} toneMapped={false} />
+      </mesh>
+    </group>
+  )
+}
+
+/** กลุ่มของลอยทั้งชุด — geometry ปั้นครั้งเดียวแล้วใช้ร่วมกันทุกชิ้นที่ทรงเดียวกัน */
+function Floaties({ position, rotation = [0, 0, 0] }) {
+  const geos = useMemo(
+    () => ({
+      ico: new THREE.IcosahedronGeometry(1, 0),
+      torus: new THREE.TorusGeometry(0.8, 0.3, 16, 40),
+      box: new RoundedBoxGeometry(1.3, 1.3, 1.3, 3, 0.22),
+      capsule: new THREE.CapsuleGeometry(0.42, 0.9, 6, 16),
+      sphere: new THREE.SphereGeometry(0.8, 32, 24),
+      knot: new THREE.TorusKnotGeometry(0.62, 0.22, 96, 16),
+    }),
+    [],
+  )
+  // โครงลวด: EdgesGeometry ให้เฉพาะสันจริง ไม่ใช่ wireframe ที่โชว์เส้นแบ่งสามเหลี่ยมทุกเส้น
+  const wires = useMemo(
+    () => ({
+      box: new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
+      ico: new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(1, 0)),
+    }),
+    [],
+  )
+  for (const g of Object.values(geos)) useDisposable(g)
+  for (const g of Object.values(wires)) useDisposable(g)
+  return (
+    <group position={position} rotation={rotation}>
+      {FLOATIES.map(([p, kind, color, size, phase, period], i) => (
+        <FloatShape
+          key={`s${i}`}
+          position={p}
+          geometry={geos[kind]}
+          color={color}
+          size={size}
+          phase={phase}
+          period={period}
+          spin={0.18}
+        />
+      ))}
+      {WIRES.map(([p, kind, color, size, phase, period], i) => (
+        <FloatShape
+          key={`w${i}`}
+          position={p}
+          geometry={wires[kind]}
+          color={color}
+          size={size}
+          phase={phase}
+          period={period}
+          spin={0.12}
+          wire
+        />
+      ))}
+      <FloatButton position={[0.6, -0.4, 2.6]} rotation={[0, 0, -0.05]} color="#14AE5C" phase={2.2} />
+    </group>
+  )
+}
+
 function UiEnter({ offset, delay = 0, span = 0.55, children }) {
   const g = useRef()
   useFrame(() => {
@@ -1230,11 +1478,15 @@ export function Panels({ shiftX = 0 }) {
   // debugger: ความโค้งของ "จอ" ที่ panel ทุกใบวางอยู่ — 0 แบน, 1 โค้งเต็มตามระยะจริง
   // แกนโค้งอยู่ที่ตาคนดู ทุกใบจึงโค้งตามส่วนโค้งเดียวกัน ไม่ใช่ต่างคนต่างม้วน
   const { screenCurve: baseCurve } = useControls('Curve Perspective', {
-    screenCurve: { value: 1.6, min: 0, max: 2.5, step: 0.05, label: 'ความโค้งจอ' },
+    screenCurve: { value: 2.35, min: 0, max: 4, step: 0.05, label: 'ความโค้งจอ' },
   })
   // view หันขวา (/2026): มองจอโค้งจากมุมเฉียง ความโค้งเท่าเดิมอ่านตื้นกว่าตอน front view —
   // อัดเพิ่มให้ดีกรีที่ "เห็น" ใกล้เคียงกัน
   const screenCurve = flip ? baseCurve * 1.3 : baseCurve
+
+  // เท็กซ์เจอร์ wireframe ทำครั้งเดียวต่อสัดส่วนการ์ด — อย่าให้เกิดใหม่ทุกเฟรม
+  const wireframeMap = useMemo(() => wireframeTex(3.6, 2.2), [])
+  useDisposable(wireframeMap)
   // debugger: ดันชั้น panel ให้ลึกเข้าไปในฉาก
   // ขยายทั้งกลุ่มรอบ "จุดกล้อง" — ระยะกับขนาดโตพร้อมกัน ภาพบนจอจึงเท่าเดิมเป๊ะ
   // แต่ตัว panel ถอยไปอยู่หลังพุ่มไม้จริง ๆ พุ่มกับสันเนินเลยบังฐาน panel ให้เอง
@@ -1260,36 +1512,27 @@ export function Panels({ shiftX = 0 }) {
           <UiEnter offset={[-7, 0, 0]} delay={0.08}>
             <FigmaToolbar {...toolbarOnScreen(onArc(TOOLBAR_POS), screenCurve, CAM0)} />
           </UiEnter>
-      {/* ซ้าย */}
+      {/* ซ้าย — เดิมเป็นแผงทึบสีส้มใบเดียว เปลี่ยนเป็นทรงลอย + ปุ่มลอย
+          เข้าฉากด้วย UiEnter ตัวเดิม จังหวะจึงยังอยู่ในคิวเดียวกับ panel ใบอื่น */}
       <UiEnter offset={[-6, 2.2, 0]} delay={0.2}>
-      <CurvedPanel
-        curve={screenCurve}
-        eyeZ={CAM0[2]}
-        position={onArc([-5.9, 4.2, -6])}
-        rotation={[0, 0.32 + yawArc, 0]}
-        size={[2.4, 1.5]}
-        color="#F2604A"
-        opacity={0.92}
-        rows={[{ y: 0, w: 1.2, h: 0.22, color: '#FFFFFF', opacity: 0.55 }]}
-      />
+        <Floaties position={onArc([-5.2, 4.6, -5.6])} rotation={[0, 0.32 + yawArc, 0]} />
       </UiEnter>
 
       {/* ขวา */}
       <UiEnter offset={[7, 2.2, 0]} delay={0.32}>
+      {/* ใบนี้คือ "งานที่กำลังทำอยู่" — จอ wireframe ที่ยังเป็นโครง มีชิ้นหนึ่งถูกเลือกค้างไว้
+          โหมด flip (/2026) กรอบเป็น close-up ตัวละคร ใบนี้ที่ตำแหน่งเดิมจะโผล่แค่เสี้ยวริมซ้าย
+          จนอ่านไม่ออกว่าเป็น UI — ย้ายเข้ามาในกรอบและขยับเข้าหากล้องเฉพาะโหมดนั้น
+          ฉากเต็ม (/joespresso) ยังใช้ตำแหน่งเดิมทุกอย่าง */}
       <CurvedPanel
         curve={screenCurve}
         eyeZ={CAM0[2]}
-        position={onArc([5.6, 4.4, -5.4])}
-        rotation={[0, -0.3 + yawArc, 0]}
-        size={[3.6, 2.2]}
-        color="#6C4BE8"
-        opacity={0.88}
-        rows={[
-          { y: 0.6, x: -0.6, w: 1.7, h: 0.2, color: '#FFFFFF', opacity: 0.8 },
-          { y: 0.2, x: -0.6, w: 1.3, h: 0.2, color: '#FFFFFF', opacity: 0.6 },
-          { y: 0.6, x: 1.1, w: 0.7, h: 0.2, color: '#FFFFFF', opacity: 0.8 },
-          { y: 0.2, x: 1.1, w: 0.7, h: 0.2, color: '#FFFFFF', opacity: 0.6 },
-        ]}
+        position={flip ? onArc([6.9, 3.7, -5.0]) : onArc([5.6, 4.4, -5.4])}
+        rotation={[0, (flip ? -0.16 : -0.3) + yawArc, 0]}
+        size={flip ? [3.2, 2.0] : [3.6, 2.2]}
+        color="#FFFFFF"
+        opacity={1}
+        map={wireframeMap}
       />
       </UiEnter>
           {/*
