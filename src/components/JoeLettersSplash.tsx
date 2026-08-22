@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
+import { preloadSceneAssets } from '@/lib/preloadAssets'
+import { useSceneProgress } from '@/stores/ready'
 
 /**
  * สปแลชตัวอักษร JOE — port ตรงจาก `src/components/SplashScreen.vue` ของ branch 2026
@@ -74,6 +76,53 @@ const PETAL_R = [
  */
 const O_DISC = 24
 
+/**
+ * องศาที่โลโก้เอียงระหว่างพุ่งเข้าไปในตัว O
+ *
+ * มากกว่านี้ตัวอักษรจะอ่านไม่ออกก่อนรูจะกลืนจอ น้อยกว่านี้ตาจับไม่ได้ว่ามันหมุน
+ */
+const TILT_DEG = 34
+
+/**
+ * ความยาวของช่วงพุ่งเข้าตัว O
+ *
+ * ทุกจังหวะในไทม์ไลน์นั้นคิดเป็นสัดส่วนของค่านี้ — แก้ที่เดียวแล้วการจางของตัวอักษร
+ * กับความเร็วการหมุนเลื่อนตามเอง ไม่หลุดจากกัน
+ */
+const ZOOM_DUR = 0.95
+
+/** แถบโหลด: กว้างเท่าคำว่า JOE พอดี วางกลางความสูงของ viewBox */
+const BAR_W = 239
+const BAR_H = 6
+const BAR_Y = 39
+/** ความกว้างขั้นต่ำ — แถบยาว 0 มองไม่เห็นว่ามีราง ไม่รู้ว่าเว็บกำลังทำงานอยู่ */
+const BAR_MIN = 6
+/**
+ * เวลาต่ำสุดที่แถบต้องอยู่บนจอก่อนจะ morph
+ *
+ * เครื่องที่ไฟล์แคชครบจะพร้อมภายในเสี้ยววินาที ถ้า morph ทันทีคนดูเห็นแค่แถบวาบ
+ * แล้วหาย — อ่านเป็นภาพกระตุก ไม่ใช่การเคลื่อนที่ ให้แถบมีเวลาวิ่งจนสุดรางเสมอ
+ */
+const BAR_MIN_MS = 900
+
+/**
+ * เฟรมแรกของสปแลช = "หมึกที่มองเห็น" ในเสี้ยวซ้ายสุดของตัว E
+ *
+ * ไม่ใช่ขนาดของ #sp-e-clip-rect (x 174 กว้าง 4 สูง 0..84) — นั่นคือช่องมอง ไม่ใช่ของที่เห็น
+ * ตัว E เป็น path `M174 2H232V81H174V65H162V18H174Z` ซึ่งในช่วง x 174..178 มีหมึกอยู่แค่
+ * y 2..81 บนกับล่างเป็นกระดาษเปล่า แถบที่ morph ไปจบที่ 0..84 จึงยาวเกินของจริงด้านละ ~2
+ * หน่วย เห็นเป็นแท่งกระตุกหดตอนสลับตัวจริงเข้ามา
+ */
+const E_SLIVER = { x: 174, y: 2, w: 4, h: 79 }
+
+/**
+ * ตำแหน่งเริ่มของทั้งก้อนตัวอักษร แล้วไถลไปทางขวาจนถึง 0 ระหว่างที่ประกอบร่าง
+ *
+ * แถบที่ morph มาต้องไปจบที่ "ตำแหน่งของตัว E ณ ตอนนั้น" ซึ่งก้อนเลื่อนไปแล้วเท่านี้ —
+ * ไม่ชดเชยตรงนี้ เสี้ยวตัว E จะโผล่คนละที่กับที่แถบไปจอด
+ */
+const SLIDE_FROM = -80
+
 export function JoeLettersSplash({
   onDone,
   ready = true,
@@ -95,15 +144,125 @@ export function JoeLettersSplash({
   // ไทม์ไลน์ประกอบตัวอักษรเล่นจบแล้วหรือยัง — แยกจาก "ฉากพร้อม" คนละเรื่องกัน
   const [built, setBuilt] = useState(false)
   const [waited, setWaited] = useState(false)
+  /**
+   * 'load'  = แถบโหลดกำลังเดิน ตัวอักษรยังไม่โผล่
+   * 'build' = แถบ morph เป็นเสี้ยวแรกของตัว E แล้ว ไทม์ไลน์ประกอบตัวอักษรเริ่มได้
+   */
+  const [phase, setPhase] = useState<'load' | 'build'>('load')
+  const barFill = useRef<SVGRectElement>(null)
+  const barTrack = useRef<SVGRectElement>(null)
+  const progress = useSceneProgress()
+  /** เวลาที่แถบขึ้นจอ — ใช้คิดเวลาขั้นต่ำก่อน morph */
+  const shownAt = useRef(performance.now())
 
   useEffect(() => {
     const t = window.setTimeout(() => setWaited(true), READY_TIMEOUT)
     return () => window.clearTimeout(t)
   }, [])
 
+  /**
+   * เริ่มดึงไฟล์ฉากตั้งแต่เฟรมแรก — แถบโหลดวัดจากไบต์ของจริงชุดนี้
+   *
+   * ยิงตรงนี้ ไม่ใช่ในโค้ดฉาก เพราะต้องเริ่มก่อนที่ chunk ของฉาก (three + drei) จะโหลดเสร็จ
+   * ไม่งั้นแถบจะนิ่งอยู่ที่ศูนย์ตลอดช่วงที่รอนานที่สุด
+   */
   useEffect(() => {
+    void preloadSceneAssets()
+  }, [])
+
+  /**
+   * แถบโหลดเดินตามค่าจริงจาก store — ไม่ใช่ทวีนตามเวลา
+   *
+   * หน่วงด้วย gsap ทีละก้าว (0.5s) เพื่อให้กระโดดระหว่างด่านอ่านเป็นการเคลื่อนที่
+   * ไม่ใช่ค่ากระตุกเป็นขั้น — ตัวเลขที่หน่วงยังเป็นตัวเลขจริง ไม่มีการเดาไปข้างหน้า
+   */
+  useEffect(() => {
+    const fill = barFill.current
+    if (!fill || phase !== 'load') return
+    // overwrite: 'auto' = ค่าเป้าใหม่เข้ามากลางทางแล้วทวีนเดิมถูกกลืน ไม่ใช่สองทวีนแย่งกันเขียน
+    // (สร้างทวีนใหม่ทับเฉย ๆ ทำให้ความกว้างกระตุกกลับตอนด่านถัดไปมาถึง)
+    const tw = gsap.to(fill, {
+      attr: { width: Math.max(BAR_MIN, BAR_W * progress) },
+      duration: 1.1,
+      ease: 'power2.out',
+      overwrite: 'auto',
+    })
+    return () => {
+      tw.kill()
+    }
+  }, [progress, phase])
+
+  /**
+   * โหลดเสร็จ → morph แถบเป็นเฟรมแรกของสปแลช
+   *
+   * เฟรมแรกคือ "เสี้ยวซ้ายสุดของตัว E" — ช่อง clip กว้าง 4 หน่วยที่ x=174 ซึ่งเป็นท่าตั้งต้น
+   * ของไทม์ไลน์ประกอบตัวอักษรอยู่แล้ว แถบจึงหดจากแนวนอนกลางจอไปเป็นแท่งตั้งตรงจุดนั้นพอดี
+   * พอถึงที่แล้วสลับตัวจริงเข้ามาแทน (สีเดียวกัน ขนาดเท่ากัน) ตาจึงไม่เห็นรอยต่อ
+   */
+  useEffect(() => {
+    const fill = barFill.current
+    const track = barTrack.current
+    if (!fill || !track || phase !== 'load' || !(ready || waited)) return
+
+    // แถบต้องวิ่งจนสุดรางก่อน แล้วค่อยหุบ — ข้ามขั้นนี้ตาจะเห็นแถบหดทั้งที่ยังไม่เต็ม
+    // อ่านเป็น "ยกเลิก" ไม่ใช่ "เสร็จแล้ว"
+    const wait = Math.max(0, BAR_MIN_MS - (performance.now() - shownAt.current))
+    /**
+     * ถ้าแถบเต็มรางอยู่แล้ว ไม่ต้องเสียเวลาทวีนเติม
+     *
+     * ทวีนที่ค่าเริ่มเท่าค่าปลายยังกินเวลาเต็ม 0.34s อยู่ดี — เห็นเป็นแถบเต็มค้างนิ่ง
+     * ก่อนจะเริ่มหุบ ซึ่งคือจังหวะค้างอีกจังหวะที่ไม่มีใครสั่ง
+     */
+    const nearFull = Number(fill.getAttribute('width')) >= BAR_W - 0.5
+    const fillDur = nearFull ? 0 : 0.34
+
+    const tl = gsap.timeline({ delay: wait / 1000, onComplete: () => setPhase('build') })
+    if (!nearFull) tl.to(fill, { attr: { width: BAR_W }, duration: fillDur, ease: 'power2.out' }, 0)
+    // รางจางทีหลังแถบเต็ม ไม่ใช่พร้อมกัน — สายตาได้เห็นว่า "เต็มแล้ว" ก่อนของหาย
+    tl.to(track, { opacity: 0, duration: 0.26, ease: 'power1.inOut' }, fillDur)
+
+    /**
+     * morph ด้วย transform ไม่ใช่ทวีน attr ของ rect
+     *
+     * ทวีน x/y/width/height พร้อมกันสี่ตัว เบราว์เซอร์ต้องคิดรูปทรงใหม่ทุกเฟรม และเส้นทาง
+     * ที่ได้ก็ผ่านสภาพ "ก้อนสี่เหลี่ยมจตุรัส" กลางทาง อ่านเป็นการบี้ ไม่ใช่การแปลงร่าง
+     * ใช้สเกลล้วน ๆ แทน: รูปทรงคงเดิมตลอด เบราว์เซอร์ยกไปทำบน compositor ได้
+     *
+     * ไม่ใช้ x/y เลย — ใน SVG ค่าพวกนี้ถูกคูณด้วยสเกลในเมทริกซ์เดียวกัน พอ scaleY เป็น 14
+     * ระยะเลื่อนก็ถูกขยาย 14 เท่าตาม แถบจึงกระเด็นออกนอกจอระหว่างทาง (วัดได้ -670px
+     * จากตำแหน่งที่ควรอยู่) แทนที่จะชดเชยด้วยการหารกลับ ใช้วิธีเลือก "จุดตรึง" ให้ถูก
+     * แล้วสเกลอย่างเดียว — จุดที่สเกลรอบมันแล้วแถบตกลงบนเสี้ยวตัว E พอดี หาได้ตรง ๆ:
+     *
+     *   ox + (0 - ox) * sx = E.x            ->  ox = E.x / (1 - sx)
+     *   oy + (BAR_Y - oy) * sy = E.y (= 0)  ->  oy = -BAR_Y * sy / (1 - sy)
+     *
+     * ได้ (176.96, 42) สำหรับค่าปัจจุบัน — คิดจากตัวเลขจริง ไม่ใช่เลขที่จูนด้วยตา
+     */
+    const sx = E_SLIVER.w / BAR_W
+    const sy = E_SLIVER.h / BAR_H
+    const origin = `${(E_SLIVER.x + SLIDE_FROM) / (1 - sx)} ${(E_SLIVER.y - BAR_Y * sy) / (1 - sy)}`
+    // หุบและวิ่งไปตำแหน่งตัว E ก่อน แล้วค่อย "ตั้งขึ้น" — สองจังหวะอ่านออกว่าตั้งใจ
+    // ทำพร้อมกันทั้งสองแกนจะเหมือนแค่ย่อ ๆ ขยาย ๆ ไม่มีเรื่องเล่า
+    // สองแกนจบพร้อมกันที่ 1.06s และใช้ ease ที่ "ยังมีความเร็วตอนถึงที่"
+    //
+    // เดิม scaleY เป็น expo.out ยาวถึง 1.28s — 30% สุดท้ายของเวลาเดินได้แค่ ~2% ของระยะ
+    // ตาอ่านว่าหยุดนิ่งไปแล้วราวสองในสิบวินาที ก่อนตัวอักษรจะเริ่ม นั่นคือจังหวะค้างที่เห็น
+    tl.to(fill, { scaleX: sx, svgOrigin: origin, duration: 0.72, ease: 'power2.inOut' }, fillDur)
+    tl.to(fill, { scaleY: sy, svgOrigin: origin, duration: 0.54, ease: 'power2.inOut' }, fillDur + 0.18)
+    return () => {
+      tl.kill()
+    }
+  }, [phase, ready, waited])
+
+  /**
+   * useLayoutEffect ไม่ใช่ useEffect — ท่าตั้งต้นต้องถูกเซ็ต "ก่อน" เบราว์เซอร์วาด
+   *
+   * useEffect ทำงานหลังวาด จะมีหนึ่งเฟรมที่กลุ่มตัวอักษรโผล่มาในท่าสุดท้าย (J อยู่ที่ กลีบ O
+   * เข้าที่ครบ) แล้วค่อยถูก set กลับไปท่าเริ่ม — เห็นเป็นโลโก้กะพริบหนึ่งเฟรมก่อนแอนิเมชันเริ่ม
+   */
+  useLayoutEffect(() => {
     const root = scene.current
-    if (!root) return
+    if (!root || phase !== 'build') return
 
     const ctx = gsap.context(() => {
       const petals = gsap.utils.toArray<SVGEllipseElement>('.sp-o-petal')
@@ -118,7 +277,7 @@ export function JoeLettersSplash({
       gsap.set('#sp-j-body', { y: -100 })
       gsap.set('#sp-j-mask', { scale: 0, svgOrigin: '34 31' })
       gsap.set('#sp-j-corner', { scale: 0, svgOrigin: '0 0' })
-      gsap.set('#sp-slide-group', { x: -80 })
+      gsap.set('#sp-slide-group', { x: SLIDE_FROM })
 
       // จบแค่ "ประกอบตัวอักษรเสร็จ" — ส่วนจางออกย้ายไปอยู่ใน effect ที่รอฉากพร้อม
       const tl = gsap.timeline({
@@ -128,12 +287,15 @@ export function JoeLettersSplash({
         },
       })
 
-      // ทั้งกลุ่มถอยแล้วดีดกลับ
-      tl.to('#sp-slide-group', { x: -60, duration: 1.18, ease: 'power1.in' }, 0)
+      // ทั้งก้อนไถลไปทางขวาตลอดช่วงประกอบร่าง — ถอยหน่วงก่อนแล้วค่อยปล่อยยาว
+      // ให้จังหวะรวมมีน้ำหนัก ไม่ใช่เลื่อนเรียบ ๆ ความเร็วเดียว
+      tl.to('#sp-slide-group', { x: SLIDE_FROM + 20, duration: 1.18, ease: 'power1.in' }, 0)
       tl.to('#sp-slide-group', { x: 0, duration: 2.06, ease: 'power1.out' }, 1.17)
 
       // E
-      tl.to('#sp-e-clip-rect', { attr: { width: 77 }, duration: 1.32, ease: 'power2.inOut' }, 0)
+      // power2.out ไม่ใช่ inOut — inOut ออกตัวจากความเร็วศูนย์ ต่อจากแถบที่เพิ่งวิ่งมาถึง
+      // จะอ่านเป็นหยุดแล้วเริ่มใหม่ ทั้งที่ภาพไม่ได้หยุด
+      tl.to('#sp-e-clip-rect', { attr: { width: 77 }, duration: 1.32, ease: 'power2.out' }, 0)
       tl.to('#sp-e-counter', { scaleX: 1, duration: 0.66, ease: 'power2.inOut' }, 0.4)
       tl.to('#sp-e-front', { scaleX: 1, duration: 0.4, ease: 'power2.inOut' }, 0.66)
       tl.to('#sp-e-opening', { x: 0, duration: 0.8, ease: 'power2.inOut' }, 0.46)
@@ -173,7 +335,7 @@ export function JoeLettersSplash({
     }, root)
 
     return () => ctx.revert()
-  }, [])
+  }, [phase])
 
   /**
    * เปิดออกเมื่อครบสองอย่าง: ตัวอักษรประกอบเสร็จ และฉากข้างหลังพร้อม
@@ -257,15 +419,30 @@ export function JoeLettersSplash({
       zoom,
       {
         z: (far * 2.1) / (O_DISC * unit),
-        duration: 1.4,
+        // เอียงต่อเนื่องระหว่างพุ่งเข้า (อ้างอิง lusion.co) — โลโก้ไม่ได้แค่โตขึ้น มันหมุนเข้าไปด้วย
+        //
+        // เป็นการหมุนรอบแกน z ล้วน ๆ ไม่ใช่ tilt สามมิติ เพราะรูบนชั้นกระดาษเป็น SVG
+        // ซึ่งหมุนได้แค่ในระนาบ ถ้าตัวอักษรเอียงสามมิติแต่รูเอียงตามไม่ได้ ขอบรูกับขอบกลีบ
+        // จะหลุดจากกัน เห็นเป็นเสี้ยวเทาโผล่ตามขอบตัว O ทันที
+        //
+        // องศาคิดจากเวลาของไทม์ไลน์ตรง ๆ ไม่ทำเป็นทวีนตัวที่สอง:
+        // ทวีนสองตัวบน object เดียวกันจะถูก render ตามลำดับที่ใส่ onUpdate ของตัวแรกจึงอ่าน
+        // ค่าที่ตัวหลังยังไม่ได้เขียนของเฟรมนั้น — ได้ค่าเก่าค้างหนึ่งเฟรมทุกเฟรม
+        // อ่านจาก tl.time() แทน ได้ค่าสดเสมอ และเป็นเชิงเส้นตามที่ต้องการ (zoom เร่งท้ายด้วย
+        // power2.in ส่วนการหมุนความเร็วคงที่ — อ่านเป็น "หมุนอยู่เรื่อย ๆ" ไม่ใช่สะบัดตอนจบ)
+        duration: ZOOM_DUR,
         ease: 'power2.in',
         onUpdate: () => {
+          const deg = TILT_DEG * Math.min(1, tl.time() / ZOOM_DUR)
+          // จุดหมุนของทั้งสองชั้นต้องเป็นจุดเดียวกัน (กลางตัว O) และลำดับต้องตรงกัน —
+          // สเกลเป็นแบบ uniform การหมุนกับการสเกลจึงสลับที่กันได้ ไม่ต้องกังวลลำดับ
           hole.setAttribute(
             'transform',
-            `translate(${at.x} ${at.y}) scale(${zoom.z}) translate(${-at.x} ${-at.y})`,
+            `translate(${at.x} ${at.y}) rotate(${deg}) scale(${zoom.z}) translate(${-at.x} ${-at.y})`,
           )
           gsap.set(svg, {
             scale: zoom.z,
+            rotation: deg,
             transformOrigin: `${at.x - box.left}px ${at.y - box.top}px`,
           })
         },
@@ -276,7 +453,7 @@ export function JoeLettersSplash({
     // แต่ 0.34s สั้นไปอีกทาง: ตอนนั้นหมึกส้มของตัว O ขยายจนเต็มจอแล้ว การจางเร็ว
     // เท่ากับทั้งจอเปลี่ยนสีในสองเฟรม (วัดจาก per-frame diff เห็น spike ชัด) — เริ่มเร็วขึ้น
     // นิดและลากยาวขึ้น ให้สีส้มละลายออกระหว่างที่ซูมยังวิ่งอยู่ อ่านเป็นการเคลื่อนเดียวกัน
-    tl.to(svg, { opacity: 0, duration: 0.55, ease: 'power1.inOut' }, 0.74)
+    tl.to(svg, { opacity: 0, duration: ZOOM_DUR * 0.39, ease: 'power1.inOut' }, ZOOM_DUR * 0.53)
     return () => {
       tl.kill()
     }
@@ -349,7 +526,8 @@ export function JoeLettersSplash({
           </clipPath>
         </defs>
 
-        <g id="sp-slide-group">
+        {/* ตัวอักษรโผล่ก็ต่อเมื่อแถบ morph มาถึงที่แล้ว */}
+        <g id="sp-slide-group" style={{ opacity: phase === 'build' ? 1 : 0 }}>
           {/* J */}
           <g>
             <path
@@ -386,6 +564,29 @@ export function JoeLettersSplash({
             />
           </g>
         </g>
+
+        {/* แถบโหลด — ตัวเดียวกับที่ morph ไปเป็นเสี้ยวตัว E ไม่ใช่คนละชิ้นแล้วสลับ */}
+        {phase === 'load' && (
+          <>
+            <rect
+              ref={barTrack}
+              x="0"
+              y={BAR_Y}
+              width={BAR_W}
+              height={BAR_H}
+              fill={INK}
+              opacity="0.16"
+            />
+            <rect
+              ref={barFill}
+              x="0"
+              y={BAR_Y}
+              width={BAR_MIN}
+              height={BAR_H}
+              fill={INK}
+            />
+          </>
+        )}
       </svg>
     </div>
   )

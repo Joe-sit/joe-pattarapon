@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { Routes, Route, useLocation } from 'react-router'
 import Lenis from '@studio-freight/lenis'
 import gsap from 'gsap'
@@ -43,8 +43,6 @@ export function App() {
   const [showSplash, setShowSplash] = useState(true)
   // ฉาก 3D ของ joespresso รายงานตัวเองว่าโหลด+compile เสร็จ — สปแลชรออันนี้
   const sceneReady = useSceneReady()
-  // ตัวอักษรของสปแลชเล่นจบหรือยัง — ใช้เป็นสัญญาณว่า "เริ่มโหลดฉากได้แล้ว"
-  const [lettersDone, setLettersDone] = useState(false)
   const location = useLocation()
   // ครอบหน้าลูกด้วย (/joespresso/toolbar) — กลุ่มนี้มี layout ของตัวเอง ไม่ใช้ shell ของเว็บ
   const isJoespresso = location.pathname.startsWith('/joespresso')
@@ -68,29 +66,73 @@ export function App() {
    */
   // /2026 ฝังฉาก 3D ใบเดียวกัน — ใช้สปแลช/การกั้น mount ชุดเดียวกับ /joespresso
   const landedOn3D = landedOn.startsWith('/joespresso') || landedOn === '/2026'
-  const holdScene = showSplash && landedOn3D && !lettersDone
+  /**
+   * ฉากถูก mount ทันที ไม่รอสปแลช
+   *
+   * เดิมกั้นไว้เพราะตัวอักษรเล่นก่อนแล้วการ mount ฉากไปแย่ง main thread จนกระตุก
+   * ตอนนี้ลำดับกลับกัน: แถบโหลดขึ้นก่อน (ถูก ๆ ไม่กินแรง) แล้วตัวอักษรค่อยเล่น
+   * "หลัง" โหลดเสร็จ — ถ้ายังกั้นอยู่ ฉากจะไม่เริ่มโหลดจนกว่าตัวอักษรจะจบ
+   * ซึ่งรอสัญญาณโหลดเสร็จอีกที = ค้างกันเอง
+   */
+
+  /** Lenis คุมตำแหน่ง scroll จริง — window.scrollTo อย่างเดียวมันดึงกลับที่เดิมในเฟรมถัดไป */
+  const lenisRef = useRef<Lenis | null>(null)
 
   const finishSplash = () => {
     setShowSplash(false)
     setIntroDone()
+    /**
+     * บังคับกลับหัวหน้าเสมอตอนสปแลชจบ
+     *
+     * มีหลายทางที่หน้าจะไม่ได้อยู่ที่ 0 ตอนสปแลชปิด — เบราว์เซอร์คืนตำแหน่งเก่า, มี hash
+     * ในลิงก์, bfcache ตอนกดย้อนกลับ, หรือ HMR ระหว่างพัฒนา ปิดทีละทางไม่จบ
+     * และหน้านี้เล่าเรื่องตามตำแหน่ง scroll เปิดมากลางเรื่องคือเปิดมาเจอฉากที่ยังไม่ได้เล่า
+     * จบด้วยการยืนยันที่จุดเดียว: พอสปแลชปิด ต้องอยู่ที่ 0
+     */
+    window.scrollTo(0, 0)
+    lenisRef.current?.scrollTo(0, { immediate: true })
   }
 
   useEffect(() => {
+    /**
+     * ปิด scroll restoration ของเบราว์เซอร์
+     *
+     * เดิมไม่ต้องปิดเพราะตอนสปแลชขึ้น หน้ายังสั้น (ฉากยังไม่ mount, scrollHeight = ความสูงจอ)
+     * เบราว์เซอร์จึงคืนตำแหน่งเก่าไม่ได้แล้วยอมแพ้ไปเอง พอย้ายให้ฉาก mount ทันทีเพื่อให้
+     * แถบโหลดมีอะไรให้วัด หน้าก็สูงเต็ม (4680px) ตั้งแต่วินาทีแรก — reload ทีไรเบราว์เซอร์
+     * เลื่อนกลับไปตำแหน่งเดิมทุกที เห็นเป็น "สปแลชจบแล้วหน้าเลื่อนลงเอง"
+     *
+     * เรื่องนี้ต้องเป็น manual อยู่แล้วสำหรับหน้าที่เล่าเรื่องตามตำแหน่ง scroll:
+     * เปิดมากลางเรื่องคือเปิดมาเจอฉากที่ยังไม่ได้เล่า
+     */
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
     window.scrollTo(0, 0)
 
     // `smooth` / `resetNativeScroll` from the Vue version are not Lenis 1.x options.
     const lenis = new Lenis({ duration: 1, smoothWheel: true })
+    lenisRef.current = lenis
 
     // สูตรผูก Lenis กับ GSAP: Lenis เดินด้วย ticker ของ gsap (นาฬิกาเดียวกับทุก tween)
     // แล้วแจ้ง ScrollTrigger ทุกครั้งที่ตำแหน่งเลื่อนขยับ — ไม่ต้องมี rAF loop ของตัวเอง
     lenis.on('scroll', ScrollTrigger.update)
     const raf = (time: number) => lenis.raf(time * 1000) // ticker ให้วินาที Lenis กินมิลลิวินาที
     gsap.ticker.add(raf)
-    // ปิด lag smoothing — มันหยุดนาฬิกาตอนเฟรมตก แล้ว Lenis จะกระโดดตามหลังชดเชย
-    gsap.ticker.lagSmoothing(0)
+    /**
+     * lag smoothing: เปิดไว้แต่ตั้งเพดานสูง
+     *
+     * ปิดสนิท (0) ตามที่ Lenis แนะนำ แปลว่าเฟรมที่ตกไป 400ms จะถูกจ่ายคืนทีเดียว —
+     * ทวีนกระโดดข้ามไปข้างหน้าแทนที่จะเล่น เห็นชัดมากตอนสปแลชเล่นพร้อมกับที่ฉาก 3D
+     * กำลัง mount (วัดจากภาพไล่เฟรม: ตัว E ประกอบเสร็จตั้งแต่วินาทีที่ 0.7 ทั้งที่ไทม์ไลน์
+     * ตรงนั้นอยู่ที่ 1.3 วินาที)
+     *
+     * 700ms คือเพดานที่สูงพอจะไม่ไปยุ่งกับ Lenis ในการใช้งานปกติ (เฟรมตกระดับนั้น
+     * ไม่เกิดตอน scroll อยู่แล้ว) แต่ยังกันการกระโดดก้อนใหญ่ตอนโหลดฉาก
+     */
+    gsap.ticker.lagSmoothing(700, 33)
 
     return () => {
       gsap.ticker.remove(raf)
+      lenisRef.current = null
       lenis.destroy()
     }
   }, [])
@@ -110,7 +152,6 @@ export function App() {
           <JoeLettersSplash
             onDone={finishSplash}
             ready={sceneReady}
-            onIntroDone={() => setLettersDone(true)}
             onOpenStart={startIntro}
           />
         ) : landedOn === '/mascot' ? (
@@ -120,17 +161,15 @@ export function App() {
         ))}
 
       {isV2 ? (
-        holdScene ? null : <Portfolio2026Page />
+        <Portfolio2026Page />
       ) : /* /joespresso = ฉาก 3D เต็มจอ มี layout/nav ของตัวเอง — ไม่ใช้ shell ของเว็บ */
       isJoespresso ? (
-        holdScene ? null : (
         <Suspense fallback={null}>
           <Routes>
             <Route path="/joespresso" element={<JoespressoPage />} />
             <Route path="/joespresso/toolbar" element={<ToolbarWorkspace />} />
           </Routes>
         </Suspense>
-        )
       ) : (
         <>
           <NavBar />
