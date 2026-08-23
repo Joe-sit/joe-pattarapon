@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
-import { useControls } from 'leva'
+import { useControls, useCreateStore } from 'leva'
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
@@ -345,13 +345,67 @@ export function Mascot({
    */
   poseOverride = null,
   followOverride = null,
+  /**
+   * true = ตัวนี้มีชุด slider ของตัวเอง ไม่ใช่ชุดเดียวกับฉากหลัก
+   *
+   * leva เก็บค่าตาม "ชื่อโฟลเดอร์" ในสโตร์กลาง — mascot สามตัวที่เรียก useControls('Rig')
+   * เหมือนกันจึงอ่าน/เขียนค่าชุดเดียวกัน ขยับตัวหนึ่งแล้วอีกสองตัวขยับตาม
+   * ตัวที่อยู่คนละ section สร้างสโตร์ของตัวเอง ค่าจึงแยกขาดจากกันจริง
+   */
+  isolated = false,
+  /** ปิดลมหายใจ/เหลียวมอง — ใช้กับตัวที่อยู่ในกรอบเล็กและต้องนิ่ง เหลือแค่หัวตามเมาส์ */
+  noIdle = false,
+  /**
+   * หัวหันตามเมาส์ "บนจอ" ไม่ใช่ตามแกนของฉากหลัก
+   *
+   * สูตรเดิมบวก x เข้ากับ yaw ตั้งต้นตรง ๆ ซึ่งถูกเฉพาะตอนตัวละครหันหน้าเข้ากล้องแบบฉาก hero
+   * พอลำตัวถูกหมุนไปทางอื่น (การ์ด what-i-do หันข้าง) ทิศเลยเพี้ยนไปตามมุมของ hero
+   * โหมดนี้คิดจากทิศ "หันเข้าหากล้องของแคนวาสตัวเอง" แล้วค่อยเบี่ยงตามเมาส์
+   */
+  screenFollow = false,
+  /**
+   * พื้นที่ที่ใช้คิดตำแหน่งเมาส์ — ref ของ DOM element (เช่นทั้ง section) ไม่ใช่แค่ canvas
+   * ไม่ส่งมา = ใช้ pointer ของ canvas ตัวเอง (ตัวละครจะขยับเฉพาะตอนเมาส์อยู่บนภาพ)
+   */
+  followRef = null,
+  /** true = แขนห้อยแนบตัวตั้งแต่เฟรมแรก ไม่ต้องชี้ (ท่าชี้ผูกกับไทม์ไลน์ของฉากหลัก) */
+  armsDown = false,
 }) {
   const { scene } = useGLTF(MODEL)
   const root = useRef()
   const headGroup = useRef()
   const eyes = useRef([])
   const rig = useRef({})
-  const { size, gl } = useThree()
+  const { gl } = useThree()
+  // สโตร์ส่วนตัวของ instance นี้ (hook ต้องถูกเรียกทุกครั้ง จะใช้หรือไม่ค่อยว่ากัน)
+  const ownStore = useCreateStore()
+  const store = isolated ? ownStore : undefined
+
+  /**
+   * ตัวที่แยกอิสระต้องไม่กินไทม์ไลน์ของหน้า — intro/scroll เป็น singleton ระดับโมดูล
+   * ตัวใน section อื่นจึงเล่นท่า intro (ชี้ crop tool) และท่าฉาก 2 (ยกแก้ว/นั่ง) ตามฉากหลักไปด้วย
+   * โหมด isolated อ่านจากออบเจกต์นิ่ง ๆ ของตัวเอง: ไม่มี intro ไม่มีบีต scroll เหลือแค่ท่ายืน + หัวตามเมาส์
+   */
+  const still = useMemo(
+    () => ({
+      // b เป็น Proxy คืน 0 ทุกชื่อบีต — ไม่ต้องไล่ก๊อบรายชื่อบีตมาไว้สองที่ และไม่มีทางหลุดเป็น
+      // undefined จนคำนวณต่อกลายเป็น NaN (ท่าจะพังทั้งตัวถ้าเผลอ)
+      intro: {
+        t: 0,
+        playing: false,
+        done: true,
+        b: new Proxy({}, { get: () => 0 }),
+        eyes: null,
+        crop: null,
+        close: null,
+        title: null,
+      },
+      scroll: { raw: 0, b: new Proxy({}, { get: () => 0 }) },
+    }),
+    [],
+  )
+  const intro = isolated ? still.intro : introState
+  const scroll = isolated ? still.scroll : scrollState
 
   // debugger: จูนท่าทางทุกข้อต่อสด ๆ
   // debugger: หัวหันตามเมาส์ — อยู่กลุ่มเดียวกับของกล้องใน App.jsx (leva รวม folder ชื่อเดียวกันให้)
@@ -360,7 +414,7 @@ export function Mascot({
     idleAmp: { value: 2, min: 0, max: 3, step: 0.05, label: 'แรงขยับ' },
     idleBreath: { value: 0.8, min: 0.1, max: 1.6, step: 0.01, label: 'จังหวะหายใจ (Hz)' },
     idleGlance: { value: 2, min: 0, max: 3, step: 0.05, label: 'เหลียวมอง' },
-  }, { collapsed: true })
+  }, { collapsed: true, store })
 
   // เหลียวมองรอบ ๆ: จุดตั้งต้น (fx/fy) -> เป้า (tx/ty) เล่นเป็นรอบ ๆ ด้วย ease in-out
   // (damp ใช้ไม่ได้กับงานนี้ — มันออกตัวพรวดแล้วค่อยเบา ได้ครึ่งเดียวของ ease in-out)
@@ -375,7 +429,7 @@ export function Mascot({
     headBaseYaw: { value: -0.22, min: -1, max: 1, step: 0.01, label: 'หัว หันตั้งต้น' },
     headBaseRoll: { value: -0.14, min: -0.8, max: 0.8, step: 0.01, label: 'หัว เอียงตั้งต้น' },
     headBasePitch: { value: 0, min: -0.6, max: 0.6, step: 0.01, label: 'หัว ก้มตั้งต้น' },
-  })
+  }, { store })
 
   const fol = useMemo(
     () => (followOverride ? { ...folSliders, ...followOverride } : folSliders),
@@ -428,7 +482,7 @@ export function Mascot({
     armDebug: { value: false, label: 'แยกสีชิ้นแขน' },
     // debug: ลากลูกบอลที่ปลายนิ้วเพื่อเล็งแขน — ปล่อยแล้วค่ามุมไหล่ถูกเขียนกลับลง slider ด้านบน
     armDrag: { value: false, label: 'ลากวางแขน' },
-  }))
+  }), { store })
 
   // อ่านทุกเฟรมใน useFrame — ผสมครั้งเดียวต่อการเปลี่ยนค่า ไม่ใช่ทุกเฟรม
   const pose = useMemo(
@@ -460,7 +514,7 @@ export function Mascot({
     tuckWristX: { value: 0, min: -2.2, max: 2.2, step: 0.05, label: 'ข้อมือเพิ่ม X' },
     tuckWristY: { value: 0, min: -2.2, max: 2.2, step: 0.05, label: 'ข้อมือเพิ่ม Y' },
     tuckWristZ: { value: 0, min: -2.2, max: 2.2, step: 0.05, label: 'ข้อมือเพิ่ม Z' },
-  }, { collapsed: true })
+  }, { collapsed: true, store })
 
   /**
    * ท่านั่งทำงานของฉาก 2 — นั่งสตูล พิมพ์ MacBook บนโต๊ะ (WorkDesk.jsx คือฉากรอบตัว)
@@ -478,7 +532,7 @@ export function Mascot({
     // แขนชี้กลายเป็นแขนพิมพ์งาน — ต่อจากท่าห้อย (tuck) อีกชั้น
     sitArmX: { value: -0.55, min: -2, max: 2, step: 0.05, label: 'แขน เหวี่ยงไปหน้า' },
     sitElbowX: { value: 0.7, min: -2.2, max: 2.2, step: 0.05, label: 'ศอก งอรับคีย์บอร์ด' },
-  }, { collapsed: true })
+  }, { collapsed: true, store })
 
   /**
    * ขา — ข้อละ 3 แกนเหมือนแขน + เลื่อนทั้งขาออกจากลำตัว
@@ -500,7 +554,7 @@ export function Mascot({
     ankleRX: { value: 0.15, min: -1, max: 1, step: 0.05, label: 'ขวา ข้อเท้า' },
     legROut: { value: 0.14, min: -0.4, max: 0.8, step: 0.01, label: 'ขวา ทั้งขา ออกข้าง' },
     legRFwd: { value: 0, min: -0.8, max: 0.8, step: 0.01, label: 'ขวา ทั้งขา หน้า/หลัง' },
-  }, { collapsed: true })
+  }, { collapsed: true, store })
 
   // ฉาก 2: ยกแก้วขึ้นดื่ม — ค่าปลายทางของแขนถือแก้ว (ค่าตั้งต้นคือ slider ชุด mug* ด้านบน)
   // แยก folder เพราะจูนคนละจังหวะกัน: ชุดบนคือท่ายืนนิ่ง ชุดนี้คือท่าปลายทางตอน scroll สุด
@@ -517,7 +571,7 @@ export function Mascot({
     // 1 = แนบสนิทพอดีตอนบีต focus จบ (= กล้องถึงฉาก 2) ลดค่าลง = แนบเสร็จก่อนถึง
     sipTuckEnd: { value: 1, min: 0.1, max: 1, step: 0.01, label: 'หุบครบที่ (สัดส่วนบีต focus)' },
     sipPreview: { value: 0, min: 0, max: 1, step: 0.01, label: 'พรีวิว (ไม่ต้อง scroll)' },
-  }, { collapsed: true })
+  }, { collapsed: true, store })
 
   // clone เพื่อไม่ไปแก้ cache ของ useGLTF
   const model = useMemo(() => scene.clone(true), [scene])
@@ -1733,13 +1787,17 @@ export function Mascot({
   // ลากวางแขน (debug) — drag.current = มุมไหล่ที่กำลังลากอยู่, handle = ลูกบอลจับที่ปลายนิ้ว
   const drag = useRef(null)
   const dragging = useRef(false)
-  // ความคืบหน้าท่าดื่ม (หน่วงจาก scrollState.b.sip) — เก็บใน ref ไม่ใช่ state, useFrame อ่านทุกเฟรม
+  // ความคืบหน้าท่าดื่ม (หน่วงจาก scroll.b.sip) — เก็บใน ref ไม่ใช่ state, useFrame อ่านทุกเฟรม
   const sip = useRef(0)
   // ความคืบหน้าการหุบแขนชี้ — ผูกกับบีต focus แยกจากท่าดื่ม
   const tuck = useRef(0)
   const handle = useRef()
 
   const pointer = useRef({ x: 0, y: 0 })
+  // true = ค่า pointer มาจาก followRef แล้ว useFrame จะไม่เขียนทับด้วย pointer ของ canvas
+  const fromRect = useRef(false)
+  // มุมที่ลำตัวหันตามหัวในโหมด screenFollow — คิดที่บล็อกหัว เอาไปใช้ที่บล็อกลำตัว
+  const bodyTurn = useRef(0)
   const cur = useRef({ x: 0, y: 0 })
   const blink = useRef({ next: 2, closing: 0 })
   // บีต eyes — ตาโต + ประกาย
@@ -1752,19 +1810,36 @@ export function Mascot({
     eyesScale: { value: 0.85, min: 0, max: 2.5, step: 0.05, label: 'ตาโตขึ้น (เท่า)' },
     eyesEase: { value: 0.16, min: 0.02, max: 0.5, step: 0.01, label: 'หน่วง' },
     eyesPreview: { value: 0, min: 0, max: 1, step: 0.01, label: 'พรีวิว (ไม่ต้อง scroll)' },
-  }, { collapsed: true })
+  }, { collapsed: true, store })
+
 
   useEffect(() => {
+    if (!followRef) return
+    // เมาส์ที่ไหนก็ได้ในกรอบที่กำหนด — แปลงเป็น -1..1 เทียบกล่องของ element นั้น
     const onMove = (e) => {
-      pointer.current.x = clamp((e.clientX / window.innerWidth) * 2 - 1, -1, 1)
-      pointer.current.y = clamp((e.clientY / window.innerHeight) * 2 - 1, -1, 1)
+      const el = followRef.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      if (!r.width || !r.height) return
+      pointer.current.x = clamp(((e.clientX - r.left) / r.width) * 2 - 1, -1, 1)
+      pointer.current.y = clamp(((e.clientY - r.top) / r.height) * 2 - 1, -1, 1)
+      fromRect.current = true
     }
     window.addEventListener('pointermove', onMove, { passive: true })
     return () => window.removeEventListener('pointermove', onMove)
-  }, [size])
+  }, [followRef])
 
   useFrame((state, delta) => {
     const dt = Math.min(delta, 0.05)
+    /**
+     * เมาส์ที่ตัวนี้มองตาม = ตำแหน่งบน canvas ของตัวเอง ไม่ใช่ตำแหน่งบนหน้าต่างทั้งบาน
+     * (state.pointer เป็น NDC ของ canvas ใบนั้น แกน y ชี้ขึ้น จึงกลับเครื่องหมาย)
+     * ก่อนหน้านี้ทุกตัวฟัง pointermove ที่ window ตัวที่อยู่คนละ section เลยหันพร้อมกันหมด
+     */
+    if (!fromRect.current) {
+      pointer.current.x = clamp(state.pointer.x, -1, 1)
+      pointer.current.y = clamp(-state.pointer.y, -1, 1)
+    }
     cur.current.x = damp(cur.current.x, pointer.current.x, fol.headEase, dt)
     cur.current.y = damp(cur.current.y, pointer.current.y, fol.headEase, dt)
     const { x, y } = cur.current
@@ -1777,7 +1852,7 @@ export function Mascot({
     // sipPreview คือค่าบังคับจาก slider ไว้จูนท่าโดยไม่ต้องเลื่อนหน้าไปมา
     sip.current = damp(
       sip.current,
-      Math.max(scrollState.b.sip, sipc.sipPreview),
+      Math.max(scroll.b.sip, sipc.sipPreview),
       sipc.sipEase,
       dt,
     )
@@ -1785,11 +1860,52 @@ export function Mascot({
     const raise = seg(sip.current, 0, 0.55)
 
     if (headGroup.current) {
-      headGroup.current.rotation.y = fol.headBaseYaw + x * fol.headYaw * dir
-      // เงยหน้ารับแก้ว — บวกทับการก้มตามเมาส์ ไม่ได้แทนที่ (ยังมองตามเมาส์อยู่)
-      headGroup.current.rotation.x =
-        fol.headBasePitch + y * fol.headPitch * dir + raise * sipc.sipHeadPitch
-      headGroup.current.rotation.z = fol.headBaseRoll - x * fol.headRoll * dir
+      if (screenFollow) {
+        /**
+         * มุมที่ "หันเข้าหากล้อง" ในสเปซโลก แล้วเบี่ยงตามเมาส์ = มุมรวมที่สายตาต้องไปถึง
+         */
+        const camYaw = Math.atan2(
+          state.camera.position.x - position[0],
+          state.camera.position.z - position[2],
+        )
+        // เทียบกับ rotation[1] ที่เขียนไว้ ไม่ใช่ baseYaw — baseYaw บวก π ของ facingAway ไปแล้ว
+        // ใช้มันเป็นฐานหัวจะหันกลับหลังพอดี 180° (เห็นแต่ท้ายทอยไม่ว่าเมาส์อยู่ตรงไหน)
+        // +π เพราะหน้าโมเดลชี้ไปทาง -z ตอน yaw = 0 (คิดจาก camYaw เฉย ๆ จะได้ท้ายทอย)
+        const want = camYaw + Math.PI + x * fol.headYaw
+        let total = want - rotation[1]
+        total = Math.atan2(Math.sin(total), Math.cos(total))
+        /**
+         * แบ่งมุมรวมให้ "คอ" กับ "ลำตัว" แทนที่จะบีบมุมรวมทิ้ง
+         *
+         * ท่านี้ลำตัวหันข้าง (yaw 1.05) กล้องอยู่เกือบตรงข้าม มุมที่ต้องใช้แค่จะมองมาทางกล้อง
+         * เฉย ๆ ก็ -1.19 rad แล้ว ของเดิม clamp มุมรวมไว้ ±1.1 หัวจึงติดเพดานตลอดทั้ง section
+         * (วัดได้ yaw -0.715 คงที่ไม่ว่าเมาส์อยู่ตรงไหน = ไม่ได้ follow อะไรเลย)
+         *
+         * แก้เป็น: คอบิดได้ถึง NECK_MAX ส่วนที่เกินให้ลำตัวรับไป บวกไหล่หันตามคออีก 18%
+         * — คนมองอะไรไกล ๆ ลำตัวก็เอี้ยวตามเสมอ แล้วหัก bodyTurn ออกจากมุมคอ สายตาจึงตรงเป้าพอดี
+         * ลำตัวหน่วงช้ากว่าหัว (0.45 เท่า) หัวจึงนำ ลำตัวตามมาทีหลัง อ่านเป็นน้ำหนักของตัว
+         */
+        const NECK_MAX = 0.95
+        const neckOnly = clamp(total, -NECK_MAX, NECK_MAX)
+        const bodyWant = total - neckOnly + neckOnly * 0.18
+        bodyTurn.current = damp(bodyTurn.current, bodyWant, fol.headEase * 0.45, dt)
+        const neck = total - bodyTurn.current
+        headGroup.current.rotation.y = neck
+        /**
+         * ก้มได้น้อยกว่าเงย และยิ่งคอบิดมาก ยิ่งก้มได้น้อย — ก้มพร้อมบิดคือท่าที่คางมุดทะลุ
+         * ปกเสื้อ/ไหล่ (โมเดลไม่มี collision) เพดานก้มจึงหดตามสัดส่วนการบิดคอ
+         */
+        const twist = Math.min(Math.abs(neck) / NECK_MAX, 1)
+        const pitch = fol.headBasePitch + y * fol.headPitch
+        headGroup.current.rotation.x = clamp(pitch, -0.26, 0.13 * (1 - 0.55 * twist))
+        headGroup.current.rotation.z = clamp(fol.headBaseRoll + x * fol.headRoll, -0.16, 0.16)
+      } else {
+        headGroup.current.rotation.y = fol.headBaseYaw + x * fol.headYaw * dir
+        // เงยหน้ารับแก้ว — บวกทับการก้มตามเมาส์ ไม่ได้แทนที่ (ยังมองตามเมาส์อยู่)
+        headGroup.current.rotation.x =
+          fol.headBasePitch + y * fol.headPitch * dir + raise * sipc.sipHeadPitch
+        headGroup.current.rotation.z = fol.headBaseRoll - x * fol.headRoll * dir
+      }
 
       /**
        * intro บีตแรก: หัวต้องตรงเป๊ะ แล้วค่อยหันซ้าย-ขวาแบบสงสัย
@@ -1800,24 +1916,24 @@ export function Mascot({
        * ครึ่งแรกของบีตนิ่งสนิทให้กระพริบตา ครึ่งหลังกวาดหัว ซ้าย -> ขวา -> กลับกลาง
        * แล้วคลายกลับไปหาท่าปกติตอนบีต pull เริ่ม กล้องจะได้ไม่รับช่วงต่อจากหัวที่ค้างเอียง
        */
-      if (introState.playing && introState.b.pull < 1) {
-        const f = introState.b.face
+      if (intro.playing && intro.b.pull < 1) {
+        const f = intro.b.face
         /**
          * หันหัวไปมอง "ทางที่ crop tool อยู่" — ทางเดียว ช้า ๆ ไม่ใช่กวาดซ้ายขวา
          *
-         * มุมไม่ได้ตั้งเอง คิดจากตำแหน่งจริงของกรอบในโลก (introState.crop) เทียบกับทิศหน้า
+         * มุมไม่ได้ตั้งเอง คิดจากตำแหน่งจริงของกรอบในโลก (intro.crop) เทียบกับทิศหน้า
          * ที่ล็อกไว้ตอนเริ่ม intro — ย้ายกรอบไปไว้ตรงไหน หัวก็ยังหันตามถูกทางเสมอ
          * หนีบมุมไว้ที่ INTRO_LOOK_MAX กันคอบิดเกินจริงถ้ากรอบอยู่หลังตัว
          *
          * ใช้ damp เข้าหาเป้าแทนคีย์เฟรม — ได้ทั้งความช้าและความนุ่มโดยไม่มีจุดกระตุก
          * และถ้าเฟรมตกก็ยังไปถึงเป้าเท่ากัน (damp คิดจาก dt ไม่ใช่ต่อเฟรม)
          */
-        const look = introState.close && introState.crop
+        const look = intro.close && intro.crop
         let want = 0
         if (look) {
           headGroup.current.getWorldPosition(TMP_V)
-          TMP_V2.copy(introState.crop).sub(TMP_V).setY(0).normalize()
-          const f0 = introState.close.face
+          TMP_V2.copy(intro.crop).sub(TMP_V).setY(0).normalize()
+          const f0 = intro.close.face
           // มุมเซ็นจาก "ทิศหน้าที่ล็อกไว้" ไปหา "ทิศของกรอบ" รอบแกน Y
           want = Math.atan2(
             f0.z * TMP_V2.x - f0.x * TMP_V2.z,
@@ -1854,7 +1970,7 @@ export function Mascot({
          * ปล่อยหัวคืนท่าปกติช้ากว่าเดิม — เดิม blend = 1 - b.pull คือคืนตั้งแต่กล้องเริ่มขยับ
          * ท่าหันเลยถูกลบทิ้งกลางคัน คราวนี้ค้างไว้ต้น pull แล้วค่อยคลายช่วง 35%-85%
          */
-        const blend = 1 - smooth01((introState.b.pull - 0.35) / 0.5)
+        const blend = 1 - smooth01((intro.b.pull - 0.35) / 0.5)
         headGroup.current.rotation.y = lerp(headGroup.current.rotation.y, introLook.current, blend)
         /**
          * ก้ม/เงย: คางตกนิดตอนกำลังหมุน (คนหันหัวเร็ว ๆ คางจะทิ้งลงก่อนแล้วค่อยยกกลับ)
@@ -1875,8 +1991,9 @@ export function Mascot({
       }
     }
     if (root.current) {
-      // ลำตัวนิ่ง — หันตามเมาส์เฉพาะหัว
-      root.current.rotation.y = baseYaw
+      // ฉากหลัก: ลำตัวนิ่ง หันตามเมาส์เฉพาะหัว — screenFollow: ไหล่หันตามหัวไปด้วยส่วนหนึ่ง
+      root.current.rotation.y = baseYaw + (screenFollow ? bodyTurn.current : 0)
+      if (screenFollow) root.current.rotation.z = rotation[2] + cur.current.x * 0.045
     }
 
     // apply ท่าจาก rig controls
@@ -1897,7 +2014,7 @@ export function Mascot({
       // แล้วค่อยหุบทีหลังพร้อมยกแก้ว ซึ่งอ่านเป็นสองท่าซ้อนกัน
       //
       // ลากวางแขนอยู่ (drag) ไม่หุบ — กำลังจูนท่าชี้อยู่
-      tuck.current = damp(tuck.current, scrollState.b.focus, sipc.sipEase, dt)
+      tuck.current = damp(tuck.current, scroll.b.focus, sipc.sipEase, dt)
       // ปั้นทิศห้อยใหม่จาก slider ทุกเฟรม (แทนค่าคงที่ตอน build) — จูนท่าหลังชี้ได้สด ๆ
       if (ud.armAxis && ud.tucked) {
         TUCK_V.set(tuk.tuckOut * (ud.outward ?? 1), -1, -tuk.tuckFwd).normalize()
@@ -1906,10 +2023,14 @@ export function Mascot({
           ud.tucked.premultiply(TMP_Q2.setFromAxisAngle(TUCK_V, tuk.tuckTwist))
       }
       if (ud.tucked && !d) {
-        const t = Math.max(
-          seg(tuck.current, 0, sipc.sipTuckEnd) * sipc.sipTuck,
-          tuk.tuckPreview,
-        )
+        /**
+         * armsDown บังคับเฉพาะ "น้ำหนักห้อยแขน" ไม่ใช่ tuck.current
+         * tuck.current ยังเป็นบีต focus ที่ท่านั่ง (sitW) อ่านต่อ — เซ็ตมันเป็น 1 เมื่อไร
+         * ตัวละครจะนั่งลงไปด้วย (หลุดออกนอกกรอบการ์ดไปเลย)
+         */
+        const t = armsDown
+          ? 1
+          : Math.max(seg(tuck.current, 0, sipc.sipTuckEnd) * sipc.sipTuck, tuk.tuckPreview)
         if (t > 0.0001) r.pointShoulder.quaternion.slerp(ud.tucked, t)
         tuckW = t
       }
@@ -2066,8 +2187,8 @@ export function Mascot({
      * ตัวคูณ 0.85 ปลายทาง: ชี้ให้ "ไปทางนั้น" ไม่ใช่เหยียดตรงเป๊ะไปที่กรอบ ซึ่งดูแข็ง
      */
     if (
-      (introState.playing || introState.done) &&
-      introState.crop &&
+      (intro.playing || intro.done) &&
+      intro.crop &&
       r.pointShoulder?.userData.armAxis &&
       root.current
     ) {
@@ -2080,13 +2201,13 @@ export function Mascot({
        * ท่าแนบลำตัวใช้ตัวเดียวกับตอน scroll เข้าฉากสอง (userData.tucked) ไม่ได้ปั้นท่าใหม่ —
        * ปลายทางของ intro จะได้ต่อกับท่าตั้งต้นของฉากถัดไปพอดี ไม่มีสะดุดตอนเริ่ม scroll
        */
-      const release = smooth01((introState.b.title - 0.5) / 0.45)
+      const release = smooth01((intro.b.title - 0.5) / 0.45)
       // smooth01 ให้แขนออกตัวนุ่มและเข้าจอดนุ่ม — กรอบ crop ใช้ smoothstep อยู่แล้ว (Panels)
       // ถ้าแขนเชิงเส้นแต่กรอบ ease สองอย่างจะถึงปลายทางคนละจังหวะ อ่านเป็นแขนแข็งทื่อ
-      const w = smooth01(introState.b.crop) * (1 - release)
+      const w = smooth01(intro.b.crop) * (1 - release)
       if (w > 0.001) {
         const sh = r.pointShoulder.getWorldPosition(TMP_V)
-        TMP_V2.copy(introState.crop).sub(sh).normalize()
+        TMP_V2.copy(intro.crop).sub(sh).normalize()
         root.current.getWorldQuaternion(TMP_Q).invert()
         TMP_V2.applyQuaternion(TMP_Q)
 
@@ -2205,13 +2326,13 @@ export function Mascot({
      * intro ต้องรู้ว่า "ตา" กับ "ทิศหน้า" อยู่ตรงไหนในโลก กล้องช่วงประชิดเล็งจากสองค่านี้
      * เขียนเฉพาะตอน intro ยังเล่นอยู่ — เลิกเล่นแล้วไม่ต้องจ่ายค่าคำนวณทุกเฟรม
      */
-    if (introState.playing && headGroup.current) {
+    if (intro.playing && headGroup.current) {
       const eyeMeshes = eyes.current
       if (eyeMeshes?.length) {
         INTRO_EYE.set(0, 0, 0)
         eyeMeshes.forEach((o) => INTRO_EYE.add(o.getWorldPosition(TMP_V)))
         INTRO_EYE.multiplyScalar(1 / eyeMeshes.length)
-        introState.eyes = INTRO_EYE
+        intro.eyes = INTRO_EYE
       }
       /**
        * ทิศหน้าคิดจาก "ตาอยู่หน้าหัว" ไม่ใช่จากแกนของ object
@@ -2221,7 +2342,7 @@ export function Mascot({
        * ไปจ่ออยู่ข้างหัว — วัดจากตาเทียบจุดกลางหัวแทน ได้ทิศที่ตรงกับที่ตามองเสมอ
        */
       headGroup.current.getWorldPosition(TMP_V)
-      introState.face = INTRO_FACE.copy(INTRO_EYE).sub(TMP_V).setY(0).normalize()
+      intro.face = INTRO_FACE.copy(INTRO_EYE).sub(TMP_V).setY(0).normalize()
     }
 
     /**
@@ -2233,7 +2354,7 @@ export function Mascot({
      * ทุกอย่างเป็นการหมุนจุดหมุนที่มีอยู่แล้ว ไม่มีการเลื่อนตำแหน่ง — เท้ายังปักอยู่ใน
      * รอยเท้าบนทราย (ยกตัวขึ้นลงแบบหุ่นลอยของ chaingpt ไม่ได้ เท้าจะหลุดจากหลุม)
      */
-    if (idle.idleAmp > 0 && !dragging.current) {
+    if (idle.idleAmp > 0 && !noIdle && !dragging.current) {
       const t = state.clock.elapsedTime
       const amp = idle.idleAmp
       const breath = Math.sin(t * idle.idleBreath * Math.PI * 2)
@@ -2308,7 +2429,7 @@ export function Mascot({
     }
     // ระหว่าง close-up ของ intro ห้ามกระพริบตามจังหวะสุ่ม — บีตนี้มีกระพริบของมันเอง
     // (จังหวะเดียว calm ดูท้ายฟังก์ชัน) กระพริบสุ่มจะไปซ้อนจังหวะนั้นพอดี
-    if (introState.playing && introState.b.face < 1) {
+    if (intro.playing && intro.b.face < 1) {
       b.closing = 0
       b.next = Math.max(b.next, 0.8)
     }
@@ -2322,7 +2443,7 @@ export function Mascot({
     // ระหว่างบีตนี้หยุดกระพริบ ไม่งั้นตาที่กำลังเบิกโตจะวูบปิดกลางจังหวะ
     eyeGrow.current = damp(
       eyeGrow.current,
-      Math.max(scrollState.b.eyes, eyec.eyesPreview),
+      Math.max(scroll.b.eyes, eyec.eyesPreview),
       eyec.eyesEase,
       dt,
     )
@@ -2337,7 +2458,7 @@ export function Mascot({
      * envelope เป็น sin เต็มลูกช่วง 0.4-0.62 ของบีต face — หลับแล้วลืมนุ่ม ๆ จังหวะเดียว
      * ปิดไม่สนิท (เหลือ 0.12 เท่ากระพริบสุ่ม) ให้อ่านเป็นกระพริบ ไม่ใช่หลับ
      */
-    const iFace = introState.playing ? introState.b.face : 0
+    const iFace = intro.playing ? intro.b.face : 0
     const iBlink = iFace > 0 ? Math.sin(clamp(seg(iFace, 0.4, 0.62), 0, 1) * Math.PI) : 0
 
     eyes.current.forEach((e) => {

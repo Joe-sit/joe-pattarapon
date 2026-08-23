@@ -66,6 +66,7 @@ export function MascotPeek({ active = true }) {
       <directionalLight position={[-4, 3, 2]} intensity={0.4} color="#FFDFC8" />
       <Suspense fallback={null}>
         <Mascot
+          isolated
           position={[-0.36, 2.46, 0.9]}
           scale={0.72}
           rotation={[0, -0.78, 0.13]}

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useControls } from 'leva'
 import * as THREE from 'three'
@@ -166,94 +166,63 @@ function roundedAlphaTex(w, h, r) {
 }
 
 /**
- * หน้าจอ wireframe ที่กำลังถูกออกแบบอยู่ — วาดครั้งเดียวลง canvas แล้วแปะเป็น map
+ * หน้าจอเดียวกันเวลาสลับเป็นโหมด dev — เทอร์มินัลที่โค้ดค้างอยู่กลางบรรทัด
  *
- * ทำไมเป็นเท็กซ์เจอร์ ไม่ใช่ mesh ต่อชิ้น: wireframe หนึ่งใบมีกล่อง/เส้น/หมุดเป็นสิบชิ้น
- * ถ้าแยก mesh ก็คือ draw call เป็นสิบต่อการ์ดหนึ่งใบ ทั้งที่มันแบนและไม่ขยับ วาดใส่ canvas
- * ใบเดียวจบในหนึ่ง draw call และคมกว่าเพราะเส้นถูกวาดที่ความละเอียดของเท็กซ์เจอร์
- *
- * องค์ประกอบเลือกให้อ่านออกว่า "งานที่ทำค้างอยู่": โครงยังเป็นกล่องเปล่ากับเส้นแทนข้อความ
- * มีกล่องรูปกากบาทแบบ placeholder และมีชิ้นหนึ่งถูกเลือกอยู่ (กรอบฟ้า + หมุดสี่มุม)
+ * โหมดออกแบบไม่มีการ์ดใบนี้แล้ว (ผังงานย้ายไปเป็นของลอยจริงในฉาก) เหลือเฉพาะโหมด dev
  */
-function wireframeTex(w, h) {
+function terminalTex(w, h) {
   const W = 1024
   const H = Math.max(256, Math.round((W * h) / w))
   const c = document.createElement('canvas')
   c.width = W
   c.height = H
   const ctx = c.getContext('2d')
-  const u = W / 100 // หน่วยสัมพัทธ์ ไม่ผูกกับพิกเซลจริง
+  const u = W / 100
 
-  ctx.fillStyle = '#F4F5F7'
+  ctx.fillStyle = '#16171b'
   ctx.fillRect(0, 0, W, H)
 
-  const line = (x, y, ww, hh, color = '#C7CBD4') => {
-    ctx.fillStyle = color
-    ctx.fillRect(x * u, y * u, ww * u, hh * u)
-  }
-  const box = (x, y, ww, hh, color = '#B9BFCC') => {
-    ctx.strokeStyle = color
-    ctx.lineWidth = Math.max(1.5, u * 0.22)
-    ctx.strokeRect(x * u, y * u, ww * u, hh * u)
-  }
-
-  // แถบหัวหน้าต่าง + จุดสามจุด
-  line(0, 0, 100, 7, '#E4E7EC')
+  // แถบหัวหน้าต่าง + จุดสามจุด (โทนเดียวกับฝั่ง wireframe จะได้อ่านเป็นหน้าต่างเดียวกัน)
+  ctx.fillStyle = '#20222a'
+  ctx.fillRect(0, 0, W, 7 * u)
   for (let i = 0; i < 3; i++) {
-    ctx.fillStyle = '#C7CBD4'
+    ctx.fillStyle = '#3a3d47'
     ctx.beginPath()
     ctx.arc((4 + i * 4) * u, 3.5 * u, 1.1 * u, 0, Math.PI * 2)
     ctx.fill()
   }
 
-  // แถบข้าง = รายการเลเยอร์ที่ยังไม่ตั้งชื่อ
-  line(0, 7, 22, 100, '#ECEEF2')
-  for (let i = 0; i < 6; i++) line(3, 12 + i * 6, 14 - (i % 3) * 3, 1.6)
-
-  // กล่องรูปแบบ placeholder — กากบาททแยงมุมตามธรรมเนียม wireframe
-  const bx = 27
-  const by = 12
-  const bw = 44
-  const bh = 26
-  box(bx, by, bw, bh)
-  ctx.strokeStyle = '#C7CBD4'
-  ctx.lineWidth = Math.max(1, u * 0.16)
-  ctx.beginPath()
-  ctx.moveTo(bx * u, by * u)
-  ctx.lineTo((bx + bw) * u, (by + bh) * u)
-  ctx.moveTo((bx + bw) * u, by * u)
-  ctx.lineTo(bx * u, (by + bh) * u)
-  ctx.stroke()
-
-  // บรรทัดข้อความจำลอง + ปุ่ม
-  line(bx, by + bh + 5, 30, 2.4)
-  line(bx, by + bh + 10, 40, 1.8)
-  line(bx, by + bh + 14, 24, 1.8)
-  ctx.fillStyle = '#C7CBD4'
-  ctx.beginPath()
-  ctx.roundRect(bx * u, (by + bh + 20) * u, 16 * u, 6 * u, 1.4 * u)
-  ctx.fill()
-
-  // การ์ดฝั่งขวาที่ "กำลังถูกเลือก" — กรอบฟ้า + หมุดสี่มุม สีเดียวกับ activeColor ของ toolbar
-  const sx = 76
-  const sy = 12
-  const sw = 20
-  const sh = 34
-  box(sx, sy, sw, sh, '#D3D7DE')
-  ctx.strokeStyle = '#0C8CE9'
-  ctx.lineWidth = Math.max(1.5, u * 0.26)
-  ctx.strokeRect(sx * u, sy * u, sw * u, sh * u)
-  const hs = 1.5
-  for (const [hx, hy] of [
-    [sx, sy],
-    [sx + sw, sy],
-    [sx, sy + sh],
-    [sx + sw, sy + sh],
-  ]) {
-    ctx.fillStyle = '#FFFFFF'
-    ctx.fillRect((hx - hs / 2) * u, (hy - hs / 2) * u, hs * u, hs * u)
-    ctx.strokeRect((hx - hs / 2) * u, (hy - hs / 2) * u, hs * u, hs * u)
-  }
+  // เลขบรรทัด + โค้ด — ข้อความสั้น ๆ ที่เป็นภาษาของฉากนี้จริง ๆ ไม่ใช่ lorem
+  const lines = [
+    [['const ', '#c792ea'], ['scene', '#82aaff'], [' = useThree()', '#8b93a7']],
+    [['useFrame', '#82aaff'], [`((_, dt) => {`, '#8b93a7']],
+    [['  cap', '#e6e6e6'], ['.position', '#8b93a7'], ['.y = ', '#8b93a7'], ['damp', '#82aaff'], ['(y, target, 9, dt)', '#8b93a7']],
+    [['})', '#8b93a7']],
+    [['', '#8b93a7']],
+    [['// ', '#5b6070'], ['ship it', '#5b6070']],
+  ]
+  const startY = 14
+  const lh = 8.4
+  ctx.font = `${u * 3.2}px ui-monospace, "SF Mono", Menlo, monospace`
+  ctx.textBaseline = 'middle'
+  lines.forEach((line, i) => {
+    const y = (startY + i * lh) * u
+    ctx.textAlign = 'right'
+    ctx.fillStyle = '#3a3d47'
+    ctx.fillText(String(i + 1), 7 * u, y)
+    ctx.textAlign = 'left'
+    let x = 10 * u
+    for (const [text, color] of line) {
+      ctx.fillStyle = color
+      ctx.fillText(text, x, y)
+      x += ctx.measureText(text).width
+    }
+    if (i === lines.length - 1) {
+      // เคอร์เซอร์บล็อกค้างท้ายบรรทัด = โค้ดที่ยังเขียนค้างอยู่ ไม่ใช่ภาพนิ่งของโค้ดที่เสร็จแล้ว
+      ctx.fillStyle = '#08872b'
+      ctx.fillRect(x + u * 0.6, y - u * 1.8, u * 1.6, u * 3.6)
+    }
+  })
 
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
@@ -979,140 +948,224 @@ export function FigmaToolbar({ position, rotation = [0, 0, 0], R, params }) {
  * ทุกชิ้นลอยด้วยนาฬิกาเดียวกัน ต่างกันแค่ phase — ไม่มี state ไม่มี timer
  * แอมพลิจูดคิดเป็นหน่วยฉาก และคาบเป็นวินาที จังหวะจึงเท่ากันทุก framerate
  */
-const FLOATIES = [
-  // [x, y, z] รอบจุดยึด, ชนิดทรง, สี, ขนาด, phase, คาบลอย (วินาที)
-  // กระจายทั่วครึ่งซ้ายของเฟรม ไม่ใช่กองรวมเป็นกระจุก — ตั้งใจให้ระยะห่าง/ความลึกไม่เท่ากัน
-  // ชิ้นใหญ่อยู่หน้า ชิ้นเล็กถอยหลัง สายตาจึงอ่านเป็นของลอยในอากาศจริง ไม่ใช่สติกเกอร์แปะระนาบเดียว
-  // สี่ชิ้นพอ — เยอะกว่านี้แย่งสายตากับ toolbar/แผงข้อมูลที่เป็นเนื้อเรื่องจริงของฉาก
-  // ม่วงกับกล่องเหลืองสลับที่กัน (ตำแหน่งเท่านั้น ขนาด/จังหวะลอยยังติดไปกับทรงเดิม)
-  [[-3.6, -2.4, 0.4], 'ico', '#7C5CFC', 1.15, 0.0, 5.2],
-  [[2.6, 1.6, -1.2], 'torus', '#14AE5C', 1.0, 1.7, 6.4],
-  [[-2.4, 0.4, 1.2], 'box', '#F5C33B', 1.1, 3.1, 4.6],
-  [[3.4, -1.2, 0.6], 'sphere', '#F2A0C0', 0.95, 2.3, 5.9],
+const DIAGRAM_NODES = [
+  // [x, y] ในระนาบของกลุ่ม + ชนิดหน้าจอที่วาดบนแผ่น
+  // ผังอ่านจากซ้ายไปขวา: ค้นหา -> แตกเป็นดูแผนที่ / ดูรายละเอียด -> จบที่หน้ายืนยัน (โหนด active)
+  [[-3.5, 0.6], 'search'],
+  [[-0.8, 2.1], 'map'],
+  [[-0.8, -0.9], 'detail'],
+  [[2.2, 0.6], 'confirm'],
 ]
 
-/** ทรงโครงลวด — เส้นขอบล้วน ไม่มีผิว ตัดกับชิ้นทึบให้ภาพไม่ตันไปทั้งกลุ่ม */
-const WIRES = [
-  // สีเข้มพอจะเห็นบนพื้นฟ้า/ทรายอ่อน — ขาวล้วนจมหายไปกับพื้นหลัง
-  // เหลือใบเดียว: กรอบเส้นสองใบซ้อนกันอ่านเป็นเส้นยุ่ง ไม่ใช่ทรง
-  [[-0.6, -0.9, 2.2], 'box', '#5A5B7A', 1.7, 1.2, 7.4],
+/** เส้นเชื่อม = คู่ดัชนีของโหนด ไม่ใช่พิกัดซ้ำ — ขยับโหนดแล้วเส้นตามเอง */
+const DIAGRAM_EDGES = [
+  [0, 1],
+  [0, 2],
+  [1, 3],
+  [2, 3],
 ]
-
-function FloatShape({ position, geometry, color, size, phase, period, spin, wire = false }) {
-  const ref = useRef()
-  useFrame(({ clock }) => {
-    const node = ref.current
-    if (!node) return
-    const t = clock.elapsedTime
-    // ลอยขึ้นลงรอบตำแหน่งตั้งต้น — amp คงที่ในหน่วยฉาก ไม่ผูกกับ framerate
-    node.position.y = position[1] + Math.sin((t / period) * Math.PI * 2 + phase) * 0.16
-    node.rotation.x = phase + t * spin * 0.6
-    node.rotation.y = phase * 1.7 + t * spin
-  })
-  if (wire) {
-    return (
-      <lineSegments ref={ref} position={position} geometry={geometry} scale={size}>
-        <lineBasicMaterial color={color} transparent opacity={0.75} toneMapped={false} />
-      </lineSegments>
-    )
-  }
-  return (
-    <mesh ref={ref} position={position} geometry={geometry} scale={size}>
-      <meshStandardMaterial color={color} roughness={0.42} metalness={0.05} />
-    </mesh>
-  )
-}
 
 /**
- * ปุ่มลอย: แผ่นมนหนา ๆ กับแถบสองเส้นบนหน้าปุ่ม
+ * ผังงานลอย ๆ แบบมินิมอล — แผ่นสี่เหลี่ยมมุมมนต่อกันด้วยเส้น ไม่มีข้อความ
  *
- * เป็นของประกอบฉาก ไม่ใช่ปุ่มจริง — จึงไม่รับเมาส์และไม่เปลี่ยน cursor
- * (กติกาในโปรเจกต์: อะไรที่กดได้ต้องเป็น pointer ของที่กดไม่ได้ก็ต้องไม่หลอกว่ากดได้)
+ * เดิมตรงนี้เป็นทรงเรขา (ico/torus/box/sphere) กับกล่องโครงลวด อ่านเป็น "ของตกแต่ง"
+ * ผังงานเล่าเรื่องเดียวกับ toolbar/crop frame ที่มีอยู่แล้ว คือของในงานออกแบบจริง
+ *
+ * geometry ปั้นครั้งเดียวแล้วใช้ร่วมทุกโหนด/ทุกเส้น เหลือแค่ transform ที่ต่างกัน
+ * เส้นคิดจากคู่โหนด (จุดกึ่งกลาง ความยาว มุมในระนาบ) ขยับโหนดแล้วเส้นวิ่งตามเอง
  */
-function FloatButton({ position, rotation, color, phase }) {
-  const ref = useRef()
-  const slab = useMemo(
-    () => roundedSlabGeometry({ w: 2.9, h: 1.0, r: 0.5, depth: 0.3, bevel: 0.06 }),
-    [],
-  )
-  useDisposable(slab)
-  useFrame(({ clock }) => {
-    const node = ref.current
-    if (!node) return
-    const t = clock.elapsedTime
-    node.position.y = position[1] + Math.sin((t / 5.8) * Math.PI * 2 + phase) * 0.13
-    // เอียงสลับซ้ายขวาช้า ๆ ให้รู้ว่ามันลอย ไม่ใช่แปะติดกับจอ
-    node.rotation.z = rotation[2] + Math.sin((t / 9) * Math.PI * 2 + phase) * 0.06
-  })
-  return (
-    <group ref={ref} position={position} rotation={rotation}>
-      <mesh geometry={slab}>
-        <meshStandardMaterial color={color} roughness={0.38} metalness={0.04} />
-      </mesh>
-      {/* แถบบนหน้าปุ่ม — ภาษาเดียวกับ rows ของ CurvedPanel ใบอื่น ไม่ใส่ข้อความปลอม */}
-      <mesh position={[-0.3, 0, 0.17]}>
-        <planeGeometry args={[1.2, 0.19]} />
-        <meshBasicMaterial color="#FFFFFF" transparent opacity={0.85} toneMapped={false} />
-      </mesh>
-      <mesh position={[0.88, 0, 0.17]}>
-        <circleGeometry args={[0.145, 24]} />
-        <meshBasicMaterial color="#FFFFFF" transparent opacity={0.7} toneMapped={false} />
-      </mesh>
-    </group>
-  )
+const NODE_W = 1.3
+const NODE_H = 2.1
+
+/**
+ * หน้าจอบนโหนดของผัง — วาดเป็นผังหน้าจอจริง ๆ ไม่ใช่แผ่นเปล่า
+ *
+ * เนื้อในเป็นแท่ง/กล่อง placeholder ล้วน ไม่มีข้อความสมมติ: ผังนี้เล่าว่า "ไหลจากจอไหนไปจอไหน"
+ * ข้อความจริงของงานจริงไม่ได้อยู่ตรงนี้ และตัวหนังสือขนาดนี้ในฉากก็อ่านไม่ออกอยู่ดี
+ */
+function screenTex(kind) {
+  const W = 384
+  const H = Math.round(W * (NODE_H / NODE_W))
+  const c = document.createElement('canvas')
+  c.width = W
+  c.height = H
+  const ctx = c.getContext('2d')
+  const u = W / 100
+  const bar = (x, y, w, h, color = '#AEB6C4', r = 0.8) => {
+    ctx.fillStyle = color
+    ctx.beginPath()
+    ctx.roundRect(x * u, y * u, w * u, h * u, r * u)
+    ctx.fill()
+  }
+
+  ctx.fillStyle = '#FFFFFF'
+  ctx.fillRect(0, 0, W, H)
+  // แถบบน + ปุ่มย้อนกลับ — มีทุกจอ ผังจึงอ่านเป็นแอปเดียวกันทั้งชุด
+  bar(0, 0, 100, 11, '#F1F3F7', 0)
+  bar(6, 4.4, 5, 2.2, '#AAB2C0')
+
+  if (kind === 'search') {
+    bar(6, 16, 88, 9, '#F1F3F7', 2.4)
+    bar(11, 19.4, 34, 2.2, '#AAB2C0')
+    for (let i = 0; i < 4; i++) {
+      const y = 32 + i * 14
+      bar(6, y, 6, 6, '#DDE2EA', 3)
+      bar(16, y + 0.6, 46, 2.4)
+      bar(16, y + 5, 30, 2, '#DDE2EA')
+    }
+  } else if (kind === 'map') {
+    // พื้นแผนที่ + เส้นถนนไม่กี่เส้น + หมุด — จำเจกว่านี้ไม่ได้ ต้องอ่านออกว่าเป็นแผนที่
+    bar(0, 11, 100, 62, '#EDEBE6', 0)
+    ctx.strokeStyle = '#DCD8CF'
+    ctx.lineWidth = u * 1.6
+    for (const [x0, y0, x1, y1] of [
+      [0, 30, 100, 26],
+      [0, 55, 100, 60],
+      [28, 11, 34, 73],
+      [70, 11, 64, 73],
+    ]) {
+      ctx.beginPath()
+      ctx.moveTo(x0 * u, y0 * u)
+      ctx.lineTo(x1 * u, y1 * u)
+      ctx.stroke()
+    }
+    ctx.fillStyle = '#E5484D'
+    ctx.beginPath()
+    ctx.arc(50 * u, 40 * u, 3.4 * u, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(46.8 * u, 41.6 * u)
+    ctx.lineTo(53.2 * u, 41.6 * u)
+    ctx.lineTo(50 * u, 48 * u)
+    ctx.closePath()
+    ctx.fill()
+    bar(0, 73, 100, 27, '#F7F8FA', 0)
+    bar(8, 79, 48, 3, '#AAB2C0')
+    bar(8, 85, 36, 2.2)
+  } else if (kind === 'detail') {
+    bar(0, 11, 100, 34, '#E7EAF0', 0)
+    bar(8, 51, 54, 3.4, '#AAB2C0')
+    bar(8, 58, 84, 2.2)
+    bar(8, 63, 76, 2.2)
+    bar(8, 68, 40, 2.2)
+    for (let i = 0; i < 3; i++) bar(8 + i * 20, 78, 16, 7, '#EDF0F5', 2)
+  } else {
+    bar(8, 18, 60, 3.4, '#AAB2C0')
+    bar(8, 25, 84, 2.2)
+    bar(8, 30, 68, 2.2)
+    bar(0, 40, 100, 26, '#EDEBE6', 0)
+    bar(8, 72, 44, 2.4)
+    // ปุ่มยืนยัน — สีเดียวกับ activeColor ของ toolbar จบผังด้วยสิ่งที่กดแล้วจบงาน
+    bar(8, 83, 84, 9, '#0C8CE9', 2.6)
+  }
+
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 4
+  return tex
 }
 
-/** กลุ่มของลอยทั้งชุด — geometry ปั้นครั้งเดียวแล้วใช้ร่วมกันทุกชิ้นที่ทรงเดียวกัน */
-function Floaties({ position, rotation = [0, 0, 0] }) {
+function Floaties({ position, rotation = [0, 0, 0], scale = 1 }) {
+  const ref = useRef()
   const geos = useMemo(
     () => ({
-      ico: new THREE.IcosahedronGeometry(1, 0),
-      torus: new THREE.TorusGeometry(0.8, 0.3, 16, 40),
-      box: new RoundedBoxGeometry(1.3, 1.3, 1.3, 3, 0.22),
-      capsule: new THREE.CapsuleGeometry(0.42, 0.9, 6, 16),
-      sphere: new THREE.SphereGeometry(0.8, 32, 24),
-      knot: new THREE.TorusKnotGeometry(0.62, 0.22, 96, 16),
-    }),
-    [],
-  )
-  // โครงลวด: EdgesGeometry ให้เฉพาะสันจริง ไม่ใช่ wireframe ที่โชว์เส้นแบ่งสามเหลี่ยมทุกเส้น
-  const wires = useMemo(
-    () => ({
-      box: new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
-      ico: new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(1, 0)),
+      node: new RoundedBoxGeometry(NODE_W, NODE_H, 0.12, 3, 0.09),
+      face: new THREE.PlaneGeometry(NODE_W - 0.08, NODE_H - 0.08),
+      edge: new THREE.BoxGeometry(1, 0.06, 0.06),
+      head: new THREE.ConeGeometry(0.13, 0.3, 12),
     }),
     [],
   )
   for (const g of Object.values(geos)) useDisposable(g)
-  for (const g of Object.values(wires)) useDisposable(g)
+
+  // เท็กซ์เจอร์หน้าจอ ทำครั้งเดียวต่อชนิด ไม่ใช่ต่อโหนด (ถ้าชนิดซ้ำก็ใช้ใบเดียวกัน)
+  const screens = useMemo(() => {
+    const byKind = new Map()
+    for (const [, kind] of DIAGRAM_NODES) if (!byKind.has(kind)) byKind.set(kind, screenTex(kind))
+    return byKind
+  }, [])
+  useEffect(
+    () => () => {
+      for (const t of screens.values()) t.dispose()
+    },
+    [screens],
+  )
+
+  // เส้นเชื่อม: คิดจากขอบโหนดถึงขอบโหนด ไม่ใช่จุดกึ่งกลางถึงกึ่งกลาง เส้นจะได้ไม่มุดใต้แผ่น
+  const edges = useMemo(
+    () =>
+      DIAGRAM_EDGES.map(([a, b]) => {
+        const [ax, ay] = DIAGRAM_NODES[a][0]
+        const [bx, by] = DIAGRAM_NODES[b][0]
+        const dx = bx - ax
+        const dy = by - ay
+        const len = Math.hypot(dx, dy)
+        // ระยะร่นจากกึ่งกลางโหนดถึงขอบกล่อง ตามด้านที่เส้นพุ่งชนจริง (กว้างหรือสูง)
+        const ux = Math.abs(dx) / len
+        const uy = Math.abs(dy) / len
+        const inset = Math.min(
+          Math.min(ux > 1e-3 ? NODE_W / 2 / ux : Infinity, uy > 1e-3 ? NODE_H / 2 / uy : Infinity) +
+            0.12,
+          len / 2 - 0.05,
+        )
+        const rot = Math.atan2(dy, dx)
+        const shaft = Math.max(0.1, len - inset * 2)
+        return {
+          pos: [(ax + bx) / 2, (ay + by) / 2, 0],
+          rot,
+          len: Math.max(0.1, shaft - 0.24),
+          // หัวลูกศรอยู่ปลายฝั่งโหนดปลายทาง หันไปตามแนวเส้น (cone ชี้ +y จึงหมุนลบ 90°)
+          head: [
+            bx - Math.cos(rot) * inset,
+            by - Math.sin(rot) * inset,
+            0,
+          ],
+        }
+      }),
+    [],
+  )
+
+  // ลอยทั้งผังเป็นชิ้นเดียว ไม่ใช่ต่างคนต่างลอย — ผังที่ชิ้นส่วนขยับคนละจังหวะอ่านเป็นของหลุดกัน
+  useFrame(({ clock }) => {
+    const node = ref.current
+    if (!node) return
+    const t = clock.elapsedTime
+    node.position.y = position[1] + Math.sin((t / 6.6) * Math.PI * 2) * 0.16
+    node.rotation.z = rotation[2] + Math.sin((t / 11) * Math.PI * 2) * 0.03
+  })
+
   return (
-    <group position={position} rotation={rotation}>
-      {FLOATIES.map(([p, kind, color, size, phase, period], i) => (
-        <FloatShape
-          key={`s${i}`}
-          position={p}
-          geometry={geos[kind]}
-          color={color}
-          size={size}
-          phase={phase}
-          period={period}
-          spin={0.18}
-        />
+    <group ref={ref} position={position} rotation={rotation} scale={scale}>
+      {edges.map((e, i) => (
+        <group key={`e${i}`}>
+          <mesh
+            position={[
+              (e.pos[0] + e.head[0]) / 2,
+              (e.pos[1] + e.head[1]) / 2,
+              0,
+            ]}
+            rotation={[0, 0, e.rot]}
+            scale={[e.len, 1, 1]}
+          >
+            <primitive object={geos.edge} attach="geometry" />
+            <meshStandardMaterial color="#8E93A6" roughness={0.5} metalness={0} />
+          </mesh>
+          <mesh position={e.head} rotation={[0, 0, e.rot - Math.PI / 2]} geometry={geos.head}>
+            <meshStandardMaterial color="#8E93A6" roughness={0.5} metalness={0} />
+          </mesh>
+        </group>
       ))}
-      {WIRES.map(([p, kind, color, size, phase, period], i) => (
-        <FloatShape
-          key={`w${i}`}
-          position={p}
-          geometry={wires[kind]}
-          color={color}
-          size={size}
-          phase={phase}
-          period={period}
-          spin={0.12}
-          wire
-        />
+      {DIAGRAM_NODES.map(([[x, y], kind], i) => (
+        <group key={`n${i}`} position={[x, y, 0]}>
+          <mesh geometry={geos.node}>
+            <meshStandardMaterial color="#FFFFFF" roughness={0.36} metalness={0.03} />
+          </mesh>
+          {/* หน้าจอเป็นแผ่นบางวางทับด้านหน้า — map ลงกล่องมุมมนตรง ๆ ภาพจะยืดที่มุม */}
+          <mesh geometry={geos.face} position={[0, 0, 0.062]}>
+            <meshBasicMaterial map={screens.get(kind)} toneMapped={false} />
+          </mesh>
+        </group>
       ))}
-      <FloatButton position={[0.6, -0.4, 2.6]} rotation={[0, 0, -0.05]} color="#14AE5C" phase={2.2} />
     </group>
   )
 }
@@ -1484,9 +1537,11 @@ export function Panels({ shiftX = 0 }) {
   // อัดเพิ่มให้ดีกรีที่ "เห็น" ใกล้เคียงกัน
   const screenCurve = flip ? baseCurve * 1.3 : baseCurve
 
-  // เท็กซ์เจอร์ wireframe ทำครั้งเดียวต่อสัดส่วนการ์ด — อย่าให้เกิดใหม่ทุกเฟรม
-  const wireframeMap = useMemo(() => wireframeTex(3.6, 2.2), [])
-  useDisposable(wireframeMap)
+  // เท็กซ์เจอร์ของการ์ด "งานที่ทำค้างอยู่" — ทำครั้งเดียวต่อสัดส่วนการ์ด ไม่ใช่ทุกเฟรม
+  // มีเฉพาะโหมด dev: โหมดออกแบบเล่าด้วยผังงานที่ลอยอยู่ในฉากแทน ไม่ต้องมีจอ wireframe ซ้ำอีกใบ
+  const terminalMap = useMemo(() => terminalTex(3.6, 2.2), [])
+  useDisposable(terminalMap)
+  const devMode = useDevMode()
   // debugger: ดันชั้น panel ให้ลึกเข้าไปในฉาก
   // ขยายทั้งกลุ่มรอบ "จุดกล้อง" — ระยะกับขนาดโตพร้อมกัน ภาพบนจอจึงเท่าเดิมเป๊ะ
   // แต่ตัว panel ถอยไปอยู่หลังพุ่มไม้จริง ๆ พุ่มกับสันเนินเลยบังฐาน panel ให้เอง
@@ -1515,26 +1570,40 @@ export function Panels({ shiftX = 0 }) {
       {/* ซ้าย — เดิมเป็นแผงทึบสีส้มใบเดียว เปลี่ยนเป็นทรงลอย + ปุ่มลอย
           เข้าฉากด้วย UiEnter ตัวเดิม จังหวะจึงยังอยู่ในคิวเดียวกับ panel ใบอื่น */}
       <UiEnter offset={[-6, 2.2, 0]} delay={0.2}>
-        <Floaties position={onArc([-5.2, 4.6, -5.6])} rotation={[0, 0.32 + yawArc, 0]} />
+        {/* ผังงานลอย — ย่อลงและวางต่ำกว่าเดิม: ที่ขนาดเต็มมันล้นขอบบนของกรอบ /2026
+            จนอ่านไม่ออกว่าเป็นผัง (เห็นแค่มุมกล่องสองสามใบ) */}
+        <Floaties
+          position={onArc([-5.35, 2.6, -5.6])}
+          rotation={[0, 0.32 + yawArc, 0]}
+          scale={0.72}
+        />
       </UiEnter>
 
       {/* ขวา */}
+      {devMode && (
       <UiEnter offset={[7, 2.2, 0]} delay={0.32}>
-      {/* ใบนี้คือ "งานที่กำลังทำอยู่" — จอ wireframe ที่ยังเป็นโครง มีชิ้นหนึ่งถูกเลือกค้างไว้
+      {/* ใบนี้คือ "งานที่กำลังทำอยู่" — เทอร์มินัลที่โค้ดค้างอยู่ มีเฉพาะโหมด dev
+          โหมดออกแบบเล่าด้วยผังงานที่ลอยอยู่ฝั่งซ้ายแทน จอใบนี้จึงหายไปทั้งใบ ไม่ใช่เปลี่ยนรูป
           โหมด flip (/2026) กรอบเป็น close-up ตัวละคร ใบนี้ที่ตำแหน่งเดิมจะโผล่แค่เสี้ยวริมซ้าย
           จนอ่านไม่ออกว่าเป็น UI — ย้ายเข้ามาในกรอบและขยับเข้าหากล้องเฉพาะโหมดนั้น
           ฉากเต็ม (/joespresso) ยังใช้ตำแหน่งเดิมทุกอย่าง */}
       <CurvedPanel
         curve={screenCurve}
         eyeZ={CAM0[2]}
-        position={flip ? onArc([6.9, 3.7, -5.0]) : onArc([5.6, 4.4, -5.4])}
+        /**
+         * x ของโหมด flip ต้องติดลบ ทั้งที่การ์ดไปโผล่ฝั่งขวา — onArc หมุนพิกัดรอบตากล้อง
+         * -23° (shiftX=4) ของที่ตั้ง x บวกไว้จึงถูกกวาดพ้นขอบขวา แล้วความโค้ง 3.05 ม้วนต่อ
+         * จนไปอยู่หลังกล้อง (ค่าเดิม 6.9 จบที่ ndc.z > 1 = ถูก clip ทิ้ง ไม่มีอะไรให้เห็นเลย)
+         */
+        position={flip ? onArc([-1.9, 3.35, -5.0]) : onArc([5.6, 4.4, -5.4])}
         rotation={[0, (flip ? -0.16 : -0.3) + yawArc, 0]}
         size={flip ? [3.2, 2.0] : [3.6, 2.2]}
         color="#FFFFFF"
         opacity={1}
-        map={wireframeMap}
+        map={terminalMap}
       />
       </UiEnter>
+      )}
           {/*
             กรอบ crop ไม่โค้งตามจอเหมือน panel ใบอื่น (curve = 0)
             เพราะมันต้อง "ย้ายที่" ได้ตามไทม์ไลน์ intro — curveOnScreen ดัด vertex รอบตาโดยอิง

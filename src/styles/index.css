@@ -119,3 +119,273 @@
     animation: none;
   }
 }
+
+/* ลายน้ำสกิลใน what-i-do — เปลี่ยนรูปแล้วค่อย ๆ ปรากฏ ไม่ใช่กระพริบเปลี่ยนทันที
+   (React เปลี่ยนโหนดจริงเพราะ key ผูกกับชื่อสกิล อนิเมชันจึงเล่นใหม่ทุกครั้งที่สลับ) */
+@keyframes v2-mark-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.v2-skill-mark {
+  animation: v2-mark-in 0.28s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v2-skill-mark {
+    animation: none;
+  }
+}
+
+/*
+ * เข้าฉากแบบ CTA ของ githubuniverse: ทุกชิ้นโผล่ "เกือบพร้อมกัน" ไม่ใช่ไล่ทีละใบให้รอ
+ * ระยะห่างระหว่างชิ้นแค่ 60ms (ของ GitHub ใช้ 80ms กับเมนู) — ตาอ่านเป็นก้อนเดียวที่ไหลขึ้นมา
+ * ลำดับส่งผ่านตัวแปร --i ไม่ต้องมีคลาสต่อชิ้น
+ *
+ * ชื่อคลาสห้ามซ้ำกับ .v2-rise ใน pages/portfolio2026.css — อันนั้นเป็นของพาดหัว hero
+ * ที่เปิดด้วย .is-in บนตัวเอง ไม่ใช่ .v2-in บนตัวแม่ ตั้งชื่อชนกันแล้วพาดหัวเพี้ยนทันที
+ */
+.v2-stagger {
+  opacity: 0;
+  transform: translateY(14px) scale(0.985);
+  transition:
+    opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: calc(var(--i, 0) * 60ms);
+}
+
+.v2-in .v2-stagger {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v2-stagger {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/*
+ * เข้าฉากระดับ section — ลูกชั้นแรกไหลขึ้นมาห่างกันชิ้นละ 60ms เหมือนกระเบื้องใน what-i-do
+ * ใช้ nth-child แทนการไปแปะคลาส/ตัวแปรทีละชิ้น เพราะ section พวกนี้มีลูกไม่กี่ชิ้น
+ */
+.v2-reveal > * {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.v2-reveal.v2-in > * {
+  opacity: 1;
+  transform: none;
+}
+
+.v2-reveal > *:nth-child(2) { transition-delay: 60ms; }
+.v2-reveal > *:nth-child(3) { transition-delay: 120ms; }
+.v2-reveal > *:nth-child(4) { transition-delay: 180ms; }
+.v2-reveal > *:nth-child(5) { transition-delay: 240ms; }
+.v2-reveal > *:nth-child(n + 6) { transition-delay: 300ms; }
+
+/*
+ * เวอร์ชันจางอย่างเดียว สำหรับ section ที่ข้างในมี position: sticky (works)
+ * transform บนตัวแม่ทำให้ sticky ยึดกับกล่องผิดใบ พาเนลจะกระตุกตอนเข้าฉาก
+ */
+.v2-reveal-fade > * {
+  opacity: 0;
+  transition: opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.v2-reveal-fade.v2-in > * {
+  opacity: 1;
+}
+
+.v2-reveal-fade > *:nth-child(2) { transition-delay: 60ms; }
+.v2-reveal-fade > *:nth-child(n + 3) { transition-delay: 120ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .v2-reveal > *,
+  .v2-reveal-fade > * {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/*
+ * เข้าฉากของกระเบื้อง what-i-do — ถอดจาก CTA ของ githubuniverse (ของเขาวาดใน WebGL canvas
+ * สไตล์ DOM จึงไม่มีอะไรให้อ่าน ต้องถ่ายเฟรมมาดู): กล่องไม่ได้จาง ๆ ขึ้นมา แต่ "กาง" ออกเต็มช่อง
+ * ภายใน ~0.3s แล้วของข้างในเด้งขึ้นมาทีละชิ้นห่างกันไม่กี่สิบมิลลิวินาที
+ *
+ * ใช้ clip-path ไม่ใช่ scale เพราะกล่องต้องกางอยู่กับที่ ไม่เบียดกล่องข้าง ๆ และขอบต้องคมตลอด
+ */
+.v2-pop {
+  clip-path: inset(0 100% 0 0);
+}
+
+/*
+ * ใช้ @keyframes ไม่ใช่ transition: transition ต้องมี "สองสถานะที่ถูก paint จริง" ถึงจะวิ่ง
+ * พอคลาสถูกเติมในเฟรมเดียวกับที่ section เพิ่งเข้าจอ เบราว์เซอร์ยุบเป็น style เดียวแล้วกระโดด
+ * (ตรวจแล้ว: ยืดเวลา 6 เท่ายังถ่ายไม่ติดช่วงกลางเลย) animation ไม่มีปัญหานี้ เริ่มนับตอนคลาสมา
+ */
+/*
+ * กล่องเข้าจากขอบ "ซ้าย" ของตัวเอง แล้วกางไปทางขวา — ไม่ใช่รูบานจากกลาง
+ * (ripple จากกลางอ่านเป็นของผุดขึ้นมา ไม่ใช่ของที่ไถลเข้ามาในเฟรม)
+ * บวก translate สั้น ๆ ให้รู้สึกว่ามันวิ่งเข้ามาจากทางซ้ายจริง ไม่ใช่แค่ผ้าม่านเปิด
+ */
+/*
+ * inset คือ "ระยะที่ถูกตัดเข้ามาจากแต่ละด้าน" (บน ขวา ล่าง ซ้าย)
+ * ตัดขวา 100% = เหลือเสี้ยวที่ขอบ "ซ้าย" แล้วบานไปทางขวา = ของวิ่งเข้ามาจากทางซ้ายจริง
+ * (ก่อนหน้านี้ใช้ตัดซ้าย 100% ซึ่งเหลือเสี้ยวที่ขอบขวา — กลายเป็นเข้าจากทางขวา สลับด้าน)
+ */
+@keyframes v2-wipe-in {
+  from {
+    clip-path: inset(0 100% 0 0);
+    transform: translateX(-2.5rem);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    transform: translateX(0);
+  }
+}
+
+@keyframes v2-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.v2-in .v2-pop {
+  animation: v2-wipe-in 0.95s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 110ms);
+}
+
+/*
+ * กระเบื้องสีข้าง ๆ ฉาก 3D — ไม่ได้กางออกมาเอง แต่ "ไถลออกมาจากหลังกระเบื้องตัวละคร"
+ * ตั้งต้นซ้อนอยู่ใต้กระเบื้องตัวละครพอดี (--from = ระยะที่ต้องถอยไปให้พ้นขอบขวาของมัน)
+ * แล้ววิ่งมาทางขวาเข้าที่ กระเบื้องตัวละครถูกยกชั้นให้อยู่บน (z-10) จึงบังช่วงที่ยังไม่โผล่
+ * ตัวแม่ overflow-hidden อยู่แล้ว ไม่มีอะไรล้นออกนอกการ์ด
+ */
+@keyframes v2-slide-out {
+  from {
+    transform: translateX(var(--from, -100%));
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.v2-slide {
+  transform: translateX(var(--from, -100%));
+}
+
+.v2-in .v2-slide {
+  animation: v2-slide-out 0.95s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 110ms);
+}
+
+/*
+ * ชิ้นส่วนย่อยใน SVG ของแต่ละกล่อง — โผล่ไล่กันทีละ layer ไม่ใช่ทั้งรูปพร้อมกัน
+ * (เคอร์เซอร์ 4 ชิ้น, พิกเซล 9 ชิ้น, ดินสอ 3 ชิ้น) ไล่ชิ้นละ 55ms ต่อจากจังหวะที่กล่องเข้าที่
+ * ต้องฝัง SVG เป็น inline ถึงจะเข้าถึง path ข้างในได้ — <img> เข้าไปแตะลูกไม่ได้
+ */
+@keyframes v2-layer-in {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.v2-layers svg > g > * {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.v2-in .v2-layers svg > g > * {
+  animation: v2-layer-in 0.42s cubic-bezier(0.2, 1.2, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 110ms + 380ms + var(--n, 0) * 55ms);
+}
+
+.v2-layers svg > g > *:nth-child(1) { --n: 0; }
+.v2-layers svg > g > *:nth-child(2) { --n: 1; }
+.v2-layers svg > g > *:nth-child(3) { --n: 2; }
+.v2-layers svg > g > *:nth-child(4) { --n: 3; }
+.v2-layers svg > g > *:nth-child(5) { --n: 4; }
+.v2-layers svg > g > *:nth-child(6) { --n: 5; }
+.v2-layers svg > g > *:nth-child(7) { --n: 6; }
+.v2-layers svg > g > *:nth-child(8) { --n: 7; }
+.v2-layers svg > g > *:nth-child(n + 9) { --n: 8; }
+
+@media (prefers-reduced-motion: reduce) {
+  .v2-layers svg > g > *,
+  .v2-in .v2-layers svg > g > * {
+    opacity: 1;
+    animation: none;
+    transform: none;
+  }
+}
+
+/* ของข้างในกล่อง (ไอคอน) เด้งจากเล็กไปเต็ม หลังกล่องกางเสร็จนิดเดียว */
+.v2-pop-in {
+  opacity: 0;
+}
+
+.v2-in .v2-pop-in {
+  animation: v2-pop-in 0.7s cubic-bezier(0.2, 1.2, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 110ms + 320ms);
+}
+
+/*
+ * วงเล็บ } ในกระเบื้องใหญ่ — ไถลเข้ามาจากขอบขวา ไม่ใช่โผล่มาเฉย ๆ
+ * ไฟล์ SVG มีพื้นเบจเต็มสี่เหลี่ยมติดมาด้วย เลื่อนทั้งใบจึงไม่เห็นรอยต่อ (พื้นกระเบื้องสีเดียวกัน)
+ */
+@keyframes v2-bracket-in {
+  from {
+    transform: translateX(42%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.v2-in .v2-bracket {
+  animation: v2-bracket-in 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 0.25s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v2-pop,
+  .v2-pop-in,
+  .v2-slide,
+  .v2-in .v2-slide,
+  .v2-in .v2-bracket,
+  .v2-in .v2-pop,
+  .v2-in .v2-pop-in {
+    clip-path: none;
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+}

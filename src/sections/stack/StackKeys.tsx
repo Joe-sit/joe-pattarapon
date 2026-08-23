@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
+import { BRAND_ICONS } from './brand-icons'
 
 /**
  * สแตกที่ใช้จริง วางเป็นแป้นคีย์แคป 3D — คีย์ละหนึ่งเทคโนโลยี
@@ -64,6 +65,19 @@ function capGeometry(w: number, d: number) {
 }
 
 /**
+ * โลโก้ที่ตัวมันเองเป็นคำอยู่แล้ว — พิมพ์ชื่อซ้ำใต้มันจะอ่านเป็นคำเดียวกันสองรอบ
+ * (GSAP ของ GreenSock เป็นเวิร์ดมาร์ก ต่างจาก TypeScript ที่เป็นกล่อง TS)
+ */
+const WORDMARKS = new Set(['GSAP'])
+
+/** สว่างพอจะรับหมึกสีแบรนด์ไหม — คิดจาก luminance ของสีคีย์ ไม่ใช่ไล่เช็คทีละสี */
+function isLight(hex: string) {
+  const n = Number.parseInt(hex.slice(1), 16)
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62
+}
+
+/**
  * ป้ายบนหน้าคีย์ — วาดครั้งเดียวต่อคีย์ ไม่ใช่ทุกเฟรม
  * คีย์ที่ลึกกว่ากว้าง (Works/Resume) หมุนตัวอักษรให้อ่านตามแนวคีย์เหมือนคีย์บอร์ดจริง
  */
@@ -77,11 +91,32 @@ function labelTexture(label: string, color: string, ink: string, w: number, d: n
   const ctx = c.getContext('2d')!
   ctx.fillStyle = color
   ctx.fillRect(0, 0, W, H)
+  const pad = unit * 0.16
+  const icon = BRAND_ICONS[label]
+
+  if (icon) {
+    // โลโก้จริงจาก simple-icons — เส้นทางเดียวใน viewBox 24 หน่วย ย่อ/ขยายได้ไม่แตก
+    // สีแบรนด์ใช้ได้เฉพาะบนคีย์สีอ่อน คีย์สีเข้มใช้สีตัวอักษรของคีย์นั้นแทน ไม่งั้นจมหาย
+    const size = unit * (WORDMARKS.has(label) ? 0.62 : 0.42)
+    ctx.save()
+    ctx.translate(pad, pad)
+    ctx.scale(size / 24, size / 24)
+    ctx.fillStyle = isLight(color) ? icon.hex : ink
+    ctx.fill(new Path2D(icon.path))
+    ctx.restore()
+  }
+
+  if (icon && WORDMARKS.has(label)) {
+    const tex0 = new THREE.CanvasTexture(c)
+    tex0.colorSpace = THREE.SRGBColorSpace
+    tex0.anisotropy = 4
+    return tex0
+  }
+
   ctx.fillStyle = ink
   ctx.font = `600 ${Math.round(unit * 0.17)}px ui-monospace, "SF Mono", Menlo, monospace`
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
-  const pad = unit * 0.16
   if (d > w) {
     // หมุน 90°: จุดเริ่มไปอยู่มุมซ้ายล่าง แล้วเขียนขึ้นตามแนวยาวของคีย์
     ctx.translate(pad, H - pad)
@@ -89,7 +124,8 @@ function labelTexture(label: string, color: string, ink: string, w: number, d: n
     ctx.fillText(label, 0, 0, H - pad * 2)
   } else {
     // ตัวหนังสือชิดมุมซ้ายบนของหน้าคีย์ แบบ legend บนคีย์แคปจริง ไม่ใช่กลางคีย์
-    ctx.fillText(label, pad, pad, W - pad * 2)
+    // มีโลโก้เมื่อไร ชื่อลงไปอยู่ใต้โลโก้ อ่านเป็นคู่เดียวกันไม่ใช่สองชิ้นชนกัน
+    ctx.fillText(label, pad, icon ? pad + unit * 0.5 : pad, W - pad * 2)
   }
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace

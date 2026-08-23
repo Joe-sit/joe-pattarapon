@@ -39,8 +39,16 @@ function Footer() {
   )
 }
 
+/**
+ * สวิตช์สปแลช — ปิดชั่วคราวได้โดยเปลี่ยนเป็น false (เคยปิดไว้ช่วง 2026-08-23 ตอนไล่ทำ what-i-do)
+ * ปิดเมื่อไรต้องเปิดประตูเองสองอย่าง: intro ของฉาก 3D (startIntro) กับ gate ของหน้า (setIntroDone)
+ * ไม่งั้นพาดหัว/eyebrow ที่รอสัญญาณ "สปแลชจบ" จะไม่โผล่เลย
+ * และตัวคืนตำแหน่ง scroll ตอน reload จะทำงานเฉพาะตอนปิดสปแลชเท่านั้น
+ */
+const SPLASH_ON = true
+
 export function App() {
-  const [showSplash, setShowSplash] = useState(true)
+  const [showSplash, setShowSplash] = useState(SPLASH_ON)
   // ฉาก 3D ของ joespresso รายงานตัวเองว่าโหลด+compile เสร็จ — สปแลชรออันนี้
   const sceneReady = useSceneReady()
   const location = useLocation()
@@ -75,6 +83,43 @@ export function App() {
    * ซึ่งรอสัญญาณโหลดเสร็จอีกที = ค้างกันเอง
    */
 
+  useEffect(() => {
+    if (SPLASH_ON) return
+    startIntro()
+    setIntroDone()
+  }, [])
+
+  /**
+   * ปิดสปแลชอยู่ = reload แล้วต้องอยู่ที่เดิม
+   *
+   * ใช้ sessionStorage ไม่พึ่ง scroll restoration ของเบราว์เซอร์: หน้านี้สูงขึ้นเรื่อย ๆ
+   * ระหว่างที่ chunk 3D/lazy ทยอย mount เบราว์เซอร์คืนตำแหน่งตั้งแต่ตอนหน้ายังเตี้ย
+   * แล้วโดน clamp ลงมาที่ก้นหน้าเก่า — คืนเองทีหลังแล้วย้ำอีกรอบตอนความสูงนิ่งจึงตรงกว่า
+   */
+  useEffect(() => {
+    if (SPLASH_ON) return
+    const KEY = 'v2:scroll'
+    const save = () => sessionStorage.setItem(KEY, String(window.scrollY))
+    const want = Number(sessionStorage.getItem(KEY) ?? 0)
+    let timers: ReturnType<typeof setTimeout>[] = []
+    if (want > 0) {
+      const put = () => {
+        window.scrollTo(0, want)
+        lenisRef.current?.scrollTo(want, { immediate: true })
+      }
+      put()
+      // ย้ำตอน chunk หนัก ๆ ลงที่แล้ว — ครั้งเดียวไม่พอ ความสูงยังขยับอยู่
+      timers = [300, 900, 1800].map((ms) => setTimeout(put, ms))
+    }
+    window.addEventListener('scroll', save, { passive: true })
+    window.addEventListener('beforeunload', save)
+    return () => {
+      for (const t of timers) clearTimeout(t)
+      window.removeEventListener('scroll', save)
+      window.removeEventListener('beforeunload', save)
+    }
+  }, [])
+
   /** Lenis คุมตำแหน่ง scroll จริง — window.scrollTo อย่างเดียวมันดึงกลับที่เดิมในเฟรมถัดไป */
   const lenisRef = useRef<Lenis | null>(null)
 
@@ -106,7 +151,7 @@ export function App() {
      * เปิดมากลางเรื่องคือเปิดมาเจอฉากที่ยังไม่ได้เล่า
      */
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
-    window.scrollTo(0, 0)
+    if (SPLASH_ON) window.scrollTo(0, 0)
 
     // `smooth` / `resetNativeScroll` from the Vue version are not Lenis 1.x options.
     const lenis = new Lenis({ duration: 1, smoothWheel: true })
