@@ -521,7 +521,7 @@ export function Mascot({
    * ไล่ตามบีต focus ตัวเดียวกับหุบแขน: กล้องถึงที่ = นั่งเข้าที่พอดี
    * ทุกค่าเป็น "ส่วนเพิ่ม" จากท่ายืน คูณน้ำหนักนั่ง — น้ำหนัก 0 คือยืนเป๊ะ ฉาก 1 ไม่กระทบ
    */
-  const sit = useControls('Sit (ฉาก 2)', {
+  const sitBase = useControls('Sit (ฉาก 2)', {
     sitOn: { value: true, label: 'เปิดท่านั่ง' },
     sitPreview: { value: 0, min: 0, max: 1, step: 0.01, label: 'ดูท่า (บังคับนั่ง)' },
     sitDown: { value: 0.78, min: 0, max: 2, step: 0.01, label: 'ตัวลง (หน่วยโลก)' },
@@ -533,6 +533,12 @@ export function Mascot({
     sitArmX: { value: -0.55, min: -2, max: 2, step: 0.05, label: 'แขน เหวี่ยงไปหน้า' },
     sitElbowX: { value: 0.7, min: -2.2, max: 2.2, step: 0.05, label: 'ศอก งอรับคีย์บอร์ด' },
   }, { collapsed: true, store })
+  // poseOverride ทับชุดนั่งได้ด้วย (คีย์ sit* ไม่ชนกับ Rig) — instance ที่ต้องนั่งท่าอื่น
+  // เช่นนั่งห้อยขาบนกำแพงในฉาก checker ส่งค่ามาเองโดยไม่แตะ slider ของฉากหลัก
+  const sit = useMemo(
+    () => (poseOverride ? { ...sitBase, ...poseOverride } : sitBase),
+    [sitBase, poseOverride],
+  )
 
   /**
    * ขา — ข้อละ 3 แกนเหมือนแขน + เลื่อนทั้งขาออกจากลำตัว

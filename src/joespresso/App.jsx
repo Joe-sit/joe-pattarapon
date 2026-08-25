@@ -640,9 +640,41 @@ function useCoveredFrameloop() {
  * faceRight — โหมดของหน้า /2026: mascot หันไปทางขวาของเฟรม (yaw กลับด้านจากปกติ)
  * และกลุ่ม panel ลอยเลื่อนไปฝั่งขวาตาม ให้องค์ประกอบชี้เข้าหาคอลัมน์ข้อความ
  */
+/**
+ * กล้อง debug (dev เท่านั้น): ติ๊ก freeCam ใน leva แล้วหมุน/แพน/ซูมเองด้วยเมาส์
+ * (CameraRig ถูกปิดระหว่างนั้น ไม่งั้นสองตัวแย่งกันคุมกล้อง)
+ * ปุ่ม log camera พิมพ์ position + target + fov ปัจจุบันลง console ไว้ก๊อปกลับมาใส่โค้ด
+ */
+function FreeCamDebug({ target = [0, 1.9, 0] }) {
+  const { camera } = useThree()
+  const controls = useRef()
+  useControls('Free Cam', {
+    'log camera': button(() => {
+      const p = camera.position
+      const t = controls.current?.target ?? new THREE.Vector3()
+      const text = [
+        `position: [${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}]`,
+        `lookAt: (${t.x.toFixed(2)}, ${t.y.toFixed(2)}, ${t.z.toFixed(2)})`,
+        `fov: ${camera.fov.toFixed(0)}`,
+      ].join('\n')
+      navigator.clipboard?.writeText(text).catch(() => {})
+      console.log(text)
+    }),
+  })
+  return (
+    <OrbitControls
+      ref={controls}
+      makeDefault
+      target={target}
+      enableDamping
+      dampingFactor={0.12}
+    />
+  )
+}
+
 export function Scene({ faceRight = false }) {
   // โหมดทำงาน: ปิดสี/บรรยากาศทั้งหมด เหลือแต่ทรงกับเงา — จูนโมเดลได้โดยไม่ถูกสีหลอกตา
-  const { clay, clayScene, clayGrid, clayOrbit } = useControls('Workspace', {
+  const { clay, clayScene, clayGrid, clayOrbit, freeCam } = useControls('Workspace', {
     // ปิดไว้ — งานปั้นทรงจบแล้ว ตอนนี้จูนสี/แสง/จังหวะ ซึ่งต้องเห็นของจริง
     // (ถ้า default เป็น true ยังติดไปกับ build เว็บจริงด้วย: แผง leva ถูกซ่อนตอน production
     //  แต่ "ค่า" ยังทำงานอยู่ ผู้ใช้ปิดเองไม่ได้ — เปิดได้เฉพาะจากแผงตอน dev)
@@ -652,6 +684,8 @@ export function Scene({ faceRight = false }) {
     clayGrid: { value: false, label: 'พื้น + กริด (แทนเนิน)' },
     // scroll ยังคุมกล้องเหมือนหน้าเว็บจริง — เปิดอันนี้เมื่อจะหมุนดูรอบตัวเท่านั้น
     clayOrbit: { value: false, label: 'กล้องหมุนรอบ (ปิด scroll cam)' },
+    // กล้องอิสระแบบไม่ต้องเข้าโหมดปั้น — หมุนดูฉากจริงสี/แสงจริง แล้วกด log camera เอาค่า
+    freeCam: { value: false, label: 'หมุนกล้องเอง (debug)' },
     // คัดลอกค่าทุก slider ทุก folder เป็น JSON — จูนเสร็จแล้วแปะกลับมาให้ตั้งเป็น default ได้เลย
     // อ่านจาก levaStore ตรง ๆ ไม่ใช่จาก useControls ของแต่ละไฟล์ (ค่าอยู่กระจายหลาย component)
     'คัดลอกค่าทั้งหมด': button(() => {
@@ -693,11 +727,12 @@ export function Scene({ faceRight = false }) {
       {clay ? <ClayLights /> : <Lights />}
       {/* CameraRig ขับกล้องจาก scroll — ต้องปิดตอน orbit ไม่งั้นสองตัวแย่งกันคุมกล้อง */}
       <IntroClock />
-      {!(clay && clayOrbit) && <CameraRig lookShift={faceRight ? 2.2 : 0} />}
-      {clay && clayOrbit && <ClayCam />}
-      {clay && clayOrbit && (
+      {!(clay && clayOrbit) && !freeCam && <CameraRig lookShift={faceRight ? 2.2 : 0} />}
+      {clay && clayOrbit && !freeCam && <ClayCam />}
+      {clay && clayOrbit && !freeCam && (
         <OrbitControls makeDefault target={[0, 2.3, 0.9]} enableDamping dampingFactor={0.12} />
       )}
+      {freeCam && <FreeCamDebug target={faceRight ? [2.2, 1.9, 0] : [0, 1.9, 0]} />}
       {/* จอโค้งบิดเส้นตรงทั้งฉาก — ปิดตอนปั้น ไม่งั้นแยกไม่ออกว่าโมเดลเบี้ยวเองหรือโดนโค้ง */}
       {/* ความโค้งตอนพักเป็น 0 — งานโค้งของฉากนิ่งไปอยู่ที่ screenCurve ของ panel แล้ว
           เลนส์ตัวนี้เหลือหน้าที่เดียวคือบีบขอบภาพตอนบีต zoom (lensPunch) */}

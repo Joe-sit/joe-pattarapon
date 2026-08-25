@@ -39,8 +39,8 @@ import bmsOffice from '@/assets/v2/bms-office.png'
 import githubIcon from '@/assets/github-142_svgrepo.com.svg'
 import linkedinIcon from '@/assets/linkedin_svgrepo.com.svg'
 
-// ฉาก 3D ของ /joespresso ทั้งใบ + การ์ด mascot ตัวเดียวกับฉาก — chunk หนัก แยกโหลด
-const JoeScene = lazy(() => import('@/joespresso/App').then((m) => ({ default: m.Scene })))
+// ฉาก 3D "โลกตารางหมากรุก" (ฉาก 3) + การ์ด mascot — chunk หนัก แยกโหลด
+const CheckerScene = lazy(() => import('@/joespresso/CheckerScene'))
 const MascotCard = lazy(() =>
   import('@/joespresso/MascotCard').then((m) => ({ default: m.MascotCard })),
 )
@@ -703,7 +703,8 @@ export function Portfolio2026Page() {
       className="min-h-screen bg-[#e8edec] text-[#292a2e]"
       style={{ fontFamily: "'Mona Sans', 'DM Sans', system-ui, sans-serif" }}
     >
-      <Leva hidden />
+      {/* dev เท่านั้น: กาง Workspace › หมุนกล้องเอง (debug) เพื่อ orbit ฉาก 3D แล้วกด log camera */}
+      <Leva hidden={!import.meta.env.DEV} collapsed />
       {/* แถบบน (rev 12542:76): แถวเซลล์วิ่งเต็มจอ แต่ช่องเนื้อหาอยู่ระหว่างเส้น guide —
           ริมสองข้างเป็นเซลล์เปล่ากว้างเท่า gutter ช่องโลโก้หดตามเนื้อหา (ไม่ fix กว้าง)
           เมนู SemiBold จัดกลางแนวตั้ง ช่องสุดท้ายสีเขียวเป็น Resume */}
@@ -801,16 +802,9 @@ export function Portfolio2026Page() {
           </h1>
         </section>
 
-        {/* แถวแรก: ฉาก 3D จริงของ /joespresso | คอลัมน์ข้อมูล */}
+        {/* แถวแรก: คอลัมน์ข้อมูล | ฉาก 3D โลกตารางหมากรุก (ฉาก 3) */}
         <section id="hero" className="flex min-h-0 flex-1 items-stretch max-lg:flex-col">
-          {/* intro เล่นในกรอบนี้ (สปแลชตัวเดียวกันกั้นให้แล้ว)
-              beat scroll ของฉากอยู่ที่ 0 ตลอดเพราะหน้านี้ไม่มีราง .jp-scroll — ค้างท่า hero พอดี */}
-          <div className={`${CELL} relative flex-[1.26] overflow-hidden max-lg:min-h-[30rem]`}>
-            <Suspense fallback={null}>
-              <JoeScene faceRight />
-            </Suspense>
-          </div>
-          <div className="-ml-px flex flex-1 flex-col max-lg:ml-0 max-lg:-mt-px">
+          <div className="flex flex-1 flex-col">
             {/* บรรทัดบทบาท (decrypt effect) + สถานะ — comp 12542:184 */}
             <div className={`${CELL} flex items-center justify-between gap-4 ${PAD} ${BODY_TEXT} font-medium text-black/50`}>
               <p className="whitespace-nowrap">
@@ -871,6 +865,13 @@ export function Portfolio2026Page() {
                 ))}
               </div>
             </div>
+          </div>
+          <div
+            className={`${CELL} relative -ml-px flex-[1.26] overflow-hidden max-lg:ml-0 max-lg:-mt-px max-lg:min-h-[30rem]`}
+          >
+            <Suspense fallback={null}>
+              <CheckerScene embedded />
+            </Suspense>
           </div>
         </section>
       </main>

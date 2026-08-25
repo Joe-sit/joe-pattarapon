@@ -20,6 +20,7 @@ import { Portfolio2026Page } from '@/pages/Portfolio2026Page'
 const JoespressoPage = lazy(() => import('@/joespresso/Page'))
 // workspace ปั้นทรง toolbar ของฉาก joespresso — ใช้ three เหมือนกัน แยก chunk เช่นกัน
 const ToolbarWorkspace = lazy(() => import('@/joespresso/ToolbarWorkspace'))
+const CheckerScene = lazy(() => import('@/joespresso/CheckerScene'))
 import { SITE } from '@/config/site'
 import { setEyeOpen, setIntroDone } from '@/stores/intro'
 import { useSceneReady } from '@/stores/ready'
@@ -73,7 +74,10 @@ export function App() {
    * กั้นเฉพาะตอนเปิดเว็บมาลงที่ /joespresso — เดินเข้ามาทีหลังไม่เกี่ยว
    */
   // /2026 ฝังฉาก 3D ใบเดียวกัน — ใช้สปแลช/การกั้น mount ชุดเดียวกับ /joespresso
-  const landedOn3D = landedOn.startsWith('/joespresso') || landedOn === '/2026'
+  // ยกเว้น /joespresso/checker: ฉากทดลองไม่มี IntroClock — สปแลชที่รอ introState จะค้างกลางทาง
+  const landedOn3D =
+    (landedOn.startsWith('/joespresso') && landedOn !== '/joespresso/checker') ||
+    landedOn === '/2026'
   /**
    * ฉากถูก mount ทันที ไม่รอสปแลช
    *
@@ -213,6 +217,8 @@ export function App() {
           <Routes>
             <Route path="/joespresso" element={<JoespressoPage />} />
             <Route path="/joespresso/toolbar" element={<ToolbarWorkspace />} />
+            {/* ฉาก 3 ทดลอง — โลกตารางหมากรุก (คอมพ์ 12601:287) */}
+            <Route path="/joespresso/checker" element={<CheckerScene />} />
           </Routes>
         </Suspense>
       ) : (
