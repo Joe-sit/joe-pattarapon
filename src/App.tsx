@@ -9,10 +9,12 @@ gsap.registerPlugin(ScrollTrigger)
 import { SplashScreen } from '@/components/SplashScreen'
 import { JoeSplash } from '@/components/JoeSplash'
 import { JoeLettersSplash } from '@/components/JoeLettersSplash'
+import { IntroSequence } from '@/components/IntroSequence'
 import { NavBar } from '@/components/NavBar'
 import { ThemePicker } from '@/components/ThemePicker'
 import { AnchorNav } from '@/components/AnchorNav'
 import { HomePage } from '@/pages/HomePage'
+import { DriftWallSandbox } from '@/pages/DriftWallSandbox'
 import { MascotPage } from '@/pages/MascotPage'
 import { NotPortedPage } from '@/pages/NotPortedPage'
 import { Portfolio2026Page } from '@/pages/Portfolio2026Page'
@@ -46,6 +48,9 @@ function Footer() {
  * ไม่งั้นพาดหัว/eyebrow ที่รอสัญญาณ "สปแลชจบ" จะไม่โผล่เลย
  * และตัวคืนตำแหน่ง scroll ตอน reload จะทำงานเฉพาะตอนปิดสปแลชเท่านั้น
  */
+/** สัญญาณว่า "คนดูขยับหน้าเอง" — ใช้เลิกบังคับตำแหน่ง scroll หลังสปแลชจบ */
+const MOVE_EVENTS = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const
+
 const SPLASH_ON = true
 
 export function App() {
@@ -138,8 +143,26 @@ export function App() {
      * และหน้านี้เล่าเรื่องตามตำแหน่ง scroll เปิดมากลางเรื่องคือเปิดมาเจอฉากที่ยังไม่ได้เล่า
      * จบด้วยการยืนยันที่จุดเดียว: พอสปแลชปิด ต้องอยู่ที่ 0
      */
-    window.scrollTo(0, 0)
-    lenisRef.current?.scrollTo(0, { immediate: true })
+    const put = () => {
+      window.scrollTo(0, 0)
+      lenisRef.current?.scrollTo(0, { immediate: true })
+    }
+    put()
+    /**
+     * ย้ำอีกสองสามจังหวะหลังสปแลชปิด
+     *
+     * ครั้งเดียวไม่พอ: หน้ายังสูงขึ้นอีกหลังจากนั้น (chunk 3D, ฟอนต์, รูปใน works ทยอยลง)
+     * ทุกครั้งที่ของเหนือจุดที่มองอยู่สูงขึ้น เบราว์เซอร์มีสิทธิ์เลื่อนหน้าตาม — เห็นเป็น
+     * "สปแลชจบแล้วหน้าไถลลงมาเอง" (ปิด overflow-anchor ไปแล้วอีกทาง ดู index.css)
+     *
+     * แต่ต้องเลิกย้ำทันทีที่คนดูขยับเอง ไม่งั้นเรากระชากหน้ากลับใส่หน้าเขาระหว่างที่เขาเลื่อนอยู่
+     */
+    const timers = [250, 700, 1500].map((ms) => setTimeout(put, ms))
+    const stop = () => {
+      for (const t of timers) clearTimeout(t)
+      for (const ev of MOVE_EVENTS) window.removeEventListener(ev, stop)
+    }
+    for (const ev of MOVE_EVENTS) window.addEventListener(ev, stop, { passive: true })
   }
 
   useEffect(() => {
@@ -195,7 +218,11 @@ export function App() {
           opens onto the hero's own scene, and the mascot page has no such scene
           to open onto. */}
       {showSplash &&
-        (landedOn3D ? (
+        (landedOn === '/2026' ? (
+          /* /2026 มีอินโทรของตัวเอง (เศษโค้ด -> สนาม ASCII -> เวิร์ดมาร์ก)
+             หน้าอื่นยังใช้สปแลชเดิม — คนละภาษาภาพกัน ไม่ควรบังคับให้เหมือน */
+          <IntroSequence onDone={finishSplash} ready={sceneReady} onOpenStart={startIntro} />
+        ) : landedOn3D ? (
           /* ฉาก 3D ของ joespresso ไม่มี "ตา" ให้เปิดออก และการ์ด hero ก็ยังโหลด three อยู่
              ตอนนั้น — ใช้สปแลชตัวอักษรคั่นแทน (port จาก branch 2026) */
           <JoeLettersSplash
@@ -234,6 +261,11 @@ export function App() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/mascot" element={<MascotPage />} />
+              {/* เครื่องมือ dev: หน้าดูคอมโพเนนต์เดี่ยว ๆ ก่อนตัดสินใจเอาไปต่อกับงานจริง
+                  กั้นด้วย DEV — build production ไม่มี route นี้เลย */}
+              {import.meta.env.DEV && (
+                <Route path="/sandbox/driftwall" element={<DriftWallSandbox />} />
+              )}
               <Route path="*" element={<NotPortedPage />} />
             </Routes>
             <Footer />

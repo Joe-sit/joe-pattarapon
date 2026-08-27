@@ -1,0 +1,138 @@
+/* ── อินโทรของ /2026 ───────────────────────────────────────────────────────
+   ลำดับเฟรมและเหตุผลของแต่ละองก์อยู่ที่หัวไฟล์ IntroSequence.tsx — ที่นี่มีแต่รูปลักษณ์ */
+
+.intro-root {
+  /* ทุกตัวอักษรในอินโทรเป็น mono: ต้นทางคือหน้าจอโค้ด ไม่ใช่งานพิมพ์ */
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* แผ่นโค้ดขององก์แรก — ในคลิปเป็นตัวดำบนแผ่นสว่าง ไม่ใช่ตัวสว่างลอย ๆ */
+.intro-plate {
+  position: absolute;
+  padding: 0.1em 0.22em;
+  white-space: nowrap;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: #0e1116;
+  background: #e8e8e8;
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}
+
+/**
+ * วงแหวนอักขระ (f009-f048)
+ *
+ * ตัวที่ i ถูกหมุนไปมุมของตัวเอง (360/total * i) บวกมุมรวมของวง แล้วดันออกไป --ring-r
+ * จากนั้นหมุนกลับเท่าเดิม ตัวอักษรจึงตั้งตรงเสมอ ไม่ใช่เอียงตามวง (ในคลิปมันตั้งตรง)
+ *
+ * ทั้งวงหมุนและหุบด้วยการไล่ --ring-a กับ --ring-r ตัวเดียว = ทวีนเดียวคุมทั้งวง
+ * ไม่ต้องแตะ DOM ทีละตัว
+ */
+.intro-ring {
+  --ring-r: 9rem;
+  --ring-a: 0deg;
+}
+
+.intro-ring-ch {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  font-size: 1.1rem;
+  line-height: 1;
+  transform: translate(-50%, -50%) rotate(calc(var(--ring-a) + (360deg / var(--total)) * var(--n)))
+    translateY(calc(var(--ring-r) * -1))
+    rotate(calc((var(--ring-a) + (360deg / var(--total)) * var(--n)) * -1));
+  will-change: transform;
+}
+
+/**
+ * แคนวาสของสนามอักขระ — ทั้งพื้นหลังและก้อนส้มอยู่ในใบนี้ใบเดียว
+ *
+ * --dash คือความสูงของขีดในหน้ากากลายซ้ำ เท่ากับ --gap คือเห็นเต็ม เล็กลงคือถูกหั่นเป็นขีด
+ * เฟรมสุดท้ายของคลิปทรงส้มแตกเป็นขีดแบบนี้พอดี
+ */
+.intro-terminal {
+  --dash: 16px;
+  --gap: 16px;
+  -webkit-mask-image: repeating-linear-gradient(
+    to bottom,
+    #000 0 var(--dash),
+    transparent var(--dash) var(--gap)
+  );
+  mask-image: repeating-linear-gradient(
+    to bottom,
+    #000 0 var(--dash),
+    transparent var(--dash) var(--gap)
+  );
+}
+
+/* ── แผงดีบัก (dev เท่านั้น) ───────────────────────────────────────────────
+   วางทับมุมล่างซ้าย ไม่แตะเลย์เอาต์ของอินโทร และรับคลิกเองเพราะฉากด้านหลัง
+   ตั้งใจให้คลิกที่ไหนก็ข้ามอินโทร */
+.intro-debug {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 320px;
+  padding: 10px;
+  border: 1px solid #2a3340;
+  border-radius: 6px;
+  background: rgba(6, 9, 14, 0.92);
+  color: #cfd6e0;
+  font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.intro-debug-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.intro-debug button {
+  padding: 2px 7px;
+  border: 1px solid #2a3340;
+  border-radius: 4px;
+  background: #121821;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.intro-debug button:hover {
+  border-color: #3d4a5c;
+  background: #1b2430;
+}
+
+.intro-debug-clock {
+  margin-left: auto;
+  color: #7f8b9b;
+}
+
+.intro-debug-hold {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.intro-debug-scrub {
+  width: 100%;
+  cursor: pointer;
+}
+
+.intro-debug-vals {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px 8px;
+  color: #7f8b9b;
+}
+
+.intro-debug-vals span span {
+  float: right;
+  color: #e5956f;
+}

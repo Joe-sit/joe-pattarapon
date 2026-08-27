@@ -38,6 +38,21 @@ type JoeLettersSplashProps = {
    * ถ้ารอให้สปแลชหายก่อนค่อยเริ่ม ภาพที่ได้คือรูเปิดไปเจอ "ภาพนิ่ง" แล้วค่อยขยับ
    */
   onOpenStart?: () => void
+  /**
+   * โหมดฝัง: เล่นเฉพาะท่อน "ประกอบตัวอักษร" อยู่ในฉากของคนอื่น
+   *
+   * ปิดสามอย่างที่เป็นของสปแลชเต็มจอ — แถบโหลดนำ, พื้นกระดาษที่ถูกเจาะรู และการซูมเข้า
+   * ตัว O ตอนจบ — เหลือแต่ตัวอักษร คนที่ฝังเป็นคนตัดสินใจเองว่าจะปิดฉากยังไง
+   * (/2026 เอาไปเล่นเป็นองก์สุดท้ายของอินโทรบนพื้นดำ แล้วปิดด้วยจังหวะของตัวเอง)
+   */
+  embedded?: boolean
+  /**
+   * สีของ "ช่องว่างในตัวอักษร" — ช่องกลางตัว E, มุมตัว J ถูกวาดทับด้วยสีนี้ ไม่ใช่ความโปร่ง
+   * ค่าตั้งต้นคือสีกระดาษ ถ้าเอาไปฝังบนพื้นสีอื่นต้องส่งสีพื้นนั้นมาแทน ไม่งั้นเห็นเป็นแผ่นขาว
+   */
+  paper?: string
+  /** สีตัวอักษร ค่าตั้งต้นคือส้มของสปแลชเต็มจอ */
+  ink?: string
 }
 
 /**
@@ -128,6 +143,9 @@ export function JoeLettersSplash({
   ready = true,
   onIntroDone,
   onOpenStart,
+  embedded = false,
+  paper = PAPER,
+  ink = INK,
 }: JoeLettersSplashProps) {
   const scene = useRef<HTMLDivElement>(null)
   // ชั้นกระดาษ แยกจากตัวอักษร เพราะชั้นนี้ตัวเดียวที่โดนเจาะรู
@@ -148,7 +166,7 @@ export function JoeLettersSplash({
    * 'load'  = แถบโหลดกำลังเดิน ตัวอักษรยังไม่โผล่
    * 'build' = แถบ morph เป็นเสี้ยวแรกของตัว E แล้ว ไทม์ไลน์ประกอบตัวอักษรเริ่มได้
    */
-  const [phase, setPhase] = useState<'load' | 'build'>('load')
+  const [phase, setPhase] = useState<'load' | 'build'>(embedded ? 'build' : 'load')
   const barFill = useRef<SVGRectElement>(null)
   const barTrack = useRef<SVGRectElement>(null)
   const progress = useSceneProgress()
@@ -357,6 +375,8 @@ export function JoeLettersSplash({
     const root = scene.current
     const hole = holeGroup.current
     const svg = root?.querySelector<SVGSVGElement>('#sp-letters-scene')
+    // โหมดฝัง: การซูมเข้าตัว O เป็นท่าปิดฉากของสปแลชเต็มจอ คนที่ฝังปิดฉากเอง
+    if (embedded) return
     if (!root || !hole || !svg || !built || !(ready || waited)) return
 
     // จุดกลางตัว O ในพิกัดจอ — คิดจาก matrix จริงของ SVG ไม่ใช่จากขนาดที่เดาเอา
@@ -457,15 +477,15 @@ export function JoeLettersSplash({
     return () => {
       tl.kill()
     }
-  }, [built, ready, waited])
+  }, [built, ready, waited, embedded])
 
   return (
     <div
       ref={scene}
       style={{
-        position: 'fixed',
+        position: embedded ? 'absolute' : 'fixed',
         inset: 0,
-        zIndex: 9999,
+        zIndex: embedded ? undefined : 9999,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -479,6 +499,7 @@ export function JoeLettersSplash({
         พิกัดทุกตัวเป็นพิกเซล (svg ไม่มี viewBox) ตัวเลขจริงถูกเซ็ตตอนเริ่มเปิดฉาก
         เพราะต้องอ่านจากขนาดจริงของตัวอักษรบนจอ
       */}
+      {!embedded && (
       <svg
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
         aria-hidden
@@ -504,8 +525,9 @@ export function JoeLettersSplash({
             </g>
           </mask>
         </defs>
-        <rect x="0" y="0" width="100%" height="100%" fill={PAPER} mask="url(#sp-hole-mask)" />
+        <rect x="0" y="0" width="100%" height="100%" fill={paper} mask="url(#sp-hole-mask)" />
       </svg>
+      )}
       <svg
         id="sp-letters-scene"
         viewBox="-10 -10 259 104"
@@ -533,34 +555,34 @@ export function JoeLettersSplash({
             <path
               id="sp-j-body"
               d="M0 0H81V43.5C81 65.8675 62.8675 84 40.5 84V84C18.1325 84 0 65.8675 0 43.5V0Z"
-              fill={INK}
+              fill={ink}
             />
             <path
               id="sp-j-mask"
               d="M41 55C36.5817 55 33 51.4183 33 47L33 30L49 30L49 47C49 51.4183 45.4183 55 41 55V55Z"
-              fill={PAPER}
+              fill={paper}
             />
-            <rect id="sp-j-corner" x="-1" y="-1" width="35" height="32" fill={PAPER} />
+            <rect id="sp-j-corner" x="-1" y="-1" width="35" height="32" fill={paper} />
           </g>
 
           {/* O */}
           <g id="sp-o-petals">
-            <ellipse className="sp-o-petal" cx="117.717" cy="62.9484" rx="15.1684" ry="18.4624" fill={INK} />
-            <ellipse className="sp-o-petal" cx="126.342" cy="20.4592" rx="15.1684" ry="18.4624" fill={INK} />
-            <ellipse className="sp-o-petal" cx="99.732" cy="41.2846" rx="14.1752" ry="19.4078" fill={INK} />
-            <ellipse className="sp-o-petal" cx="144.851" cy="41.4516" rx="14.1752" ry="19.4078" fill={INK} />
+            <ellipse className="sp-o-petal" cx="117.717" cy="62.9484" rx="15.1684" ry="18.4624" fill={ink} />
+            <ellipse className="sp-o-petal" cx="126.342" cy="20.4592" rx="15.1684" ry="18.4624" fill={ink} />
+            <ellipse className="sp-o-petal" cx="99.732" cy="41.2846" rx="14.1752" ry="19.4078" fill={ink} />
+            <ellipse className="sp-o-petal" cx="144.851" cy="41.4516" rx="14.1752" ry="19.4078" fill={ink} />
           </g>
-          <circle id="sp-o-bullet" cx="173" cy="42" r="1" fill={INK} />
+          <circle id="sp-o-bullet" cx="173" cy="42" r="1" fill={ink} />
 
           {/* E */}
           <g clipPath="url(#sp-e-reveal)">
-            <path d="M174 2H232V81H174V65H162V18H174Z" fill={INK} />
-            <rect id="sp-e-front" x="231" y="10" width="8" height="29" fill={INK} />
-            <rect id="sp-e-counter" x="185" y="18" width="35" height="16" rx="8" fill={PAPER} />
+            <path d="M174 2H232V81H174V65H162V18H174Z" fill={ink} />
+            <rect id="sp-e-front" x="231" y="10" width="8" height="29" fill={ink} />
+            <rect id="sp-e-counter" x="185" y="18" width="35" height="16" rx="8" fill={paper} />
             <path
               id="sp-e-opening"
               d="M185 57C185 52.5817 188.582 49 193 49H239V65H193C188.582 65 185 61.4183 185 57Z"
-              fill={PAPER}
+              fill={paper}
             />
           </g>
         </g>
@@ -574,7 +596,7 @@ export function JoeLettersSplash({
               y={BAR_Y}
               width={BAR_W}
               height={BAR_H}
-              fill={INK}
+              fill={ink}
               opacity="0.16"
             />
             <rect
@@ -583,7 +605,7 @@ export function JoeLettersSplash({
               y={BAR_Y}
               width={BAR_MIN}
               height={BAR_H}
-              fill={INK}
+              fill={ink}
             />
           </>
         )}
