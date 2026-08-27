@@ -6,64 +6,63 @@
   font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-/* แผ่นโค้ดขององก์แรก — ในคลิปเป็นตัวดำบนแผ่นสว่าง ไม่ใช่ตัวสว่างลอย ๆ */
-.intro-plate {
+/**
+ * องก์แรก (f001-f053) — ทุกชิ้นอยู่บน "วงโคจรเดียวกัน" ตั้งแต่เฟรมแรก
+ *
+ * เคยทำผิดเป็นสองท่อนแยกกัน: เศษโค้ดหดเข้ากลางแล้วหาย จากนั้นวงแหวนโผล่มาเฉย ๆ
+ * ในคลิปไม่มีรอยต่อแบบนั้น — ไล่ f001→f005 ทีละเฟรมแล้ววัดตำแหน่งของชิ้นเดิมได้ว่า
+ * ทุกชิ้นกวาดเป็นวงตามเข็มรอบกลางจอตั้งแต่เฟรมแรก ชิ้นใหญ่แค่อยู่วงนอกจนล้นเฟรม
+ * "วงแหวน" ที่เห็นทีหลังคือวงโคจรเดิมนั่นเอง พอรัศมีของทุกชิ้นหดมาเท่ากันมันจึงอ่านเป็นวง
+ *
+ * รัศมีอยู่ในตัวแปร --r ต่อชิ้น เพื่อให้ย่อวงได้โดยที่ตัวอักษรไม่ถูกย่อตาม — ในคลิปขนาด
+ * ตัวอักษรคงที่ มีแต่วงที่แคบเข้า ถ้าใช้ scale ตัวอักษรจะเล็กลงด้วยซึ่งผิด
+ */
+.intro-orbit {
   position: absolute;
-  padding: 0.1em 0.22em;
+  left: 50%;
+  top: 50%;
+  will-change: transform;
+}
+
+.intro-orbit-slot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  --r: 0px;
   white-space: nowrap;
   line-height: 1;
   letter-spacing: -0.02em;
-  color: #0e1116;
-  background: #e8e8e8;
+}
+
+/* ตัวอักษรตั้งตรงเสมอ — ตัวนี้รับการหมุนสวนทางกับวงโคจร (ดูไทม์ไลน์ใน IntroSequence) */
+.intro-orbit-ch {
+  display: inline-block;
+  padding: 0 2px;
+}
+
+/**
+ * ไทล์กลางจอตอนวงยุบ (f047-f053) — ในคลิปเป็น "บล็อกไล่เฉดฟ้า" กับอักขระที่อยู่ข้าง ๆ
+ * ไม่ใช่ตัวอักษรบนพื้นทึบ และตัวอักษรเปลี่ยนไปเรื่อย (1 → 2 → %) ก่อนหยุดที่ %
+ */
+.intro-pct {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  color: #eef4fa;
+  font-size: 26px;
+  line-height: 1;
   transform: translate(-50%, -50%);
   will-change: transform, opacity;
 }
 
-/**
- * วงแหวนอักขระ (f009-f048)
- *
- * ตัวที่ i ถูกหมุนไปมุมของตัวเอง (360/total * i) บวกมุมรวมของวง แล้วดันออกไป --ring-r
- * จากนั้นหมุนกลับเท่าเดิม ตัวอักษรจึงตั้งตรงเสมอ ไม่ใช่เอียงตามวง (ในคลิปมันตั้งตรง)
- *
- * ทั้งวงหมุนและหุบด้วยการไล่ --ring-a กับ --ring-r ตัวเดียว = ทวีนเดียวคุมทั้งวง
- * ไม่ต้องแตะ DOM ทีละตัว
- */
-.intro-ring {
-  --ring-r: 9rem;
-  --ring-a: 0deg;
-}
-
-.intro-ring-ch {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  font-size: 1.1rem;
-  line-height: 1;
-  transform: translate(-50%, -50%) rotate(calc(var(--ring-a) + (360deg / var(--total)) * var(--n)))
-    translateY(calc(var(--ring-r) * -1))
-    rotate(calc((var(--ring-a) + (360deg / var(--total)) * var(--n)) * -1));
-  will-change: transform;
-}
-
-/**
- * แคนวาสของสนามอักขระ — ทั้งพื้นหลังและก้อนส้มอยู่ในใบนี้ใบเดียว
- *
- * --dash คือความสูงของขีดในหน้ากากลายซ้ำ เท่ากับ --gap คือเห็นเต็ม เล็กลงคือถูกหั่นเป็นขีด
- * เฟรมสุดท้ายของคลิปทรงส้มแตกเป็นขีดแบบนี้พอดี
- */
-.intro-terminal {
-  --dash: 16px;
-  --gap: 16px;
-  -webkit-mask-image: repeating-linear-gradient(
-    to bottom,
-    #000 0 var(--dash),
-    transparent var(--dash) var(--gap)
-  );
-  mask-image: repeating-linear-gradient(
-    to bottom,
-    #000 0 var(--dash),
-    transparent var(--dash) var(--gap)
-  );
+.intro-pct i {
+  display: block;
+  width: 18px;
+  height: 26px;
+  background: linear-gradient(150deg, #8fd0f5, #1f6fb2);
 }
 
 /* ── แผงดีบัก (dev เท่านั้น) ───────────────────────────────────────────────

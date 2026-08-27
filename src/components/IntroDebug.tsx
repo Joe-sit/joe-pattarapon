@@ -22,16 +22,18 @@ type IntroDebugProps = {
 
 /** ป้ายบอกองก์ ตรงกับคอมเมนต์ในไทม์ไลน์ — กดแล้วกระโดดไปวินาทีนั้น */
 const MARKS: [string, number][] = [
-  ['plates', 0],
-  ['ring', 0.6],
-  ['guide', 1.4],
-  ['%', 2.3],
-  ['build', 3.8],
-  ['solid', 4.8],
-  ['done', 7.4],
+  ['chaos', 0],
+  ['hold', 1.5],
+  ['implode', 3.2],
+  ['tile', 3.68],
+  ['heat', 4.3],
+  ['seed', 5.9],
+  ['solid', 6.9],
+  ['sweep', 8.5],
+  ['done', 10.4],
 ]
 
-const FIELDS: (keyof AsciiDrive)[] = ['gain', 'guide', 'build', 'solid', 'ink']
+const FIELDS: (keyof AsciiDrive)[] = ['gain', 'guide', 'build', 'solid', 'ink', 'spin', 'sweep']
 
 export function IntroDebug({ tl, drive, onHoldChange }: IntroDebugProps) {
   const scrub = useRef<HTMLInputElement>(null)
