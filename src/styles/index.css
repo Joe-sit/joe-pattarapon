@@ -32,6 +32,10 @@
        position: sticky เกาะ viewport ไม่ได้ทั้งหน้า (การ์ดงานเด่นซ้อนชั้นต้องใช้)
        clip กันล้นแนวนอนได้เหมือนกันโดยไม่สร้าง scroll container */
     overflow-x: clip;
+    /* scroll anchoring ของ Chrome ต้องปิด: หน้านี้โตขึ้นเรื่อย ๆ หลังโหลด (chunk 3D, ฟอนต์,
+       รูปใน works) พอเนื้อหา "เหนือจุดที่มองอยู่" สูงขึ้น เบราว์เซอร์จะเลื่อนหน้าลงตามเพื่อ
+       ตรึงจุดเดิมไว้ — บนหน้าที่เพิ่งเปิดมาที่ 0 มันเลยกลายเป็นหน้าไถลลงมาเองหลังสปแลชจบ */
+    overflow-anchor: none;
     background-color: var(--color-paper);
     font-family: var(--font-sans);
   }

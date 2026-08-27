@@ -13,7 +13,7 @@
   margin-left: 0.45ch;
   vertical-align: baseline;
   transform: translateY(0.12em);
-  background: #08872b;
+  background: var(--v2-green, #08872b);
   /* steps(1) = ตัด ไม่เฟด — caret ของ terminal จริงไม่เฟด */
   animation: v2-blink 1.06s steps(1) infinite;
 }
@@ -30,7 +30,7 @@
   position: relative;
   /* ขัง ::after (z-index -1) ไว้ใน stacking context ของปุ่มเอง — ไม่งั้นมันมุดไปหลังพื้น cell */
   isolation: isolate;
-  background: #08872b;
+  background: var(--v2-green, #08872b);
   border-radius: 8px;
   transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
   cursor: pointer;
@@ -113,19 +113,19 @@
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border: 1px solid #d2d9d5;
-  background: #fff;
+  border: 1px solid var(--v2-line, #d2d9d5);
+  background: var(--v2-surface, #fff);
   font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
   font-size: clamp(11px, 0.9vw, 13px);
   letter-spacing: -0.01em;
-  color: rgba(0, 0, 0, 0.55);
+  color: color-mix(in srgb, var(--v2-ink, #000) 62%, transparent);
   white-space: nowrap;
 }
 
 .v2-peek-dot {
   width: 8px;
   height: 8px;
-  background: #08872b;
+  background: var(--v2-green, #08872b);
   /* กะพริบจังหวะเดียวกับ caret ของ eyebrow — ตัวเรียกสายตาเบา ๆ */
   animation: v2-blink 1.06s steps(1) infinite;
 }
@@ -154,4 +154,24 @@
   .v2-peek-dot {
     animation: none;
   }
+}
+
+/* ── ธีมของหน้า /2026: dark ล้วน พื้นดำสนิท ────────────────────────────────
+   สีทั้งหน้าอ่านจากตัวแปรชุดนี้ ไม่ใช่ค่าดิบใน JSX — เปลี่ยนธีมทั้งหน้าได้ที่เดียว
+   ประกาศไว้ที่คลาส ไม่ใช่ :root เพราะไฟล์ CSS ถูกโหลดค้างทั้งแอปหลังเข้าหน้านี้ครั้งแรก
+   (route เปลี่ยนแล้ว CSS ไม่ถูกถอด) ถ้าไปอยู่ :root มันจะไปทับหน้าอื่นด้วย
+
+   ค่าสีมาจาก BMS Design System (Figma node 12654:2364) ซึ่งให้มาสามตัวตามบทบาท:
+   header #020409 / surface #0e1116 / border #3e444c — แมปเป็น พื้นหน้า = surface,
+   แถบบนกับการ์ดที่ยกขึ้น = header (เข้มกว่าพื้น แบบ inset ไม่ใช่ลอยขึ้น), เส้น = border */
+.v2-theme {
+  --v2-bg: #0e1116;
+  --v2-surface: #020409;
+  --v2-raise: #020409;
+  --v2-line: #3e444c;
+  --v2-ink: #f2f3f5;
+  --v2-muted: #8b8f8d;
+  /* เขียวเดิม (#008a15) จมกับพื้นดำ ดันความสว่างขึ้นให้ contrast ผ่านบนพื้นดำแทน */
+  --v2-green: #0dbb3a;
+  --v2-green-2: #0a9330;
 }
