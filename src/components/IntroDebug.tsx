@@ -33,7 +33,16 @@ const MARKS: [string, number][] = [
   ['done', 10.4],
 ]
 
-const FIELDS: (keyof AsciiDrive)[] = ['gain', 'guide', 'build', 'solid', 'ink', 'spin', 'sweep']
+const FIELDS: (keyof AsciiDrive)[] = [
+  'gain',
+  'guide',
+  'lead',
+  'build',
+  'solid',
+  'ink',
+  'spin',
+  'sweep',
+]
 
 export function IntroDebug({ tl, drive, onHoldChange }: IntroDebugProps) {
   const scrub = useRef<HTMLInputElement>(null)

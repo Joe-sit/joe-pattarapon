@@ -125,8 +125,9 @@ export function IntroSequence({ onDone, ready = true, onOpenStart }: IntroSequen
     build: 0,
     ink: 0,
     guide: 0,
-    // ตรงกับ SPIN0 ใน AsciiField — เลือกให้ท่าเลขแปดตกที่ f132 และห่วงมองตรงที่ f189
-    spin: 3.39,
+    lead: 0,
+    // เลือกให้ท่า "มองสันขอบ" (cos spin = 0) ตกที่ f146 พอดี ตามที่วัดจากคลิป
+    spin: 0.96,
     sweep: -0.2,
     shatter: 0,
   })
@@ -181,6 +182,7 @@ export function IntroSequence({ onDone, ready = true, onOpenStart }: IntroSequen
             build: 1,
             ink: 1,
             guide: 1,
+            lead: 1,
             spin: Math.PI * 2,
           })
           .call(() => setBuilt(true))
@@ -225,9 +227,11 @@ export function IntroSequence({ onDone, ready = true, onOpenStart }: IntroSequen
       // f008-f044: ตัวอักษรในช่องสลับไปมาทุกราวสามเฟรม
       for (let k = 0; k < 13; k++) tl.call(() => swapRingGlyph(k), undefined, at(8 + k * 3))
 
-      // f035-f070: เกาะ ASCII โผล่จากขอบจอ — ก่อน f035 พื้นหลังยังดำสนิท
+      /* f044-f076: เกาะ ASCII เริ่มก่อตัว — ก่อน f044 พื้นหลังยังดำสนิท
+         เริ่มตรงจังหวะที่ไทล์ % กำลังจะโผล่ (f047) พอดี ไม่ใช่มาก่อนสิบกว่าเฟรม
+         สองอย่างนี้ต้องเข้ามาพร้อมกัน ตาถึงจะอ่านว่าเป็นเหตุการณ์เดียว */
       tl.set('.intro-terminal', { opacity: 1 }, 0)
-      tl.to(drive.current, { gain: 0.92, duration: dur(35, 70), ease: 'power1.out' }, at(35))
+      tl.to(drive.current, { gain: 0.92, duration: dur(44, 76), ease: 'power1.out' }, at(44))
 
       // f047-f085: ไทล์กลางจอ อักขระข้างบล็อกวิ่ง 1 → 2 → % (f047/f050/f053) แล้วค้าง
       tl.fromTo(
@@ -240,24 +244,32 @@ export function IntroSequence({ onDone, ready = true, onOpenStart }: IntroSequen
       tl.call(() => setPctGlyph('%'), undefined, at(53))
       tl.to('.intro-pct', { opacity: 0, scale: 0.35, duration: dur(85, 92), ease: 'power2.in' }, at(85))
 
-      // f052-f070: แกนเกาะไต่ขึ้นถึงชั้นคราม รอให้หัวออกเดินตรงมุมบนซ้าย
-      tl.to(drive.current, { guide: 1, duration: dur(52, 70), ease: 'power1.inOut' }, at(52))
+      /* f052-f112: แอมพลิจูดของเกาะไต่ขึ้นตลอด ไม่หยุดตอนริบบิ้นเริ่มก่อตัว
+         ตราบใดที่ยอดยังสูงขึ้น เส้นระดับก็ยังถูกดันออก = ยังเห็นคลื่นวิ่งออกจากแกน
+         เคยจบที่ f070 แถบเลยหยุดนิ่งตลอดครึ่งหลังของฉาก */
+      tl.to(drive.current, { guide: 1, duration: dur(52, 150), ease: 'none' }, at(52))
 
-      /* f070-f132: หัวเกิดที่มุมบนซ้าย (f070) วิ่งไปตามความยาววงทิ้งรอยไว้ข้างหลัง
-         จนบรรจบครบที่ f112 แล้วถมทึบทั้งวงที่ f132
-         build = ตำแหน่งหัวบนความยาววง, ink = ดันขึ้นบันได (สีส้มโผล่ f082),
-         solid = บีบคอนทัวร์รอบให้หดจนเหลือแถบทึบล้วน */
-      // เริ่มที่ค่าพื้นไม่ใช่ศูนย์ — f070-f078 ก้อนที่หัวเห็นเป็นครามอยู่แล้ว ยังไม่มีสีส้ม
+      /* f035-f132: รอยความร้อนถูกลากบนผืนภูมิประเทศที่อยู่นิ่ง หัวเดิน หางค้าง
+         ยาวขึ้นเรื่อย ๆ จนวนกลับมาบรรจบตัวเองเป็นห่วงที่ f112 — จากนั้น f116-f132 ไม่ลากเพิ่ม
+         แล้วปล่อยให้รอยหายไป รอยนี้คือแกนกลางของริบบิ้นเอง
+         (ดู FRONT_PATH ใน AsciiField — ตำแหน่งวัดจากคลิปทีละเฟรม) */
+      tl.to(drive.current, { lead: 1, duration: dur(35, 150), ease: 'none' }, at(35))
+
+      /* f104-f150: รอยที่คลื่นลากไว้จางลง แล้วโลโก้ J O E ประกอบขึ้นมาแทนที่
+         ชิ้นส่วนประกอบตามลำดับ E → O → J ตามตารางจังหวะใน AsciiField (PART)
+         รอยของคลื่นเป็นตัวลากตัวอักษรเอง (ดู FRONT_PATH ขาหลัง) ตัวอักษรถมตามหลังรอย
+         จังหวะจึงต้องเป็นเชิงเส้นเท่ากันทั้งคู่ ไม่งั้นรอยกับเนื้อจะไม่ตรงกัน
+         solid ตามมาทีหลังเพื่อบีบคอนทัวร์รอบตัวอักษรให้หดจนเหลือรูปคม */
       tl.fromTo(
         drive.current,
         { ink: 0.18 },
-        { ink: 1, duration: dur(70, 120), ease: 'power2.out' },
-        at(70),
+        { ink: 1, duration: dur(112, 142), ease: 'power2.out' },
+        at(112),
       )
-      tl.to(drive.current, { build: 1, duration: dur(70, 112), ease: 'none' }, at(70))
-      tl.to(drive.current, { solid: 1, duration: dur(112, 132), ease: 'power1.inOut' }, at(112))
+      tl.to(drive.current, { build: 1, duration: dur(112, 156), ease: 'none' }, at(112))
+      tl.to(drive.current, { solid: 1, duration: dur(134, 158), ease: 'power2.out' }, at(134))
       // f084-f189: หมุนต่อเนื่องจนจบ ปลายทาง 2π = หันหน้าเข้ากล้อง จึงอ่านเป็นห่วงเรียบ
-      tl.to(drive.current, { spin: Math.PI * 2, duration: dur(84, 189), ease: 'none' }, at(84))
+      tl.to(drive.current, { spin: Math.PI * 2, duration: dur(84, 172), ease: 'none' }, at(84))
 
       // f150-f183: ไฮไลต์กวาด และพื้นหลังหรี่จนดับสนิท (f183 เป็นดำล้วน)
       tl.to(drive.current, { sweep: 1.5, duration: dur(150, 183), ease: 'none' }, at(150))
