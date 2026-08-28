@@ -259,17 +259,22 @@ export function IntroSequence({ onDone, ready = true, onOpenStart }: IntroSequen
          ชิ้นส่วนประกอบตามลำดับ E → O → J ตามตารางจังหวะใน AsciiField (PART)
          รอยของคลื่นเป็นตัวลากตัวอักษรเอง (ดู FRONT_PATH ขาหลัง) ตัวอักษรถมตามหลังรอย
          จังหวะจึงต้องเป็นเชิงเส้นเท่ากันทั้งคู่ ไม่งั้นรอยกับเนื้อจะไม่ตรงกัน
-         solid ตามมาทีหลังเพื่อบีบคอนทัวร์รอบตัวอักษรให้หดจนเหลือรูปคม */
+         solid เป็นองก์ที่สองซึ่งแยกกันชัด: ห้ามคาบเกี่ยวกับ build เพราะโครงสร้างของคลิป
+         คือ "วาดจนได้รูปสุดท้ายครบก่อน โดยทั้งรูปยังเป็นตัวอักษร ASCII" แล้วสีทึบค่อยไล่
+         เข้ามาเติมข้างในโครงนั้น ถ้าสองช่วงนี้ทับกันจะไม่มีเฟรมไหนเลยที่เห็นโครงร่างครบ
+         แต่ยังไม่ติดสี ซึ่งเป็นหน้าตาหลักของฉาก */
       tl.fromTo(
         drive.current,
         { ink: 0.18 },
         { ink: 1, duration: dur(112, 142), ease: 'power2.out' },
         at(112),
       )
-      tl.to(drive.current, { build: 1, duration: dur(112, 156), ease: 'none' }, at(112))
-      tl.to(drive.current, { solid: 1, duration: dur(134, 158), ease: 'power2.out' }, at(134))
-      // f084-f189: หมุนต่อเนื่องจนจบ ปลายทาง 2π = หันหน้าเข้ากล้อง จึงอ่านเป็นห่วงเรียบ
-      tl.to(drive.current, { spin: Math.PI * 2, duration: dur(84, 172), ease: 'none' }, at(84))
+      tl.to(drive.current, { build: 1, duration: dur(107, 148), ease: 'none' }, at(107))
+      tl.to(drive.current, { solid: 1, duration: dur(150, 180), ease: 'none' }, at(150))
+      /* f084-f107: ส่ายจนแบนราบพอดีตอนปากกาเริ่มลากตัวอักษร
+         ต้องแบนก่อนถึงตรงนั้น เพราะมาสก์ปลายปากกาอยู่ในพิกัดจอ ส่วนตัวอักษรถูกวางผ่าน
+         สเกล/หมุนของ logoXf ถ้ายังส่ายอยู่ รอยกับตัวอักษรจะเหลื่อมกันเป็นคนละที่ */
+      tl.to(drive.current, { spin: Math.PI * 2, duration: dur(84, 107), ease: 'none' }, at(84))
 
       // f150-f183: ไฮไลต์กวาด และพื้นหลังหรี่จนดับสนิท (f183 เป็นดำล้วน)
       tl.to(drive.current, { sweep: 1.5, duration: dur(150, 183), ease: 'none' }, at(150))
