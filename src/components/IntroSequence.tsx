@@ -62,16 +62,16 @@ type Orb = {
  * มันจะกวาดออกนอกเฟรมเอง ไม่ต้องสั่งให้วิ่งออกไปต่างหาก
  */
 const ORBIT_BIG: Orb[] = [
-  { t: 'increaseSpeed();', c: '#0e1116', bg: '#f2f4f7', size: 38, r: 560, a: 340 },
-  { t: 'motion.accelerate();', c: '#0e1116', bg: '#f2f4f7', size: 40, r: 520, a: 350 },
-  { t: 'animation.playbackRate =', c: '#0e1116', bg: '#c9ced6', size: 40, r: 620, a: 45 },
-  { t: 'if (speed > threshold) {', c: '#0e1116', bg: '#c9ced6', size: 38, r: 680, a: 212 },
-  { t: 'enableTurboMode();', c: '#0e1116', bg: '#c9ced6', size: 38, r: 640, a: 203 },
-  { t: '20', c: '#0e1116', bg: '#c9ced6', size: 130, r: 560, a: 302 },
-  { t: '24', c: '#0e1116', bg: '#eef1f5', size: 130, r: 700, a: 138 },
+  { t: 'increaseSpeed();', c: '#f4f2ee', bg: '#242a33', size: 38, r: 560, a: 340 },
+  { t: 'motion.accelerate();', c: '#f4f2ee', bg: '#242a33', size: 40, r: 520, a: 350 },
+  { t: 'animation.playbackRate =', c: '#f4f2ee', bg: '#39414c', size: 40, r: 620, a: 45 },
+  { t: 'if (speed > threshold) {', c: '#f4f2ee', bg: '#39414c', size: 38, r: 680, a: 212 },
+  { t: 'enableTurboMode();', c: '#f4f2ee', bg: '#39414c', size: 38, r: 640, a: 203 },
+  { t: '20', c: '#f4f2ee', bg: '#39414c', size: 130, r: 560, a: 302 },
+  { t: '24', c: '#f4f2ee', bg: '#2d343d', size: 130, r: 700, a: 138 },
   // ปื้นฮาล์ฟโทนเทา — ในคลิปเป็นสี่เหลี่ยมจุดหยาบ ไม่มีตัวอักษร
-  { t: '■', c: '#5f666f', size: 96, r: 430, a: 356 },
-  { t: '■', c: '#5f666f', size: 74, r: 520, a: 152 },
+  { t: '■', c: '#a8afb8', size: 96, r: 430, a: 356 },
+  { t: '■', c: '#a8afb8', size: 74, r: 520, a: 152 },
 ]
 
 /**
@@ -81,35 +81,35 @@ const ORBIT_BIG: Orb[] = [
  * รัศมีตั้งต้นไม่เท่ากัน ชิ้นที่อยู่ใกล้อยู่แล้วจึงเข้าที่ก่อน เหมือน f011-f018 ในคลิป
  */
 const ORBIT_RING: Orb[] = [
-  { t: '()', c: '#39d353', size: 30, r: 605, a: 175 },
-  { t: 'if', c: '#0e1116', bg: '#9aa4b0', size: 24, r: 170, a: 169 },
-  { t: '#', c: '#0e1116', bg: '#f2f4f7', size: 26, r: 352, a: 317 },
-  { t: '■', c: '#39d353', size: 22, r: 368, a: 296 },
-  { t: '*', c: '#0e1116', bg: '#9aa4b0', size: 26, r: 387, a: 338 },
-  { t: 'a', c: '#e9edf2', size: 40, r: 300, a: 120 },
-  { t: '¬', c: '#e9edf2', size: 30, r: 250, a: 20 },
-  { t: '¬', c: '#e9edf2', size: 30, r: 430, a: 250 },
-  { t: '¬', c: '#e9edf2', size: 26, r: 520, a: 60 },
-  { t: '()', c: '#39d353', size: 30, r: 470, a: 205 },
+  { t: '()', c: '#159a37', size: 30, r: 605, a: 175 },
+  { t: 'if', c: '#f4f2ee', bg: '#525b66', size: 24, r: 170, a: 169 },
+  { t: '#', c: '#f4f2ee', bg: '#242a33', size: 26, r: 352, a: 317 },
+  { t: '■', c: '#159a37', size: 22, r: 368, a: 296 },
+  { t: '*', c: '#f4f2ee', bg: '#525b66', size: 26, r: 387, a: 338 },
+  { t: 'a', c: '#2a313a', size: 40, r: 300, a: 120 },
+  { t: '¬', c: '#2a313a', size: 30, r: 250, a: 20 },
+  { t: '¬', c: '#2a313a', size: 30, r: 430, a: 250 },
+  { t: '¬', c: '#2a313a', size: 26, r: 520, a: 60 },
+  { t: '()', c: '#159a37', size: 30, r: 470, a: 205 },
   { t: '¬', c: '#3b3bd0', size: 26, r: 330, a: 95 },
   { t: '%', c: '#5b5bf0', size: 28, r: 560, a: 285 },
-  { t: '■', c: '#2f7fc4', size: 18, r: 210, a: 230 },
+  { t: '■', c: '#1f6fb2', size: 18, r: 210, a: 230 },
 ]
 
 /** ตัวที่ใช้สลับไปมาในช่องของวงระหว่างที่หมุน — ในคลิปแต่ละช่องไม่ได้ตรึงตัวเดิมตลอด */
 const SWAPS: { t: string; c: string; bg?: string }[] = [
-  { t: 'a', c: '#e9edf2' },
-  { t: '1', c: '#e9edf2' },
-  { t: '()', c: '#39d353' },
-  { t: '*', c: '#39d353' },
-  { t: '¬', c: '#e9edf2' },
+  { t: 'a', c: '#2a313a' },
+  { t: '1', c: '#2a313a' },
+  { t: '()', c: '#159a37' },
+  { t: '*', c: '#159a37' },
+  { t: '¬', c: '#2a313a' },
   { t: '%', c: '#5b5bf0' },
   { t: '¬', c: '#3b3bd0' },
-  { t: '#', c: '#0e1116', bg: '#f2f4f7' },
-  { t: '■', c: '#39d353' },
-  { t: 'if', c: '#0e1116', bg: '#9aa4b0' },
-  { t: '¬', c: '#2f7fc4' },
-  { t: '■', c: '#2f7fc4' },
+  { t: '#', c: '#f4f2ee', bg: '#242a33' },
+  { t: '■', c: '#159a37' },
+  { t: 'if', c: '#f4f2ee', bg: '#525b66' },
+  { t: '¬', c: '#1f6fb2' },
+  { t: '■', c: '#1f6fb2' },
 ]
 
 export function IntroSequence({ onDone, ready = true, onOpenStart }: IntroSequenceProps) {
@@ -247,13 +247,13 @@ export function IntroSequence({ onDone, ready = true, onOpenStart }: IntroSequen
       /* f052-f112: แอมพลิจูดของเกาะไต่ขึ้นตลอด ไม่หยุดตอนริบบิ้นเริ่มก่อตัว
          ตราบใดที่ยอดยังสูงขึ้น เส้นระดับก็ยังถูกดันออก = ยังเห็นคลื่นวิ่งออกจากแกน
          เคยจบที่ f070 แถบเลยหยุดนิ่งตลอดครึ่งหลังของฉาก */
-      tl.to(drive.current, { guide: 1, duration: dur(52, 150), ease: 'none' }, at(52))
+      tl.to(drive.current, { guide: 1, duration: dur(52, 168), ease: 'none' }, at(52))
 
       /* f035-f132: รอยความร้อนถูกลากบนผืนภูมิประเทศที่อยู่นิ่ง หัวเดิน หางค้าง
          ยาวขึ้นเรื่อย ๆ จนวนกลับมาบรรจบตัวเองเป็นห่วงที่ f112 — จากนั้น f116-f132 ไม่ลากเพิ่ม
          แล้วปล่อยให้รอยหายไป รอยนี้คือแกนกลางของริบบิ้นเอง
          (ดู FRONT_PATH ใน AsciiField — ตำแหน่งวัดจากคลิปทีละเฟรม) */
-      tl.to(drive.current, { lead: 1, duration: dur(35, 150), ease: 'none' }, at(35))
+      tl.to(drive.current, { lead: 1, duration: dur(35, 168), ease: 'none' }, at(35))
 
       /* f104-f150: รอยที่คลื่นลากไว้จางลง แล้วโลโก้ J O E ประกอบขึ้นมาแทนที่
          ชิ้นส่วนประกอบตามลำดับ E → O → J ตามตารางจังหวะใน AsciiField (PART)
@@ -269,17 +269,17 @@ export function IntroSequence({ onDone, ready = true, onOpenStart }: IntroSequen
         { ink: 1, duration: dur(112, 142), ease: 'power2.out' },
         at(112),
       )
-      tl.to(drive.current, { build: 1, duration: dur(107, 148), ease: 'none' }, at(107))
-      tl.to(drive.current, { solid: 1, duration: dur(150, 180), ease: 'none' }, at(150))
+      tl.to(drive.current, { build: 1, duration: dur(107, 166), ease: 'none' }, at(107))
+      tl.to(drive.current, { solid: 1, duration: dur(168, 192), ease: 'none' }, at(168))
       /* f084-f107: ส่ายจนแบนราบพอดีตอนปากกาเริ่มลากตัวอักษร
          ต้องแบนก่อนถึงตรงนั้น เพราะมาสก์ปลายปากกาอยู่ในพิกัดจอ ส่วนตัวอักษรถูกวางผ่าน
          สเกล/หมุนของ logoXf ถ้ายังส่ายอยู่ รอยกับตัวอักษรจะเหลื่อมกันเป็นคนละที่ */
       tl.to(drive.current, { spin: Math.PI * 2, duration: dur(84, 107), ease: 'none' }, at(84))
 
       // f150-f183: ไฮไลต์กวาด และพื้นหลังหรี่จนดับสนิท (f183 เป็นดำล้วน)
-      tl.to(drive.current, { sweep: 1.5, duration: dur(150, 183), ease: 'none' }, at(150))
-      tl.to(drive.current, { gain: 0, duration: dur(150, 183), ease: 'power1.in' }, at(150))
-      tl.call(() => setBuilt(true), undefined, at(189))
+      tl.to(drive.current, { sweep: 1.5, duration: dur(168, 198), ease: 'none' }, at(168))
+      tl.to(drive.current, { gain: 0, duration: dur(168, 198), ease: 'power1.in' }, at(168))
+      tl.call(() => setBuilt(true), undefined, at(204))
     }, root)
 
     return () => {
@@ -339,7 +339,7 @@ export function IntroSequence({ onDone, ready = true, onOpenStart }: IntroSequen
   return (
     <div
       ref={rootRef}
-      className="intro-root fixed inset-0 z-9999 overflow-hidden bg-[#0e1116]"
+      className="intro-root fixed inset-0 z-9999 overflow-hidden bg-[#f4f2ee]"
       role="presentation"
     >
       <AsciiField drive={drive} className="intro-terminal absolute inset-0 h-full w-full" />

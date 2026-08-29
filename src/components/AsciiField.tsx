@@ -35,29 +35,37 @@ import type { CSSProperties, MutableRefObject } from 'react'
  * แล้วให้ตัววาดเช็คดัชนีเอง
  */
 const RAMP = '_•=+<:;!$@#'
-/** สีของแต่ละขั้น ไล่ฟ้าเข้ม → ฟ้า → คราม → ส้ม ตรงตามที่เห็นในเฟรม */
+/**
+ * สีของแต่ละขั้น — โหมดสว่าง
+ *
+ * บันไดเดิม (พื้นดำ) ไล่จากมืดขึ้นไปหาสว่าง พอกลับพื้นเป็นสว่างต้องไล่กลับทาง: ขั้นล่าง
+ * ต้องเกือบกลืนไปกับพื้น แล้วค่อยเข้มขึ้นเรื่อย ๆ ไม่งั้นภูมิประเทศจะสว่างกว่าพื้นซึ่งอ่านไม่ออก
+ * ลำดับสีคงเดิม (ฟ้าอ่อน → ฟ้า → คราม → ส้ม) เปลี่ยนแค่ทิศของความเข้ม
+ */
 const RAMP_TINT = [
-  '#132433',
-  '#1a3450',
-  '#21486a',
-  '#285f86',
-  '#3076a3',
-  '#3b85b3',
+  '#dfe2e6',
+  '#cbd6e0',
+  '#b0c4d6',
+  '#93b0c9',
+  '#77a0bf',
+  '#5b8fb5',
   '#4a7ec0',
   '#5b5bd8',
-  '#6a5fdd',
-  '#b8734e',
-  '#e08a5c',
+  '#5a4fd0',
+  '#c86a38',
+  '#b4551f',
 ]
 /** ขนาดช่องหนึ่งช่อง หน่วยพิกเซล — ฟอนต์ mono กว้างราว 0.6 ของความสูง */
 const CELL_W = 11
 const CELL_H = 16
 
-/** สีบล็อกทึบของริบบิ้น */
-const INK = '#F79C6A'
+/** สีบล็อกทึบของริบบิ้น — เข้มกว่าเดิมนิดเพื่อให้ยังอ่านออกบนพื้นสว่าง */
+const INK = '#EE7B3F'
 /**
- * ไฮไลต์ที่กวาดไปตามตัวริบบิ้น — ในคลิป (f154-f181) เป็นปื้นขาว "ไล่เฉด" กว้าง ๆ
- * ไม่ใช่แถบคม จึงต้องมีขั้นเยอะพอที่ตาจะอ่านเป็นเกรเดียนต์
+ * ปื้นที่กวาดไปตามตัวริบบิ้น (f154-f181) — ไล่จากสีเนื้อขึ้นไปหาขาว
+ *
+ * ปื้นนี้อยู่ "บนตัวโลโก้" ซึ่งเป็นสีส้มทึบ ไม่ได้อยู่บนพื้น ขาวจึงยังอ่านออกแม้พื้นจะสว่าง
+ * ต้องมีขั้นเยอะพอที่ตาจะอ่านเป็นเกรเดียนต์ ไม่ใช่แถบคม
  */
 const SPEC = ['#f8ac80', '#fabb95', '#fccbab', '#fdd9c2', '#fee7d9', '#fff3ee', '#ffffff']
 /** ลายเฉดบนเนื้อแถบ (f156-f175) — อักขระอ่อน ๆ โปรยบนพื้นส้ม */
@@ -66,13 +74,13 @@ const GRAIN = ',;:+>$@'
 /** ปิดโลโก้ชั่วคราวเพื่อส่องคลื่นล้วน ๆ ตอนดีบัก — ปกติเปิด */
 const SHOW_LOGO = true
 /**
- * ชั่วคราว: เหลือแค่ตัว E ตัวเดียว
+ * วาดครบทั้ง J O E หรือเหลือแค่ E ตัวเดียว
  *
  * ปิดทั้งสองฝั่งพร้อมกัน — ทั้งชิ้นตัวอักษรที่ถม และช่วงที่รอยลากไปวน O กับ J
  * เมื่อ false ทั้งเส้นทางรอย (FRONT_PATH) และจังหวะประกอบ (PART) จะถูกยืดให้ขา E
  * กินเวลาเท่าที่เดิมทั้งสามตัวใช้ ไม่งั้นฉากจะจบไปครึ่งทางแล้วนิ่งค้าง
  */
-const SHOW_OJ = false
+const SHOW_OJ = true
 
 /* ---------- โลโก้ J O E ---------- */
 
@@ -101,46 +109,33 @@ const LOGO_PETALS: { cx: number; cy: number; rx: number; ry: number; rot: number
 /** กลางตัว O — จุดที่กลีบทุกใบเริ่มต้นซ้อนกันอยู่ */
 const O_CENTRE = { x: 122, y: 42 }
 /**
- * ตารางจังหวะของแต่ละชิ้น ยกสัดส่วนมาจากไทม์ไลน์ประกอบร่างของสปแลช (ยาว 3 วินาที)
- * แปลงเป็นช่วงบน build 0-1 ลำดับที่โผล่จึงเป็น E → O → J เหมือนกัน
- */
-const PART_ALL = {
-  eClipW: [0.3, 0.46],
-  eCounter: [0.36, 0.46],
-  eFront: [0.38, 0.47],
-  eOpening: [0.36, 0.48],
-  eClipX: [0.4, 0.48],
-  oBullet: [0.5, 0.6],
-  oSpread: [0.56, 0.72],
-  oRotate: [0.58, 0.84],
-  jBody: [0.74, 0.9],
-  jCorner: [0.84, 0.96],
-  jMask: [0.88, 1.0],
-} as const
-/**
- * โหมด E ตัวเดียว: ท่าประกอบของ E ผูกกับ "ปลายปากกา" ไม่ใช่ build
+ * ตารางจังหวะของแต่ละชิ้น — วัดบน "ตำแหน่งปลายปากกา" ไม่ใช่ build
  *
- * มาสก์ปลายปากกาอย่างเดียวได้แค่การเผย — ตัวอักษรที่โผล่ออกมาไม่มีท่าเข้าของตัวเองเลย
+ * มาสก์ปลายปากกาอย่างเดียวได้แค่การเผย ตัวอักษรที่โผล่ออกมาไม่มีท่าเข้าของตัวเองเลย
  * ตรงนี้เอาท่าประกอบจากสปแลชกลับเข้ามาผสม แต่วางช่วงให้ตรงกับลำดับที่ปากกาเดินจริง
- * (ขวาบน → ซ้ายบน → คานกลาง → ซ้ายล่าง → ขวาล่าง) ชิ้นจึงยืดตัวออกมาในจังหวะเดียว
- * กับที่รอยผ่าน ไม่ใช่ขยับสวนทางกับมัน
+ * ชิ้นจึงยืดตัวออกมาในจังหวะเดียวกับที่รอยผ่าน ไม่ใช่ขยับสวนทางกับมัน
  *
- * ค่าเป็นสัดส่วนบนขาลากโลโก้ (lead E_LEAD_0 → 1) ส่วน O กับ J ไม่ถูกวาดในโหมดนี้
+ * ค่าเป็นสัดส่วนบนขาลากโลโก้ (lead E_LEAD_0 → 1) ซึ่งแบ่งเป็นสามช่วงตามที่ปากกาเดิน
+ *
+ *   prog 0.00-0.36  ขา E  (lead .625-.76)
+ *   prog 0.44-0.68  ขา O  (lead .79-.878)
+ *   prog 0.75-1.00  ขา J  (lead .905-1.0)
+ *
+ * ชิ้นของตัวไหนจึงต้องอยู่ในช่วงของตัวนั้น ไม่งั้นมันเข้าที่ตอนปากกายังไม่ไปถึง
  */
-const PART_E = {
-  eFront: [0.04, 0.3], // เดือยหน้าอยู่ขวาสุด ปากกาเริ่มที่นั่นพอดี
-  eClipW: [0.0, 0.55], // ตัวถังเปิดออกทางซ้ายตามรอยที่กวาดไปทางซ้าย
-  eClipX: [0.35, 0.7],
-  eCounter: [0.4, 0.72], // ช่องกลางยืดตอนปากกาลากคานกลาง
-  eOpening: [0.6, 0.95], // ช่องเปิดล่างไถลเข้ามาตอนปากกาถึงขาล่าง
-  oBullet: [0, 1],
-  oSpread: [0, 1],
-  oRotate: [0, 1],
-  jBody: [0, 1],
-  jCorner: [0, 1],
-  jMask: [0, 1],
-} as const
-const PART: Record<keyof typeof PART_ALL, readonly [number, number]> = SHOW_OJ ? PART_ALL : PART_E
+const PART = {
+  eFront: [0.02, 0.14], // เดือยหน้าอยู่ขวาสุด ปากกาเริ่มที่นั่นพอดี
+  eClipW: [0.0, 0.26], // ตัวถังเปิดออกทางซ้ายตามรอยที่กวาดไปทางซ้าย
+  eClipX: [0.16, 0.32],
+  eCounter: [0.2, 0.34], // ช่องกลางยืดตอนปากกาลากคานกลาง
+  eOpening: [0.26, 0.4], // ช่องเปิดล่างไถลเข้ามาตอนปากกาถึงขาล่าง
+  oBullet: [0.4, 0.5], // จุดนำโผล่ตอนปากกาข้ามจาก E มาที่ O
+  oSpread: [0.46, 0.64], // กลีบแยกออกไปตอนปากกาวนรอบ O (ยังหน่วงต่อใบอีกชั้น)
+  oRotate: [0.48, 0.8],
+  jBody: [0.7, 0.9], // ตัวถังไหลลงมาตอนปากกาข้ามมาถึง J
+  jCorner: [0.86, 0.97],
+  jMask: [0.9, 1.0],
+} as const satisfies Record<string, readonly [number, number]>
 
 /**
  * "คลื่น" = แนวความร้อนที่กวาดผ่านผืนภูมิประเทศซึ่งอยู่นิ่ง
@@ -257,6 +252,23 @@ const FRONT_SKIRT = 0.032
  */
 const FRONT_SAMPLES = 56
 
+/**
+ * ท่าสุดท้ายของคลื่น: เส้นตรงทึบที่นอนอยู่บนคานบนของตัว E
+ *
+ * คลื่นไม่ได้จางหายแล้วมีตัวอักษรโผล่มาแทน — มันยืดตัวตรงจนกลายเป็นเส้นเดียว แล้วตัว E
+ * ก็เปิดออกจากเส้นนั้น (ท่าเข้าของ E คือ clip ที่กว้างขึ้นจากเสี้ยว x 174 อยู่แล้ว)
+ *
+ * พิกัดแปลงจาก viewBox ของโลโก้ด้วยกรอบเดียวกับที่ stampLogo ใช้:
+ *   จอ.x = 0.21 + viewBox.x / 239 × 0.58   จอ.y = 0.32 + viewBox.y / 84 × 0.36
+ * เส้นจึงทับคานบนของ E พอดี ไม่ใช่ลอยอยู่ใกล้ ๆ
+ */
+const LINE_X0 = 0.21 + (174 / 239) * 0.58
+const LINE_X1 = 0.21 + (239 / 239) * 0.58
+const LINE_Y = 0.32 + (9 / 84) * 0.36
+/** ช่วง lead ที่คลื่นค่อย ๆ ยืดตรง — จบพอดีตอนขาลากโลโก้เริ่ม (E_LEAD_0) */
+const LINE_FROM = 0.5
+const LINE_TO = 0.6
+
 /** ส่วนที่ต้องเจาะออก (สีกระดาษในสปแลช) */
 const LOGO_PAPER = [
   // J — ลิ้นตรงกลาง
@@ -268,6 +280,14 @@ const LOGO_PAPER = [
 ]
 /** ช่องกลางตัว E เป็นสี่เหลี่ยมมุมมน */
 const LOGO_COUNTER = { x: 185, y: 18, w: 35, h: 16, r: 8 }
+/**
+ * ตัว J ในเวิร์ดมาร์กต้นฉบับลึกกว่าเพื่อน (y 0..84 ส่วน E คือ 2..81, O คือ 2..81.4)
+ * ซึ่งเป็นการเผื่อ overshoot ของก้นมนตามธรรมเนียมงานตัวอักษร แต่ในฉากนี้ตัวอักษรถูกอ่าน
+ * เป็นบล็อกหยาบ ๆ ในตารางช่อง overshoot เลยไม่ได้อ่านเป็นเส้นโค้ง มันอ่านเป็น "J หล่นต่ำ"
+ * จึงบีบ J ให้ลงกรอบเดียวกับอีกสองตัว หัวและก้นตรงระนาบเดียวกันพอดี
+ */
+const J_FIT = { y: 2, k: 79 / 84 }
+
 const LOGO_X0 = 0
 const LOGO_X1 = 239
 const LOGO_CX = 119.5
@@ -378,9 +398,6 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
     const tctx = hot.getContext('2d', { willReadFrequently: true })
     const hi = document.createElement('canvas')
     const hctx = hi.getContext('2d', { willReadFrequently: true })
-    /** มาสก์ "ปากกาผ่านไปถึงไหนแล้ว" — ตัวเชื่อมระหว่างรอยคลื่นกับตัวอักษร */
-    const rev = document.createElement('canvas')
-    const rctx = rev.getContext('2d')
 
     let raf = 0
     let last = 0
@@ -467,8 +484,14 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
       let bx1 = -9
       let by0 = 9
       let by1 = -9
+      /** ยืดตรงแค่ไหนแล้ว — 1 = เป็นเส้นตรงเต็มตัว */
+      const str = span(u, LINE_FROM, LINE_TO)
       for (let i = 0; i < FRONT_SAMPLES; i++) {
-        const [px, py] = at(tail + (u - tail) * (i / (FRONT_SAMPLES - 1)))
+        const f = i / (FRONT_SAMPLES - 1)
+        const [cx, cy] = at(tail + (u - tail) * f)
+        // ปลายทางของทุกจุดคือตำแหน่งของตัวเองบนเส้นตรง เรียงตามลำดับหางไปหัวเหมือนเดิม
+        const px = cx + (LINE_X0 + (LINE_X1 - LINE_X0) * f - cx) * str
+        const py = cy + (LINE_Y - cy) * str
         const qy = py * aspect
         trail[i * 2] = px
         trail[i * 2 + 1] = qy
@@ -523,7 +546,7 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
       shatter: number,
       lead: number,
     ) => {
-      if (!octx || !bctx || !hctx || !tctx || !rctx) return
+      if (!octx || !bctx || !hctx || !tctx) return
 
       off.width = cols
       off.height = rows
@@ -567,7 +590,7 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
        * ด้วยนาฬิกาเรือนเดียวกัน (ดู PART_E) ถ้าใช้คนละเรือน ชิ้นจะยืดตัวอยู่ใต้รอยที่
        * กำลังลากแบบไม่สัมพันธ์กัน กลายเป็นสองการเคลื่อนไหวคนละเรื่อง
        */
-      const prog = SHOW_OJ ? b : span(lead, E_LEAD_0, 1)
+      const prog = span(lead, E_LEAD_0, 1)
       const at = ([t0, t1]: readonly [number, number]) =>
         Math.min(1, Math.max(0, (prog - t0) / (t1 - t0 || 1)))
       /** ease แบบเดียวกับที่สปแลชใช้เป็นส่วนใหญ่ */
@@ -605,7 +628,28 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
        * ประกอบไม่เสร็จก็ติดสีไปแล้ว จังหวะ "โครงร่างครบแต่ยังไม่ติดสี" เลยไม่มีให้เห็น
        * ตอนนี้เนื้อในขึ้นกับ solid ตัวเดียว และไล่เป็นม่านผ่าน fillClip ข้างล่าง
        */
-      const fillOf = () => Math.min(1, Math.max(0, solid))
+      /**
+       * ── เนื้อในถมทีละ "ชิ้น" ตามหลังท่าเข้าของชิ้นนั้นเอง ──
+       *
+       * ไม่ใช่ถมทีละตัวอักษร และไม่ใช่ม่านกวาดซ้าย→ขวา (ม่านให้ลำดับ J → O → E เพราะ J
+       * อยู่ซ้ายสุด ซึ่งกลับทางกับลำดับที่ปากกาลาก) — ชิ้นไหนเข้าที่ก่อนก็ติดสีก่อน
+       * ตัวถัง E, เดือยหน้า, กลีบ O ทีละกลีบ, ตัวถัง J จึงทยอยติดสีตามลำดับที่มันประกอบ
+       *
+       * สีเดินไปพร้อมกับท่าเข้าของชิ้นนั้น ออกหลังนิดเดียว (FILL_LAG) แล้วเต็มพอดีตอน
+       * ชิ้นเข้าที่ (บวก FILL_TAIL อีกนิด) — ชิ้นจึง "ไหลเข้ามาพร้อมสี" ไม่ใช่มาเป็นโครง
+       * เปล่า ๆ ค้างไว้ก่อนแล้วค่อยเทสีทีหลัง ซึ่งอ่านเป็นสองเหตุการณ์แยกกัน
+       *
+       * solid เป็นตัวเก็บกวาดท้ายฉาก — ค่าที่มากกว่าชนะเสมอ ชิ้นที่ยังไม่ถึงคิวจึงไม่ค้าง
+       * เป็นโครงเปล่าถ้า solid มาถึงก่อน
+       */
+      const FILL_LAG = 0.02
+      const FILL_TAIL = 0.04
+      const fillAfter = (win: readonly [number, number]) =>
+        Math.max(
+          io(span(prog, win[0] + FILL_LAG, win[1] + FILL_TAIL)),
+          Math.min(1, Math.max(0, solid)),
+        )
+
       /** เติมหรือลากเส้น ตามโหมดที่ส่งเข้ามา */
       const F = (c: CanvasRenderingContext2D, st: boolean, path?: Path2D) => {
         if (st) {
@@ -627,7 +671,7 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
         const front = io(at(PART.eFront))
         parts.push({
           p: at(PART.eClipW),
-          fill: fillOf(),
+          fill: fillAfter(PART.eClipW),
           draw: (c, st) => {
             c.save()
             c.beginPath()
@@ -657,7 +701,7 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
           if (r > 0.4) {
             parts.push({
               p: at(PART.oBullet),
-              fill: fillOf(),
+              fill: fillAfter(PART.oBullet),
               draw: (c, st) => {
                 c.beginPath()
                 c.ellipse(O_CENTRE.x, O_CENTRE.y, r, r, 0, 0, Math.PI * 2)
@@ -666,35 +710,44 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
             })
           }
         }
-        if (at(PART.oSpread) > 0) {
-          for (const pe of LOGO_PETALS) {
-            const cxp = mix(O_CENTRE.x, pe.cx, sp)
-            const cyp = mix(O_CENTRE.y, pe.cy, sp)
-            const rot = (pe.rot * rt * Math.PI) / 180
-            parts.push({
-              p: at(PART.oSpread),
-              fill: fillOf(),
-              draw: (c, st) => {
-                c.beginPath()
-                c.ellipse(cxp, cyp, pe.rx, pe.ry, rot, 0, Math.PI * 2)
-                F(c, st)
-              },
-            })
-          }
+        /**
+         * กลีบแยกออกทีละใบ ไม่ใช่พร้อมกันทั้งสี่ — ใบหลังหน่วงจากใบหน้าใบละ STEP
+         * ตาจึงอ่านว่ากำลัง "ประกอบ" ไม่ใช่ทั้งดอกบานพรวดเดียว และสีก็ตามมาทีละใบด้วย
+         */
+        const STEP = 0.05
+        for (let pi = 0; pi < LOGO_PETALS.length; pi++) {
+          const pe = LOGO_PETALS[pi]
+          const win = [PART.oSpread[0] + pi * STEP, PART.oSpread[1] + pi * STEP] as const
+          const u = at(win)
+          if (u <= 0) continue
+          const spi = io(u)
+          const cxp = mix(O_CENTRE.x, pe.cx, spi)
+          const cyp = mix(O_CENTRE.y, pe.cy, spi)
+          const rot = (pe.rot * rt * Math.PI) / 180
+          parts.push({
+            p: u,
+            fill: fillAfter(win),
+            draw: (c, st) => {
+              c.beginPath()
+              c.ellipse(cxp, cyp, pe.rx, pe.ry, rot, 0, Math.PI * 2)
+              F(c, st)
+            },
+          })
         }
       }
 
       // ── J ─────────────────────────────────────────────
       if (SHOW_OJ) {
         const bodyU = io(at(PART.jBody))
-        const dy = mix(-100, 0, bodyU)
+        const dy = mix(-150, 0, bodyU)
         if (at(PART.jBody) > 0) {
           parts.push({
             p: at(PART.jBody),
-            fill: fillOf(),
+            fill: fillAfter(PART.jBody),
             draw: (c, st) => {
               c.save()
-              c.translate(0, dy)
+              c.translate(0, dy + J_FIT.y)
+              c.scale(1, J_FIT.k)
               F(c, st, inkPaths[0])
               c.restore()
             },
@@ -722,11 +775,13 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
         c.restore()
         // J: ลิ้นกับบากมุมขยายจากศูนย์ ตามตัวถังที่ไหลลงมา
         if (SHOW_OJ) {
-          const dyJ = mix(-100, 0, io(at(PART.jBody)))
+          // ต้องเป็นระยะเดียวกับตัวถัง ไม่งั้นลิ้นกับบากมุมลอยแยกจากตัว J ระหว่างที่มันหล่นลงมา
+          const dyJ = mix(-150, 0, io(at(PART.jBody)))
           const co = io(at(PART.jCorner))
           const mk = io(at(PART.jMask))
           c.save()
-          c.translate(0, dyJ)
+          c.translate(0, dyJ + J_FIT.y)
+          c.scale(1, J_FIT.k)
           if (co > 0) {
             c.save()
             c.scale(co, co)
@@ -764,27 +819,18 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
        */
       const paintLogo = (c: CanvasRenderingContext2D, mode: 'full' | 'hot') => {
         /**
-         * ม่านถม: สีทึบไม่ได้ขึ้นพร้อมกันทั้งรูป แต่ไล่จากซ้ายไปขวาข้างในโครงร่าง
+         * ถมทีละชิ้นตามค่า fill ของชิ้นนั้น ไม่ใช่ม่านเดียวกวาดทั้งรูป
          *
-         * ถ้าขึ้นพร้อมกันทั้งรูปจะได้ภาพ "ตัวอักษรจางแล้วกลายเป็นสีทึบ" ซึ่งอ่านเป็นการ
-         * เฟด ไม่ใช่การเติมสี ม่านนี้ทำให้เห็นว่ามีขอบสีคืบเข้าไปในโครงที่วาดไว้แล้ว
-         * ขอบม่านไม่ต้องนุ่ม เพราะตารางช่องอักขระควอนไทซ์ให้อยู่แล้ว
+         * ม่านซ้าย→ขวาให้ลำดับ J → O → E ซึ่งกลับทางกับลำดับที่ปากกาลากและที่ชิ้นเข้าที่
+         * ตอนนี้ตัวไหนประกอบเสร็จก่อนก็ติดสีก่อน ค่ากลาง ๆ ของ fill ใช้เป็น alpha ตรง ๆ
+         * ช่องที่ยังไม่เต็มจึงตกอยู่กลางบันไดและถูกอ่านเป็นตัวอักษรก่อนจะขึ้นเป็นบล็อกทึบ
          */
-        const fw = parts.length ? parts[0].fill : 0
-        if (fw > 0.001) {
-          c.save()
-          // เผื่อขอบข้างละ 30 หน่วยให้ครอบเส้นขอบที่ยื่นออกนอกพาธ
-          const x0 = LOGO_X0 - 30
-          const x1 = LOGO_X1 + 30
-          c.beginPath()
-          c.rect(x0, -60, (x1 - x0) * fw, LOGO_H + 120)
-          c.clip()
-          for (const q of parts) {
-            c.globalAlpha = 1
-            q.draw(c, false)
-          }
-          c.restore()
+        for (const q of parts) {
+          if (q.fill <= 0.001) continue
+          c.globalAlpha = q.fill
+          q.draw(c, false)
         }
+        c.globalAlpha = 1
         if (mode === 'hot') {
           c.globalAlpha = 1
           return
@@ -806,53 +852,18 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
       }
 
       /**
-       * มาสก์ปลายปากกา — ตัวเชื่อมระหว่างคลื่นกับตัวอักษร
+       * ไม่มีมาสก์ปลายปากกาแล้ว
        *
-       * รอยคลื่นในครึ่งหลังเดินตามรูปตัว E อยู่แล้ว (FRONT_PATH ขาหลัง) แต่เดิมตัวอักษร
-       * โผล่ตามจังหวะของตัวเอง (PART) ซึ่งไม่รู้เลยว่าปลายปากกาอยู่ตรงไหน ตัวอักษรจึง
-       * ผุดขึ้นมาเป็นของคนละชิ้นกับรอย ตาอ่านว่าขาดตอน
+       * เคยครอบตัวอักษรด้วยรอยที่ปากกาผ่านไปแล้ว เพื่อผูกคลื่นเข้ากับตัวอักษร ผลคือรูป
+       * ถูก "เซาะ" ออกมาตามรอยแปรง ไม่ใช่ประกอบขึ้นจากชิ้นส่วนของมันเอง — ชิ้นที่กำลัง
+       * บินเข้าที่ถูกตัดทิ้งเพราะยังไม่มีรอยพาดถึง ท่าเข้าทั้งหมดจึงมองไม่เห็น
        *
-       * ตอนนี้ตัวอักษรถูกครอบด้วยรอยที่ปากกาผ่านไปแล้วจริง ๆ: เส้นเดียวกัน เดินด้วย
-       * pathAt ตัวเดียวกัน ตั้งแต่จุดที่ขาลากโลโก้เริ่ม (E_LEAD_0) ถึงตำแหน่งปากกาตอนนี้
-       * ตัว E จึงงอกออกมาจากรอยพอดี ไม่มีเฟรมไหนที่มันเป็นสองสิ่ง
+       * การผูกกับปากกาไม่ได้หายไป: ทุกชิ้นยังอ่านจังหวะจาก prog ซึ่งคือตำแหน่งปลายปากกา
+       * ชิ้นของตัวไหนก็ยังเริ่มตอนปากกาเดินถึงขาของตัวนั้น แค่ไม่ถูกครอบด้วยรูปทรงของรอย
        */
-      const revealMask = () => {
-        rev.width = cols
-        rev.height = rows
-        rctx.setTransform(1, 0, 0, 1, 0, 0)
-        rctx.clearRect(0, 0, cols, rows)
-        rctx.strokeStyle = '#fff'
-        rctx.lineCap = 'round'
-        rctx.lineJoin = 'round'
-        // กว้างกว่ารอยจริงเท่าตัว เพราะต้องครอบทั้งความหนาของตัวอักษร ไม่ใช่แค่แกนรอย
-        rctx.lineWidth = FRONT_R * 4.6 * cols
-        rctx.beginPath()
-        const u = Math.min(1, Math.max(E_LEAD_0, lead))
-        const N = 90
-        for (let i = 0; i <= N; i++) {
-          const [px, py] = pathAt(E_LEAD_0 + (u - E_LEAD_0) * (i / N))
-          const gx = px * cols
-          const gy = py * rows
-          if (i === 0) rctx.moveTo(gx, gy)
-          else rctx.lineTo(gx, gy)
-        }
-        rctx.stroke()
-      }
-      /** ครอบแคนวาสหนึ่งใบด้วยมาสก์ — ทำหลังวาดเสร็จ ไม่ใช่ clip ก่อนวาด (เส้นทางไม่ใช่รูปปิด) */
-      const applyMask = (c: CanvasRenderingContext2D) => {
-        c.setTransform(1, 0, 0, 1, 0, 0)
-        c.globalCompositeOperation = 'destination-in'
-        c.globalAlpha = 1
-        c.drawImage(rev, 0, 0)
-        c.globalCompositeOperation = 'source-over'
-      }
-      /** ปากกายังลากไม่จบ = ยังต้องครอบ พอถึงปลายทางแล้วตัวอักษรอยู่ครบทั้งตัว */
-      const masking = !SHOW_OJ && lead < 1
-      if (masking) revealMask()
 
       setT(octx)
       paintLogo(octx, 'full')
-      if (masking) applyMask(octx)
 
       /**
        * คอนทัวร์รอบตัวโลโก้ = สำเนาที่เบลอของตัวทึบ
@@ -860,8 +871,14 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
        * ค่าที่ฟุ้งออกไปตกกลางบันได จึงถูกเรนเดอร์เป็น # @ $ ! ; : < + = ไล่ออกไปเป็นวง ๆ
        * รัศมีใหญ่ตอนต้น (หัวยังเป็นก้อนนุ่ม) แล้วหดลงเมื่อกวาดไปเรื่อย ๆ และเมื่อ solid ขึ้น
        */
-      const radius =
-        (1.1 + 2.9 * (1 - solid)) * (1 + 0.5 * (1 - Math.min(1, b * 1.4)))
+      /**
+       * คอนทัวร์ต้องหดตาม "การประกอบร่าง" ไม่ใช่รอจนถึง solid
+       *
+       * ตอนชิ้นส่วนกำลังบินเข้าที่ คอนทัวร์หนา 5-6 ช่องรอบทุกชิ้นทำให้ทั้งย่านนั้นเป็น
+       * ปื้นอักขระเดียวกันหมด ตาอ่านไม่ออกว่าชิ้นไหนขยับ — เอฟเฟกต์แย่งซีนสิ่งที่ควรดู
+       * ให้มันใหญ่ตอนยังเป็นก้อนคลื่น แล้วหดลงทันทีที่เริ่มประกอบ
+       */
+      const radius = (1.0 + 2.4 * (1 - Math.min(1, b * 1.15))) * (1 - 0.55 * solid)
       bctx.setTransform(1, 0, 0, 1, 0, 0)
       bctx.clearRect(0, 0, cols, rows)
       bctx.filter = radius > 0.05 ? `blur(${radius.toFixed(2)}px)` : 'none'
@@ -878,7 +895,6 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
       // ชิ้นที่ถมเนื้อในแล้วคือชิ้นที่ร้อน — ติดสีทีละชิ้นตามจังหวะของตัวเอง
       setT(tctx)
       paintLogo(tctx, 'hot')
-      if (masking) applyMask(tctx)
 
       /** อ่านทั้งสี่แคนวาสกลับมาเป็นค่าต่อช่อง */
       const readBack = () => {
@@ -954,6 +970,8 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
 
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       const { gain, solid, build, ink, guide, lead, spin, sweep, shatter } = drive.current
+      /** ความคืบหน้าของการประกอบร่าง หนีบ 0-1 — ใช้หรี่เอฟเฟกต์ ASCII ระหว่างที่ชิ้นกำลังเข้าที่ */
+      const bp = Math.min(1, Math.max(0, build))
       if (gain <= 0.01 && ink <= 0.01) return
 
       placeFront(lead)
@@ -996,7 +1014,16 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
        * เดิมผูกกับ build (จางที่ 0.86-1) ซึ่งหมดก่อนปากกาถึงปลายทาง เกิดช่วงที่ตัวอักษร
        * ยังไม่ครบแต่รอยหายไปแล้ว — ตรงนั้นแหละที่ขาดตอน ตอนนี้รอยตายเมื่อ solid มารับช่วง
        */
-      const ringFade = 1 - span(solid, 0, 0.3)
+      /**
+       * เส้นตรงคือ "ตัว E ก่อนเปิดออก" จึงต้องอยู่จนกว่าตัวถัง E จะกางออกมาแทนที่
+       * ไม่ใช่หายไปตั้งแต่ยังไม่มีอะไรมารับช่วง
+       */
+      /**
+       * เส้นตรงคือ "ตัว E ก่อนเปิดออก" ต้องอยู่จนกว่าตัวถัง E จะกางออกมาแทนที่จริง ๆ
+       * ช่วง build 0.20-0.42 คือตอนที่ clip ของ E กว้างขึ้นจนคลุมเส้นพอดี (เทียบเฟรม
+       * f118-f131) หรี่ก่อนหน้านั้นจะมีช่วงที่จอว่าง ไม่มีทั้งเส้นและตัวอักษร
+       */
+      const ringFade = (1 - span(solid, 0, 0.3)) * (1 - span(bp, 0.2, 0.42))
       /** ตัวเดียวกับที่ placeFront ใช้ — ต้องตรงกัน ไม่งั้นรอยจะเบี้ยวในแกนตั้ง */
       const aspect = (rows * CELL_H) / (cols * CELL_W || 1)
       /**
@@ -1018,7 +1045,8 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
              * ตอน solid = 1 ถ้ายังนับ hal เต็มน้ำหนัก ช่องว่างระหว่าง J กับ O กับ E จะถูก
              * เชื่อมจนอ่านเป็นก้อนเดียว ไม่ใช่สามตัวอักษร
              */
-            const r = Math.min(1.25, cov[idx] + hal[idx] * (0.8 - 0.55 * solid))
+            // น้ำหนักของคอนทัวร์ก็ลดตามการประกอบเช่นกัน ด้วยเหตุผลเดียวกับรัศมี
+            const r = Math.min(1.25, cov[idx] + hal[idx] * (0.8 - 0.4 * bp - 0.3 * solid))
             /**
              * ส่วนที่กวาดผ่านแล้วอยู่ที่ชั้น @ / # (เป็น "ตัวอักษรสีส้ม") ยังไม่ใช่บล็อกทึบ
              * มีสองอย่างเท่านั้นที่ดันให้ข้ามไปเป็นบล็อก: หย่อมที่เกาะหัวกวาด กับ solid
@@ -1038,7 +1066,15 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
              * ข้ามไปเป็นบล็อกเป็นของ solid เท่านั้น (r ขึ้นได้ถึง 1.25 จากคอนทัวร์ที่ฟุ้ง)
              */
             const lv = r * heat * (0.9 + 0.18 * hotm[idx] + 0.1 * solid)
-            level = solid > 0.001 ? lv : Math.min(0.97, lv)
+            /**
+             * เพดาน 0.97 คือตัวที่บังคับให้ "โครงร่างยังเป็นตัวอักษร ไม่ใช่บล็อก"
+             *
+             * แต่ต้องยกให้ช่องที่ถมแล้วจริง ๆ ไม่งั้นการถมทีละตัว (E → O → J) มองไม่เห็นเลย
+             * เพราะทุกตัวจะไปโผล่เป็นบล็อกพร้อมกันตอน solid เริ่ม — ซึ่งเคยเป็นบั๊กจริง
+             * ช่องที่ยังไม่ถึงคิว (hotm ต่ำ) ยังโดนเพดานเหมือนเดิม
+             */
+            const filled = solid > 0.001 || hotm[idx] > 0.45
+            level = filled ? lv : Math.min(0.97, lv)
             // ท่าปิด (f189): หั่นเป็นขีดนอนยาวราวเจ็ดช่อง เว้นช่องเป็นจังหวะ
             if (shatter > 0.001 && hash(Math.floor(x / 7) * 3.3, y * 1.9) < shatter * 1.12) {
               level = 0
@@ -1189,6 +1225,13 @@ export function AsciiField({ className, style, drive }: AsciiFieldProps) {
            */
           if (bg > 0) {
             bg = Math.min(0.7 + 0.27 * band * ringFade, bg * (terrTop + 0.85 * band))
+            /**
+             * ภูมิประเทศถอยให้ตอนตัวอักษรกำลังประกอบ
+             *
+             * ไม่ได้ดับ (พื้นหลังยังต้องอยู่จนถึง f183) แค่เบาลงพอให้ชิ้นส่วนที่กำลังบินเข้าที่
+             * เป็นของที่เด่นที่สุดบนจอ ไม่ใช่แข่งกับปื้นอักขระที่อยู่รอบ ๆ
+             */
+            bg *= 1 - 0.4 * bp
           }
           /**
            * พื้นขั้นต่ำของย่านร้อน — มันต้องก่อเกาะของตัวเองได้ แม้ตรงนั้นไม่มีภูมิประเทศเลย
