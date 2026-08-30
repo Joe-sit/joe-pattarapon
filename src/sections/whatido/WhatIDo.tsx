@@ -370,7 +370,9 @@ export function WhatIDo({
             {/* กระเบื้องใหญ่: พื้นเบจ + mascot 3D ตัวจริง + วงเล็บเวกเตอร์ชิดขวา
                 (ที่ githubuniverse กระเบื้องใบใหญ่ก็เป็นตัวละครของงานเขา ไม่ใช่พื้นสีเปล่า)
                 mascot กินแค่ 78% ทางซ้าย วงเล็บจึงไม่ถูกบัง และ canvas ไม่ต้องเรนเดอร์เต็มช่อง */}
+            {/* data-mascot-tile: จอ Experiences วัดกรอบใบนี้เพื่อซูมต่อจากมันพอดี (ดู sections/tunnel) */}
             <div
+              data-mascot-tile
               className="v2-pop relative z-30 w-1/2 overflow-hidden bg-[#e2d7cb]"
               style={{ '--i': 0 } as CSSProperties}
             >

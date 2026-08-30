@@ -5,7 +5,11 @@ import './portfolio2026.css'
 import { useSkillStory, WhatIDo } from '@/sections/whatido/WhatIDo'
 import { Logo } from '@/joespresso/Logo'
 import { HeroPlatform } from './HeroPlatform'
+import { ExperienceTunnel } from '@/sections/tunnel/ExperienceTunnel'
 import { AnchorNav } from '@/components/AnchorNav'
+import { SITE } from '@/config/site'
+import type { HeroMode } from './HeroToolPanel'
+import { OpenToWorkMarquee } from '@/components/OpenToWorkMarquee'
 import heroLife from '@/assets/v2final/hero-life.svg'
 import heroBubble from '@/assets/v2final/hero-ideas-bubble.svg'
 
@@ -20,7 +24,6 @@ import heroBubble from '@/assets/v2final/hero-ideas-bubble.svg'
  */
 
 /** เมนูบนขวา — ชื่อและลำดับตามแบบ */
-const NAV = ['About', 'Experiences', 'Works', 'Contact'] as const
 
 /** หกจอของแบบ เรียงตามลำดับที่เลื่อนเจอ ใช้ผูกกับราวจุดด้านซ้าย */
 const SECTIONS = ['hero', 'what-i-do', 'experiences', 'works', 'health', 'stacks'] as const
@@ -44,20 +47,46 @@ const SECTION_LINKS: { id: SectionId; label: string }[] = [
  * fixed ตัวเดียวจึงเป็นสิ่งที่แบบหมายถึงจริง ๆ
  */
 function TopBar() {
+  /**
+   * เลื่อนลง = ซ่อน, เลื่อนขึ้น = โผล่กลับมา
+   *
+   * เทียบกับตำแหน่งครั้งก่อนไม่ใช่กับ "ทิศของ event" — สโครลนุ่มของ lenis ยิงหลายครั้งต่อ
+   * เฟรมและกลับทิศเล็ก ๆ ตอนหน่วง ถ้าดูแค่ทิศแถบจะกะพริบ จึงเก็บเฉพาะการขยับที่เกินระยะหนึ่ง
+   * ช่วงบนสุดของหน้าไม่ซ่อนเลย ไม่งั้นแค่ขยับนิดเดียวโลโก้ก็หาย
+   */
+  const [hidden, setHidden] = useState(false)
+  const lastY = useRef(0)
+
+  useEffect(() => {
+    lastY.current = window.scrollY
+    const onScroll = () => {
+      const y = window.scrollY
+      const dy = y - lastY.current
+      if (Math.abs(dy) < 6) return
+      lastY.current = y
+      setHidden(y > 120 && dy > 0)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
   return (
-    <header className="pointer-events-none fixed inset-x-0 top-0 z-30 flex items-center justify-between px-[clamp(24px,4.4vw,64px)] pt-[clamp(20px,6svh,64px)]">
+    <header
+      className={`pointer-events-none fixed inset-x-0 top-0 z-30 flex items-center justify-between px-[clamp(24px,4.4vw,64px)] pt-[clamp(20px,6svh,64px)] transition-[transform,opacity] duration-300 ease-out ${
+        hidden ? '-translate-y-full opacity-0' : 'translate-y-0 opacity-100'
+      }`}
+    >
       <Logo width={93} height={32} color="var(--v3-ink)" className="shrink-0" />
-      <nav className="pointer-events-auto flex items-center gap-[5px]">
-        {NAV.map((label) => (
-          <a
-            key={label}
-            href={`#${label.toLowerCase()}`}
-            className="flex items-center justify-center rounded-full px-[clamp(8px,1vw,16px)] py-2 text-[clamp(12px,1vw,14px)] font-bold whitespace-nowrap text-[var(--v3-ink)] transition-colors hover:bg-white/10"
-          >
-            {label}
-          </a>
-        ))}
-      </nav>
+      {/* เหลือปุ่มเดียว — ลิงก์ในแถบซ้ำกับราวจุดด้านซ้ายที่พาไปทุกจออยู่แล้ว
+          มุมขวาจึงเก็บไว้ให้สิ่งที่ราวนั้นทำแทนไม่ได้: เรซูเม่ที่ลิงก์ออกนอกหน้า */}
+      <a
+        href={SITE.resumeUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="pointer-events-auto flex cursor-pointer items-center justify-center rounded-full bg-[var(--v3-orange)] px-[clamp(16px,1.6vw,24px)] py-[clamp(8px,1vw,11px)] text-[clamp(12px,1vw,14px)] font-bold whitespace-nowrap text-white transition-colors duration-200 hover:brightness-110"
+      >
+        Resume
+      </a>
     </header>
   )
 }
@@ -105,17 +134,13 @@ const FORBIDDEN = /requirement\s*change/i
  */
 function HeroBubble({
   active,
-  exploded,
   onToggle,
-  onRestore,
   className = '',
 }: {
   className?: string
   /** อยู่ในโหมดคอมเมนต์อยู่หรือเปล่า */
   active: boolean
-  exploded: boolean
   onToggle: () => void
-  onRestore: () => void
 }) {
   return (
     <div
@@ -144,19 +169,6 @@ function HeroBubble({
         </span>
       </button>
 
-      {/* ปุ่ม Restore อยู่ "ข้าง" ลูกโป่ง ไม่ใช่ใต้ — ใต้ลูกโป่งคือบรรทัด to LIFE ปุ่มจะไปทับ */}
-      <div className="absolute top-1/2 left-[calc(100%+14px)] -translate-y-1/2">
-        {/* โผล่เฉพาะตอนฉากพังแล้ว — กดแล้วทีมงานจะเดินไปประกอบฉากคืน */}
-        {exploded && (
-          <button
-            type="button"
-            onClick={onRestore}
-            className="cursor-pointer rounded-full bg-[var(--v3-orange)] px-4 py-2 text-[clamp(11px,1.6svh,14px)] font-bold whitespace-nowrap text-white transition-opacity hover:opacity-90"
-          >
-            Restore the scene
-          </button>
-        )}
-      </div>
     </div>
   )
 }
@@ -219,6 +231,8 @@ export function Portfolio2026FinalPage() {
   /** โหมดคอมเมนต์ (เคอร์เซอร์เป็นหมุดทั้งจอแรก) + ตำแหน่งที่ปักช่องพิมพ์ไว้ */
   const [commenting, setCommenting] = useState(false)
   const [pin, setPin] = useState<{ x: number; y: number } | null>(null)
+  /** โหมดของจอแล็ปท็อปในฉาก — สลับจาก toolbar (design = ซิมมือถือ, dev = โค้ด) */
+  const [mode, setMode] = useState<HeroMode>('design')
   const rootRef = useRef<HTMLDivElement>(null)
   // จอ What I Do ยกมาทั้งก้อนจาก /2026 — สองอันนี้คือของที่ section นั้นต้องการ
   const scrollyRef = useRef<HTMLDivElement>(null)
@@ -296,6 +310,7 @@ export function Portfolio2026FinalPage() {
             มุมล่างของแผ่นถูกขอบล่างของแคนวาสตัดหายไป ความสูงกับ fit ของกล้องขยับคู่กัน
             ขนาดฉากบนจอจึงเท่าเดิม ได้แค่ที่ว่างเพิ่ม */}
         <HeroPlatform
+          screenMode={mode}
           exploded={exploded}
           onRestored={() => setExploded(false)}
           className="absolute top-[-31svh] right-[-6%] h-[126svh] w-[95%] min-w-[560px]"
@@ -314,12 +329,10 @@ export function Portfolio2026FinalPage() {
               <HeroBubble
                 className="z-50"
                 active={commenting}
-                exploded={exploded}
                 onToggle={() => {
                   setPin(null)
                   setCommenting((v) => !v)
                 }}
-                onRestore={() => setExploded(false)}
               />
             </div>
             <div className="flex items-end gap-[clamp(10px,1.7vw,24px)]">
@@ -335,7 +348,33 @@ export function Portfolio2026FinalPage() {
             to bringing design to a real-world impact solution.
           </p>
         </div>
+
+        {/* แผงเครื่องมือของจอแรกเป็นของสามมิติในฉาก (HeroToolPanel) ซึ่ง screen reader
+            อ่านไม่ได้ — ปุ่มชุดนี้คือทางเดียวกันในแบบที่คีย์บอร์ดกับ AT ใช้ได้จริง */}
+        <div className="sr-only">
+          <button type="button" onClick={() => setCommenting(false)}>
+            Move tool
+          </button>
+          <button type="button" onClick={() => setCommenting(true)}>
+            Comment tool
+          </button>
+          <button type="button" onClick={() => setMode('design')}>
+            Design mode
+          </button>
+          <button type="button" onClick={() => setMode('dev')}>
+            Dev mode
+          </button>
+          {exploded && (
+            <button type="button" onClick={() => setExploded(false)}>
+              Restore the scene
+            </button>
+          )}
+        </div>
       </Screen>
+
+      {/* แถบ Open to work — คั่นจอ hero กับ What I Do เหมือนหน้า /2026
+          ชิดขอบทั้งสองจอ ไม่เว้นระยะ เพื่อให้อ่านเป็นเส้นแบ่งไม่ใช่บล็อกลอย */}
+      <OpenToWorkMarquee />
 
       {/* ── จอ 2: สิ่งที่ทำ ───────────────────────────────────────────────
           ใช้ section ตัวเดียวกับหน้า /2026 (กระเบื้องสกิลที่กางทีละใบตามระยะ scroll
@@ -349,7 +388,9 @@ export function Portfolio2026FinalPage() {
           <div className="flex flex-col lg:sticky lg:top-0 lg:h-screen lg:justify-center">
             {/* กรอบเดียวกับจออื่นของหน้านี้ — ของเดิมกินเต็มความกว้างจอเพราะหน้า /2026
                 มีขอบของตัวเองอยู่แล้ว ที่นี่ไม่มี ต้องใส่ให้ */}
-            <div className="mx-auto w-full max-w-[1440px] px-[clamp(16px,4.44vw,64px)]">
+            {/* ระยะขอบซ้าย/ขวาเท่ากับหัวเรื่องในจอแรก — สองจออยู่ในกรอบเดียวกัน
+                ถ้าไม่เท่ากันจะเห็นเป็นบล็อกที่เยื้องกันตอนเลื่อนผ่าน */}
+            <div className="mx-auto w-full max-w-[1440px] px-[clamp(24px,9.5vw,137px)]">
               <WhatIDo skillsRef={skillsRef} active={skill} />
             </div>
           </div>
@@ -357,10 +398,9 @@ export function Portfolio2026FinalPage() {
       </section>
 
       {/* ── จอ 3: ประสบการณ์ ───────────────────────────────────────────
-          ในแบบมีแต่หัวเรื่อง เนื้อหายังไม่ถูกออกแบบ — ปล่อยว่างตามนั้น */}
-      <Screen id="experiences">
-        <ScreenHead eyebrow="SKILLS" title="Experiences" />
-      </Screen>
+          จบ What I Do แล้วการ์ด mascot ขยายเต็มจอ ก่อนจางออกเผยอุโมงค์กระเบื้องสามมิติ
+          ที่เล่าเส้นทางการทำงานตามไทม์ไลน์จริง (ดู sections/tunnel) */}
+      <ExperienceTunnel id="experiences" />
 
       {/* ── จอ 4: ผลงาน ──────────────────────────────────────────────────
           เป็น section ที่ไหลจริง ไม่ใช่การ์ดสามใบที่ปักพิกัดสัมบูรณ์ไว้: ในแบบการ์ดใบที่สาม
@@ -368,7 +408,7 @@ export function Portfolio2026FinalPage() {
           ที่นี่จึงเป็นแถวที่เลื่อนได้ กว้างตามเนื้อหา แล้วปล่อยให้ใบท้ายเลยขอบเหมือนกัน
           — พอจอแคบกว่า 1440 มันก็ยังอ่านได้ ไม่ใช่การ์ดหลุดออกไปเฉย ๆ */}
       <Screen id="works">
-        <div className="flex h-[100svh] flex-col pt-[clamp(96px,16svh,161px)] pb-[clamp(24px,8svh,80px)]">
+        <div className="flex h-[100svh] flex-col pt-[clamp(72px,16svh,161px)] pb-[clamp(16px,8svh,80px)]">
           <div className="flex shrink-0 gap-[clamp(24px,5vw,74px)] px-[clamp(24px,4.4vw,64px)]">
             <p className="v3-eyebrow pt-[6px]">WORKS</p>
             <h2 className="v3-h1 uppercase">My Work</h2>
@@ -376,21 +416,31 @@ export function Portfolio2026FinalPage() {
 
           {/* items-center: ใบกลางสูงกว่าเพื่อนตามแบบ สองใบข้างจึงเยื้องลงเองโดยไม่ต้องตั้ง
               margin-top ตายตัว (ค่า 62px ในแบบคือผลของการจัดกึ่งกลาง ไม่ใช่ระยะที่ตั้งใจ) */}
-          <div className="mt-[clamp(24px,5svh,52px)] flex min-h-0 flex-1 items-center gap-[clamp(16px,2.8vw,40px)] overflow-x-auto px-[clamp(24px,14vw,202px)] pb-2">
-            <article className="flex h-[83%] w-[407px] shrink-0 flex-col rounded-[40px] bg-[var(--v3-blue-deep)] p-10">
-              <h3 className="text-[20px] leading-normal" style={{ fontFamily: 'var(--v3-display)' }}>
+          {/* ขนาดทุกอย่างในแถวนี้ผูกกับ "ความสูงจอ" ไม่ใช่ค่าตายตัวจากแบบ 1024: ระยะขอบ
+              ตัวอักษร และช่องว่างในการ์ดหดตามจอเตี้ย ไม่งั้นช่องภาพ (ตัวที่ยืดได้ตัวเดียว)
+              จะโดนบีบจนเหลือเป็นแถบบาง ๆ ก่อนอย่างอื่นเสมอ */}
+          <div className="mt-[clamp(16px,5svh,52px)] flex min-h-0 flex-1 items-center gap-[clamp(16px,2.8vw,40px)] overflow-x-auto px-[clamp(24px,14vw,202px)] pb-2">
+            <article className="flex h-[83%] w-[clamp(260px,28vw,407px)] shrink-0 flex-col rounded-[clamp(20px,4svh,40px)] bg-[var(--v3-blue-deep)] p-[clamp(20px,3.6svh,40px)]">
+              <h3
+                className="text-[clamp(15px,2.2svh,20px)] leading-normal"
+                style={{ fontFamily: 'var(--v3-display)' }}
+              >
                 HEALTH DASHBOARDS
               </h3>
-              <div className="mt-4 flex gap-4">
+              <div className="mt-[clamp(8px,1.6svh,16px)] flex flex-wrap gap-[clamp(8px,1.6svh,16px)]">
                 {['Data Visualization', 'UX/UI Design'].map((tag) => (
-                  <span key={tag} className="rounded-xl bg-white/10 px-3 py-2 text-[16px]">
+                  <span
+                    key={tag}
+                    className="rounded-xl bg-white/10 px-[clamp(8px,1.2vw,12px)] py-[clamp(5px,1svh,8px)] text-[clamp(12px,1.8svh,16px)]"
+                  >
                     {tag}
                   </span>
                 ))}
               </div>
-              {/* ที่วางภาพงานจริง — ยังไม่มีในแบบ จึงเป็นช่องว่างที่ถูกกันไว้ ไม่ใช่ภาพหลอก */}
-              <div className="mt-8 min-h-0 flex-1 rounded-3xl bg-[var(--v3-grey)]" />
-              <p className="mt-8 text-[16px] leading-normal">
+              {/* ที่วางภาพงานจริง — ยังไม่มีในแบบ จึงเป็นช่องว่างที่ถูกกันไว้ ไม่ใช่ภาพหลอก
+                  min-h กันไม่ให้มันถูกบีบจนหายไปตอนจอเตี้ย */}
+              <div className="mt-[clamp(12px,3svh,32px)] min-h-[72px] flex-1 rounded-3xl bg-[var(--v3-grey)]" />
+              <p className="mt-[clamp(12px,3svh,32px)] text-[clamp(12px,1.8svh,16px)] leading-normal">
                 Transform over million data into actionable
                 <br />
                 insight for 200+ hospital in Thailand
@@ -398,8 +448,8 @@ export function Portfolio2026FinalPage() {
             </article>
 
             {/* สองใบที่เหลือในแบบยังเป็นแผ่นเปล่า เนื้อหายังไม่ถูกออกแบบ — ปล่อยว่างตามนั้น */}
-            <div className="h-full w-[407px] shrink-0 rounded-[40px] bg-[var(--v3-grey)]" />
-            <div className="h-[83%] w-[407px] shrink-0 rounded-[40px] bg-[var(--v3-blue-deep)]" />
+            <div className="h-full w-[clamp(260px,28vw,407px)] shrink-0 rounded-[clamp(20px,4svh,40px)] bg-[var(--v3-grey)]" />
+            <div className="h-[83%] w-[clamp(260px,28vw,407px)] shrink-0 rounded-[clamp(20px,4svh,40px)] bg-[var(--v3-blue-deep)]" />
           </div>
         </div>
       </Screen>

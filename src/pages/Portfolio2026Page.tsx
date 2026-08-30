@@ -9,6 +9,8 @@ import {
 } from 'react'
 import './portfolio2026.css'
 import { BODY_TEXT, BORDER, CELL, PAD } from './portfolio2026.tokens'
+import { OpenToWorkMarquee } from '@/components/OpenToWorkMarquee'
+import { JOURNEY } from '@/data/journey'
 import { useRevealed } from '@/hooks/useRevealed'
 import { useSkillStory, WhatIDo } from '@/sections/whatido/WhatIDo'
 import { Leva } from 'leva'
@@ -26,9 +28,6 @@ import quoteMark from '@/assets/v2/quote-mark.svg'
 import mosaicBand from '@/assets/v2/mosaic-band.svg'
 import chartBarIcon from '@/assets/v2/icon-chart-bar.svg'
 import homeHealthIcon from '@/assets/v2/icon-home-health.svg'
-import logoSit from '@/assets/v2/logo-sit.png'
-import logoKmutt from '@/assets/v2/logo-kmutt.png'
-import bmsOffice from '@/assets/v2/bms-office.png'
 import githubIcon from '@/assets/github-142_svgrepo.com.svg'
 import linkedinIcon from '@/assets/linkedin_svgrepo.com.svg'
 
@@ -102,40 +101,6 @@ function scrollToSection(id: string) {
   const y = el.getBoundingClientRect().top + window.scrollY - Number.parseInt(HEADER_H, 10)
   window.scrollTo({ top: y, behavior: 'smooth' })
 }
-
-/**
- * ไทม์ไลน์เส้นทางงาน (comp 12563:216-244)
- *
- * `at` = ป้ายแท็บข้างล่าง ส่วน `role`/`org` คือหมุดบนเส้น — หมุดสุดท้ายเป็นปัจจุบัน
- * จึงยังไม่มีข้อความกำกับในคอมพ์ เส้นหลังหมุดนั้นเป็นสีเทา (ยังไม่ถึง)
- */
-type Stop = {
-  at: string
-  role: string
-  org: string
-  /** เนื้อการ์ดของช่วงนั้น — มีเฉพาะช่วงที่มีของจริง ไม่มีก็ปล่อยว่าง ไม่แต่งขึ้นมา */
-  credential?: string
-  logos?: { src: string; alt: string }[]
-  quote?: string
-  photo?: { src: string; alt: string }
-}
-
-const JOURNEY: Stop[] = [
-  {
-    at: '@SIT',
-    role: 'B.Sc. Information Technology',
-    org: 'Second Class Honors',
-    credential: 'B.Sc. Information Technology',
-    logos: [
-      { src: logoSit, alt: 'School of Information Technology' },
-      { src: logoKmutt, alt: 'KMUTT' },
-    ],
-    quote: 'This valuable 4 years gave me a solid foundation of software development.',
-    photo: { src: bmsOffice, alt: 'บรรยากาศห้องประชุมของทีม' },
-  },
-  { at: '@APPMAN', role: 'Internship UX/UI Designer', org: 'AppMan Co,. Ltd.' },
-  { at: '@BMS', role: 'Full-time UX/UI Designer', org: 'Bangkok Medical Software Co,. Ltd.' },
-]
 
 /**
  * โมเสกมุมขวาล่างของการ์ดคำพูด — บันไดไต่ขึ้นทางขวา
@@ -652,31 +617,7 @@ export function Portfolio2026Page() {
         </section>
       </main>
 
-      {/* แถบ Open to work คั่นหน้า — marquee เลื่อนไม่รู้จบ เต็มความกว้างจอ (comp 12546:158910)
-          เนื้อในซ้ำสองชุด แล้วเลื่อน -50% วนลูป: รอยต่อจึงเนียนทุกขนาดจอ */}
-      <div className="my-[clamp(1.5rem,2.8vw,2.5rem)] overflow-hidden" aria-hidden>
-        <div className="v2-marquee">
-          {[0, 1].map((copy) => (
-            <div key={copy} className="flex">
-              {([
-                ['#c25200', 'text-white'],
-                ['#5a3bf7', 'text-white'],
-                ['#62ed83', 'text-black'],
-                ['#bba00f', 'text-black'],
-              ] as const).map(([bg, tone]) => (
-                <p
-                  key={bg}
-                  className={`flex h-[clamp(2.75rem,3.75vw,3.4rem)] w-[clamp(15rem,26vw,23.5rem)] items-center justify-center gap-2 ${BODY_TEXT} font-medium ${tone}`}
-                  style={{ background: bg }}
-                >
-                  Open to work
-                  <span className="inline-block size-[0.85em] rounded-full bg-[var(--v2-green)]" />
-                </p>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
+      <OpenToWorkMarquee className="my-[clamp(1.5rem,2.8vw,2.5rem)]" />
 
       <main className="border-x border-[var(--v2-line)]" style={{ marginInline: GUTTER_LINE }}>
         {/* แถวหัว section: Pixels & Logic | ป้าย joe.skills() (comp 12546:158862) */}
