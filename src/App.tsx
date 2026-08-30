@@ -15,9 +15,11 @@ import { ThemePicker } from '@/components/ThemePicker'
 import { AnchorNav } from '@/components/AnchorNav'
 import { HomePage } from '@/pages/HomePage'
 import { DriftWallSandbox } from '@/pages/DriftWallSandbox'
+import { IntroSandbox } from '@/pages/IntroSandbox'
 import { MascotPage } from '@/pages/MascotPage'
 import { NotPortedPage } from '@/pages/NotPortedPage'
 import { Portfolio2026Page } from '@/pages/Portfolio2026Page'
+import { Portfolio2026FinalPage } from '@/pages/Portfolio2026FinalPage'
 // ฉาก 3D หนัก (three.js) — lazy แยก chunk ไม่ถ่วงหน้าอื่น
 const JoespressoPage = lazy(() => import('@/joespresso/Page'))
 // workspace ปั้นทรง toolbar ของฉาก joespresso — ใช้ three เหมือนกัน แยก chunk เช่นกัน
@@ -62,6 +64,17 @@ export function App() {
   const isJoespresso = location.pathname.startsWith('/joespresso')
   // เวอร์ชันสองของหน้าแรก (layout ตาราง) — มี header ของตัวเอง ไม่ใช้ NavBar/Footer ของ shell
   const isV2 = location.pathname === '/2026'
+  /** หน้าเวอร์ชันตัดสินแล้ว ถอดจาก Figma — มี shell ของตัวเอง ไม่ใช้ nav ของเว็บ */
+  const isV3 = location.pathname === '/2026-final'
+  /**
+   * หน้าส่องอินโทรเดี่ยว ๆ (dev เท่านั้น)
+   *
+   * ต้องอยู่ชั้นเดียวกับ /joespresso คือมี shell ของตัวเอง ไม่ใช่ route ข้างในเลย์เอาต์หลัก
+   * เพราะอินโทรเป็น fixed inset-0 แต่ตัวห่อของเลย์เอาต์มี transform อยู่ กรอบอ้างอิงของ
+   * fixed เลยกลายเป็นตัวห่อนั้นแทนที่จะเป็นวิวพอร์ต แคนวาสจึงถูกบีบเหลือแถบบาง ๆ
+   * และต้องกันสปแลชของเว็บไม่ให้ขึ้นทับด้วย ไม่งั้นมีอินโทรสองตัวซ้อนกัน
+   */
+  const isIntroLab = import.meta.env.DEV && location.pathname === '/sandbox/intro'
 
   // Which splash plays is decided by where the visitor landed, not by where
   // they are now — it runs once, on load, and reading `location` live would
@@ -217,7 +230,7 @@ export function App() {
           The mascot gets the wordmark instead. The eye's whole point is that it
           opens onto the hero's own scene, and the mascot page has no such scene
           to open onto. */}
-      {showSplash &&
+      {showSplash && !isIntroLab &&
         (landedOn === '/2026' ? (
           /* /2026 มีอินโทรของตัวเอง (เศษโค้ด -> สนาม ASCII -> เวิร์ดมาร์ก)
              หน้าอื่นยังใช้สปแลชเดิม — คนละภาษาภาพกัน ไม่ควรบังคับให้เหมือน */
@@ -236,7 +249,11 @@ export function App() {
           <SplashScreen onEyeOpen={setEyeOpen} onDone={finishSplash} />
         ))}
 
-      {isV2 ? (
+      {isIntroLab ? (
+        <IntroSandbox />
+      ) : isV3 ? (
+        <Portfolio2026FinalPage />
+      ) : isV2 ? (
         <Portfolio2026Page />
       ) : /* /joespresso = ฉาก 3D เต็มจอ มี layout/nav ของตัวเอง — ไม่ใช้ shell ของเว็บ */
       isJoespresso ? (

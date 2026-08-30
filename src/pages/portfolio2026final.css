@@ -1,0 +1,111 @@
+/* ── /2026-final ───────────────────────────────────────────────────────────
+   สีและค่าคงที่ของหน้านี้ ถอดจากไฟล์ Figma (BMS Design System, node 12716:2552)
+
+   ตั้งบนคลาส ไม่ใช่ :root — CSS ของ route หนึ่งยังค้างอยู่ทั้งแอปหลังเข้าหน้านั้น
+   ครั้งแรก ถ้าตั้งที่ :root มันจะไปย้อมทุกหน้าที่เหลือด้วย */
+.v3 {
+  --v3-blue: #265ada;
+  --v3-blue-deep: #2052cd;
+  --v3-green: #008254;
+  --v3-ink: #f0f0f0;
+  --v3-line: #d2d9d5;
+  --v3-muted: #666;
+  --v3-purple: #ad85fe;
+  --v3-orange: #fd5000;
+  --v3-sky: #158ffc;
+  --v3-sand: #e2d7cb;
+  --v3-grey: #d9d9d9;
+
+  /* ฟอนต์ของแบบ โหลดจาก Google Fonts ที่ index.html
+     Display มีน้ำหนักเดียวคือ 400 — อย่าสั่ง font-weight อย่างอื่นกับหัวเรื่อง มันจะได้ตัวหนา
+     ปลอมที่เบราว์เซอร์วาดเอง ส่วน Sans มีจริง 300-700 */
+  --v3-display: 'Momo Trust Display', 'Mona Sans', system-ui, sans-serif;
+  --v3-body: 'Momo Trust Sans', 'Mona Sans', system-ui, sans-serif;
+
+  background: var(--v3-blue);
+  color: var(--v3-ink);
+  font-family: var(--v3-body);
+}
+
+/**
+ * แผ่นสี่เหลี่ยมเอียงที่ลอยอยู่หลังฉาก
+ *
+ * ในไฟล์ออกแบบเป็นสี่เหลี่ยมจัตุรัส 400px ที่ถูกหมุน 33.69° บีบแกนตั้ง 92% แล้ว skew
+ * แกนนอน −22.42° — ค่าชุดนี้คือการฉายภาพไอโซเมตริก เก็บไว้เป็นคลาสเดียวเพราะทุกแผ่น
+ * ใช้ค่าเดียวกันหมด ต่างกันแค่ตำแหน่ง
+ */
+.v3-iso {
+  position: absolute;
+  width: 400px;
+  height: 400px;
+  border: 1px solid #fff;
+  background: rgb(255 255 255 / 0.05);
+  transform: rotate(33.69deg) scaleY(0.92) skewX(-22.42deg);
+  pointer-events: none;
+}
+
+/**
+ * ราวจุดนำสายตา — ตัวเดียวกับหน้าแรก (components/AnchorNav) แต่ต้องใช้สีของหน้านี้
+ *
+ * ตัวราวแต่งด้วยโทเคนของ Tailwind (bg-panel / bg-brand-orange / text-ink) ซึ่งธีมหลัก
+ * ตั้งเป็นชุดสี Discord — ทับเฉพาะในขอบเขต .v3 ให้เป็นสีของแบบ BMS ไม่ต้องแก้ตัวคอมโพเนนต์
+ */
+.v3 {
+  --color-panel: #fff;
+  --color-brand-orange: var(--v3-orange);
+  --color-ink: #292a2e;
+}
+
+/* ในแบบเนื้อหาชิดขอบซ้ายที่ 64px เท่ากับตำแหน่งราวเดิม — ขยับเข้ามาไม่ให้ทับกระเบื้อง */
+.v3 .anchor-nav {
+  left: 24px;
+}
+
+/**
+ * เคอร์เซอร์โหมดคอมเมนต์ — ลูกโป่งคำพูดแบบเดียวกับเครื่องมือคอมเมนต์ของ Figma
+ *
+ * เป็น data URI ของ SVG ตรง ๆ (ไฟล์ .cur ไม่รองรับ retina และ .svg แยกไฟล์ต้องรอโหลด
+ * ทำให้เห็นเคอร์เซอร์กระพริบตอนเข้าโหมด) ตัวเลขท้าย = จุดกด (hotspot) ที่ปลายหางลูกโป่ง
+ */
+.v3-comment-cursor {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M4 3h22a3 3 0 0 1 3 3v13a3 3 0 0 1-3 3H13l-9 8v-8a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z' fill='%23fd5000' stroke='%23ffffff' stroke-width='2'/%3E%3C/svg%3E")
+      4 29,
+    crosshair;
+}
+
+/* หัวข้อใหญ่ของแต่ละหน้าจอ — 96px ที่ 1440 แล้วย่อตามจอ */
+.v3-h1 {
+  font-family: var(--v3-display);
+  /* ย่อตามทั้งความกว้างและความสูงของจอ — จอเตี้ย (โน้ตบุ๊ก 13") ตัวอักษรที่คิดจาก vw
+     อย่างเดียวจะดันบรรทัดล่างหลุดออกนอกจอแรก */
+  font-size: clamp(36px, min(6.7vw, 9.4svh), 96px);
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+/* ป้ายกำกับหมวดที่ขอบซ้าย (SKILLS / WORKS / TOOLS) */
+.v3-eyebrow {
+  font-family: var(--v3-display);
+  font-size: 16px;
+  letter-spacing: 0.02em;
+}
+
+/**
+ * จอ What I Do — section ตัวเดียวกับหน้า /2026 แต่ต้องอยู่บนพื้นน้ำเงินของหน้านี้
+ *
+ * ตัว section อ่านสีจากตัวแปร --v2-* ทั้งหมด (ไม่มีค่าดิบใน JSX) การเปลี่ยนพื้นจึงเป็นการ
+ * ทับตัวแปรชุดนั้นเฉพาะตรงนี้ ไม่ใช่ไปแก้ธีมของ /2026 ซึ่งยังต้องดำเหมือนเดิม
+ * ต้องเจาะจงกว่า .v2-theme (จึงเขียนเป็น .v3 .v3-whatido) ไม่งั้นค่าดำชนะเพราะมาทีหลัง
+ *
+ * สีกระเบื้องสกิล (ฟ้า/ม่วง/ส้ม) กับพื้นเบจของกระเบื้องตัวละครไม่ใช่ตัวแปร — เป็นสีของแบรนด์
+ * ที่ต้องคงเดิมทั้งสองธีมอยู่แล้ว จึงไม่ถูกแตะ
+ */
+.v3 .v3-whatido {
+  --v2-bg: var(--v3-blue);
+  --v2-surface: var(--v3-blue-deep);
+  --v2-raise: var(--v3-blue-deep);
+  --v2-line: rgb(255 255 255 / 0.28);
+  --v2-ink: var(--v3-ink);
+  --v2-muted: rgb(240 240 240 / 0.7);
+}
