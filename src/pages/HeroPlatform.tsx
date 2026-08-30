@@ -2,8 +2,10 @@ import { Suspense, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { Edges } from '@react-three/drei'
-import { BASE_H, HeroScene } from './HeroScene'
-import { HeroShatter } from './HeroShatter'
+import { HeroScene } from './HeroScene'
+import type { ScreenMode } from './HeroScene'
+import { Chunk, HeroShatter } from './HeroShatter'
+import { editor, EditorPanel, useEditorRev } from './HeroEditor'
 // แผงจูนฉาก (HeroPlatformDebug) ถูกถอดออกจากหน้าชั่วคราวตามที่สั่ง — ไฟล์ยังอยู่
 // เอากลับมาได้ด้วยการคืน state กับบล็อก import.meta.env.DEV ที่ท้ายไฟล์
 import type { HeroCfg } from './HeroPlatformDebug'
@@ -30,11 +32,14 @@ export const TILE = 4
  * ค่าที่ใช้จริงบนหน้า — ตัวเลขชุดนี้มาจากการลากในแผงดีบัก (HeroPlatformDebug) แล้วก๊อบกลับมา
  * yaw เป็นหน่วย π ไม่ใช่องศา ให้ตรงกับที่แผงแสดง
  */
+/** ความสูงของทั้ง diorama — HeroCfg ไม่มีช่อง y จึงอยู่แยก (แผงจัดฉากปรับตัวนี้ได้) */
+const SCENE_Y = 0.3
+
 const DEFAULT_CFG: HeroCfg = {
   // ตัวละครตัวหน้าสุด ยืนอยู่หน้าโต๊ะ (อีกสองตัวในฉากตำแหน่งตายตัว — ดู HeroPlatform)
-  mascot: { x: -2.6, z: 3.6, yaw: 0.1, scale: 0.42 },
+  mascot: { x: -1.1, z: 3.5, yaw: 0.1, scale: 0.42 },
   // ทั้ง diorama: เลื่อน/หมุน/ย่อทั้งก้อนพร้อมกัน
-  scene: { x: 4.2, z: 1.4, yaw: 0, scale: 1 },
+  scene: { x: 6.8, z: 1.5, yaw: 0, scale: 1.04 },
   // fit ผูกกับความสูงของกรอบ (126svh) — เปลี่ยนความสูงกรอบต้องขยับค่านี้ตามสัดส่วน
   fit: 21.4,
 }
@@ -140,56 +145,14 @@ function Rig({ fit }: { fit: number }) {
   return null
 }
 
-/**
- * วางของให้ "ยืนบนแผ่น" จริง + เปิดเงาให้ทุกชิ้นข้างใน
- *
- * จุดกำเนิดของ GLB ตัวนี้อยู่แถวหัว ไม่ใช่ฝ่าเท้า วางที่ y=0 ตรง ๆ ตัวจะจมอยู่ใต้แผ่นทั้งตัว
- * (มองเห็นอยู่เพราะแผ่นโปร่ง) แทนที่จะฮาร์ดโค้ดตัวเลขยกขึ้นซึ่งจะผิดทันทีที่เปลี่ยน scale
- * ตรงนี้วัดกล่องขอบเขตจริงหลังเมานต์แล้วเลื่อนให้ก้นกล่องแตะ y=0 พอดี
- *
- * castShadow ก็ตั้งที่นี่ด้วยเหตุผลเดียวกัน — ต้องรอให้โมเดลถูก clone เข้ามาเป็นลูกก่อน
- * (onUpdate ของ group ยิงตั้งแต่ตอนใส่ prop ซึ่งเร็วเกินไป)
- */
-function OnPlatform({
-  children,
-  position,
-}: {
-  children: ReactNode
-  position: [number, number, number]
-}) {
-  const ref = useRef<THREE.Group>(null)
-  const snapped = useRef(false)
-
-  useEffect(() => {
-    const g = ref.current
-    if (!g || snapped.current) return
-    const box = new THREE.Box3().setFromObject(g)
-    if (box.isEmpty()) return
-    // กล่องเป็นพิกัดโลก ต้องแปลงก้นกล่องกลับมาเป็นพิกัดของ parent ก่อน — ตัวที่ยืนบนของที่
-    // ยกสูง (เช่นขอบบนฝาจอ) มี parent อยู่สูงจากพื้นแล้ว ถ้าลบด้วยค่าโลกดิบ ๆ มันจะถูก
-    // ดันจมลงไปเท่ากับความสูงของ parent พอดี
-    const parent = g.parent
-    const footLocal = parent ? parent.worldToLocal(new THREE.Vector3(0, box.min.y, 0)).y : box.min.y
-    g.position.y += position[1] - footLocal
-    snapped.current = true
-    g.traverse((o) => {
-      o.castShadow = true
-    })
-  })
-
-  return (
-    <group ref={ref} position={position} userData={{ mascot: true }}>
-      {children}
-    </group>
-  )
-}
-
 type HeroPlatformProps = {
   className?: string
   /** ระเบิดฉากออกเป็นชิ้น ๆ — สั่งจากช่องแชทในหัวเรื่อง */
   exploded?: boolean
   /** ยิงตอนประกอบฉากกลับครบแล้ว */
   onRestored?: () => void
+  /** โหมดของจอแล็ปท็อปในฉาก — design = เน้นฝั่งซิมมือถือ, dev = เน้นฝั่งโค้ด */
+  screenMode?: ScreenMode
   /** ของที่จะมาวางบนแท่น — อ้างพิกัดด้วย slot() */
   children?: ReactNode
 }
@@ -199,34 +162,65 @@ export function HeroPlatform({
   children,
   exploded = false,
   onRestored,
+  screenMode = 'design',
 }: HeroPlatformProps) {
-  const cfg = DEFAULT_CFG
+  // โหมดจัดฉากแก้ค่าวางทั้ง diorama ได้จากแผง — ถ้ายังไม่ถูกแตะก็ใช้ค่าจากโค้ดตามเดิม
+  editor.initScene({ ...DEFAULT_CFG.scene, y: SCENE_Y, fit: DEFAULT_CFG.fit })
+  const live = editor.scene
+  const cfg: HeroCfg = live
+    ? { ...DEFAULT_CFG, scene: { x: live.x, z: live.z, yaw: live.yaw, scale: live.scale }, fit: live.fit }
+    : DEFAULT_CFG
   // ตั้งแต่ระเบิดจนประกอบกลับเสร็จถือว่า "ไม่นิ่ง" — ห้ามวัดแผ่นพื้นระหว่างนี้ ไม่งั้นมันจะไป
   // วัดตอนชิ้นส่วนลอยกระจาย แล้วได้ขนาดผิด (ชิ้นที่ลอยสูงถูกกรองออก เหลือแค่ของบนพื้นไม่กี่ชิ้น)
   const [busy, setBusy] = useState(false)
+  // โหมดจัดฉาก: มีเฉพาะตอน dev — ลากชิ้นส่วนได้ แล้วก๊อบตำแหน่งไปใส่โค้ด
+  useEditorRev()
+  const editing = editor.editing
   useEffect(() => {
     if (exploded) setBusy(true)
   }, [exploded])
 
   return (
-    <div className={className} aria-hidden>
+    // ตอนจัดฉาก แคนวาสต้องอยู่เหนือชั้นข้อความของหัวเรื่อง ไม่งั้นคลิกไปโดนกล่องข้อความ
+    // ที่กินเต็มความกว้างจอ แล้วลากอะไรไม่ได้เลย
+    <div className={className} style={editing ? { zIndex: 45 } : undefined}>
       <Canvas
-        shadows
+        // ฉากเป็นภาพประกอบล้วน ไม่มีข้อมูลให้ screen reader — ซ่อนเฉพาะแคนวาส ไม่ใช่ทั้งกล่อง
+        // เพราะปุ่มโหมดจัดฉากของ dev อยู่ในกล่องเดียวกัน
+        aria-hidden
+        /**
+         * เงาแบบ PCF soft + shadow map ความละเอียดพอดี ๆ = ขอบเงานุ่ม
+         *
+         * ทางที่ไม่ได้ใช้ และเหตุผล:
+         *  - <SoftShadows/> ของ drei แพตช์ shader chunk ที่ three 0.182 เปลี่ยนไปแล้ว
+         *    (unpackRGBAToDepth หาย) fragment shader คอมไพล์ไม่ผ่าน ทั้งฉากหายทั้งฉาก
+         *  - VSM เบลอได้จริงแต่กินกับ shadowMaterial ไม่ได้ เงาบนพื้นหายเกลี้ยง
+         */
+        shadows="soft"
         orthographic
         // มุมไอโซจริง: กล้องอยู่ระยะเท่ากันทั้งสามแกน มองกลับมาที่จุดกำเนิด
         camera={{ position: [12, 12, 12], near: -100, far: 100 }}
         // ตัวละครขยับทุกเฟรม (ลมหายใจ + หัวตามเมาส์) frameloop จึงเป็น always ไม่ใช่ demand
         dpr={[1, 1.5]}
         gl={{ antialias: true, alpha: true }}
-        style={{ pointerEvents: 'none' }}
+        // ปกติแคนวาสไม่รับคลิก (ข้อความข้างหลังยังเลือกได้) เปิดรับเฉพาะตอนจัดฉาก
+        style={{ pointerEvents: editing ? 'auto' : 'none' }}
       >
         <Rig fit={cfg.fit} />
-        {/* แสงอ่อน ๆ ไว้ให้ของที่มาวางทีหลังมีปริมาตร ตัวแผ่นเองใช้ material ที่ไม่รับแสง */}
-        <ambientLight intensity={0.8} />
+
+        {/**
+         * แสง: หนึ่งดวงหลักนุ่ม ๆ + แสงเติมจากท้องฟ้า ไม่ใช่ ambient ก้อนเดียวแบน ๆ
+         *
+         * ambient ล้วนทำให้ทุกด้านสว่างเท่ากัน ของเลยดูแบนและเงาต้องแรงถึงจะเห็นรูปทรง
+         * hemisphere ให้ด้านบนรับสีฟ้าของหน้าเว็บ ด้านล่างรับสีอุ่นจากพื้น — ด้านมืดจึงยัง
+         * มีสีอยู่ ไม่ทึบ พอด้านมืดไม่ทึบก็ลดความเข้มของแสงหลักและความเข้มเงาลงได้
+         */}
+        <hemisphereLight args={['#cfe0ff', '#f6d9b8', 0.85]} />
+        <ambientLight intensity={0.32} />
         <directionalLight
           castShadow
           position={[5, 14, 3]}
-          intensity={1.2}
+          intensity={0.95}
           shadow-mapSize={[2048, 2048]}
           shadow-camera-left={-18}
           shadow-camera-right={18}
@@ -234,10 +228,13 @@ export function HeroPlatform({
           shadow-camera-bottom={-18}
           shadow-normalBias={0.03}
         />
+        {/* แสงเติมฝั่งตรงข้าม ไม่ทำเงา — กันไม่ให้ด้านที่หันหนีแสงหลักดำจนอ่านรูปทรงไม่ออก */}
+        <directionalLight position={[-8, 5, -6]} intensity={0.28} color="#bcd4ff" />
+
 
         <Suspense fallback={null}>
           <group
-            position={[cfg.scene.x, 0, cfg.scene.z]}
+            position={[cfg.scene.x, live?.y ?? SCENE_Y, cfg.scene.z]}
             rotation={[0, Math.PI * cfg.scene.yaw, 0]}
             scale={cfg.scene.scale}
           >
@@ -252,7 +249,7 @@ export function HeroPlatform({
               position={[0, -0.01, 0]}
             >
               <planeGeometry args={[TILE * 6, TILE * 6]} />
-              <shadowMaterial transparent opacity={0.28} />
+              <shadowMaterial transparent opacity={0.3} color="#12275e" />
             </mesh>
             <GroundPlate frozen={busy} />
             <HeroShatter
@@ -263,36 +260,38 @@ export function HeroPlatform({
               }}
             >
               <HeroScene
+                screenMode={screenMode}
                 // คนที่ปีนบันไดกับคนที่ยืนบนแท่นเครนต้องเอียง/ห้อยไปกับของพวกนั้น จึงส่งเข้าไป
                 // ให้ฉากแขวนเอง ไม่ใช่วางเป็นพิกัดโลกแล้วเดาให้ตรง
-                onLadder={<Worker scale={0.34} rotation={[0, Math.PI * 1, 0]} />}
-                onCrane={
-                  // ยืนบนขอบบนของฝาจอ — OnPlatform วัดกล่องจริงแล้ววางเท้าให้แตะระนาบของ
-                  // parent (ซึ่ง HeroScene ตั้งไว้ที่ยอดฝาจอแล้ว) จึงส่ง y = 0
-                  <OnPlatform position={[0, 0, 0]}>
-                    <Worker scale={0.32} rotation={[0, Math.PI * -0.15, 0]} />
-                  </OnPlatform>
-                }
+                onLadder={<Worker scale={0.34} rotation={[0, Math.PI * 1, 0]} role="climber" />}
+                onCrane={<Worker scale={0.32} rotation={[0, Math.PI * -0.15, 0]} role="boss" />}
               >
-                {/* key ผูกกับ scale: การยกให้เท้าแตะพื้นวัดครั้งเดียวตอนเมานต์ พอลากสเกลในแผง
-                  ดีบัก ค่าที่วัดไว้ก็ผิดทันที บังคับให้เมานต์ใหม่จึงวัดใหม่ (GLB มาจากแคช) */}
-                <OnPlatform key={cfg.mascot.scale} position={[cfg.mascot.x, 0, cfg.mascot.z]}>
+                {/* คนงานทุกคนเป็น Chunk เหมือนของชิ้นอื่น — ตอนประกอบฉากคืน ตัวจัดคิว
+                    ต้องสั่งให้พวกเขาเดินไปยกของ ถ้าไม่ใช่ RigidBody ก็สั่งอะไรไม่ได้เลย
+                    (การยกให้เท้าแตะพื้นย้ายไปอยู่ใน Worker แล้ว ไม่ต้องใช้ OnPlatform อีก) */}
+                <Chunk
+                  name="worker-front"
+                  mascot
+                  position={[cfg.mascot.x, -0.6, cfg.mascot.z]}
+                  rotation={[-3.13, 0.74, -3.13]}
+                >
                   <Worker
                     scale={cfg.mascot.scale}
                     rotation={[0, Math.PI * cfg.mascot.yaw, 0]}
+                    role="boss"
                   />
-                </OnPlatform>
+                </Chunk>
 
                 {/* คนงานที่เหลือตามภาพอ้างอิง — ยืนบนฐานแล็ปท็อปหนึ่ง ข้างซ้ายสอง ขวาหนึ่ง */}
-                <OnPlatform position={[-1.5, BASE_H, 0.5]}>
+                <Chunk name="worker-desk" mascot position={[-3.9, -0.7, -0.1]}>
                   <Worker scale={0.34} rotation={[0, Math.PI * 0.55, 0]} />
-                </OnPlatform>
-                <OnPlatform position={[-4.8, 0, 0.6]}>
-                  <Worker scale={0.4} rotation={[0, Math.PI * 0.15, 0]} />
-                </OnPlatform>
-                <OnPlatform position={[7.4, 0, 3.4]}>
+                </Chunk>
+                <Chunk name="worker-left" mascot position={[1.0, 0.3, 2.1]}>
+                  <Worker scale={0.4} rotation={[0, Math.PI * 0.15, 0]} role="watcher" />
+                </Chunk>
+                <Chunk name="worker-right" mascot position={[6.6, 0.2, -0.1]}>
                   <Worker scale={0.4} rotation={[0, Math.PI * -0.3, 0]} />
-                </OnPlatform>
+                </Chunk>
 
                 {children}
               </HeroScene>
@@ -300,6 +299,17 @@ export function HeroPlatform({
           </group>
         </Suspense>
       </Canvas>
+
+      {import.meta.env.DEV && !editing && (
+        <button
+          type="button"
+          onClick={() => editor.setEditing(true)}
+          className="pointer-events-auto fixed right-4 bottom-4 z-50 cursor-pointer rounded-full bg-black/60 px-3 py-2 font-mono text-[11px] text-white hover:bg-black/80"
+        >
+          edit scene
+        </button>
+      )}
+      {import.meta.env.DEV && editing && <EditorPanel onClose={() => editor.setEditing(false)} />}
     </div>
   )
 }
