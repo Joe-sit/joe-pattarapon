@@ -20,6 +20,7 @@ import { MascotPage } from '@/pages/MascotPage'
 import { NotPortedPage } from '@/pages/NotPortedPage'
 import { Portfolio2026Page } from '@/pages/Portfolio2026Page'
 import { Portfolio2026FinalPage } from '@/pages/Portfolio2026FinalPage'
+import { NewHeroPage } from '@/pages/NewHeroPage'
 // ฉาก 3D หนัก (three.js) — lazy แยก chunk ไม่ถ่วงหน้าอื่น
 const JoespressoPage = lazy(() => import('@/joespresso/Page'))
 // workspace ปั้นทรง toolbar ของฉาก joespresso — ใช้ three เหมือนกัน แยก chunk เช่นกัน
@@ -66,6 +67,8 @@ export function App() {
   const isV2 = location.pathname === '/2026'
   /** หน้าเวอร์ชันตัดสินแล้ว ถอดจาก Figma — มี shell ของตัวเอง ไม่ใช้ nav ของเว็บ */
   const isV3 = location.pathname === '/2026-final'
+  /** หน้าเปล่าสำหรับทดลอง hero ตัวใหม่ — shell ของตัวเองเหมือนกัน (ดู NewHeroPage) */
+  const isNewHero = location.pathname === '/new-hero'
   /**
    * หน้าส่องอินโทรเดี่ยว ๆ (dev เท่านั้น)
    *
@@ -230,7 +233,8 @@ export function App() {
           The mascot gets the wordmark instead. The eye's whole point is that it
           opens onto the hero's own scene, and the mascot page has no such scene
           to open onto. */}
-      {showSplash && !isIntroLab &&
+      {/* /new-hero เป็นหน้าเปล่าไว้ทดลอง — สปแลชของเว็บบังของที่กำลังจูนอยู่เปล่า ๆ */}
+      {showSplash && !isIntroLab && !isNewHero &&
         (landedOn === '/2026' ? (
           /* /2026 มีอินโทรของตัวเอง (เศษโค้ด -> สนาม ASCII -> เวิร์ดมาร์ก)
              หน้าอื่นยังใช้สปแลชเดิม — คนละภาษาภาพกัน ไม่ควรบังคับให้เหมือน */
@@ -253,6 +257,8 @@ export function App() {
         <IntroSandbox />
       ) : isV3 ? (
         <Portfolio2026FinalPage />
+      ) : isNewHero ? (
+        <NewHeroPage />
       ) : isV2 ? (
         <Portfolio2026Page />
       ) : /* /joespresso = ฉาก 3D เต็มจอ มี layout/nav ของตัวเอง — ไม่ใช้ shell ของเว็บ */
