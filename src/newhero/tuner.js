@@ -69,6 +69,15 @@ export const DEFAULTS = {
   boardRotY: -36,
   boardRotZ: -0.5,
   /**
+   * ลำตัว (องศา) — lean = เอียงทั้งตัวรวมขา / fold = พับเฉพาะช่วงบน เท้าอยู่กับที่
+   */
+  leanX: 14.9,
+  leanZ: -9.2,
+  foldX: 0,
+  foldY: 0,
+  foldZ: 0,
+  headX: -11.5,
+  /**
    * ขา (องศา)
    *
    * มุมในระนาบข้าง (hipX + knee + ankle) ต้องเท่ากันทั้งสองข้าง ไม่งั้นเท้าอยู่คนละ
@@ -107,9 +116,16 @@ export const DEFAULTS = {
 }
 
 // ขึ้นเวอร์ชันเมื่อชุดคีย์/ค่าเริ่มต้นเปลี่ยนแนว — ค่าที่ค้างในเบราว์เซอร์จะได้ไม่ทับของใหม่
-const KEY = 'newhero.tuner.v19'
+const KEY = 'newhero.tuner.v20'
 
 function load() {
+  /**
+   * นอกโหมด dev อ่านจาก DEFAULTS อย่างเดียว
+   *
+   * หน้า /2026-final ใช้ฉากเดียวกันนี้ ถ้าปล่อยให้อ่าน localStorage ค่าที่ใครสักคน
+   * เผลอลากทิ้งไว้ตอนจูนจะติดไปกับหน้าจริงของเขาเอง โดยที่ไม่มีแผงให้แก้กลับ
+   */
+  if (!import.meta.env.DEV) return { ...DEFAULTS }
   if (typeof localStorage === 'undefined') return { ...DEFAULTS }
   try {
     const raw = localStorage.getItem(KEY)

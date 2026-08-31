@@ -1,15 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import './portfolio2026final.css'
 import './portfolio2026.css'
 import { useSkillStory, WhatIDo } from '@/sections/whatido/WhatIDo'
 import { Logo } from '@/joespresso/Logo'
-import { HeroPlatform } from './HeroPlatform'
 import { ExperienceTunnel } from '@/sections/tunnel/ExperienceTunnel'
 import { AnchorNav } from '@/components/AnchorNav'
 import { SITE } from '@/config/site'
-import type { HeroMode } from './HeroToolPanel'
 import { OpenToWorkMarquee } from '@/components/OpenToWorkMarquee'
+/** ฉาก 3D ของจอแรก — แยก chunk ไม่ให้ถ่วงจอที่เหลือ */
+const NewHeroScene = lazy(() => import('@/newhero/NewHeroScene'))
 import heroLife from '@/assets/v2final/hero-life.svg'
 import heroBubble from '@/assets/v2final/hero-ideas-bubble.svg'
 
@@ -122,8 +122,6 @@ function ScreenHead({ eyebrow, title }: { eyebrow: string; title: string }) {
   )
 }
 
-/** ข้อความต้องห้าม — พิมพ์อันนี้แล้วฉากพัง (จงใจให้เป็นมุกของหน้า) */
-const FORBIDDEN = /requirement\s*change/i
 
 /**
  * ลูกโป่งคำพูดในหัวเรื่อง — ตอนนี้เป็นปุ่มธรรมดา
@@ -227,12 +225,10 @@ function Iso({ left, top }: { left: string; top: string }) {
 export function Portfolio2026FinalPage() {
   const [onHero, setOnHero] = useState(true)
   /** ฉากสามมิติพังอยู่หรือเปล่า — คุมจากช่องแชทในหัวเรื่อง */
-  const [exploded, setExploded] = useState(false)
   /** โหมดคอมเมนต์ (เคอร์เซอร์เป็นหมุดทั้งจอแรก) + ตำแหน่งที่ปักช่องพิมพ์ไว้ */
   const [commenting, setCommenting] = useState(false)
   const [pin, setPin] = useState<{ x: number; y: number } | null>(null)
   /** โหมดของจอแล็ปท็อปในฉาก — สลับจาก toolbar (design = ซิมมือถือ, dev = โค้ด) */
-  const [mode, setMode] = useState<HeroMode>('design')
   const rootRef = useRef<HTMLDivElement>(null)
   // จอ What I Do ยกมาทั้งก้อนจาก /2026 — สองอันนี้คือของที่ section นั้นต้องการ
   const scrollyRef = useRef<HTMLDivElement>(null)
@@ -294,8 +290,7 @@ export function Portfolio2026FinalPage() {
               <CommentPin
                 x={pin.x}
                 y={pin.y}
-                onSubmit={(text) => {
-                  if (FORBIDDEN.test(text)) setExploded(true)
+                onSubmit={() => {
                   setPin(null)
                   setCommenting(false)
                 }}
@@ -305,20 +300,23 @@ export function Portfolio2026FinalPage() {
           </div>
         )}
 
-        {/* แท่นไอโซของจริง กินครึ่งขวาของจอ วางเลยขอบบนไปเหมือนในแบบที่แผ่นบนสุดโดนตัด */}
-        {/* กรอบแคนวาสสูงกว่าจอ (126svh) เพราะข้าวหลามตัดของแท่นสูงกว่ากรอบ 100svh — เดิม
-            มุมล่างของแผ่นถูกขอบล่างของแคนวาสตัดหายไป ความสูงกับ fit ของกล้องขยับคู่กัน
-            ขนาดฉากบนจอจึงเท่าเดิม ได้แค่ที่ว่างเพิ่ม */}
-        <HeroPlatform
-          screenMode={mode}
-          exploded={exploded}
-          onRestored={() => setExploded(false)}
-          className="absolute top-[-31svh] right-[-6%] h-[126svh] w-[95%] min-w-[560px]"
-        />
+        {/**
+         * ฉาก hero ตัวใหม่ — หน้าต่างสามมิติ + ถนนหมากรุก + ตัวละครบนสเก็ตบอร์ด
+         *
+         * กินเต็มจอแรก ไม่ใช่ครึ่งใดครึ่งหนึ่ง เพราะกล้องของฉากถูกแก้จากเส้น perspective
+         * ของแบบไว้แล้ว (ดู docs/new-hero-handoff.md) การไปบีบกรอบให้เหลือครึ่งจอ
+         * เท่ากับเปลี่ยนอัตราส่วนที่ค่ากล้องชุดนั้นคิดมา ของจะเลื่อนหลุดตำแหน่งทันที
+         * องค์ประกอบถูกจัดไว้แล้วให้ของอยู่ซ้าย เหลือที่ว่างฝั่งขวาให้ตัวหนังสือ
+         */}
+        <div className="absolute inset-0 h-[100svh]">
+          <Suspense fallback={null}>
+            <NewHeroScene />
+          </Suspense>
+        </div>
 
         {/* จอแรกไหลตามความสูงจริงของวิวพอร์ต ไม่ใช่พิกัดตายตัวจากแบบ 1024
             หัวเรื่องอยู่กลาง ประโยคปิดถูกดันลงไปติดล่างด้วย mt-auto */}
-        <div className="relative z-10 flex h-[100svh] flex-col px-[clamp(24px,9.5vw,137px)] pt-[clamp(72px,16svh,164px)] pb-[clamp(24px,14svh,143px)]">
+        <div className="pointer-events-none relative z-10 ml-auto flex h-[100svh] w-[min(46%,560px)] flex-col pt-[clamp(72px,16svh,164px)] pr-[clamp(24px,4.7vw,68px)] pb-[clamp(24px,14svh,143px)]">
           {/* my-auto ไม่ใช่ justify-center — ประโยคปิดถูกตรึงไว้ล่างสุด ที่ว่างที่เหลือ
               จึงต้องถูกแบ่งรอบหัวเรื่องเอง ไม่งั้นมันจะถูกดันไปชนแถบเมนูด้านบน */}
           <div className="my-auto flex flex-col gap-[clamp(12px,3.5svh,36px)]">
@@ -327,7 +325,7 @@ export function Portfolio2026FinalPage() {
               <p className="v3-h1">Ideas</p>
               {/* ปุ่มต้องอยู่เหนือชั้นรับคลิกของโหมดคอมเมนต์ ไม่งั้นกดปิดโหมดไม่ได้ */}
               <HeroBubble
-                className="z-50"
+                className="pointer-events-auto z-50"
                 active={commenting}
                 onToggle={() => {
                   setPin(null)
@@ -349,8 +347,8 @@ export function Portfolio2026FinalPage() {
           </p>
         </div>
 
-        {/* แผงเครื่องมือของจอแรกเป็นของสามมิติในฉาก (HeroToolPanel) ซึ่ง screen reader
-            อ่านไม่ได้ — ปุ่มชุดนี้คือทางเดียวกันในแบบที่คีย์บอร์ดกับ AT ใช้ได้จริง */}
+        {/* โหมดคอมเมนต์เปิด/ปิดด้วยฟองคำพูดในฉาก ซึ่ง screen reader อ่านไม่ได้ —
+            ปุ่มคู่นี้คือทางเดียวกันในแบบที่คีย์บอร์ดกับ AT ใช้ได้จริง */}
         <div className="sr-only">
           <button type="button" onClick={() => setCommenting(false)}>
             Move tool
@@ -358,17 +356,6 @@ export function Portfolio2026FinalPage() {
           <button type="button" onClick={() => setCommenting(true)}>
             Comment tool
           </button>
-          <button type="button" onClick={() => setMode('design')}>
-            Design mode
-          </button>
-          <button type="button" onClick={() => setMode('dev')}>
-            Dev mode
-          </button>
-          {exploded && (
-            <button type="button" onClick={() => setExploded(false)}>
-              Restore the scene
-            </button>
-          )}
         </div>
       </Screen>
 

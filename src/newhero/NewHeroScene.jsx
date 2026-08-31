@@ -1070,6 +1070,14 @@ function Scene() {
               wheelW: t.bdWheelW,
               deckY: t.bdRideY,
             }}
+            torsoPose={{
+              leanX: t.leanX * RAD,
+              leanZ: t.leanZ * RAD,
+              foldX: t.foldX * RAD,
+              foldY: t.foldY * RAD,
+              foldZ: t.foldZ * RAD,
+              headX: t.headX * RAD,
+            }}
             legPose={{
               L: {
                 hipX: t.hipLX * RAD,

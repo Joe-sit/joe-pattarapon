@@ -31,6 +31,7 @@ export function Rider({
   foreScale = 1,
   armPose = null,
   legPose = null,
+  torsoPose = null,
   boardSpec = null,
   boardRot = [0, 0.26, 0],
   ...props
@@ -165,6 +166,7 @@ export function Rider({
               foreScale={foreScale}
               armPose={armPose}
               legPose={legPose}
+              torsoPose={torsoPose}
             />
           </Suspense>
         </group>

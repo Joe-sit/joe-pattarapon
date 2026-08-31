@@ -121,6 +121,9 @@ const POSE0 = { elbowX: 0, elbowZ: 0.35, wristX: 0 }
  * ค่าเริ่มต้นของข้อต่อขาในท่า skate — อ่านคู่กับ prop legPose
  * ข้อเท้าคือตัวที่ทำให้ฝ่าเท้าแนบหน้าแผ่นบอร์ดหรือไม่ ต้องปรับคู่กับเข่าเสมอ
  */
+/** ค่าเริ่มต้นการเอียง/พับลำตัวในท่า skate (เรเดียน) */
+const SKATE_TORSO = { leanX: 0.26, leanZ: -0.16, foldX: 0, foldY: 0, foldZ: 0, headX: -0.2 }
+
 const SKATE_LEG = {
   L: { hipX: -1.34, hipY: 0.3, hipZ: 0.16, knee: 1.95, ankle: 0.5 },
   R: { hipX: -0.98, hipY: -0.22, hipZ: -0.12, knee: 1.48, ankle: 0.36 },
@@ -424,6 +427,13 @@ export function Mascot({
   armPose = null,
   /** มุมข้อต่อขาในท่า skate (เรเดียน) — ส่ง null เพื่อใช้ค่าเริ่มต้นของท่า */
   legPose = null,
+  /**
+   * การพับลำตัว (เรเดียน) — ส่ง null เพื่อใช้ค่าเริ่มต้นของท่า
+   *
+   * `lean` คือเอียงทั้งตัวรวมขา ส่วน `fold` คือพับเฉพาะช่วงบน โดยหมุน root ไปแล้ว
+   * หมุนสะโพกกลับเท่ากัน เท้าจึงอยู่กับที่ — ริกตัวนี้ไม่มีข้อต่อเอวให้หมุนตรง ๆ
+   */
+  torsoPose = null,
   /** ซ่อนแก้วกาแฟ — ฉากที่ตัวละครไม่ได้อยู่โหมดทำงาน (เช่นกำลังโต้คลื่น) ถือแก้วแล้วประหลาด */
   noMug = false,
 }) {
@@ -2636,12 +2646,23 @@ export function Mascot({
        * บิดสะโพกรอบแกน y ด้วย เพราะบนบอร์ดเท้าเรียงตามความยาวแผ่น ไม่ใช่เรียงข้างกัน
        */
       const LEG = legPose ?? SKATE_LEG
+      const TP = torsoPose ?? SKATE_TORSO
       for (const k of ['L', 'R']) {
         const L = LEG[k]
         const hip = r[`hip${k}`]
         if (hip?.userData.baseRot) {
           const br = hip.userData.baseRot
-          hip.rotation.set(br.x + L.hipX + w1 * 0.06, br.y + L.hipY, br.z + L.hipZ)
+          /**
+           * หักมุมพับออกจากสะโพก = ขาอยู่กับที่ขณะที่ลำตัวพับ
+           *
+           * ริกไม่มีข้อต่อเอว การพับจึงทำที่ root ซึ่งลากขาไปด้วย ต้องหมุนสะโพกกลับ
+           * เท่ากันเป๊ะ ผลลัพธ์คือช่วงบนพับ ส่วนเท้ายังแนบบอร์ดเหมือนเดิม
+           */
+          hip.rotation.set(
+            br.x + L.hipX - TP.foldX + w1 * 0.06,
+            br.y + L.hipY - TP.foldY,
+            br.z + L.hipZ - TP.foldZ,
+          )
         }
         const knee = r[`knee${k}`]
         if (knee) knee.rotation.x = L.knee + (k === 'L' ? w1 : w2) * 0.08
