@@ -48,8 +48,15 @@ const LOOP = RINGS_PER_LOOP * STEP
 /** ระยะที่ "บินได้" ทั้งจอ — ใช้แปลงระยะ scroll เป็นระยะทางในอุโมงค์ */
 const TRAVEL = LOOP * 5
 
-/** ค่ากลางที่ฉากอ่านทุกเฟรม (ไม่ใช่ state) */
-const flight = { t: 0 }
+/**
+ * ค่ากลางที่ฉากอ่านทุกเฟรม (ไม่ใช่ state)
+ * t = ระยะบินในอุโมงค์ 0..1 · open = ความคืบหน้าของการซูมเข้าไปในกล่อง 0..1
+ */
+const flight = { t: 0, open: 0 }
+
+/** มุมกล้องตอนซูมสุด / ตอนกางเต็มจอแล้ว — ต่างกันคือความรู้สึกว่ากล้อง "พุ่งเข้าไป" ในกล่อง */
+const FOV_IN = 42
+const FOV_OUT = 62
 
 /** สกรีนช็อตงานจริง — แกลเลอรีบนผนังอุโมงค์เป็นผลงานที่ทำจริง ไม่ใช่ภาพ stock */
 const WORK_SHOTS = Object.values(
@@ -325,6 +332,23 @@ function Tunnel() {
   )
 }
 
+/**
+ * ซูมเข้าไปในกล่องด้วยมุมกล้อง ไม่ใช่ CSS transform
+ *
+ * ถ้าขยายแคนวาสด้วย scale() ภาพที่ถูกยืดคือพิกเซลที่เรนเดอร์มาแล้ว = เบลอตามอัตราขยาย
+ * ขยับ fov แทน ทุกเฟรมเรนเดอร์ที่ความละเอียดเต็ม ภาพคมตลอดการซูม
+ */
+function ZoomIn() {
+  useFrame(({ camera }) => {
+    const cam = camera as THREE.PerspectiveCamera
+    const want = FOV_IN + (FOV_OUT - FOV_IN) * flight.open
+    if (Math.abs(cam.fov - want) < 0.01) return
+    cam.fov = want
+    cam.updateProjectionMatrix()
+  })
+  return null
+}
+
 function Lights() {
   // ไฟดวงหลักอยู่ตรงหน้ากล้อง (ซึ่งอยู่กับที่) — กระเบื้องที่วิ่งเข้ามาใกล้จึงสว่างขึ้นแล้วจมกลับเข้าหมอก
   return (
@@ -354,7 +378,8 @@ function FloatingMascot() {
     const time = clock.elapsedTime
 
     // ระยะห่างจากกล้อง: ใกล้มากตอนเต็มจอ แล้วถอยออกเมื่อเริ่มบิน
-    const dist = 3.9 + t * 4.4
+    // เริ่มไกลพอให้เห็นเต็มตัวตั้งแต่เฟรมแรกของอุโมงค์ (มุมกล้องช่วงซูมแคบกว่าปกติ ตัวจึงดูใหญ่ขึ้น)
+    const dist = 6.2 + t * 4.0
     // เยื้องออกข้างและลอยขึ้นลง เริ่มจากศูนย์กลางเป๊ะ แล้วค่อยกว้างขึ้นตามระยะบิน
     const sway = Math.min(1, t / 0.25)
     // ลอยออกไปทางข้างเป็นหลัก ไม่ใช่ค้างกลางเฟรม — กลางเฟรมเป็นที่ของข้อความที่กำลังเล่า
@@ -419,7 +444,7 @@ export function ExperienceTunnel({ id = 'experiences' }: { id?: string }) {
     const el = frame.current
     if (!el) return
     let raf = 0
-    /** กรอบของกระเบื้องตัวละครบนจอ ตอนที่จอ What I Do ยังถูกหมุดอยู่ (วัดครั้งเดียวต่อขนาดจอ) */
+    /** กรอบล่าสุดของกระเบื้องตัวละครบนจอ ตอนที่จอ What I Do ยังถูกหมุดอยู่ */
     let tile: DOMRect | null = null
 
     const read = () => {
@@ -436,7 +461,7 @@ export function ExperienceTunnel({ id = 'experiences' }: { id?: string }) {
        * เหนือจอ วัดสด ๆ จะได้ค่าติดลบ ที่ต้องการคือพิกัดตอนถูกหมุด = พิกัดของมันเทียบกับ
        * บล็อก sticky ที่ห่อมันอยู่ (ตอนถูกหมุด บล็อกนั้น top = 0 พอดี) ค่านี้คงที่ วัดครั้งเดียวพอ
        */
-      if (!tile) {
+      if (!tile || p < 0.35) {
         const node = document.querySelector('[data-mascot-tile]')
         const sticky = node?.closest('[class*="lg:sticky"]')
         if (node && sticky) {
@@ -465,12 +490,14 @@ export function ExperienceTunnel({ id = 'experiences' }: { id?: string }) {
       if (clip.current) {
         clip.current.style.clipPath = `inset(${top}px ${right}px ${bottom}px ${left}px)`
       }
+      flight.open = e
       if (card.current) {
         card.current.style.left = `${left}px`
         card.current.style.top = `${top}px`
         card.current.style.width = `${vw - left - right}px`
         card.current.style.height = `${vh - top - bottom}px`
-        card.current.style.opacity = String(Math.max(0, 1 - e * 1.8))
+        // จางเร็วกว่าจังหวะกางกล่อง: ถ้าค้างอยู่นาน ตัวละครในการ์ดจะซ้อนกับตัวจริงในอุโมงค์เป็นภาพซ้อน
+        card.current.style.opacity = String(Math.max(0, 1 - e * 3))
       }
       if (story.current) {
         story.current.style.opacity = String(Math.min(1, Math.max(0, (p - 0.24) / 0.06)))
@@ -512,12 +539,13 @@ export function ExperienceTunnel({ id = 'experiences' }: { id?: string }) {
             aria-hidden
             className="absolute inset-0"
             dpr={[1, 1.5]}
-            camera={{ position: [0, 0, 0], fov: 62, near: 0.1, far: 90 }}
+            camera={{ position: [0, 0, 0], fov: FOV_IN, near: 0.1, far: 90 }}
             gl={{ antialias: true }}
           >
             {/* หมอกสีเดียวกับพื้นอุโมงค์ — ปลายอุโมงค์จมหายแทนที่จะถูกตัดเป็นขอบ */}
             <color attach="background" args={['#0b1f5e']} />
             <fog attach="fog" args={['#0b1f5e', 12, 58]} />
+            <ZoomIn />
             <Lights />
             <Tunnel />
             <FloatingMascot />
@@ -530,7 +558,9 @@ export function ExperienceTunnel({ id = 'experiences' }: { id?: string }) {
           className="pointer-events-none absolute z-10 overflow-hidden bg-[#e2d7cb]"
           style={{ left: 0, top: 0, width: 0, height: 0 }}
         >
-          <div className="absolute inset-y-0 left-0 w-[78%]">
+          {/* ตำแหน่งเดียวกับตัวละครในกระเบื้องตอนกางสุด (ดู .v3-tile-art ใน styles/index.css)
+              ถ้าไม่ตรงกัน ภาพจะกระตุกตอนสลับจากกระเบื้องจริงมาเป็นการ์ดใบนี้ */}
+          <div className="absolute inset-y-0 left-[38%] w-[24%]">
             <Suspense fallback={null}>
               <MascotCard />
             </Suspense>

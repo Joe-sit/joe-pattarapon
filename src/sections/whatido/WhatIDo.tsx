@@ -303,9 +303,19 @@ export function useSkillStory(
       const span = r.height - window.innerHeight
       if (span <= 0) return
       const p = Math.min(Math.max(-r.top / span, 0), 1)
-      const raw = (p - 0.2) / 0.24
+      const raw = (p - 0.2) / 0.21
       const idx = p < 0.2 ? -1 : Math.min(2, Math.floor(raw))
       frac = idx < 0 ? 0 : Math.min(Math.max(raw > 3 ? 1 : raw - Math.floor(raw), 0), 1)
+      /**
+       * ท่อนปิดท้าย — เล่าครบสามใบแล้วกระเบื้องตัวละครกางกว้างจนเต็ม section
+       * ไม่ผ่านคิว pump/MIN_DWELL เพราะไม่ใช่ "สเตจ" ที่ต้องรอให้ครบตา แต่เป็นค่าที่เกาะนิ้วไปเลย
+       *
+       * กางเสร็จที่ p = 0.92 ที่เหลืออีก 8% ของกรอบเป็นช่วงที่จอ Experiences ซูมเข้าไปในกล่องใบนี้
+       * ทั้งที่ยังอยู่ในจอ What I Do (ดู ZOOM_FROM ใน sections/tunnel) — จบ scroll จอนี้คือ
+       * อยู่ในอุโมงค์แล้ว ไม่ใช่เจอกล่องตัวละครซ้ำอีกใบตอนขึ้นจอถัดไป
+       */
+      const open = Math.min(Math.max((p - 0.84) / 0.08, 0), 1)
+      skillsRef.current?.style.setProperty('--tile-open', (open * open * (3 - 2 * open)).toFixed(3))
       target = idx
       const offscreen = r.bottom <= 0 || r.top >= window.innerHeight
       if (offscreen) {
@@ -370,10 +380,12 @@ export function WhatIDo({
             {/* กระเบื้องใหญ่: พื้นเบจ + mascot 3D ตัวจริง + วงเล็บเวกเตอร์ชิดขวา
                 (ที่ githubuniverse กระเบื้องใบใหญ่ก็เป็นตัวละครของงานเขา ไม่ใช่พื้นสีเปล่า)
                 mascot กินแค่ 78% ทางซ้าย วงเล็บจึงไม่ถูกบัง และ canvas ไม่ต้องเรนเดอร์เต็มช่อง */}
-            {/* data-mascot-tile: จอ Experiences วัดกรอบใบนี้เพื่อซูมต่อจากมันพอดี (ดู sections/tunnel) */}
+            {/* data-mascot-tile: จอ Experiences วัดกรอบใบนี้เพื่อซูมต่อจากมันพอดี (ดู sections/tunnel)
+                v3-tile-open: ท่อนสุดท้ายของไทม์ไลน์ กล่องใบนี้กางกว้างจนเต็ม section ก่อนถูกซูมเข้าไป
+                (ความกว้างผูกกับ --tile-open ที่ useSkillStory เขียนไว้ที่ section — ดู styles/index.css) */}
             <div
               data-mascot-tile
-              className="v2-pop relative z-30 w-1/2 overflow-hidden bg-[#e2d7cb]"
+              className="v2-pop v3-tile-open relative z-30 w-1/2 overflow-hidden bg-[#e2d7cb]"
               style={{ '--i': 0 } as CSSProperties}
             >
               {/* วงเล็บมาก่อน mascot ในลำดับ DOM: ไฟล์ SVG ใบนี้มีพื้นเบจเต็มสี่เหลี่ยมอยู่ในตัว
@@ -381,9 +393,11 @@ export function WhatIDo({
               <img
                 src={skillsBracket}
                 alt=""
-                className="v2-bracket pointer-events-none absolute inset-y-0 right-0 h-full w-auto max-w-none"
+                className="v2-bracket v3-tile-bracket pointer-events-none absolute inset-y-0 right-0 h-full w-auto max-w-none"
               />
-              <div className="absolute inset-y-0 left-0 w-[78%]">
+              {/* พอกล่องกางกว้างขึ้นสามเท่า ถ้าตัวละครยังกิน 78% ของกล่องมันจะโตตามจนล้นจอ
+                  v3-tile-art จึงหดความกว้างและเลื่อนเข้ากลางพร้อมกัน = ขนาดบนจอเท่าเดิม */}
+              <div className="v3-tile-art absolute inset-y-0 left-0 w-[78%]">
                 <Suspense fallback={null}>
                   <MascotCard followRef={skillsRef} />
                 </Suspense>

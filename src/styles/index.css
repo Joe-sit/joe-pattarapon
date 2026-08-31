@@ -393,3 +393,36 @@
     animation: none;
   }
 }
+
+/*
+ * ท่อนปิดของ what-i-do — กระเบื้องตัวละครกางกว้างจนเต็ม section แล้วจอ Experiences ซูมเข้าไปในกล่องนั้น
+ *
+ * --tile-open (0..1) เขียนโดย useSkillStory ตามระยะ scroll ช่วงท้ายของกรอบ
+ * ทำที่ CSS ไม่ใช่ inline style เพราะพฤติกรรมนี้มีเฉพาะจอ >= lg ที่ section ถูกปักหมุดไว้เท่านั้น
+ * จอเล็กไม่มีไทม์ไลน์ กระเบื้องยังเรียงกันลงมาในโฟลว์ตามเดิม
+ *
+ * absolute เทียบ section ไม่ใช่เทียบบล็อกกระเบื้อง: มันต้องกางข้ามการ์ดข้อความไปชนขอบขวา
+ * เหมือนกระเบื้องสกิลสามใบ (ซึ่ง absolute อยู่แล้ว) และต้องอยู่ชั้นบนสุดเพื่อกลบใบที่กางค้างไว้
+ * บล็อกกระเบื้องที่ห่อมันอยู่ overflow-hidden ก็จริง แต่ containing block ของกล่องนี้คือ section
+ * ซึ่งอยู่เหนือขึ้นไป การ clip ของบล็อกจึงไม่มีผลกับมัน
+ */
+@media (min-width: 64rem) {
+  .v3-tile-open {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    /* 30.6% = ครึ่งหนึ่งของบล็อกกระเบื้อง (61.2% ของ section) = ความกว้างเดิมของใบนี้ */
+    width: calc(30.6% + 69.4% * var(--tile-open, 0));
+    z-index: 50;
+  }
+
+  .v3-tile-open .v3-tile-art {
+    left: calc(38% * var(--tile-open, 0));
+    width: calc(78% - 54% * var(--tile-open, 0));
+  }
+
+  .v3-tile-open .v3-tile-bracket {
+    opacity: calc(1 - var(--tile-open, 0));
+  }
+}
