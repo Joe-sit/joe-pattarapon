@@ -118,6 +118,34 @@ const LEG_SPLAY = 0.17
 const POSE0 = { elbowX: 0, elbowZ: 0.35, wristX: 0 }
 
 /**
+ * ค่าเริ่มต้นของข้อต่อขาในท่า skate — อ่านคู่กับ prop legPose
+ * ข้อเท้าคือตัวที่ทำให้ฝ่าเท้าแนบหน้าแผ่นบอร์ดหรือไม่ ต้องปรับคู่กับเข่าเสมอ
+ */
+const SKATE_LEG = {
+  L: { hipX: -1.34, hipY: 0.3, hipZ: 0.16, knee: 1.95, ankle: 0.5 },
+  R: { hipX: -0.98, hipY: -0.22, hipZ: -0.12, knee: 1.48, ankle: 0.36 },
+}
+
+/** ค่าเริ่มต้นของข้อต่อแขนในท่า skate — อ่านคู่กับ prop armPose */
+const SKATE_ARM = {
+  aimX: 1,
+  aimY: 0.1,
+  aimZ: -0.08,
+  elbowX: 0,
+  elbowY: 0,
+  elbowZ: POSE0.elbowZ,
+  wristX: 0,
+  wristY: 0,
+  wristZ: 0,
+  mugShX: 0,
+  mugShY: 0,
+  mugShZ: -1.05,
+  mugElX: 0,
+  mugElY: 0,
+  mugElZ: 0,
+}
+
+/**
  * จานสีสำหรับโหมด debug แยกชิ้นส่วนแขน — สร้างครั้งเดียวแล้วใช้ซ้ำ
  * เลือกสีที่ต่างกันชัดในภาพเดียว ไม่ใช่ไล่เฉด (ต้องแยกออกแม้ชิ้นเล็กและโดนแสงต่างกัน)
  */
@@ -179,6 +207,9 @@ const AIM_DIR = new THREE.Vector3()
 // ท่าห้อยแขนหลังชี้ (tuck): ทิศห้อยจาก slider + แกนแขน normalize แล้ว
 const TUCK_V = new THREE.Vector3()
 const TUCK_AXIS = new THREE.Vector3()
+// ท่าว่ายอากาศ: ทิศที่อยากให้แขนชี้ไป + แกนแขนของท่านั้น
+const AIR_V = new THREE.Vector3()
+const AIR_AXIS = new THREE.Vector3()
 const IK_T = new THREE.Vector3()
 const IK_D = new THREE.Vector3()
 const IK_U = new THREE.Vector3()
@@ -370,6 +401,31 @@ export function Mascot({
   followRef = null,
   /** true = แขนห้อยแนบตัวตั้งแต่เฟรมแรก ไม่ต้องชี้ (ท่าชี้ผูกกับไทม์ไลน์ของฉากหลัก) */
   armsDown = false,
+  /**
+   * ท่าว่ายอากาศแบบนักโดดร่ม — แขนกางเป็นตัว W ขาถ่างงอเข่า ทั้งตัวไหวตามลม
+   *
+   * เขียนทับท่าอื่นทั้งหมดที่จัดมาก่อนหน้าในเฟรมเดียวกัน ไม่ใช่บวกทับ: ท่าอื่นทุกท่าคิดบน
+   * สมมติฐานว่ามีพื้นให้ยืน (แขนห้อยตามน้ำหนัก เท้าปักที่) ซึ่งไม่มีเลยตอนลอยอยู่กลางอากาศ
+   */
+  skydive = false,
+  /** ท่ายืนเล่นสเก็ต — ย่อเข่าลึก บิดลำตัว กางแขนเป็น T (ดูภาพ ref 12739:335) */
+  skate = false,
+  /** สเกลทั้งแขน (ทั้งสองข้าง) — ใช้ตอนจูนสัดส่วนแขนกับลำตัว */
+  armScale = 1,
+  /** สเกลเฉพาะท่อนล่าง+มือ — แยกจาก armScale เพราะมือของ mascot ใหญ่กว่าสัดส่วนแขน */
+  foreScale = 1,
+  /**
+   * มุมของข้อต่อแขนทั้งชุด (ใช้กับท่า skate) — ส่ง null เพื่อใช้ค่าเริ่มต้นของท่า
+   *
+   * สองแขนคุมคนละวิธีโดยธรรมชาติของริก: แขนที่มี armAxis ใช้ "เล็งทิศ" (aim เป็นเวกเตอร์
+   * ทิศทาง ไม่ใช่องศา) ส่วนแขนถือแก้วไม่มี armAxis ที่ใช้ได้ จึงคิดต่อจาก quaternion
+   * ท่าพักด้วยมุมออยเลอร์ ตัวเลขสองชุดนี้จึงเทียบกันตรง ๆ ไม่ได้
+   */
+  armPose = null,
+  /** มุมข้อต่อขาในท่า skate (เรเดียน) — ส่ง null เพื่อใช้ค่าเริ่มต้นของท่า */
+  legPose = null,
+  /** ซ่อนแก้วกาแฟ — ฉากที่ตัวละครไม่ได้อยู่โหมดทำงาน (เช่นกำลังโต้คลื่น) ถือแก้วแล้วประหลาด */
+  noMug = false,
 }) {
   const { scene } = useGLTF(MODEL)
   const root = useRef()
@@ -1690,6 +1746,8 @@ export function Mascot({
       // (ต้องคิดตอนนั้นเพราะ "ทิศลงในโลกจริง" ขึ้นกับมุมข้อต่อที่ยังไม่ถูก apply ตอนนี้)
       mug.userData.grip = hand.isEmpty() ? new THREE.Vector3() : hand.getCenter(new THREE.Vector3())
       mug.position.copy(mug.userData.grip)
+      // ค่านิ่งต่อ instance — effect นี้รันครั้งเดียวตอนสร้างโมเดล ไม่ต้องใส่ deps
+      mug.visible = !noMug
       armMug.wrist.add(mug)
       // แก้วเอียงได้เองตอนยกดื่ม ห้ามถูกรวมเข้ากับมือ
       mug.traverse((o) => {
@@ -2415,6 +2473,201 @@ export function Mascot({
         )
         r.mugShoulder.quaternion.multiply(TMP_Q)
       }
+    }
+
+    /**
+     * ท่าว่ายอากาศ (โดดร่ม) — ชั้นสุดท้าย เขียนทับทุกท่าที่จัดมาก่อนหน้า
+     *
+     * ต้องอยู่ท้ายสุดเพราะทุกระบบข้างบนคิดบนสมมติฐาน "มีพื้นให้ยืน": แขนห้อยตามน้ำหนัก
+     * (tuck) เท้าปักที่ ไหล่ขยับตามลมหายใจ ถ้าไปบวกทับ ท่าจะกลายเป็นคนยืนที่กางแขนนิดหน่อย
+     * ไม่ใช่คนที่กำลังตกอยู่กลางอากาศ
+     *
+     * แขนใช้วิธี "เล็งแกนแขนไปยังทิศที่ต้องการ" ตัวเดียวกับท่าห้อย (userData.armAxis) แทน
+     * การใส่มุมออยเลอร์ — แขนซ้าย/ขวาเป็นชิ้นที่ถูกสะท้อนมา มุมออยเลอร์ชุดเดียวกันจึงให้ผล
+     * คนละท่า ส่วนแขนถือแก้วไม่มี armAxis ที่ใช้ได้ (userData ถูกก๊อบผ่าน JSON ตอนโคลน
+     * Vector3 เลยกลายเป็นออบเจกต์เปล่า) จึงคิดต่อจาก quaternion ท่าพักของมันเอง
+     */
+    if (skydive) {
+      const t = state.clock.elapsedTime
+      /** ไหวช้า ๆ คนละความถี่ ไม่เป็นเท่าตัวกัน — ผลรวมจึงไม่วนซ้ำให้ตาจับได้ */
+      const w1 = Math.sin(t * 1.15)
+      const w2 = Math.sin(t * 0.87 + 2.2)
+      const w3 = Math.sin(t * 0.63 + 4.7)
+
+      if (r.pointShoulder?.userData.armAxis?.isVector3) {
+        const ud = r.pointShoulder.userData
+        // กางออกข้างเกือบสุด ยกขึ้นเหนือไหล่ และเปิดไปข้างหน้าเล็กน้อย (หน้า = -z)
+        AIR_V.set(1 * (ud.outward ?? 1), 0.52 + w1 * 0.12, -0.34 + w2 * 0.1).normalize()
+        r.pointShoulder.quaternion.setFromUnitVectors(
+          AIR_AXIS.copy(ud.armAxis).normalize(),
+          AIR_V,
+        )
+        r.pointShoulder.position.set(ud.baseX, ud.baseY, ud.baseZ)
+      }
+      // ศอกงอขึ้น = ท่า W ของนักโดดร่ม ไม่ใช่แขนเหยียดตรงเป็นไม้กางเขน
+      if (r.pointElbow) r.pointElbow.rotation.set(-0.85 + w2 * 0.1, 0, 0.45)
+      if (r.mugShoulder?.userData.rest) {
+        const ud = r.mugShoulder.userData
+        r.mugShoulder.quaternion
+          .copy(ud.rest)
+          .multiply(TMP_Q.setFromEuler(TMP_E.set(-0.5, 0, -0.72 - w2 * 0.1)))
+        r.mugShoulder.position.set(ud.baseX, ud.baseY, ud.baseZ)
+      }
+      if (r.mugElbow?.userData.rest) {
+        r.mugElbow.quaternion
+          .copy(r.mugElbow.userData.rest)
+          .multiply(TMP_Q.setFromEuler(TMP_E.set(-0.9 + w1 * 0.1, 0, 0)))
+      }
+
+      // ขา: ถ่างออก งอเข่า ปลายเท้าตกตามแรงลม
+      for (const k of ['L', 'R']) {
+        const s = k === 'L' ? -1 : 1
+        const hip = r[`hip${k}`]
+        if (hip?.userData.baseRot) {
+          const br = hip.userData.baseRot
+          hip.rotation.set(br.x - 0.62 + w3 * 0.1, br.y, br.z + s * 0.62)
+        }
+        const knee = r[`knee${k}`]
+        if (knee) knee.rotation.x = 1.35 + (k === 'L' ? w1 : w2) * 0.16
+        const ankle = r[`ankle${k}`]
+        if (ankle) ankle.rotation.x = -0.35
+      }
+
+      // ทั้งตัวแอ่นหลังนิด ๆ แล้วส่ายตามกระแสลม — ไม่ใช่แผ่นแข็งที่ลอยนิ่ง
+      if (root.current) {
+        root.current.rotation.x = rotation[0] + 0.12 + w2 * 0.05
+        root.current.rotation.z = rotation[2] + w3 * 0.07
+      }
+      if (headGroup.current) headGroup.current.rotation.x += 0.18
+    }
+
+    /**
+     * ท่าเล่นสเก็ต — ชั้นสุดท้ายเหมือน skydive เขียนทับท่าที่จัดมาก่อนหน้า
+     *
+     * ต่างจาก skydive ตรงที่ "มีพื้นให้ยืน" จริง แต่ยังต้องทับ เพราะระบบท่ายืนปกติ
+     * ตั้งขาให้ตรงและปล่อยแขนห้อยตามน้ำหนัก ซึ่งขัดกับท่าย่อลึกบิดตัวใน ref
+     *
+     * แขนใช้วิธีเล็งแกนแขน (armAxis) เหมือน skydive — แขนซ้าย/ขวาถูกสะท้อนมา
+     * มุมออยเลอร์ชุดเดียวกันจึงให้คนละท่า ส่วนแขนถือแก้วไม่มี armAxis ที่ใช้ได้
+     * (userData ถูกก๊อบผ่าน JSON ตอนโคลน) จึงคิดต่อจาก quaternion ท่าพักของมันเอง
+     */
+    if (skate) {
+      const t = state.clock.elapsedTime
+      /** ไหวคนละความถี่ ไม่เป็นเท่าตัวกัน — ผลรวมไม่วนซ้ำให้ตาจับ */
+      const w1 = Math.sin(t * 1.25)
+      const w2 = Math.sin(t * 0.91 + 1.7)
+      const w3 = Math.sin(t * 0.67 + 3.9)
+
+      /**
+       * แขนกางเป็น T — เหยียดออกข้างทั้งสองข้าง เกือบขนานพื้น
+       *
+       * แขนข้างนี้เล็งด้วยแกนแขน (armAxis) ทิศ (ออกข้าง, ~0, ~0) คือกางตรงออกไปเลย
+       * ศอกต้องเหยียดสุด (0) ด้วย ไม่งั้นปลายแขนตกลงมาแล้วอ่านเป็นท่ากางแขนครึ่งใจ
+       */
+      const ap = armPose ?? SKATE_ARM
+      if (r.pointShoulder?.userData.armAxis?.isVector3) {
+        const ud = r.pointShoulder.userData
+        // aim เป็นทิศทาง ไม่ใช่องศา — x ต้องคูณ outward เพราะแขนสองข้างถูกสะท้อนกัน
+        AIR_V.set(
+          ap.aimX * (ud.outward ?? 1),
+          ap.aimY + w1 * 0.05,
+          ap.aimZ + w2 * 0.05,
+        ).normalize()
+        r.pointShoulder.quaternion.setFromUnitVectors(
+          AIR_AXIS.copy(ud.armAxis).normalize(),
+          AIR_V,
+        )
+        r.pointShoulder.position.set(ud.baseX, ud.baseY, ud.baseZ)
+      }
+      /**
+       * ศอกเหยียด = POSE0.elbowZ (0.35) ไม่ใช่ 0
+       *
+       * ค่าศูนย์ของข้อต่อนี้ไม่ใช่ท่าเหยียดตรง ใส่ 0 แล้วปลายแขนบิดตกลงมาเป็นแขนหัก
+       * — เป็นสาเหตุที่แขนข้างนี้ตกอยู่ข้างเดียวทั้งที่เล็งแกนไหล่ออกข้างถูกแล้ว
+       */
+      if (r.pointElbow) r.pointElbow.rotation.set(ap.elbowX + w1 * 0.05, ap.elbowY, ap.elbowZ)
+      /**
+       * คืนท่อนแขนล่างกับข้อมือกลับค่าตั้งต้น
+       *
+       * ระบบท่ายืนเลื่อนท่อนล่างไปข้างหน้า (pointArmFwd) และบิดข้อมือด้วยสไลเดอร์ของมันเอง
+       * ถ้าไม่เขียนทับ ปลายแขนจะค้างเยื้องจากท่อนบนเป็นข้อต่อหลุด และกำปั้นบิดคนละทาง
+       * — เห็นชัดมากตอนกางแขนเป็น T เพราะแขนอยู่ในระนาบที่มองเห็นข้อต่อเต็ม ๆ
+       */
+      if (r.pointLower) for (const o of r.pointLower) o.position.copy(o.userData.base)
+      if (r.pointWrist?.userData.rest) {
+        r.pointWrist.quaternion
+          .copy(r.pointWrist.userData.rest)
+          .multiply(TMP_Q.setFromEuler(TMP_E.set(ap.wristX, ap.wristY, ap.wristZ)))
+      }
+
+      /**
+       * แขนอีกข้างกางออกเป็นคู่กัน
+       *
+       * แขนถือแก้วไม่มี armAxis ที่ใช้ได้ (userData ถูกก๊อบผ่าน JSON ตอนโคลน Vector3
+       * เลยกลายเป็นออบเจกต์เปล่า) จึงคิดต่อจาก quaternion ท่าพัก — และเครื่องหมาย z
+       * ต้องเป็นลบถึงจะกางออก ใส่บวกแล้วแขนพับเข้าหาตัวจนหายไปหลังลำตัว
+       */
+      if (r.mugShoulder?.userData.rest) {
+        const ud = r.mugShoulder.userData
+        /**
+         * premultiply ไม่ใช่ multiply — หมุนในสเปซของลำตัว ไม่ใช่สเปซของแขนเอง
+         *
+         * ท่าพักของแขนนี้กดแขนห้อยแนบตัวไว้แล้ว การคูณต่อท้าย (multiply) จึงกลายเป็น
+         * "บิดรอบแกนแขนตัวเอง" แขนเลยแทบไม่ยกขึ้น ปรับค่าเท่าไรก็ยังห้อยอยู่
+         * คูณนำหน้าคือหมุนรอบแกนของลำตัว = ยกกางออกได้จริง
+         */
+        r.mugShoulder.quaternion
+          .copy(ud.rest)
+          .premultiply(TMP_Q.setFromEuler(TMP_E.set(ap.mugShX, ap.mugShY, ap.mugShZ - w3 * 0.04)))
+        r.mugShoulder.position.set(ud.baseX, ud.baseY, ud.baseZ)
+      }
+      // ศอกฝั่งแก้วอยู่ที่ท่าพักพอดี — บิดเพิ่มเมื่อไรปลายแขนจะหักออกจากแนวท่อนบนทันที
+      if (r.mugElbow?.userData.rest) {
+        r.mugElbow.quaternion
+          .copy(r.mugElbow.userData.rest)
+          .multiply(TMP_Q.setFromEuler(TMP_E.set(ap.mugElX + w2 * 0.04, ap.mugElY, ap.mugElZ)))
+      }
+
+      /**
+       * ขาไม่สมมาตร — เท้าหน้ากับเท้าหลังบนบอร์ดไม่ได้ทำงานเหมือนกัน
+       *
+       * ref ย่อลึกจนต้นขาเกือบขนานพื้น และเข่าข้างหน้ายกสูงกว่าอีกข้างชัดเจน
+       * ถ้าใส่ค่าเดียวกันทั้งสองข้างจะได้ท่านั่งยอง ซึ่งอ่านเป็นคนหมอบ ไม่ใช่คนเล่นสเก็ต
+       * บิดสะโพกรอบแกน y ด้วย เพราะบนบอร์ดเท้าเรียงตามความยาวแผ่น ไม่ใช่เรียงข้างกัน
+       */
+      const LEG = legPose ?? SKATE_LEG
+      for (const k of ['L', 'R']) {
+        const L = LEG[k]
+        const hip = r[`hip${k}`]
+        if (hip?.userData.baseRot) {
+          const br = hip.userData.baseRot
+          hip.rotation.set(br.x + L.hipX + w1 * 0.06, br.y + L.hipY, br.z + L.hipZ)
+        }
+        const knee = r[`knee${k}`]
+        if (knee) knee.rotation.x = L.knee + (k === 'L' ? w1 : w2) * 0.08
+        const ankle = r[`ankle${k}`]
+        if (ankle) ankle.rotation.x = L.ankle
+      }
+
+      // ตัวโน้มไปหน้าเยอะ (หลังค่อม ทิ้งน้ำหนักลงเข่า) + เอียงตามการเลี้ยว
+      if (root.current) {
+        root.current.rotation.x = rotation[0] + 0.26 + w2 * 0.04
+        root.current.rotation.z = rotation[2] - 0.1 + w3 * 0.05
+      }
+      /**
+       * สเกลแขน — เขียนทุกเฟรมเพราะ prop เปลี่ยนได้ระหว่างจูน
+       *
+       * สเกลที่ไหล่คูณลงไปทั้งสาย (ท่อนบน ท่อนล่าง มือ) ส่วนสเกลที่ศอกคูณเฉพาะ
+       * ท่อนล่างกับมือ — แยกสองตัวเพราะมือของ mascot ใหญ่กว่าสัดส่วนแขนอยู่แล้ว
+       * ย่อทั้งแขนอย่างเดียวจะได้แขนกุดที่มือยังใหญ่เท่าเดิมเมื่อเทียบกับท่อนแขน
+       */
+      if (r.pointShoulder) r.pointShoulder.scale.setScalar(armScale)
+      if (r.mugShoulder) r.mugShoulder.scale.setScalar(armScale)
+      if (r.pointElbow) r.pointElbow.scale.setScalar(foreScale)
+      if (r.mugElbow) r.mugElbow.scale.setScalar(foreScale)
+
+      // ตัวก้มแล้วหัวต้องเงยสวนขึ้นมามองทางไป ไม่ใช่ก้มตามลำตัวจนมองพื้น
+      if (headGroup.current) headGroup.current.rotation.x -= 0.2
     }
 
     // หนีบมุมก้ม/เงยรวมของหัว "หลังทุกระบบเขียนเสร็จ" — ห้ามหัวจมคอเสื้อไม่ว่าจะบวกกันมากี่ทาง

@@ -384,7 +384,9 @@ export function Portfolio2026FinalPage() {
           (ไม่ใช่ :root) และเป็นจอเดียวในหน้าที่สูงกว่าหนึ่งวิวพอร์ต — ระยะ scroll ในกรอบ
           คือไทม์ไลน์ของการเล่า จึงอยู่นอก <Screen> ที่ล็อกความสูงไว้จอเดียว */}
       <section id="what-i-do" data-screen="what-i-do" className="v2-theme v3-whatido relative w-full bg-[var(--v2-bg)]">
-        <div ref={scrollyRef} className="relative lg:h-[520vh]">
+        {/* data-whatido-scrolly: จอ Experiences อ่านความคืบหน้าของกรอบนี้เพื่อเริ่มซูมเข้า
+            อุโมงค์ตั้งแต่ยังอยู่ในจอนี้ (ช่วง 8% ท้าย) — ดู sections/tunnel */}
+        <div ref={scrollyRef} data-whatido-scrolly className="relative lg:h-[520vh]">
           <div className="flex flex-col lg:sticky lg:top-0 lg:h-screen lg:justify-center">
             {/* กรอบเดียวกับจออื่นของหน้านี้ — ของเดิมกินเต็มความกว้างจอเพราะหน้า /2026
                 มีขอบของตัวเองอยู่แล้ว ที่นี่ไม่มี ต้องใส่ให้ */}
