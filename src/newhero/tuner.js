@@ -86,16 +86,16 @@ export const DEFAULTS = {
    *
    * ผลรวม hipX + knee + ankle ≈ 0 คือฝ่าเท้าขนานกับหน้าแผ่น
    */
-  hipLX: -66,
+  hipLX: -120,
   hipLY: 17.2,
   hipLZ: 9.2,
   kneeL: 98,
-  ankleL: -32,
-  hipRX: -66,
+  ankleL: -4,
+  hipRX: -114,
   hipRY: -12.6,
   hipRZ: -6.9,
   kneeR: 98,
-  ankleR: -32,
+  ankleR: -2,
   armScale: 1,
   foreScale: 1.18,
   aimX: 1,
