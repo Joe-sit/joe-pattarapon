@@ -19,11 +19,15 @@ import { deckTop, Skateboard } from './Skateboard'
 
 /** เวกเตอร์ใช้ซ้ำ — สร้างใหม่ทุกเฟรมคือขยะให้ GC เก็บ 60 ครั้งต่อวินาที */
 const WORLD = new THREE.Vector3()
-const INV = new THREE.Matrix4()
 const BOX1 = new THREE.Box3()
+const SCL = new THREE.Vector3()
+const TOP = new THREE.Vector3()
 
 export function Rider({
   bob = true,
+  breathe = false,
+  idleAmp = 1,
+  idleSpeed = 1,
   mascotScale = 0.5,
   mascotLift = 0,
   boardScale = 1,
@@ -34,6 +38,7 @@ export function Rider({
   torsoPose = null,
   boardSpec = null,
   boardRot = [0, 0.26, 0],
+  boardOffset = [0, 0, 0],
   ...props
 }) {
   const sway = useRef()
@@ -48,7 +53,7 @@ export function Rider({
    * เดิมใช้ธง boolean วัดครั้งเดียวจบ ผลคือลาก boardScale/mascotScale แล้วไม่มีอะไร
    * ขยับจนกว่าจะรีเฟรช — เพราะโค้ดวัดไม่เคยถูกเรียกอีกเลย
    */
-  const specKey = `${JSON.stringify(boardSpec)}|${boardScale}|${mascotScale}`
+  const specKey = `${JSON.stringify(boardSpec)}|${boardScale}|${mascotScale}|${boardOffset.join()}`
   /**
    * วางบอร์ดจากกล่องขอบเขตจริงของ mascot ไม่ใช่จากตัวเลขที่เดา
    *
@@ -79,70 +84,86 @@ export function Rider({
        * ที่ถูกซ่อนด้วย noMug ก็ยังนับ กล่องเลยยื่นต่ำกว่าฝ่าเท้าจริง บอร์ดจึงไปเกาะ
        * ระดับนั้นแล้วดูเหมือนลอยห่างจากเท้า
        */
+      /**
+       * รวมกล่องจาก "เมชที่มองเห็นเท่านั้น" และคิดในพิกัดโลกตลอด
+       *
+       * Box3.setFromObject ไล่ลูกทุกตัวรวมถึงตัวที่ visible = false (แก้วที่ซ่อนด้วย
+       * noMug ก็ยังนับ) และคืนกล่องในพิกัดโลก การเอาเลขพิกัดโลกไปตั้งเป็นพิกัด
+       * ท้องถิ่นของลูกคือที่มาของบั๊กสเกลซ้ำรอบก่อน — คราวนี้จึงคิดในโลกให้จบ
+       * แล้วค่อยแปลงเฉพาะตอนเขียนกลับลง position
+       */
       const box = new THREE.Box3()
-      let lowName = ''
-      let lowY = Infinity
       body.current.traverseVisible((o) => {
         if (!o.isMesh) return
         BOX1.setFromObject(o)
         box.union(BOX1)
-        if (BOX1.min.y < lowY) {
-          lowY = BOX1.min.y
-          lowName = o.name || o.type
-        }
       })
-      READOUT.low = lowName
-      if (box.isEmpty()) return
+      if (box.isEmpty() || !Number.isFinite(box.min.y)) return
+
       sway.current.updateWorldMatrix(true, false)
-      box.applyMatrix4(INV.copy(sway.current.matrixWorld).invert())
-      if (Number.isFinite(box.min.y)) {
-        const size = new THREE.Vector3()
-        box.getSize(size)
-        /**
-         * ความยาวบอร์ดคิดจาก "ความสูงตัว" ไม่ใช่ความกว้างของกล่องขอบเขต
-         *
-         * ความกว้างของกล่องขึ้นกับท่าแขน — กางแขนเป็น T แล้วกล่องกว้างเท่าช่วงแขน
-         * บอร์ดจะยาวตามไปด้วยทั้งที่เท้าไม่ได้ขยับ ความสูงตัวนิ่งกว่ามากในทุกท่า
-         * (สเก็ตบอร์ดจริงยาวราวครึ่งหนึ่งของความสูงคนขี่ — 0.62 เผื่อไว้ให้ปรับต่อ)
-         */
-        const s = size.y * 0.62 * boardScale
-        /**
-         * จัดให้ "หน้าแผ่น" มาอยู่ที่ฝ่าเท้า ไม่ใช่เอาล้อไปแตะฝ่าเท้า
-         *
-         * ล้อของ Skateboard แตะ y = 0 ของตัวมันเอง ถ้าวางที่ box.min.y ตรง ๆ หน้าแผ่น
-         * จะสูงกว่าฝ่าเท้าเท่ากับความหนาของทรัค+ล้อ เท้าเลยจมเข้าไปในแผ่น
-         */
-        const top = deckTop(boardSpec ?? undefined) * s
-        board.current.position.set(0, box.min.y - top, 0)
-        // ส่งตัวเลขให้แผง debug: ระดับฝ่าเท้า / ระดับหน้าแผ่น / ช่องว่างระหว่างสอง
-        // วัดบอร์ดจริงหลังจัดวาง แทนการเชื่อสูตร — ตัวเลขต้องมาจากของที่เรนเดอร์จริง
-        board.current.updateWorldMatrix(true, true)
-        const bb = new THREE.Box3()
-        board.current.traverseVisible((o) => {
-          if (!o.isMesh) return
-          BOX1.setFromObject(o)
-          bb.union(BOX1)
-        })
-        bb.applyMatrix4(INV.copy(sway.current.matrixWorld).invert())
-        READOUT.sole = box.min.y
-        READOUT.deck = bb.max.y
-        READOUT.gap = READOUT.sole - READOUT.deck
-        board.current.scale.setScalar(s)
-        fitted.current = specKey
-        settle.current += 1
-      }
+      /** สเกลรวมของกลุ่มแม่ — ใช้แปลงระยะในโลกกลับเป็นระยะท้องถิ่น */
+      const pScale = SCL.setFromMatrixScale(sway.current.matrixWorld).y || 1
+      const sizeY = (box.max.y - box.min.y) / pScale
+
+      /**
+       * ความยาวบอร์ดคิดจาก "ความสูงตัว" ไม่ใช่ความกว้างของกล่องขอบเขต
+       *
+       * ความกว้างของกล่องขึ้นกับท่าแขน — กางแขนเป็น T แล้วกล่องกว้างเท่าช่วงแขน
+       * บอร์ดจะยาวตามไปด้วยทั้งที่เท้าไม่ได้ขยับ ความสูงตัวนิ่งกว่ามากในทุกท่า
+       */
+      board.current.scale.setScalar(sizeY * 0.62 * boardScale)
+
+      /**
+       * เลื่อนบอร์ดจาก "ตำแหน่งหน้าแผ่นที่เรนเดอร์จริง" ไม่ใช่จากสูตร
+       *
+       * รอบก่อนคำนวณระยะยกด้วย deckTop × scale แล้วเชื่อว่าถูก — ซึ่งพลาดทุกครั้งที่
+       * กลุ่มแม่มีสเกล/การหมุนเพิ่มเข้ามา วิธีนี้ยิงจุดบนหน้าแผ่นผ่าน matrixWorld
+       * ออกมาเป็นพิกัดโลกจริง แล้วขยับส่วนต่างกับฝ่าเท้า — ผิดสมมติฐานตรงไหนก็ยังตรง
+       */
+      board.current.position.set(boardOffset[0], board.current.position.y, boardOffset[2])
+      board.current.updateWorldMatrix(true, false)
+      const deckWorldY = TOP.set(0, deckTop(boardSpec ?? undefined), 0)
+        .applyMatrix4(board.current.matrixWorld).y
+      /**
+       * ออฟเซ็ตแนวตั้งเป็น "เป้าหมาย" ของการจัดวาง ไม่ใช่ค่าที่บวกทีหลัง
+       *
+       * ถ้าบวกทีหลัง รอบวัดถัดไปจะเห็นออฟเซ็ตนั้นเป็นความคลาดแล้วหักล้างมันทิ้ง
+       * ปุ่มก็จะขยับไม่ได้เลย — ต้องเลื่อนเป้าหมายไปแทน
+       */
+      board.current.position.y += (box.min.y - deckWorldY) / pScale + boardOffset[1]
+
+      READOUT.sole = box.min.y
+      READOUT.deck = deckWorldY
+      READOUT.gap = box.min.y - deckWorldY
+      fitted.current = specKey
+      settle.current += 1
     }
     // ส่งตำแหน่งจริงในโลกให้แผง debug อ่าน — ค่านี้รวมผลของกลุ่มแม่ทุกชั้นแล้ว
     if (body.current) body.current.getWorldPosition(WORLD).toArray().forEach((v, i) => {
       READOUT[['x', 'y', 'z'][i]] = v
     })
     const g = sway.current
-    if (!g || !bob) return
-    const t = clock.elapsedTime
-    // เลี้ยงตัวบนบอร์ด: ยุบขึ้นลง + เอียงข้าง คนละความถี่ ไม่ให้อ่านเป็นจังหวะเดียว
-    g.position.y = Math.sin(t * 1.1) * 0.05
-    g.rotation.z = Math.sin(t * 0.73 + 0.6) * 0.04
-    g.rotation.x = Math.sin(t * 0.86 + 2.1) * 0.03
+    if (!g) return
+    if (!bob) {
+      // ปิดไหว = คืนกลุ่มกลับท่านิ่งด้วย ไม่ใช่แค่หยุดเขียนค่าแล้วค้างที่เฟรมสุดท้าย
+      g.position.y = 0
+      g.rotation.set(0, 0, 0)
+      return
+    }
+    /**
+     * idle อยู่ที่กลุ่ม sway ซึ่งห่อทั้งตัวละครและบอร์ด — ทั้งคู่จึงขยับเป็นก้อนเดียว
+     *
+     * ถ้าไปใส่ไหวที่ข้อต่อของ rig แทน (poseIdle) เท้าจะขยับแต่บอร์ดไม่ตาม เพราะบอร์ด
+     * ถูกจัดตำแหน่งครั้งเดียวตอนวัด ไม่ได้เกาะกระดูกเท้า — ฝ่าเท้าจะไถหลุดออกจากแผ่น
+     * ต้องการไหวระดับข้อต่อจริง ๆ ค่อยเปิด `breathe` แยก (แลกกับการที่เท้าไม่แนบนิ่ง)
+     */
+    const t = clock.elapsedTime * idleSpeed
+    const a = idleAmp
+    g.position.y = Math.sin(t * 1.1) * 0.05 * a
+    g.rotation.z = Math.sin(t * 0.73 + 0.6) * 0.04 * a
+    g.rotation.x = Math.sin(t * 0.86 + 2.1) * 0.03 * a
+    // ส่ายตามการเลี้ยว ช้ากว่าจังหวะยุบ — รวมกันแล้วไม่วนซ้ำให้ตาจับ
+    g.rotation.y = Math.sin(t * 0.41 + 1.4) * 0.05 * a
   })
 
   return (
@@ -167,6 +188,7 @@ export function Rider({
               armPose={armPose}
               legPose={legPose}
               torsoPose={torsoPose}
+              poseIdle={breathe}
             />
           </Suspense>
         </group>

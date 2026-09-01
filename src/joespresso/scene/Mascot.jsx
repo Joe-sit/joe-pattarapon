@@ -127,10 +127,38 @@ const SKATE_TORSO = { leanX: 0.26, leanZ: -0.16, foldX: 0, foldY: 0, foldZ: 0, h
 const SKATE_LEG = {
   L: { hipX: -1.34, hipY: 0.3, hipZ: 0.16, knee: 1.95, ankle: 0.5 },
   R: { hipX: -0.98, hipY: -0.22, hipZ: -0.12, knee: 1.48, ankle: 0.36 },
+  /** ถ่างขาออกข้าง / เหลื่อมหน้า-หลัง — เลื่อนจุดสะโพกจริง ไม่ใช่หมุนให้เท้ากางออก */
+  spread: 0,
+  stagger: 0,
 }
 
 /** ค่าเริ่มต้นของข้อต่อแขนในท่า skate — อ่านคู่กับ prop armPose */
 const SKATE_ARM = {
+  /**
+   * เลื่อนโคนแขนออกจากลำตัว — คนละเรื่องกับการหมุนไหล่
+   *
+   * หมุนอย่างเดียวแล้วโคนแขนยังฝังอยู่ในลำตัวเสมอ ยิ่งกางยิ่งเห็นเนื้อทับกันตรงหัวไหล่
+   * ค่าพวกนี้ย้ายจุดหมุนเอง: out = ออกนอกตัว (คิดทิศให้เองทั้งสองข้าง), up = ขึ้น,
+   * fwd = ไปข้างหน้า
+   */
+  aimOut: 0,
+  aimUp: 0,
+  aimFwd: 0,
+  mugOut: 0,
+  mugUp: 0,
+  mugFwd: 0,
+  /**
+   * หมุน "ทั้งแขน" รอบข้อไหล่ — ต้นแขน ท่อนล่าง มือ ไปด้วยกันทั้งก้อน
+   *
+   * คนละอันกับมุมข้อต่อข้างล่าง: elbow/wrist งอเฉพาะช่วงของตัวเอง ส่วนชุดนี้หมุน
+   * ทั้งเส้นในสเปซของลำตัว จึงใช้เหวี่ยงแขนไปข้างหน้า/หลัง หรือบิดทั้งแขนได้ในทีเดียว
+   */
+  aimRotX: 0,
+  aimRotY: 0,
+  aimRotZ: 0,
+  mugRotX: 0,
+  mugRotY: 0,
+  mugRotZ: 0,
   aimX: 1,
   aimY: 0.1,
   aimZ: -0.08,
@@ -140,6 +168,7 @@ const SKATE_ARM = {
   wristX: 0,
   wristY: 0,
   wristZ: 0,
+  handScale: 1,
   mugShX: 0,
   mugShY: 0,
   mugShZ: -1.05,
@@ -434,6 +463,8 @@ export function Mascot({
    * หมุนสะโพกกลับเท่ากัน เท้าจึงอยู่กับที่ — ริกตัวนี้ไม่มีข้อต่อเอวให้หมุนตรง ๆ
    */
   torsoPose = null,
+  /** ไหวเบา ๆ ของท่า skate — ปิดเพื่อจับท่านิ่งตอนจูน */
+  poseIdle = true,
   /** ซ่อนแก้วกาแฟ — ฉากที่ตัวละครไม่ได้อยู่โหมดทำงาน (เช่นกำลังโต้คลื่น) ถือแก้วแล้วประหลาด */
   noMug = false,
 }) {
@@ -1547,6 +1578,8 @@ export function Mascot({
       // หน้าตัดโคนกำปั้นจึงไม่บรรจบกับปลายท่อนแขน เห็นเป็นก้อนเหลื่อมกันอยู่
       // แกนพาดผ่านศูนย์กลางฝ่ามืออยู่แล้ว จึงเหลือแค่เลื่อนตามแกน ไม่ต้องดึงเข้าด้านข้างอีก
       const along = armEnd - F * 0.2 - handLo
+      // จุดต่อจริงระหว่างปลายแขนกับมือ (ในสเปซไหล่) — ที่นี่คือที่ที่ข้อมือควรหมุนรอบ
+      arm.wrist.userData.jointInShoulder = axis.clone().multiplyScalar(armEnd - F * 0.2)
       const move = axis.clone().multiplyScalar(along)
       arm.wrist.position.add(move.applyQuaternion(arm.elbow.quaternion.clone().invert()))
       model.updateMatrixWorld(true)
@@ -1662,6 +1695,31 @@ export function Mascot({
 
       alignHandToArm(armPoint)
       rebuildForearm(armPoint)
+
+      /**
+       * ท่า skate: ย้ายจุดหมุนข้อมือไปไว้ที่ "รอยต่อปลายแขน-มือ" จริง
+       *
+       * centerPivot วางจุดหมุนไว้กลางก้อนที่กลุ่มข้อมือถืออยู่ ซึ่งอยู่กลางมือ ไม่ใช่ที่ข้อ
+       * หมุนแล้วมือจึงเหวี่ยงเป็นวงรอบตัวเอง หลุดออกจากปลายแขนเป็นรอยสะดุด อ่านเป็น
+       * ข้อศอกอันที่สองแทนที่จะเป็นข้อมือ ย้ายจุดหมุนแล้วชดเชยตำแหน่งลูกกลับเท่าเดิม —
+       * ท่าปัจจุบันไม่เปลี่ยน แต่หมุนแล้วงอถูกที่
+       *
+       * ทำเฉพาะท่า skate: ท่ายืนของ /joespresso จูนค่ามุมข้อมือมาบนจุดหมุนเดิม
+       */
+      if (skate && armPoint.wrist.userData.jointInShoulder) {
+        const wrist = armPoint.wrist
+        const elbow = armPoint.elbow
+        // สเปซไหล่ -> สเปซศอก (พ่อของข้อมือ)
+        const pElbow = wrist.userData.jointInShoulder
+          .clone()
+          .sub(elbow.position)
+          .applyQuaternion(elbow.quaternion.clone().invert())
+        const delta = pElbow.clone().sub(wrist.position)
+        wrist.position.copy(pElbow)
+        const inLocal = delta.applyQuaternion(wrist.quaternion.clone().invert())
+        wrist.children.forEach((c) => c.position.sub(inLocal))
+        model.updateMatrixWorld(true)
+      }
 
       // ท่า "เก็บแขนแนบตัว" ของแขนชี้ — ใช้ตอน scroll เข้าฉาก 2 (ยกแก้วดื่ม ไม่ควรชี้ค้างไว้)
       // ไม่ได้ตั้งมุมเอา แต่คำนวณจากแกนแขนจริง (ต้นแขน -> ปลายแขน ที่ rebuildForearm วัดไว้)
@@ -1825,7 +1883,7 @@ export function Mascot({
     model.userData.headGroup = g
     model.userData.eyes = parts.eye
 
-  }, [model])
+  }, [model, skate])
 
 
   /**
@@ -2512,7 +2570,27 @@ export function Mascot({
           AIR_AXIS.copy(ud.armAxis).normalize(),
           AIR_V,
         )
-        r.pointShoulder.position.set(ud.baseX, ud.baseY, ud.baseZ)
+        /**
+         * หมุนทั้งแขนต่อจากการเล็ง — premultiply คือหมุนในสเปซลำตัว
+         *
+         * ถ้าใช้ multiply มันจะกลายเป็นบิดรอบแกนแขนของตัวเอง ซึ่งเป็นคนละท่ากับที่ต้องการ
+         * (แขนอยู่ที่เดิม แค่หมุนควง) — ทิศ x ต้องกลับข้างตาม outward เหมือนตอนเล็ง
+         */
+        r.pointShoulder.quaternion.premultiply(
+          TMP_Q.setFromEuler(
+            TMP_E.set(
+              (ap.aimRotX ?? 0) * (ud.outward ?? 1),
+              (ap.aimRotY ?? 0) * (ud.outward ?? 1),
+              ap.aimRotZ ?? 0,
+            ),
+          ),
+        )
+        // ทิศ "หน้า" ของ mascot คือ -z จึงลบ aimFwd ไม่ใช่บวก
+        r.pointShoulder.position.set(
+          ud.baseX + (ud.outward ?? 1) * (ap.aimOut ?? 0),
+          ud.baseY + (ap.aimUp ?? 0),
+          ud.baseZ - (ap.aimFwd ?? 0),
+        )
       }
       // ศอกงอขึ้น = ท่า W ของนักโดดร่ม ไม่ใช่แขนเหยียดตรงเป็นไม้กางเขน
       if (r.pointElbow) r.pointElbow.rotation.set(-0.85 + w2 * 0.1, 0, 0.45)
@@ -2521,7 +2599,11 @@ export function Mascot({
         r.mugShoulder.quaternion
           .copy(ud.rest)
           .multiply(TMP_Q.setFromEuler(TMP_E.set(-0.5, 0, -0.72 - w2 * 0.1)))
-        r.mugShoulder.position.set(ud.baseX, ud.baseY, ud.baseZ)
+        r.mugShoulder.position.set(
+          ud.baseX + (ud.outward ?? 1) * (ap.mugOut ?? 0),
+          ud.baseY + (ap.mugUp ?? 0),
+          ud.baseZ - (ap.mugFwd ?? 0),
+        )
       }
       if (r.mugElbow?.userData.rest) {
         r.mugElbow.quaternion
@@ -2533,6 +2615,18 @@ export function Mascot({
       for (const k of ['L', 'R']) {
         const s = k === 'L' ? -1 : 1
         const hip = r[`hip${k}`]
+        /**
+         * ระยะห่างของขาต้อง "เลื่อนจุดสะโพก" ไม่ใช่หมุน hipY ให้กางออก
+         *
+         * การหมุนทำให้เท้ากวาดเป็นส่วนโค้ง ยิ่งกางยิ่งยกสูงและถอยหลัง ฝ่าเท้าจึงหลุด
+         * จากแผ่นบอร์ดทันที เลื่อนตำแหน่งข้อต่อแทนแล้วขาทั้งท่อนขนานกันไป ระดับเท้าคงเดิม
+         *
+         * จำตำแหน่งเดิมไว้ครั้งแรก แล้วเขียนจากค่านั้นทุกเฟรม ไม่ใช่บวกสะสม
+         */
+        if (hip) {
+          const bp = (hip.userData.basePos ??= hip.position.clone())
+          hip.position.set(bp.x + s2 * (LEG.spread ?? 0), bp.y, bp.z + s2 * (LEG.stagger ?? 0))
+        }
         if (hip?.userData.baseRot) {
           const br = hip.userData.baseRot
           hip.rotation.set(br.x - 0.62 + w3 * 0.1, br.y, br.z + s * 0.62)
@@ -2563,10 +2657,13 @@ export function Mascot({
      */
     if (skate) {
       const t = state.clock.elapsedTime
-      /** ไหวคนละความถี่ ไม่เป็นเท่าตัวกัน — ผลรวมไม่วนซ้ำให้ตาจับ */
-      const w1 = Math.sin(t * 1.25)
-      const w2 = Math.sin(t * 0.91 + 1.7)
-      const w3 = Math.sin(t * 0.67 + 3.9)
+      /**
+       * ไหวคนละความถี่ ไม่เป็นเท่าตัวกัน — ผลรวมไม่วนซ้ำให้ตาจับ
+       * ปิดได้ด้วย poseIdle: ตอนจูนท่าต้องเทียบภาพนิ่งกับภาพนิ่ง ไม่ใช่ภาพที่ขยับอยู่
+       */
+      const w1 = poseIdle ? Math.sin(t * 1.25) : 0
+      const w2 = poseIdle ? Math.sin(t * 0.91 + 1.7) : 0
+      const w3 = poseIdle ? Math.sin(t * 0.67 + 3.9) : 0
 
       /**
        * แขนกางเป็น T — เหยียดออกข้างทั้งสองข้าง เกือบขนานพื้น
@@ -2587,7 +2684,27 @@ export function Mascot({
           AIR_AXIS.copy(ud.armAxis).normalize(),
           AIR_V,
         )
-        r.pointShoulder.position.set(ud.baseX, ud.baseY, ud.baseZ)
+        /**
+         * หมุนทั้งแขนต่อจากการเล็ง — premultiply คือหมุนในสเปซลำตัว
+         *
+         * ถ้าใช้ multiply มันจะกลายเป็นบิดรอบแกนแขนของตัวเอง ซึ่งเป็นคนละท่ากับที่ต้องการ
+         * (แขนอยู่ที่เดิม แค่หมุนควง) — ทิศ x ต้องกลับข้างตาม outward เหมือนตอนเล็ง
+         */
+        r.pointShoulder.quaternion.premultiply(
+          TMP_Q.setFromEuler(
+            TMP_E.set(
+              (ap.aimRotX ?? 0) * (ud.outward ?? 1),
+              (ap.aimRotY ?? 0) * (ud.outward ?? 1),
+              ap.aimRotZ ?? 0,
+            ),
+          ),
+        )
+        // ทิศ "หน้า" ของ mascot คือ -z จึงลบ aimFwd ไม่ใช่บวก
+        r.pointShoulder.position.set(
+          ud.baseX + (ud.outward ?? 1) * (ap.aimOut ?? 0),
+          ud.baseY + (ap.aimUp ?? 0),
+          ud.baseZ - (ap.aimFwd ?? 0),
+        )
       }
       /**
        * ศอกเหยียด = POSE0.elbowZ (0.35) ไม่ใช่ 0
@@ -2608,6 +2725,14 @@ export function Mascot({
         r.pointWrist.quaternion
           .copy(r.pointWrist.userData.rest)
           .multiply(TMP_Q.setFromEuler(TMP_E.set(ap.wristX, ap.wristY, ap.wristZ)))
+        /**
+         * ย่อ/ขยายเฉพาะ "มือ"
+         *
+         * ริกนี้ปั้นมือใหญ่กว่าปลายแขนมาก (กำปั้น+นิ้วยาวรวมราว 0.7 หน่วย ส่วนปลายแขนราว 0.2)
+         * ข้อมือกับข้อศอกจึงอยู่ห่างกันแค่นิดเดียว หมุนอันไหนก็เห็นแขนทั้งท่อนกวาดคล้ายกัน
+         * ย่อมือลงคือทางที่ทำให้ข้อมืออ่านเป็นข้อมือ โดยไม่ต้องรื้อสัดส่วนแขนทั้งเส้น
+         */
+        r.pointWrist.scale.setScalar(ap.handScale ?? 1)
       }
 
       /**
@@ -2629,7 +2754,21 @@ export function Mascot({
         r.mugShoulder.quaternion
           .copy(ud.rest)
           .premultiply(TMP_Q.setFromEuler(TMP_E.set(ap.mugShX, ap.mugShY, ap.mugShZ - w3 * 0.04)))
-        r.mugShoulder.position.set(ud.baseX, ud.baseY, ud.baseZ)
+        // หมุนทั้งแขนอีกชั้นในสเปซลำตัว — แยกจากมุมไหล่ข้างบนเพื่อให้จูนทีละเรื่องได้
+        r.mugShoulder.quaternion.premultiply(
+          TMP_Q.setFromEuler(
+            TMP_E.set(
+              (ap.mugRotX ?? 0) * (ud.outward ?? 1),
+              (ap.mugRotY ?? 0) * (ud.outward ?? 1),
+              ap.mugRotZ ?? 0,
+            ),
+          ),
+        )
+        r.mugShoulder.position.set(
+          ud.baseX + (ud.outward ?? 1) * (ap.mugOut ?? 0),
+          ud.baseY + (ap.mugUp ?? 0),
+          ud.baseZ - (ap.mugFwd ?? 0),
+        )
       }
       // ศอกฝั่งแก้วอยู่ที่ท่าพักพอดี — บิดเพิ่มเมื่อไรปลายแขนจะหักออกจากแนวท่อนบนทันที
       if (r.mugElbow?.userData.rest) {
@@ -2648,8 +2787,21 @@ export function Mascot({
       const LEG = legPose ?? SKATE_LEG
       const TP = torsoPose ?? SKATE_TORSO
       for (const k of ['L', 'R']) {
+        const s2 = k === 'L' ? -1 : 1
         const L = LEG[k]
         const hip = r[`hip${k}`]
+        /**
+         * ระยะห่างของขาต้อง "เลื่อนจุดสะโพก" ไม่ใช่หมุน hipY ให้กางออก
+         *
+         * การหมุนทำให้เท้ากวาดเป็นส่วนโค้ง ยิ่งกางยิ่งยกสูงและถอยหลัง ฝ่าเท้าจึงหลุด
+         * จากแผ่นบอร์ดทันที เลื่อนตำแหน่งข้อต่อแทนแล้วขาทั้งท่อนขนานกันไป ระดับเท้าคงเดิม
+         *
+         * จำตำแหน่งเดิมไว้ครั้งแรก แล้วเขียนจากค่านั้นทุกเฟรม ไม่ใช่บวกสะสม
+         */
+        if (hip) {
+          const bp = (hip.userData.basePos ??= hip.position.clone())
+          hip.position.set(bp.x + s2 * (LEG.spread ?? 0), bp.y, bp.z + s2 * (LEG.stagger ?? 0))
+        }
         if (hip?.userData.baseRot) {
           const br = hip.userData.baseRot
           /**
@@ -2670,10 +2822,16 @@ export function Mascot({
         if (ankle) ankle.rotation.x = L.ankle
       }
 
-      // ตัวโน้มไปหน้าเยอะ (หลังค่อม ทิ้งน้ำหนักลงเข่า) + เอียงตามการเลี้ยว
+      /**
+       * เอียงทั้งตัว (lean) + พับช่วงบน (fold) เขียนที่ root ทั้งคู่
+       *
+       * fold ต้องมาคู่กับการหมุนสะโพกกลับข้างบน — ถ้าเขียนแค่ที่สะโพกอย่างเดียว
+       * จะกลายเป็น "ขาหมุนถอยหลัง" ที่บังเอิญดูคล้ายการพับ แต่ลำตัวไม่ได้ขยับจริง
+       */
       if (root.current) {
-        root.current.rotation.x = rotation[0] + 0.26 + w2 * 0.04
-        root.current.rotation.z = rotation[2] - 0.1 + w3 * 0.05
+        root.current.rotation.x = rotation[0] + TP.leanX + TP.foldX + w2 * 0.04
+        root.current.rotation.y = rotation[1] + TP.foldY
+        root.current.rotation.z = rotation[2] + TP.leanZ + TP.foldZ + w3 * 0.05
       }
       /**
        * สเกลแขน — เขียนทุกเฟรมเพราะ prop เปลี่ยนได้ระหว่างจูน
@@ -2688,7 +2846,7 @@ export function Mascot({
       if (r.mugElbow) r.mugElbow.scale.setScalar(foreScale)
 
       // ตัวก้มแล้วหัวต้องเงยสวนขึ้นมามองทางไป ไม่ใช่ก้มตามลำตัวจนมองพื้น
-      if (headGroup.current) headGroup.current.rotation.x -= 0.2
+      if (headGroup.current) headGroup.current.rotation.x += TP.headX
     }
 
     // หนีบมุมก้ม/เงยรวมของหัว "หลังทุกระบบเขียนเสร็จ" — ห้ามหัวจมคอเสื้อไม่ว่าจะบวกกันมากี่ทาง

@@ -21,18 +21,23 @@ const NIGHT_SKY = [
 /** ดวงอาทิตย์เหลือความสว่างเท่านี้ตอนกลางคืน (ไม่หายไปเลย — เหลือเป็นเรืองแสงจาง ๆ หลังดวงจันทร์) */
 const SUN_DIM = 0.03
 
+/**
+ * สีของผนังฟ้ากลางวัน — export ไว้ให้ที่อื่นใช้สีเดียวกันได้
+ *
+ * หน้า /new-hero เอาฟ้าชุดนี้ไปใช้เป็นผนังของพอร์ทัลแทนที่จะซ้อนผนังของตัวเองอีกใบ
+ * ถ้าก๊อบค่าสีไปวางซ้ำ วันหนึ่งจะแก้ที่เดียวแล้วอีกที่ไม่ตาม
+ */
+export const DAY_SKY = [
+  [0, '#FBE3C8'],
+  [0.45, '#F8D3B4'],
+  [1, '#F6C9A8'],
+]
+
 /** ผนังไล่สีด้านหลังทั้งฉาก + ดวงอาทิตย์ + เมฆ */
 /** sunAt — ตำแหน่งดวงอาทิตย์ทางเลือก (หน้า /2026 ย้ายไปมุมขวาบนของ view ที่แพนขวา) */
-export function Sky({ sunAt }) {
-  const bg = useMemo(
-    () =>
-      gradientTexture([
-        [0, '#FBE3C8'],
-        [0.45, '#F8D3B4'],
-        [1, '#F6C9A8'],
-      ]),
-    [],
-  )
+/** noBackdrop — ตัดผนังฟ้าออก เหลือดวงอาทิตย์กับเมฆ (ผู้เรียกมีผนังของตัวเองแล้ว) */
+export function Sky({ sunAt, noBackdrop = false }) {
+  const bg = useMemo(() => gradientTexture(DAY_SKY), [])
   const night = useMemo(() => gradientTexture(NIGHT_SKY), [])
   useDisposable(bg)
   useDisposable(night)
@@ -46,16 +51,20 @@ export function Sky({ sunAt }) {
 
   return (
     <group ref={ref}>
-      {/* ผนังหลัง — ไม่รับแสง จะได้สีเรียบเนียน */}
-      <mesh position={[0, 4, -26]} renderOrder={-1}>
-        <planeGeometry args={[90, 46]} />
-        <meshBasicMaterial map={bg} toneMapped={false} />
-      </mesh>
-      {/* ฟ้ากลางคืนซ้อนหน้าฟ้ากลางวัน จางเข้ามาแทนกันตอนสลับโหมด */}
-      <mesh ref={nightWall} position={[0, 4, -25.9]} renderOrder={-1}>
-        <planeGeometry args={[90, 46]} />
-        <meshBasicMaterial map={night} transparent opacity={0} depthWrite={false} toneMapped={false} />
-      </mesh>
+      {!noBackdrop && (
+        <>
+        {/* ผนังหลัง — ไม่รับแสง จะได้สีเรียบเนียน */}
+        <mesh position={[0, 4, -26]} renderOrder={-1}>
+          <planeGeometry args={[90, 46]} />
+          <meshBasicMaterial map={bg} toneMapped={false} />
+        </mesh>
+        {/* ฟ้ากลางคืนซ้อนหน้าฟ้ากลางวัน จางเข้ามาแทนกันตอนสลับโหมด */}
+        <mesh ref={nightWall} position={[0, 4, -25.9]} renderOrder={-1}>
+          <planeGeometry args={[90, 46]} />
+          <meshBasicMaterial map={night} transparent opacity={0} depthWrite={false} toneMapped={false} />
+        </mesh>
+        </>
+      )}
 
       {/* ดวงจันทร์ขึ้นแทนที่ดวงอาทิตย์ตรงตำแหน่งเดิม — เยื้องซ้ายนิดเดียวให้เสี้ยวไม่ทับขอบดวงอาทิตย์
           (เคยวางไว้มุมซ้ายบน แล้วมันไปโผล่หลังก้อนเมฆ มองไม่เห็นเลยทั้งดวง) */}

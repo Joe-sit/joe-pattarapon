@@ -1,12 +1,18 @@
 import { Suspense, useLayoutEffect, useMemo, useRef } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Grid } from '@react-three/drei'
 import * as THREE from 'three'
 import { Mascot } from '@/joespresso/scene/Mascot'
-import { useDisposable, makeRandom, LOW_END, damp, clamp } from '@/joespresso/scene/utils'
+import { useDisposable, makeRandom, gradientTexture, LOW_END, damp, clamp } from '@/joespresso/scene/utils'
 import { DEFAULTS, getTuner, useTuner } from './tuner'
 import { roundedBoxGeo } from './geo'
 import { Rider } from './Rider'
+import { DAY_SKY, Sky } from '@/joespresso/scene/Sky'
+import { Terrain } from '@/joespresso/scene/Terrain'
+import { Foliage } from '@/joespresso/scene/Foliage'
+import { StackedWindows } from './StackedWindows'
+import { Tetris } from './Tetris'
+import { Switch } from './Switch'
 
 /**
  * ฉาก hero ใหม่ — "โต้คลื่นบนริบบิ้นหมากรุก" (คอมพ์ 12739:337)
@@ -29,14 +35,14 @@ const BG_TOP = '#2f66e2'
 const BG_MID = '#265ada'
 const BG_BOT = '#1e4dc4'
 const CREAM = '#3c6bde'
+/** เลขที่ใช้ทำเครื่องหมายพื้นที่ "ในหน้าต่าง" บน stencil buffer */
+const STENCIL_REF = 1
+
 /** สีเนื้อหน้าต่าง — ขาวล้วน ตัดกับพื้นน้ำเงินของหน้า */
 const INNER_BG = '#ffffff'
 const GREEN_DEEP = '#1d4a38'
 const GREEN_MAIN = '#3cb464'
 const GREEN_SOFT = '#8fd98a'
-const CHECKER_DARK = '#262019'
-const CHECKER_LIGHT = '#f4ecd9'
-const CHECKER_LINE = '#7fd0a2'
 const ORANGE = '#f2793b'
 const PURPLE = '#b44be0'
 const BLUE = '#4f7df9'
@@ -44,34 +50,59 @@ const RED = '#e8492e'
 
 /* ---------- textures (canvas วาดครั้งเดียว ระดับโมดูล — แชร์ทุก instance ห้าม dispose) ---------- */
 
-/** กระเบื้องหมากรุก 2x2 พร้อมเส้นตารางเขียวจาง ๆ — RepeatWrapping แล้วปูยาวตามริบบิ้น */
-function checkerTile(size = 256) {
+/**
+ * ผิวถนน = ตารางคอมมิตแบบ GitHub
+ *
+ * 7 แถวเพราะเป็นวันในสัปดาห์ ไม่ใช่เลขที่เลือกให้พอดีรูป — ปูซ้ำตามยาวริบบิ้นแล้ว
+ * แต่ละคอลัมน์จึงอ่านเป็นสัปดาห์ที่ไล่ออกไป เหมือนหน้าโปรไฟล์จริง
+ *
+ * ระดับสีสุ่มด้วยเมล็ดคงที่ (makeRandom) ไม่ใช่ Math.random — เทกซ์เจอร์ต้องออกมา
+ * เหมือนเดิมทุกครั้งที่โหลด ไม่งั้นหน้าตาถนนเปลี่ยนไปทุกรีเฟรชโดยไม่มีใครสั่ง
+ */
+/**
+ * ชุดสีธีม dark dimmed ของ GitHub — เทาอมน้ำเงินนุ่ม ไม่ใช่ดำสนิทแบบธีม dark
+ * ช่องระดับ 0 ต้องต่างจากสีพื้นเสมอ ไม่งั้นวันที่ไม่มีคอมมิตหายไปกับพื้นจนไม่เห็นเป็นตาราง
+ */
+const HEAT_BG = '#22272e'
+const HEAT_LEVELS = ['#2d333b', '#1b4721', '#2f6b36', '#478b48', '#63c363']
+/** จำนวนแถว = วันในสัปดาห์ */
+const HEAT_ROWS = 7
+
+function heatmapTile(size = 1024) {
   const c = document.createElement('canvas')
   c.width = c.height = size
   const ctx = c.getContext('2d')
-  const h = size / 2
-  for (let y = 0; y < 2; y++)
-    for (let x = 0; x < 2; x++) {
-      ctx.fillStyle = (x + y) & 1 ? CHECKER_LIGHT : CHECKER_DARK
-      ctx.fillRect(x * h, y * h, h, h)
+  ctx.fillStyle = HEAT_BG
+  ctx.fillRect(0, 0, size, size)
+
+  const cell = size / HEAT_ROWS
+  // ช่องไฟกว้างขึ้นเล็กน้อย — ขอบช่องที่ชัดคือสิ่งที่ทำให้ตารางอ่านออกตอนอยู่ไกล
+  const pad = cell * 0.16
+  const box = cell - pad * 2
+  const r = box * 0.24
+  const rnd = makeRandom(7)
+  for (let y = 0; y < HEAT_ROWS; y++) {
+    for (let x = 0; x < HEAT_ROWS; x++) {
+      /**
+       * ถ่วงให้ช่องจาง ๆ เยอะกว่าช่องเข้ม — ตารางจริงมีวันที่ไม่ได้คอมมิตเยอะที่สุด
+       * สุ่มแบบกระจายเท่ากันจะได้ผืนเขียวทึบซึ่งอ่านไม่ออกว่าเป็นตารางคอมมิต
+       */
+      const u = rnd()
+      const lv = u < 0.34 ? 0 : u < 0.56 ? 1 : u < 0.76 ? 2 : u < 0.91 ? 3 : 4
+      ctx.fillStyle = HEAT_LEVELS[lv]
+      const bx = x * cell + pad
+      const by = y * cell + pad
+      ctx.beginPath()
+      ctx.roundRect(bx, by, box, box, r)
+      ctx.fill()
     }
-  ctx.strokeStyle = CHECKER_LINE
-  ctx.lineWidth = size * 0.018
-  for (let i = 0; i <= 2; i++) {
-    ctx.beginPath()
-    ctx.moveTo(i * h, 0)
-    ctx.lineTo(i * h, size)
-    ctx.moveTo(0, i * h)
-    ctx.lineTo(size, i * h)
-    ctx.stroke()
   }
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-  tex.anisotropy = 8
   return tex
 }
-const checkerTex = checkerTile()
+const checkerTex = heatmapTile()
 
 /** ลายทางลูกกวาดแดง-ขาว — ปูรอบหน้าตัดของโดนัท */
 function candyStripes(size = 256) {
@@ -215,7 +246,16 @@ const clubGlyph = glyphTexture((ctx, s) => {
  * ค่อย ๆ เพิ่มตามระยะ — ได้ริบบิ้นที่ "ม้วนตัว" แบบภาพ ref ไม่ใช่แถบแบนราบ
  * uv แกน u คิดจากระยะจริงหารครึ่งความกว้าง — ช่องหมากรุกจึงเป็นจัตุรัสตลอดเส้น
  */
-function ribbonGeometry(points, w = 3.1, thick = 0.18, wave = 0.35, waves = 2.5, segs = 300) {
+function ribbonGeometry(
+  points,
+  w = 3.1,
+  thick = 0.18,
+  wave = 0.35,
+  waves = 2.5,
+  segs = 300,
+  from = 0,
+  to = 1,
+) {
   const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.6)
   const len = curve.getLength()
   const pos = []
@@ -229,7 +269,12 @@ function ribbonGeometry(points, w = 3.1, thick = 0.18, wave = 0.35, waves = 2.5,
   const UP = new THREE.Vector3(0, 1, 0)
   const hw = w / 2
   for (let i = 0; i <= segs; i++) {
-    const t = i / segs
+    /**
+     * t ยังเป็นพารามิเตอร์ของ "เส้นเต็ม" เสมอ แม้จะสร้างแค่บางช่วง
+     * เกลียวกับคลื่นคิดจาก t และ uv คิดจาก t × ความยาวเต็ม — ถ้า normalize ใหม่ต่อช่วง
+     * สองท่อนจะมีเฟสคนละชุดแล้วต่อกันไม่สนิทตรงรอยตัด
+     */
+    const t = from + (to - from) * (i / segs)
     curve.getPointAt(t, P)
     curve.getTangentAt(t, T)
     S.crossVectors(T, UP).normalize()
@@ -254,8 +299,17 @@ function ribbonGeometry(points, w = 3.1, thick = 0.18, wave = 0.35, waves = 2.5,
     pos.push(cx + S.x * hw, cy + S.y * hw, cz + S.z * hw)
     pos.push(cx - S.x * hw - N.x * thick, cy - S.y * hw - N.y * thick, cz - S.z * hw - N.z * thick)
     pos.push(cx + S.x * hw - N.x * thick, cy + S.y * hw - N.y * thick, cz + S.z * hw - N.z * thick)
-    const u = (t * len) / hw
-    uv.push(u, 0, u, 2, u, 0, u, 2)
+    /**
+     * v วิ่ง 0→1 ตลอดความกว้าง ไม่ใช่ 0→2
+     *
+     * เดิมใช้ 0→2 เทกซ์เจอร์จึงปูซ้ำสองรอบขวางถนน ได้ 14 ช่องต่อความกว้าง ทั้งที่
+     * ตารางคอมมิตต้องมี 7 ช่องต่อคอลัมน์พอดี (เจ็ดวันในสัปดาห์)
+     *
+     * u หารด้วยความกว้างเต็ม ไม่ใช่ครึ่งความกว้าง — ต้องขยับคู่กัน ไม่งั้นช่องจะไม่จัตุรัส
+     * (v ครอบ 1 หน่วยเทกซ์เจอร์ต่อความกว้าง u ก็ต้องครอบ 1 หน่วยต่อระยะเท่าความกว้าง)
+     */
+    const u = (t * len) / w
+    uv.push(u, 0, u, 1, u, 0, u, 1)
     if (i < segs) {
       const a = i * 4
       const b = a + 4
@@ -333,6 +387,14 @@ function Clay({ on, children }) {
     const orig = new Map()
     root.traverse((o) => {
       if (!o.material) return
+      /**
+       * ข้ามหน้ากาก stencil ของหน้าต่าง
+       *
+       * หน้ากากเป็นวัสดุที่ไม่เขียนสีแต่เขียน stencil ถ้าถูกแทนด้วยดินเหนียว มันจะ
+       * กลายเป็นแผ่นทึบและเลิกทำเครื่องหมาย stencil — ฉากในพอร์ทัลหายทั้งหมด
+       * (อาการคือ "กด clay แล้วของในหน้าต่างหายเกลี้ยง")
+       */
+      if (o.userData.noClay) return
       orig.set(o, o.material)
       if (on) o.material = mat
     })
@@ -421,13 +483,18 @@ function SoftCircles() {
 const PANEL_BAND = '#8ccf90'
 const PANEL_BAND_LINE = '#c6e7bd'
 
-function Panel({ w = 5.2, h = 6.5, d = 1.7, band = 0, cells = 0, stripe = false, ...props }) {
+function Panel({ w = 5.2, h = 6.5, d = 1.7, band = 0, cells = 0, stripe = false, portal = false, tint = INNER_BG, ...props }) {
   /**
-   * หน้าต่าง = แผ่นมุมมนสีขาว ไม่มีกรอบ
+   * หน้าต่าง = ช่องมองทะลุไปอีกฉาก ทำด้วย stencil buffer
    *
-   * เคยทำเป็นกรอบเจาะรูซ้อนกับกล่องโพรงด้านหลัง (BackSide) เพื่อให้เห็นเป็นช่องลึก
-   * แต่กรอบหนาไปบังริบบิ้นตอนลอดออกมา และคอมพ์เองก็เป็นแผ่นมุมมนเรียบ ๆ ไม่มีขอบ
-   * เหลือกล่องเดียวจึงตรงกับคอมพ์กว่า และริบบิ้นผ่านหน้า/หลังได้โดยไม่มีอะไรมาคั่น
+   * วาดตัวหน้าต่างโดยไม่เขียนสี (colorWrite=false) แต่เขียนเลข STENCIL_REF ลง stencil
+   * แล้วของในฉากข้างในตั้งเงื่อนไขว่าจะวาดเฉพาะพิกเซลที่ stencil ตรงเลขนั้น — ผลคือ
+   * ฉากข้างในโผล่เฉพาะในกรอบหน้าต่าง เหมือนมองผ่านช่อง
+   *
+   * เคยลอง MeshPortalMaterial ของ drei แล้วภาพในช่องไม่ตรงตำแหน่งกับฉากหลัก (คลาด
+   * แนวตั้งราว 100 px) เพราะมันเรนเดอร์ลง render target แล้วสุ่มตัวอย่างกลับด้วยพิกัดจอ
+   * ซึ่งพลาดง่ายเมื่อขนาด target กับขนาดจอไม่ตรงกัน stencil ไม่มีปัญหานั้นเลย เพราะ
+   * ทุกอย่างวาดด้วยกล้องตัวเดียวกันในบัฟเฟอร์เดียวกัน ตำแหน่งจึงตรงโดยอัตโนมัติ
    */
   const r = Math.min(w, h) * 0.17
   const geo = useMemo(() => roundedBoxGeo(w, h, d, r), [w, h, d, r])
@@ -436,8 +503,19 @@ function Panel({ w = 5.2, h = 6.5, d = 1.7, band = 0, cells = 0, stripe = false,
   const bh = h * band
   return (
     <group {...props}>
-      <mesh geometry={geo}>
-        <meshStandardMaterial color={INNER_BG} roughness={0.95} />
+      <mesh geometry={geo} renderOrder={portal ? -2 : 0} userData={{ noClay: portal }}>
+        {portal ? (
+          <meshBasicMaterial
+            colorWrite={false}
+            depthWrite={false}
+            stencilWrite
+            stencilRef={STENCIL_REF}
+            stencilFunc={THREE.AlwaysStencilFunc}
+            stencilZPass={THREE.ReplaceStencilOp}
+          />
+        ) : (
+          <meshStandardMaterial color={tint} roughness={0.95} />
+        )}
       </mesh>
       {band > 0 && (
         <group position={[0, -h / 2 + bh / 2, d / 2 - 0.02]}>
@@ -763,6 +841,191 @@ function Squiggle({ color = '#59d3a8', ...props }) {
 /** จุดหมุนของริบบิ้น = ปากช่องบานที่ 2 ตรงที่มันโผล่ออกมา (พิกัดในกลุ่มแถบหน้าต่าง) */
 const RIBBON_PIVOT = [-3.5, 2.45, 0.7]
 
+/**
+ * ของที่อยู่ "ในหน้าต่าง" — วาดเฉพาะพิกเซลที่ stencil ถูกทำเครื่องหมายไว้โดยหน้าต่าง
+ *
+ * ไล่ตั้งค่า stencil ให้ทุกวัสดุด้วย traverse แทนการส่ง prop ทีละชิ้น เพราะของในนี้
+ * เป็นเมชธรรมดาหลายชิ้น การลืมตั้งแค่ชิ้นเดียวจะทำให้มันโผล่นอกกรอบหน้าต่างทันที
+ *
+ * depthTest ยังเปิดอยู่ ของที่อยู่หน้าหน้าต่าง (ริบบิ้น ตัวละคร) จึงบังพอร์ทัลได้ตามจริง
+ */
+function InsideWindow({ children }) {
+  const g = useRef()
+  /**
+   * ไล่ตั้ง stencil ซ้ำทุกเฟรมช่วงแรก ไม่ใช่ครั้งเดียวตอน mount
+   *
+   * ฉาก joespresso สร้างเมชหลายชิ้นหลังจากนั้น (โหลด GLB, สร้าง geometry ใน effect)
+   * ตั้งครั้งเดียวแล้วชิ้นที่มาทีหลังจะไม่มีเงื่อนไข stencil แล้วโผล่นอกกรอบหน้าต่างทันที
+   * ตั้งเฉพาะชิ้นที่ยังไม่ถูกตั้ง (ดูจาก stencilRef) เพื่อไม่ให้ต้อง needsUpdate ทุกเฟรม
+   */
+  const frames = useRef(0)
+  useFrame(() => {
+    const root = g.current
+    if (!root || frames.current > 240) return
+    frames.current += 1
+    root.traverse((o) => {
+      /**
+       * เปิด matrixWorldAutoUpdate กลับให้ทุกชิ้นในพอร์ทัล
+       *
+       * Sky กับ Terrain ของ joespresso เรียก useStaticSubtree ซึ่งปิดธงนี้ทั้งกิ่ง
+       * (ของสองชิ้นนั้นไม่เคยขยับในหน้าเดิม จึงตัดออกจากงานคำนวณทุกเฟรม)
+       * ผลข้างเคียงที่นี่คือพอกลุ่มแม่ขยับ ลูกไม่คำนวณ matrixWorld ใหม่เลย สไลเดอร์
+       * ตำแหน่ง/สเกล/หมุนจึงไม่มีผล — และ updateMatrixWorld(true) ก็ช่วยไม่ได้
+       * เพราะโค้ดของ three ข้ามการคำนวณเมื่อธงนี้เป็น false ไม่ว่าจะ force หรือไม่
+       */
+      o.matrixWorldAutoUpdate = true
+      if (!o.material) return
+      o.renderOrder = 1
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (m.stencilWrite && m.stencilRef === STENCIL_REF) continue
+        m.stencilWrite = true
+        m.stencilRef = STENCIL_REF
+        m.stencilFunc = THREE.EqualStencilFunc
+        m.needsUpdate = true
+      }
+    })
+  })
+  return <group ref={g}>{children}</group>
+}
+
+/**
+ * ริบบิ้นของฉากในหน้าต่าง — คนละชิ้นกับเส้นหลัก ไม่ได้ผูกกับตำแหน่งบาน
+ *
+ * แยกเป็นวัตถุของตัวเองเพราะเส้นหลักต้องเริ่มที่ปากช่องพอดี ส่วนชิ้นนี้แค่ต้องอยู่ใน
+ * กรอบหน้าต่างให้สวย จะวางตรงไหนก็ได้ตราบใดที่ยังอยู่หลังระนาบบาน — ผูกสองเรื่องนี้
+ * เข้าด้วยกันเมื่อไร การขยับบานทีเดียวจะพังทั้งสองฝั่ง
+ */
+function PortalRibbon({ width, thick, wave, waves, scale, offset, rot }) {
+  const geo = useMemo(
+    () =>
+      ribbonGeometry(
+        [
+          new THREE.Vector3(-46, 10, -16),
+          new THREE.Vector3(-26, 4, -8),
+          new THREE.Vector3(-8, 0, -2),
+          new THREE.Vector3(12, -3, 2),
+          new THREE.Vector3(32, -8, 10),
+          new THREE.Vector3(52, -16, 22),
+        ],
+        width,
+        thick,
+        wave,
+        waves,
+        260,
+      ),
+    [width, thick, wave, waves],
+  )
+  useDisposable(geo)
+  const tex = useMemo(() => {
+    const t = checkerTex.clone()
+    t.needsUpdate = true
+    return t
+  }, [])
+  useDisposable(tex)
+  return (
+    <mesh geometry={geo} position={offset} rotation={rot} scale={scale}>
+      <meshStandardMaterial attach="material-0" map={tex} roughness={0.85} side={THREE.DoubleSide} />
+      <meshStandardMaterial attach="material-1" color={GREEN_DEEP} roughness={0.75} side={THREE.DoubleSide} />
+    </mesh>
+  )
+}
+
+/** ฉากที่อยู่หลังหน้าต่าง — โทนอุ่นเข้ม ตัดกับพื้นน้ำเงินของหน้า จึงอ่านว่าเป็นคนละที่ */
+function WindowWorld({
+  z = -46,
+  ribbon,
+  joespresso,
+  jScale = 1,
+  jx = 0,
+  jy = 0,
+  jz = 0,
+  jRot = [0, 0, 0],
+  parts = { sky: true, terrain: true, foliage: true },
+  wall = true,
+  hemi = 0.7,
+  /** ชื่อ keyLight ไม่ใช่ key — `key` เป็นชื่อสงวนของ React ส่งเป็น prop ไม่ได้ */
+  keyLight = 1.1,
+  stack,
+  tetris,
+}) {
+  const skyTex = useMemo(() => gradientTexture(DAY_SKY), [])
+  useDisposable(skyTex)
+
+  return (
+    <group position={[0, 0, z]}>
+      {/**
+       * ผนังหลังสุดสีขาว — ทึบพอที่จะกันไม่ให้พื้นหลังน้ำเงินของหน้าลอดออกมา
+       *
+       * ใช้ meshBasicMaterial ไม่ใช่ standard: ผนังต้องขาวเท่ากันทั้งผืนไม่ว่าไฟจะตกยังไง
+       * ถ้ารับแสงมันจะมีไล่เฉดแล้วอ่านเป็น "กำแพงที่ถูกส่อง" แทนที่จะเป็นที่ว่างสีขาว
+       */}
+      {wall && (
+        /**
+         * ผนังพอร์ทัลใช้ไล่สีฟ้าชุดเดียวกับฉาก joespresso (DAY_SKY)
+         *
+         * ฉากนั้นมีผนังฟ้าของตัวเองอยู่แล้ว แต่มันกว้างแค่ 90 หน่วยและอยู่ที่ z -26
+         * ของฉากเอง พอย่อ/เลื่อนฉากให้พอดีกรอบหน้าต่าง ขอบผนังนั้นจะโผล่เป็นเส้นตัด
+         * กลางหน้าต่าง จึงปิดผนังของฉาก (noBackdrop) แล้วใช้ผนังใบนี้ใบเดียวแทน
+         *
+         * สีดึงจากค่าที่ export มาจาก Sky.jsx ไม่ได้ก๊อบตัวเลขมาวาง — ก๊อบแล้ววันหนึ่ง
+         * จะแก้ที่เดียวแล้วอีกที่ไม่ตาม
+         */
+        <mesh position={[0, 0, -22]}>
+          <planeGeometry args={[220, 150]} />
+          <meshBasicMaterial map={skyTex} toneMapped={false} />
+        </mesh>
+      )}
+      {/* พื้นหลังขาวสว่างกว่าเดิมมาก ไฟจึงต้องลดลง ไม่งั้นของในฉากจะซีดจนกลืนกับผนัง */}
+      <hemisphereLight intensity={hemi} color="#ffffff" groundColor="#c9d4e8" />
+      <directionalLight position={[-8, 10, 6]} intensity={keyLight} color="#fff2e2" />
+      {joespresso && (
+        /**
+         * ฉาก joespresso — ยกมาเฉพาะชิ้นภูมิทัศน์ (ฟ้า/เนิน/ต้นไม้)
+         *
+         * ตัว Scene ของหน้านั้นเป็น <Canvas> ของตัวเอง ซ้อนเข้ามาไม่ได้ ต้องประกอบจาก
+         * ชิ้นส่วนแทน และเลือกเฉพาะชิ้นที่ไม่พึ่งสโตร์ของหน้านั้น — Panels/Slogan/WorkDesk
+         * อ่านสถานะ scroll/intro ของ /joespresso ซึ่งไม่มีในหน้านี้ จะได้ท่าค้างหรือพัง
+         *
+         * ฉากนั้นปั้นมาที่สเกลของมันเอง ต้องย่อและดันลงให้พอดีกรอบหน้าต่าง
+         */
+        <group position={[jx, jy, jz]} rotation={jRot} scale={jScale}>
+          {parts.sky && <Sky noBackdrop />}
+          {parts.terrain && <Terrain />}
+          {parts.foliage && <Foliage />}
+        </group>
+      )}
+      {stack && (
+        <StackedWindows
+          count={stack.count}
+          step={stack.step}
+          w={stack.w}
+          h={stack.h}
+          barRatio={stack.barRatio}
+          depth={stack.depth}
+          radius={stack.radius}
+          btnRatio={stack.btnRatio}
+          inset={stack.inset}
+          position={stack.pos}
+          rotation={stack.rot}
+          scale={stack.scale}
+        />
+      )}
+      {tetris && (
+        <Tetris
+          shape={tetris.shape}
+          depth={tetris.depth}
+          radius={tetris.radius}
+          gap={tetris.gap}
+          position={tetris.pos}
+          rotation={tetris.rot}
+          scale={tetris.scale}
+        />
+      )}
+      <PortalRibbon {...ribbon} />
+    </group>
+  )
+}
+
 /** ริบบิ้นหมากรุกเส้นหลัก */
 function CheckerRibbon({ width, thick, wave, waves, scale, offset, rot }) {
   /**
@@ -783,16 +1046,25 @@ function CheckerRibbon({ width, thick, wave, waves, scale, offset, rot }) {
    *
    * แกน +z ของกลุ่มนี้ชี้ออกมาทางกล้องเยื้องขวา (หมุน 26°) — ไล่ z ขึ้นคือวิ่งเข้าหาคนดู
    */
-  const geo = useMemo(
-    () =>
-      ribbonGeometry([
-        // ในโพรงบานที่ 1 (โพรงลึกจาก z 0.15 ถึง -4.85)
+  const PATH = useMemo(
+    () => [
+        /**
+         * ช่วงหลัง: ในโพรงบานที่ 1 → ลอดหลังกรอบ → ปากช่องบานที่ 2
+         *
+         * ชุดจุดนี้ได้จากการค้นหา ไม่ใช่การกะ: วัด "มุมที่ทิศทางเส้นหักต่อหนึ่งสเต็ป"
+         * ตลอดเส้นแล้วเลือกชุดที่ค่าสูงสุดต่ำที่สุด — มุมหักคือสิ่งที่ทำให้ริบบิ้นตะแคง
+         * จนเห็นเป็นสันบางแล้วบานออกตรงรอยต่อ ไม่ใช่รูโหว่ในเรขาคณิต
+         *
+         * ได้ 1.51° จากเดิม 2.08° (ลองด้วยมือก่อนหน้านี้ได้ 4.32° คือแย่ลง — เลยต้องวัด)
+         *
+         * เงื่อนไขที่ล็อกไว้ระหว่างค้นหา: จุดปากช่องคงเดิมเป๊ะ และความยาวรวมต่างจากเดิม
+         * ไม่เกิน 0.7% เพราะเฟสของคลื่นคิดจากระยะตามเส้น ถ้ายาวเปลี่ยนมากคลื่นจะเลื่อน
+         * ไปทั้งเส้น รวมช่วงหน้าที่จัดไว้แล้ว
+         */
         new THREE.Vector3(-9.6, 2.7, -3.9),
-        new THREE.Vector3(-8.6, 2.65, -2.4),
-        // ลอดหลังกรอบระหว่างบาน 1 กับ 2 — ยังลึกกว่าระนาบกรอบ จึงอ่านเป็นของที่อยู่ข้างหลัง
-        new THREE.Vector3(-6.6, 2.55, -1.6),
-        new THREE.Vector3(-4.8, 2.5, -1.0),
-        // ถึงปากช่องบานที่ 2 แล้วโผล่ออกมา (z > d/2 คือพ้นหน้ากรอบ)
+        new THREE.Vector3(-8.3, 2.66, -3.0),
+        new THREE.Vector3(-6.1, 2.58, -2.1),
+        new THREE.Vector3(-4.6, 2.52, -1.1),
         new THREE.Vector3(-3.5, 2.45, 0.7),
         /**
          * ขาออกต้องลด x ท้องถิ่นลงขณะที่ z เพิ่ม
@@ -806,15 +1078,56 @@ function CheckerRibbon({ width, thick, wave, waves, scale, offset, rot }) {
         new THREE.Vector3(-4.9, -1.4, 11.0),
         // ปลายต้องพ้นขอบล่างของเฟรม ไม่ใช่จบกลางอากาศ — เอียงซ้ายเพิ่มไม่ให้ไปทับโซนข้อความ
         new THREE.Vector3(-7.0, -4.8, 16.0),
-      ], width, thick, wave, waves),
-    [width, thick, wave, waves],
+    ],
+    [],
   )
-  useDisposable(geo)
+
+  /**
+   * ริบบิ้นเส้นนี้เริ่มที่ "ปากช่องบานที่ 2" ไม่มีหางลากไปข้างหลังอีกแล้ว
+   *
+   * หางเดิมอยู่ในช่องว่างระหว่างบาน ไม่ได้อยู่หลังบานไหนเลย จึงเห็นเป็นริบบิ้นพาด
+   * พื้นหลังแทนที่จะเป็นของในหน้าต่าง — ตัดทิ้ง แล้วไปทำเป็นวัตถุแยกในฉากของหน้าต่าง
+   * (ดู PortalRibbon) ซึ่งวางอิสระได้โดยไม่ต้องผูกกับตำแหน่งบาน
+   *
+   * หาจุดเริ่มจากระยะตามเส้นจริง (getPointAt) ไม่ใช่ index ของจุดควบคุมหารจำนวนจุด
+   * เพราะช่วงระหว่างจุดควบคุมยาวไม่เท่ากัน ใช้ index จะเริ่มเลยหรือไม่ถึงปากช่อง
+   */
+  const tCut = useMemo(() => {
+    const c = new THREE.CatmullRomCurve3(PATH, false, 'catmullrom', 0.6)
+    const exit = PATH[4]
+    const P = new THREE.Vector3()
+    let best = 0
+    let bestD = Infinity
+    for (let i = 0; i <= 600; i++) {
+      const t = i / 600
+      const d = c.getPointAt(t, P).distanceTo(exit)
+      if (d < bestD) {
+        bestD = d
+        best = t
+      }
+    }
+    return best
+  }, [PATH])
+
+  const geoFront = useMemo(
+    () => ribbonGeometry(PATH, width, thick, wave, waves, 260, tCut, 1),
+    [PATH, width, thick, wave, waves, tCut],
+  )
+  useDisposable(geoFront)
+  /**
+   * anisotropy สูงสุดเท่าที่การ์ดรองรับ — ตัวชี้ขาดความคมของผิวที่วางเกือบขนานสายตา
+   *
+   * ถนนพุ่งหนีกล้อง แต่ละพิกเซลจึงกินเนื้อเทกซ์เจอร์เป็นแถบยาว ๆ ตัวกรองปกติเฉลี่ย
+   * เป็นวงกลมจึงเบลอทั้งที่ความละเอียดพอ ค่าเดิมตั้งไว้ตายตัวที่ 8 ซึ่งมักต่ำกว่า
+   * ที่การ์ดทำได้ (ส่วนใหญ่ 16)
+   */
+  const maxAniso = useThree((st) => st.gl.capabilities.getMaxAnisotropy())
   const tex = useMemo(() => {
     const t = checkerTex.clone()
+    t.anisotropy = maxAniso
     t.needsUpdate = true
     return t
-  }, [])
+  }, [maxAniso])
   useDisposable(tex)
   return (
     /**
@@ -825,11 +1138,13 @@ function CheckerRibbon({ width, thick, wave, waves, scale, offset, rot }) {
      */
     <group position={RIBBON_PIVOT} rotation={rot}>
     <group position={[-RIBBON_PIVOT[0], -RIBBON_PIVOT[1], -RIBBON_PIVOT[2]]}>
-    <mesh geometry={geo} position={offset} scale={scale}>
-      {/* ผิวบน = ลายหมากรุก / ผิวล่างกับสันข้าง = สีทึบ ให้เห็นว่ามันเป็นแผ่นมีความหนา */}
-      <meshStandardMaterial attach="material-0" map={tex} roughness={0.85} side={THREE.DoubleSide} />
-      <meshStandardMaterial attach="material-1" color={GREEN_DEEP} roughness={0.75} side={THREE.DoubleSide} />
-    </mesh>
+    <group position={offset} scale={scale}>
+      <mesh geometry={geoFront}>
+        {/* ผิวบน = ตารางคอมมิต / ผิวล่างกับสันข้าง = สีทึบ ให้เห็นว่าเป็นแผ่นมีความหนา */}
+        <meshStandardMaterial attach="material-0" map={tex} roughness={0.85} side={THREE.DoubleSide} />
+        <meshStandardMaterial attach="material-1" color={GREEN_DEEP} roughness={0.75} side={THREE.DoubleSide} />
+      </mesh>
+    </group>
     </group>
     </group>
   )
@@ -933,7 +1248,19 @@ function Scene() {
   const clay = t.clay > 0.5
   const props = t.props > 0.5
   const skater = t.skater > 0.5
+  /**
+   * โหมด clay ปิดพอร์ทัลเสมอ
+   *
+   * clay มีไว้ดูรูปทรงของโมเดล การเปิดพอร์ทัลค้างไว้ทำให้ฉากในหน้าต่าง (ซึ่งอยู่นอก
+   * กลุ่ม Clay จึงยังมีสีของตัวเอง) กินพื้นที่ครึ่งจอ แล้วหน้าต่างก็ไม่เหลือรูปทรง
+   * ให้ตรวจเพราะมันเป็นหน้ากากที่ไม่เขียนสี — เหลือเป็นเทาปนขาวทั้งจอ อ่านอะไรไม่ได้
+   */
+  const portal = t.portal > 0.5 && !clay
   const grid = clay ? GRID.clay : GRID.color
+  // exposure อยู่บนตัว renderer ไม่ใช่ใน scene graph จึงต้องเขียนเองเมื่อค่าเปลี่ยน
+  useFrame(({ gl }) => {
+    if (gl.toneMappingExposure !== t.exposure) gl.toneMappingExposure = t.exposure
+  })
   /**
    * ริบบิ้นตัวเดียวกัน ใช้ทั้งในฉากของหน้าต่างและในฉากหลัก
    *
@@ -961,17 +1288,37 @@ function Scene() {
          * ambient ต่ำกว่าโหมดสี เพราะ clay ต้องอ่านรูปทรงจากไล่เงา ไม่ใช่จากสี
          */
         <>
-          <ambientLight intensity={0.42} color="#ffffff" />
-          <directionalLight position={[-6, 9, 7]} intensity={1.5} color="#ffffff" />
-          <directionalLight position={[7, 2, 5]} intensity={0.5} color="#dfe6ee" />
-          <directionalLight position={[0, 4, -10]} intensity={0.55} color="#ffffff" />
+          {/* ค่าชุดนี้ลดลงจากเดิมราวครึ่ง — ตอนตั้งครั้งแรกยังไม่มี exposure มาคูณทับ
+              รวมกันแล้วดินเหนียวสว่างจนชนเพดาน ทุกหน้าขาวเท่ากันจนอ่านทรงไม่ออก */}
+          <ambientLight intensity={0.22} color="#ffffff" />
+          <directionalLight position={[-6, 9, 7]} intensity={0.85} color="#ffffff" />
+          <directionalLight position={[7, 2, 5]} intensity={0.28} color="#dfe6ee" />
+          <directionalLight position={[0, 4, -10]} intensity={0.3} color="#ffffff" />
         </>
       ) : (
         <>
-          {/* ambient เขียวอ่อนทำให้ครีมกลายเป็นเทา — ใน ref แผงเป็นเบจอุ่น */}
-          <ambientLight intensity={0.85} color="#ffffff" />
-          <directionalLight position={[-4, 7, 8]} intensity={1.15} color="#fff6e8" />
-          <directionalLight position={[6, -2, 4]} intensity={0.28} color="#bfffdf" />
+          {/**
+           * ชุดไฟสามดวง + ฟ้า/พื้น แทนการดัน ambient ให้สว่าง
+           *
+           * ambient สูง ๆ สว่างจริงแต่ทุกหน้าได้แสงเท่ากันหมด ทรงเลยแบนเป็นกระดาษตัด
+           * ความ "กระจ่างและมีชีวิต" มาจากการที่แต่ละหน้าได้แสงคนละค่า ไม่ใช่ค่าเฉลี่ยที่สูงขึ้น
+           * จึงลด ambient ลงแล้วไปเพิ่มที่ key/fill/rim แทน
+           *
+           * hemisphereLight คือตัวที่ให้ "ชีวิต" ถูกที่สุด — ด้านบนรับสีฟ้าของหน้า
+           * ด้านล่างรับสีอุ่นสะท้อนขึ้นมา เงาจึงมีสีแทนที่จะเป็นเทาตาย
+           */}
+          <ambientLight intensity={t.ambIntensity} color="#ffffff" />
+          <hemisphereLight
+            intensity={t.hemiIntensity}
+            color={BG_MID}
+            groundColor="#ffd9a8"
+          />
+          {/* key: เฉียงบนซ้ายหน้า อุ่น — ตัวกำหนดทิศของเงาทั้งฉาก */}
+          <directionalLight position={[-5, 8, 7]} intensity={t.keyIntensity} color="#fff4e2" />
+          {/* fill: ฝั่งตรงข้าม เย็น รับสีพื้นน้ำเงินของหน้า ไม่ให้ด้านมืดเป็นดำตัน */}
+          <directionalLight position={[7, 1, 5]} intensity={t.fillIntensity} color="#cfe0ff" />
+          {/* rim: จากหลัง ตัดขอบตัวละครออกจากแผงขาวข้างหลัง */}
+          <directionalLight position={[2, 6, -9]} intensity={t.rimIntensity} color="#ffffff" />
         </>
       )}
 
@@ -1043,13 +1390,36 @@ function Scene() {
               w={t.panelW}
               h={t.panelH}
               d={t.panelD}
+              portal={portal}
             />
           )
         })}
         {ribbon}
+        {/**
+         * สวิตช์ — ลอยอยู่หน้าแถบหน้าต่าง ไม่ใช่ของในพอร์ทัล
+         *
+         * อยู่ในกลุ่มเดียวกับริบบิ้น/ตัวละคร พิกัดจึงเป็นระบบเดียวกับของสองชิ้นนั้น
+         * วางเทียบกับปากหน้าต่างได้ตรง ๆ และยังตามไปด้วยเมื่อหมุน bandYaw
+         */}
+        {t.bc > 0.5 && (
+          <Switch
+            len={t.bcLen}
+            radius={t.bcRadius}
+            pos={t.bcPos}
+            opacity={t.bcOpacity}
+            icon={t.bcIcon}
+            position={[t.bcX, t.bcY, t.bcZ]}
+            rotation={[t.bcRotX * RAD, t.bcRotY * RAD, t.bcRotZ * RAD]}
+            scale={t.bcScale}
+          />
+        )}
         {/* ตัวละครอยู่ในพิกัดกลุ่มเดียวกับริบบิ้น จะได้วางบนถนนได้ตรง ๆ ไม่ต้องแปลงพิกัด */}
         {skater && (
           <Rider
+            bob={t.idle > 0.5}
+            breathe={t.breathe > 0.5}
+            idleAmp={t.idleAmp}
+            idleSpeed={t.idleSpeed}
             position={[t.skaterX, t.skaterY, t.skaterZ]}
             rotation={[t.skaterRotX * RAD, t.skaterRotY * RAD, t.skaterRotZ * RAD]}
             scale={t.skaterScale}
@@ -1059,6 +1429,7 @@ function Scene() {
             armScale={t.armScale}
             foreScale={t.foreScale}
             boardRot={[t.boardRotX * RAD, t.boardRotY * RAD, t.boardRotZ * RAD]}
+            boardOffset={[t.boardX, t.boardY, t.boardZ]}
             boardSpec={{
               deckLen: t.bdLen,
               deckWide: t.bdWide,
@@ -1079,6 +1450,8 @@ function Scene() {
               headX: t.headX * RAD,
             }}
             legPose={{
+              spread: t.legSpread,
+              stagger: t.legStagger,
               L: {
                 hipX: t.hipLX * RAD,
                 hipY: t.hipLY * RAD,
@@ -1095,12 +1468,26 @@ function Scene() {
               },
             }}
             armPose={{
+              /* เลื่อนโคนแขน — ไม่ใช่องศา จึงไม่คูณ RAD */
+              aimOut: t.aimOut,
+              aimUp: t.aimUp,
+              aimFwd: t.aimFwd,
+              mugOut: t.mugOut,
+              mugUp: t.mugUp,
+              mugFwd: t.mugFwd,
+              aimRotX: t.aimRotX * RAD,
+              aimRotY: t.aimRotY * RAD,
+              aimRotZ: t.aimRotZ * RAD,
+              mugRotX: t.mugRotX * RAD,
+              mugRotY: t.mugRotY * RAD,
+              mugRotZ: t.mugRotZ * RAD,
               aimX: t.aimX,
               aimY: t.aimY,
               aimZ: t.aimZ,
               elbowX: t.elbowX * RAD,
               elbowY: t.elbowY * RAD,
               elbowZ: t.elbowZ * RAD,
+              handScale: t.handScale,
               wristX: t.wristX * RAD,
               wristY: t.wristY * RAD,
               wristZ: t.wristZ * RAD,
@@ -1115,6 +1502,64 @@ function Scene() {
         )}
       </group>
       </group>
+      {/* ต้องอยู่หลังแถบหน้าต่างในลำดับ JSX — หน้ากาก stencil ต้องถูกวาดก่อนของข้างใน */}
+      {portal && (
+        <InsideWindow>
+          <WindowWorld
+            z={t.portalZ}
+            joespresso={t.joe > 0.5}
+            jScale={t.joeScale}
+            jx={t.joeX}
+            jy={t.joeY}
+            jz={t.joeZ}
+            jRot={[t.joeRotX * RAD, t.joeRotY * RAD, t.joeRotZ * RAD]}
+            parts={{
+              sky: t.joeSky > 0.5,
+              terrain: t.joeTerrain > 0.5,
+              foliage: t.joeFoliage > 0.5,
+            }}
+            wall={t.portalWall > 0.5}
+            hemi={t.portalHemi}
+            keyLight={t.portalKey}
+            stack={
+              t.sw > 0.5 && {
+                count: t.swCount,
+                step: [t.swDX, t.swDY, t.swDZ],
+                w: t.swW,
+                h: t.swH,
+                barRatio: t.swBar,
+                depth: t.swDepth,
+                radius: t.swRadius,
+                btnRatio: t.swBtn,
+                inset: t.swInset,
+                pos: [t.swX, t.swY, t.swZ],
+                rot: [t.swRotX * RAD, t.swRotY * RAD, t.swRotZ * RAD],
+                scale: t.swScale,
+              }
+            }
+            tetris={
+              t.te > 0.5 && {
+                shape: t.teShape,
+                depth: t.teDepth,
+                radius: t.teRadius,
+                gap: t.teGap,
+                pos: [t.teX, t.teY, t.teZ],
+                rot: [t.teRotX * RAD, t.teRotY * RAD, t.teRotZ * RAD],
+                scale: t.teScale,
+              }
+            }
+            ribbon={{
+              width: t.prW,
+              thick: t.prThick,
+              wave: t.prWave,
+              waves: t.prWaves,
+              scale: t.prScale,
+              offset: [t.prX, t.prY, t.prZ],
+              rot: [t.prRotX * RAD, t.prRotY * RAD, t.prRotZ * RAD],
+            }}
+          />
+        </InsideWindow>
+      )}
       {props && (
         <>
           <BigDisc position={[9.2, -0.3, -13.5]} scale={1.15} />
@@ -1220,7 +1665,13 @@ export default function NewHeroScene() {
         near: 0.1,
         far: 140,
       }}
-      gl={{ antialias: true }}
+      /**
+       * exposure ยกความสว่างทั้งภาพ "หลัง" คำนวณแสงเสร็จ
+       * ต่างจากการเร่ง intensity ของไฟทีละดวง ซึ่งจะดันด้านสว่างจนไหม้ก่อนที่ด้านมืด
+       * จะสว่างพอ — ที่นี่อัตราส่วนระหว่างด้านสว่างกับด้านมืดคงเดิม
+       */
+      // stencil ต้องเปิดเอง — พอร์ทัลของหน้าต่างใช้ stencil buffer เป็นตัวจำกัดพื้นที่วาด
+      gl={{ antialias: true, stencil: true, toneMappingExposure: DEFAULTS.exposure }}
     >
       <Suspense fallback={null}>
         <Scene />
