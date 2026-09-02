@@ -1,6 +1,6 @@
 import { Suspense, useLayoutEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { Environment, Grid, Lightformer } from '@react-three/drei'
+import { Environment, Grid, Lightformer, MeshTransmissionMaterial } from '@react-three/drei'
 import * as THREE from 'three'
 import { Mascot } from '@/joespresso/scene/Mascot'
 import { useDisposable, makeRandom, gradientTexture, LOW_END, damp, clamp } from '@/joespresso/scene/utils'
@@ -534,6 +534,88 @@ function SoftCircles() {
  */
 const PANEL_BAND = '#8ccf90'
 const PANEL_BAND_LINE = '#c6e7bd'
+
+/**
+ * แสงเรืองพาสเทลหลังบานหน้าต่าง — ก้อนสีนุ่ม ๆ ชมพู/ม่วง/ฟ้า ซ้อนกันแบบ additive
+ *
+ * ภาพอ้างอิงเป็น "หมอกสี" ฟุ้งอยู่หลังกระจก ไม่ใช่ขอบเรืองแสงคม — จึงเป็นแผ่นไล่สีรัศมี
+ * (radial gradient) ที่จางถึงศูนย์ที่ขอบ วางหลังระนาบบานเล็กน้อย ไม่เขียน depth ของในพอร์ทัล
+ * จะทับมันในช่องหน้าต่าง เหลือเป็นรัศมีรอบกรอบ — ตรงกับที่ตาเห็นใน ref
+ *
+ * แต่ละบานมี 3 ก้อน คนละสี คนละมุม ลอยเลี้ยงตัวช้า ๆ (ความถี่ไม่เป็นเท่าตัวกัน)
+ * เท็กซ์เจอร์รัศมีสร้างครั้งเดียวทั้งไฟล์ — ทุกก้อนใช้ร่วมกัน สีมาจาก material.color
+ */
+const GLOW_TEX = (() => {
+  const size = 256
+  const c = document.createElement('canvas')
+  c.width = size
+  c.height = size
+  const ctx = c.getContext('2d')
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+  g.addColorStop(0, 'rgba(255,255,255,1)')
+  g.addColorStop(0.35, 'rgba(255,255,255,0.55)')
+  g.addColorStop(0.7, 'rgba(255,255,255,0.12)')
+  g.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, size, size)
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+})()
+/** สีของก้อนแสง — ชุดพาสเทลจากภาพอ้างอิง (ชมพู ม่วงลาเวนเดอร์ ฟ้า พีช) วนใช้ตามลำดับ */
+const GLOW_COLORS = ['#f9a8d4', '#c4b5fd', '#7dd3fc', '#fdba74', '#a5f3fc', '#f0abfc']
+
+function PortalGlow({ w, h, seed = 0, ...props }) {
+  const refs = useRef([])
+  const rnd = useMemo(() => makeRandom(31 + seed * 7), [seed])
+  const blobs = useMemo(
+    () =>
+      [0, 1, 2].map((i) => ({
+        color: GLOW_COLORS[(seed * 3 + i) % GLOW_COLORS.length],
+        // ตำแหน่งเทียบขนาดบาน (กระจายไปคนละมุม) ความถี่/เฟสสุ่มคงที่ต่อ seed
+        ox: (rnd() - 0.5) * 0.9,
+        oy: (rnd() - 0.5) * 0.9,
+        sc: 0.75 + rnd() * 0.6,
+        f1: 0.18 + rnd() * 0.16,
+        f2: 0.13 + rnd() * 0.14,
+        ph: rnd() * Math.PI * 2,
+      })),
+    [rnd, seed],
+  )
+  useFrame(({ clock }) => {
+    const t = getTuner()
+    const time = clock.elapsedTime * t.pgSpeed
+    const base = Math.max(w, h) * t.pgSize
+    blobs.forEach((b, i) => {
+      const m = refs.current[i]
+      if (!m) return
+      m.position.set(
+        b.ox * w * t.pgSpread + Math.sin(time * b.f1 + b.ph) * w * 0.08,
+        b.oy * h * t.pgSpread + Math.cos(time * b.f2 + b.ph) * h * 0.06,
+        -0.02 * i,
+      )
+      m.scale.setScalar(base * b.sc)
+      m.material.opacity = t.pgIntensity
+    })
+  })
+  return (
+    <group {...props}>
+      {blobs.map((b, i) => (
+        <mesh key={i} ref={(m) => (refs.current[i] = m)} renderOrder={-3} userData={{ noClay: true }}>
+          <planeGeometry args={[1, 1]} />
+          <meshBasicMaterial
+            map={GLOW_TEX}
+            color={b.color}
+            transparent
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
+    </group>
+  )
+}
 
 function Panel({ w = 5.2, h = 6.5, d = 1.7, band = 0, cells = 0, stripe = false, portal = false, tint = INNER_BG, ...props }) {
   /**
@@ -1207,6 +1289,78 @@ function CheckerRibbon({ width, thick, wave, waves, scale, offset, rot }) {
 }
 
 /**
+ * ริบบิ้นกระจก — แถบโปร่งแสงฟุ้ง ๆ สีขาวฟ้า โค้งพุ่งออกจากปากบานที่ 2
+ *
+ * ภาพอ้างอิงเป็นแถบเหมือนกระจกฝ้าบาง ๆ ที่หักเหฉากหลังและมีไฮไลต์ขาว — จึงเป็น
+ * MeshTransmissionMaterial (เบลอฉากหลังแบบกระจก ไม่ใช่ฝ้าทึบ) บน geometry ริบบิ้นตัวเดียวกับ
+ * เส้นหมากรุก (มีความหนา สันข้างรับแสงเป็นเส้นสว่าง) ไม่มีคลื่น ไม่มีลาย
+ *
+ * เส้นทางเป็นพิกัดสัมพัทธ์กับปากช่อง (RIBBON_PIVOT) แล้วค่อยเลื่อน/หมุน/ย่อขยายทั้งชิ้นด้วยปุ่ม
+ * โค้งไปทางขวาแล้วม้วนขึ้น — ปลายที่ม้วนคือจุดที่ตาอ่านว่า "แถบ" ไม่ใช่ "ถนน"
+ */
+const GLASS_PATH = [
+  new THREE.Vector3(-1.5, 0.2, -2.5),
+  new THREE.Vector3(0, 0, 0),
+  new THREE.Vector3(2.4, -0.4, 2.6),
+  new THREE.Vector3(5.6, -1.2, 5.2),
+  new THREE.Vector3(9.4, -0.6, 6.4),
+  new THREE.Vector3(12.6, 1.6, 5.4),
+  new THREE.Vector3(14.2, 4.2, 2.6),
+  new THREE.Vector3(13.0, 6.2, -0.6),
+]
+
+function GlassRibbon({ width, thick, scale, offset, rot, rough, transmission, chroma, ior, tint }) {
+  const geo = useMemo(
+    () => ribbonGeometry(GLASS_PATH, width, thick, 0, 1, 220),
+    [width, thick],
+  )
+  useDisposable(geo)
+  return (
+    <group position={RIBBON_PIVOT} rotation={rot}>
+      <group position={[-RIBBON_PIVOT[0], -RIBBON_PIVOT[1], -RIBBON_PIVOT[2]]}>
+        <group position={offset} scale={scale}>
+          <mesh geometry={geo} renderOrder={2} userData={{ noClay: true }}>
+            {/* ผิวบน/ล่างและสันข้างเป็นวัสดุเดียวกัน — กระจกไม่มี "ผิวหน้า" ให้ปูลาย */}
+            <MeshTransmissionMaterial
+              attach="material-0"
+              color={tint}
+              transmission={transmission}
+              thickness={thick * 3}
+              ior={ior}
+              roughness={rough}
+              anisotropicBlur={0.4}
+              chromaticAberration={chroma}
+              samples={4}
+              resolution={256}
+              attenuationDistance={4}
+              attenuationColor="#dff1ff"
+              side={THREE.DoubleSide}
+              transparent
+            />
+            <MeshTransmissionMaterial
+              attach="material-1"
+              color={tint}
+              transmission={transmission}
+              thickness={thick * 3}
+              ior={ior}
+              roughness={rough}
+              anisotropicBlur={0.4}
+              chromaticAberration={chroma}
+              samples={4}
+              resolution={256}
+              attenuationDistance={4}
+              attenuationColor="#dff1ff"
+              side={THREE.DoubleSide}
+              transparent
+            />
+          </mesh>
+        </group>
+      </group>
+    </group>
+  )
+}
+
+/**
  * ตัวละครบนบอร์ด
  *
  * เคยใช้ท่า `skydive` ซึ่งเป็นท่านอนคว่ำกางแขน (ทำไว้ให้ฉาก tunnel) พอเอามาวางบนบอร์ด
@@ -1588,17 +1742,41 @@ function Scene() {
           // เรียงสมมาตรรอบศูนย์ ระยะห่างเท่ากันทุกช่อง ไม่ว่าจะกี่ใบ
           const x = t.panelX + (i - (Math.round(t.panelCount) - 1) / 2) * t.panelGap
           return (
-            <Panel
-              key={i}
-              position={[x, t.panelBase + t.panelH / 2, 0]}
-              w={t.panelW}
-              h={t.panelH}
-              d={t.panelD}
-              portal={portal}
-            />
+            <group key={i}>
+              {t.pg > 0.5 && !clay && (
+                <PortalGlow
+                  position={[x, t.panelBase + t.panelH / 2, -t.panelD / 2 - t.pgBack]}
+                  w={t.panelW}
+                  h={t.panelH}
+                  seed={i}
+                />
+              )}
+              <Panel
+                position={[x, t.panelBase + t.panelH / 2, 0]}
+                w={t.panelW}
+                h={t.panelH}
+                d={t.panelD}
+                portal={portal}
+              />
+            </group>
           )
         })}
         {ribbon}
+        {/* ริบบิ้นกระจก — พุ่งออกจากปากบานที่ 2 คนละชิ้นกับเส้นหมากรุก */}
+        {t.gr > 0.5 && !clay && (
+          <GlassRibbon
+            width={t.grW}
+            thick={t.grThick}
+            scale={t.grScale}
+            offset={[t.grX, t.grY, t.grZ]}
+            rot={[t.grRotX * RAD, t.grRotY * RAD, t.grRotZ * RAD]}
+            rough={t.grRough}
+            transmission={t.grTrans}
+            chroma={t.grChroma}
+            ior={t.grIor}
+            tint="#eef7ff"
+          />
+        )}
         {/**
          * สวิตช์ — ลอยอยู่หน้าแถบหน้าต่าง ไม่ใช่ของในพอร์ทัล
          *

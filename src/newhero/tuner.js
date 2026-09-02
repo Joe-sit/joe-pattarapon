@@ -218,9 +218,31 @@ export const DEFAULTS = {
   panelX: 6.36,
   panelZ: -11,
   panelBase: -1.6,
+  /* แสงเรืองพาสเทลหลังบาน — ความแรง ขนาด (×ด้านยาวของบาน) การกระจาย ความเร็วลอย ระยะถอยหลังบาน */
+  pg: 1,
+  pgIntensity: 0.55,
+  pgSize: 1.1,
+  pgSpread: 0.6,
+  pgSpeed: 0.6,
+  pgBack: 0.4,
   /* พื้น */
   gridY: 0,
   gridCell: 0.2,
+  /* ริบบิ้นกระจก — พุ่งออกจากปากบานที่ 2 (พิกัดสัมพัทธ์กับปากช่อง ระบบเดียวกับริบบิ้นหลัก) */
+  gr: 1,
+  grW: 3.8,
+  grThick: 0.28,
+  grScale: 1.5,
+  grX: 0,
+  grY: 0.6,
+  grZ: 0,
+  grRotX: 0,
+  grRotY: 0,
+  grRotZ: 0,
+  grRough: 0.18,
+  grTrans: 0.96,
+  grChroma: 0.03,
+  grIor: 1.25,
   /* ริบบิ้น — อยู่ในพิกัดของกลุ่มแถบหน้าต่าง ออฟเซ็ต/การหมุนจึงเป็นพิกัดท้องถิ่น */
   ribbonScale: 1.57,
   ribbonW: 6.5,
@@ -428,7 +450,7 @@ export const DEFAULTS = {
 }
 
 // ขึ้นเวอร์ชันเมื่อชุดคีย์/ค่าเริ่มต้นเปลี่ยนแนว — ค่าที่ค้างในเบราว์เซอร์จะได้ไม่ทับของใหม่
-const KEY = 'newhero.tuner.v130'
+const KEY = 'newhero.tuner.v133'
 
 function load() {
   /**
