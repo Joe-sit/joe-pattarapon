@@ -101,21 +101,81 @@ export function damp(x, target, alphaAt60, dt) {
 export function addRim(material, { color = '#FFF3DC', power = 2.4, intensity = 0.6 } = {}) {
   if (material.userData.rimApplied) return material
   material.userData.rimApplied = true
+  /**
+   * สร้างออบเจกต์ uniform ไว้ "ก่อน" compile แล้วยัดตัวเดียวกันนี้เข้า shader
+   *
+   * ของเดิมเก็บตัวอ้างอิงตอน onBeforeCompile ซึ่งใช้ไม่ได้จริง: customProgramCacheKey
+   * คืนค่าเท่ากันทุกวัสดุ three จึงคอมไพล์โปรแกรมครั้งเดียวแล้วใช้ซ้ำ วัสดุตัวที่สองเป็นต้นไป
+   * ไม่ถูกเรียก onBeforeCompile เลย — ตัวอ้างอิงเลยว่าง ปรับค่าทีหลังไม่ขยับสักชิ้น
+   * ทำแบบนี้ทุกวัสดุถือ uniform ชุดเดียวกัน เขียน .value ทีเดียวเปลี่ยนพร้อมกันหมด
+   */
+  const u = {
+    rimColor: { value: new THREE.Color(color) },
+    rimPower: { value: power },
+    rimIntensity: { value: intensity },
+    /** จำนวนชั้นของแสง — 0 หรือ 1 = ไล่เฉดต่อเนื่องตามปกติ, 2-4 = แบนแบบเวกเตอร์ */
+    rimBands: { value: 0 },
+    /**
+     * ขอบเขตของขอบ — ตัด fresnel ด้วย smoothstep รอบ rimEdge กว้าง ±rimSoft
+     * fresnel ดิบ ๆ ไล่จากศูนย์ถึงหนึ่งทั่วทั้งผิว ผิวที่เอียงนิดเดียวก็ได้แสงมาบ้าง
+     * รวมกันแล้ว "ทั้งตัว" สว่างขึ้นแทนที่จะเป็นเส้นขอบ ตัดด้วยเกณฑ์แล้วเหลือแต่ผิวที่
+     * เกือบขนานกับสายตาจริง ๆ (rimEdge 0 = ไม่ตัด)
+     */
+    rimEdge: { value: 0 },
+    rimSoft: { value: 0.1 },
+    /**
+     * ทิศของไฟขอบใน view space (ชี้จากผิวไปหาไฟ) กับน้ำหนักของมัน
+     * rim จริงมาจากไฟหลัง จึงควรขึ้นเฉพาะด้านที่หันไปหาไฟ ไม่ใช่รอบตัวเท่ากันหมด
+     * rimDirMix 0 = ไม่สนทิศ (รอบตัว), 1 = ขึ้นเฉพาะฝั่งไฟ
+     */
+    rimDir: { value: new THREE.Vector3(0, 0, -1) },
+    rimDirMix: { value: 0 },
+  }
+  material.userData.rimU = u
   const prev = material.onBeforeCompile
   material.onBeforeCompile = (shader, renderer) => {
     prev?.call(material, shader, renderer)
-    shader.uniforms.rimColor = { value: new THREE.Color(color) }
-    shader.uniforms.rimPower = { value: power }
-    shader.uniforms.rimIntensity = { value: intensity }
+    shader.uniforms.rimColor = u.rimColor
+    shader.uniforms.rimPower = u.rimPower
+    shader.uniforms.rimIntensity = u.rimIntensity
+    shader.uniforms.rimBands = u.rimBands
+    shader.uniforms.rimEdge = u.rimEdge
+    shader.uniforms.rimSoft = u.rimSoft
+    shader.uniforms.rimDir = u.rimDir
+    shader.uniforms.rimDirMix = u.rimDirMix
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
-        '#include <common>\nuniform vec3 rimColor;\nuniform float rimPower;\nuniform float rimIntensity;',
+        '#include <common>\nuniform vec3 rimColor;\nuniform float rimPower;\nuniform float rimIntensity;\nuniform float rimBands;\nuniform float rimEdge;\nuniform float rimSoft;\nuniform vec3 rimDir;\nuniform float rimDirMix;',
       )
       .replace(
         '#include <opaque_fragment>',
         [
-          'float rimF = pow(1.0 - saturate(dot(normalize(normal), normalize(vViewPosition))), rimPower);',
+          /**
+           * ตัดแสงเป็นชั้น ๆ ก่อนใส่ rim — ได้หน้าตาแบบเวกเตอร์แบน
+           *
+           * ปัดเฉพาะ "ความสว่าง" แล้วคูณกลับเข้าสีเดิม ไม่ได้ปัดทีละช่องสี
+           * ปัดทีละช่องสีแล้วเนื้อสีจะเพี้ยน (ส้มเลื่อนไปแดง เขียวเลื่อนไปเหลือง)
+           * วิธีนี้เนื้อสีคงเดิม เปลี่ยนแค่จำนวนระดับความสว่าง
+           */
+          'if (rimBands > 1.5) {',
+          '  float lum = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));',
+            '  float q = (floor(lum * rimBands) + 0.5) / rimBands;',
+          '  outgoingLight *= lum > 1e-4 ? q / lum : 1.0;',
+          '}',
+          'vec3 rimN = normalize(normal);',
+          'float rimF = pow(1.0 - saturate(dot(rimN, normalize(vViewPosition))), rimPower);',
+          /**
+           * ตัดให้เหลือแต่ขอบ: ต่ำกว่าเกณฑ์ = ศูนย์ สูงกว่า = เต็ม ไล่นุ่มตาม rimSoft
+           * ขอบล่างของช่วงต้องไม่หลุดต่ำกว่าศูนย์ — ของเดิมใช้ rimEdge - rimSoft ตรง ๆ
+           * พอ rimSoft > rimEdge ช่วงเริ่มที่ค่าลบ ผิวที่ fresnel เป็นศูนย์ (หันหากล้องตรง ๆ)
+           * ก็ได้แสงติดมาด้วย ทั้งหัวเลยสว่างขึ้นเป็นเทา ๆ โดยเฉพาะผมสีดำ
+           * ช่วงนี้ยึดกับเกณฑ์: ล่าง = เกณฑ์ × (1 - soft), บน = เกณฑ์ + soft × (1 - เกณฑ์)
+           */
+          'rimF = rimEdge > 0.0 ? smoothstep(rimEdge * (1.0 - rimSoft), rimEdge + rimSoft * (1.0 - rimEdge), rimF) : rimF;',
+          // ขึ้นเฉพาะฝั่งที่หันไปหาไฟขอบ (ถ่วงด้วย rimDirMix)
+          'rimF *= mix(1.0, saturate(dot(rimN, normalize(rimDir))), rimDirMix);',
+          'rimF = rimBands > 1.5 ? step(0.5, rimF) : rimF;',
           'outgoingLight += rimColor * rimF * rimIntensity;',
           '#include <opaque_fragment>',
         ].join('\n'),

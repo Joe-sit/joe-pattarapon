@@ -34,8 +34,17 @@ export function Rider({
   armScale = 1,
   foreScale = 1,
   armPose = null,
+  rimPower = 4.2,
+  rimBoost = 0.5,
+  rimEdge = 0,
+  rimSoft = 0.1,
+  rimDirMix = 0,
+  rimYaw = 160,
+  rimPitch = 35,
+  flatBands = 0,
   legPose = null,
   torsoPose = null,
+  facePose = null,
   boardSpec = null,
   boardRot = [0, 0.26, 0],
   boardOffset = [0, 0, 0],
@@ -183,11 +192,20 @@ export function Rider({
               noIdle
               noMug
               skate
+              rimPower={rimPower}
+              rimBoost={rimBoost}
+              rimEdge={rimEdge}
+              rimSoft={rimSoft}
+              rimDirMix={rimDirMix}
+              rimYaw={rimYaw}
+              rimPitch={rimPitch}
+              flatBands={flatBands}
               armScale={armScale}
               foreScale={foreScale}
               armPose={armPose}
               legPose={legPose}
               torsoPose={torsoPose}
+              facePose={facePose}
               poseIdle={breathe}
             />
           </Suspense>

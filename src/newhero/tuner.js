@@ -10,7 +10,7 @@ import { useSyncExternalStore } from 'react'
  */
 export const DEFAULTS = {
   /* สวิตช์ (0/1) — เก็บเป็นตัวเลขเพราะสโตร์นี้รับเฉพาะตัวเลข */
-  clay: 1,
+  clay: 0,
   props: 0,
   grid: 0,
   skater: 1,
@@ -79,12 +79,30 @@ export const DEFAULTS = {
   teRotZ: -12,
   /** สวิตช์เปิด/ปิด — ลอยหน้าแถบหน้าต่าง (พิกัดชุดเดียวกับริบบิ้น/ตัวละคร) */
   bc: 1,
-  bcLen: 2.3,
+  bcLen: 1.9,
   bcRadius: 0.6,
+  /** ความหนาของก้อน (extrusion) เทียบรัศมี */
+  bcThick: 0.78,
   /** ตำแหน่งปุ่ม 0 = ปิด (ซ้าย) 1 = เปิด (ขวา) */
   bcPos: 1,
+  /* ปุ่มกลม — ขนาดเทียบครึ่งความสูงราง / ความหนาเทียบความหนาราง / ระยะล้ำพ้นผิวหน้าราง */
+  bcKnob: 1,
+  bcKnobThick: 0.66,
+  bcKnobProud: 0.01,
   bcOpacity: 0.8,
   bcIcon: 0.76,
+  /** ความหนาเส้นขอบสวิตช์ — 0 = ไม่มีขอบ */
+  bcOutline: 0.002,
+  /** ความเข้มของเส้นขอบ */
+  bcOutlineAlpha: 0.9,
+  /** วาดสันของ extrusion (วงหน้า/วงหลัง) */
+  bcEdges: 1,
+  /** เกณฑ์มุมที่นับว่าเป็นสัน (องศา) */
+  bcEdgeAngle: 25,
+  /** ความเป็นกระจกของราง 0 = ทึบแบน 1 = ใสหักเหเต็มที่ */
+  bcGlass: 1,
+  /** ความฝ้าของกระจก — ยิ่งมากของหลังยิ่งเบลอ */
+  bcBlur: 0.45,
   bcScale: 1.7,
   bcX: 13.5,
   bcY: 2.5,
@@ -112,7 +130,7 @@ export const DEFAULTS = {
    * `idle` ขยับทั้งตัวละครและบอร์ดเป็นก้อนเดียว เท้ายังแนบแผ่นตลอด
    * `breathe` คือไหวระดับข้อต่อของ rig ซึ่งบอร์ดตามไม่ได้ — เท้าจะไถหลุดจากแผ่น
    */
-  idle: 1,
+  idle: 0,
   breathe: 0,
   idleAmp: 1,
   idleSpeed: 1,
@@ -120,12 +138,61 @@ export const DEFAULTS = {
    * แสง — ambient ต่ำ แล้วไปเพิ่มที่ key/fill/rim
    * ดัน ambient สูงจะสว่างแบบแบน เพราะทุกหน้าได้แสงเท่ากันหมด
    */
-  ambIntensity: 1.28,
-  hemiIntensity: 0.86,
+  ambIntensity: 0,
+  hemiIntensity: 0,
   keyIntensity: 4,
-  fillIntensity: 0.6,
+  fillIntensity: 1.2,
   rimIntensity: 3,
+  /* rim บนตัวละคร (fresnel ที่ผิว) — power = ความคมของขอบ / boost = ความสว่าง */
+  rimPower: 9.9,
+  rimBoost: 1.04,
+  /**
+   * ขอบจริง ๆ ไม่ใช่ทั้งตัวสว่าง: ตัด fresnel ที่ rimEdge (±rimSoft) และให้ขึ้นเฉพาะ
+   * ฝั่งที่หันไปหาไฟขอบ (rimDirMix) ทิศไฟเป็นองศาในโลก — yaw 180 = จากหลังตรง ๆ
+   */
+  /**
+   * rim จากขอบภาพ (post pass ใน CameraFX) — เส้นบางที่เส้นรอบรูปฝั่งไฟ ไม่แตะเนื้อใน
+   * นี่คือตัวที่ทำงานจริงกับตัวละครทรงกล่อง (fresnel ด้านบนขึ้นแทบไม่เห็น)
+   */
+  /* ผิวพลาสติกเงาทั้งฉาก — roughness ต่ำ + สะท้อน environment แรงขึ้น (ไม่แตะสี) */
+  gloss: 1,
+  glossRough: 0.28,
+  glossEnv: 1.4,
+  rimFx: 1,
+  rimFxInt: 1.93,
+  rimFxW: 9.5,
+  rimFxSoft: 0.4,
+  rimFxThresh: 0.04,
+  rimFxMix: 1,
+  rimFxAngle: 180,
+  rimFxFall: 2.95,
+  rimFxShade: 0.78,
+  rimFxBack: 0.6,
+  rimEdge: 0.18,
+  rimSoft: 0.5,
+  rimDirMix: 1,
+  rimYaw: 108,
+  rimPitch: 30,
+  /** ตัดแสงเป็นชั้น — 0 = ไล่เฉดปกติ, 3 = แบนแบบเวกเตอร์ */
+  flatBands: 1,
+  /** แผงไฟนุ่มรอบฉาก (environment) — ตัวที่ให้หน้าตาแบบดินน้ำมัน */
+  envIntensity: 1.57,
   exposure: 1,
+  /**
+   * เอฟเฟกต์กล้อง (post) — ปิดไว้เป็นค่าเริ่มต้น
+   * fxFish บวก = นูนออก (fisheye) / ลบ = เว้าเข้า, fxSkew = เอียงภาพ, fxChroma = เหลื่อมสีขอบ
+   */
+  fx: 0,
+  fxFish: 0,
+  fxSkewX: 0,
+  fxSkewY: 0,
+  fxZoom: 1,
+  fxChroma: 0,
+  /** เลนส์นูนเฉพาะจุด — bulge = ความแรง (ลบ = ยุบ), R = รัศมีวง, X/Y = จุดกึ่งกลางบนจอ 0..1 */
+  fxBulge: 0,
+  fxBulgeR: 0.35,
+  fxBulgeX: 0.5,
+  fxBulgeY: 0.5,
   /* ของลอย: ปรับสเกล/ตำแหน่งรวมทีเดียว */
   propScale: 0.55,
   propX: 0,
@@ -135,7 +202,7 @@ export const DEFAULTS = {
   fov: 56.26,
   pitch: 1.57,
   camX: 16.6,
-  camY: 1,
+  camY: 3.2,
   camZ: 15,
   /* ถอยกล้องเมื่อจอแคบ — 1 = ไม่ถอยเลย ค่ามุมกล้องที่แก้จากเส้นจึงตรงเป๊ะ */
   fitMax: 1,
@@ -170,21 +237,115 @@ export const DEFAULTS = {
   /* ตัวละคร — พิกัดในกลุ่มแถบหน้าต่าง (เดียวกับริบบิ้น) */
   skaterScale: 1.87,
   skaterX: 8,
-  skaterY: 2.65,
+  skaterY: 4.55,
   skaterZ: 13.85,
   skaterRotX: -17,
   skaterRotY: -40,
   skaterRotZ: 0,
+  /**
+   * ทางเข้า — ตัวละครไหลออกจากในหน้าต่างมาหยุดที่ skaterX/Y/Z
+   * จุดเริ่ม (enX/Y/Z) เป็นพิกัดกลุ่มแถบหน้าต่าง เหมือน skaterX/Y/Z — z ติดลบ = อยู่หลังบาน
+   * enOver = เลยเป้าแล้วดีดกลับ (0 = หยุดนิ่ม ๆ) enReplay เป็นตัวนับ กดปุ่มแล้วเล่นใหม่
+   */
+  en: 1,
+  enDelay: 0.2,
+  enDur: 3.4,
+  enX: -12,
+  enY: 3.2,
+  enZ: -5,
+  enArc: 0.8,
+  enSpin: -40,
+  enBank: 16,
+  enScale: 0.45,
+  enOver: 0.55,
+  /* ไถลบนริบบิ้นจริง: ช่วง t ของเส้น (0 = ในบานที่ 1, ~0.45 = ปากบานที่ 2, 1 = ปลาย) */
+  enRide: 1,
+  /* เส้นหลัก: เริ่มที่ t (0 = ในโพรงบานที่ 1) ออกจากเส้นที่ t (ปากบาน 2 ≈ 0.45) */
+  enT0: 0.28,
+  enT1: 0.56,
+  /* ยังนับว่า "อยู่ในพอร์ทัล" ต่ออีกเท่านี้หลังพ้นปากช่อง (ให้พ้นกรอบก่อนค่อยโผล่เต็มตัว) */
+  enMouthPad: 0.02,
+  /* ช่วงในพอร์ทัล ไม่ให้ลึกกว่านี้หลังระนาบบาน (หน่วยกลุ่มแถบหน้าต่าง) */
+  enBackZ: 6,
+  enUp: 1.35,
+  enFace: 0,
+  enBlend: 0.45,
+  /* จุดกลางทาง = ปากบานที่ 2 (พิกัดกลุ่มแถบหน้าต่าง) */
+  enMidX: -3.5,
+  enMidY: 3.2,
+  enMidZ: -1,
+  /**
+   * เส้นทางวางเอง (debug) — waypoint พิกัดกลุ่มแถบหน้าต่าง (เดียวกับ skaterX/Y/Z)
+   * enPts = ใช้กี่จุด (1-4) เส้นจบที่ตำแหน่งตัวละครเสมอ enInside = อยู่ในพอร์ทัลถึงสัดส่วนไหนของเส้น
+   */
+  /* หยุดชั่วคราวตอนจัดเส้น: แช่ที่ความคืบหน้า enScrub (0 = ต้นเส้น, 1 = ปลาย) */
+  enPause: 0,
+  enScrub: 0.5,
+  /**
+   * ช่วงที่เล่น: 0 = ต้นเส้น, 1 = ตำแหน่งจบ
+   * เต็มช่วง (0→1) เล่นครั้งเดียวแล้วค้าง — แคบกว่านั้นวนซ้ำเฉพาะช่วง (ใช้ตอนจูน)
+   */
+  enFrom: 0,
+  enTo: 1,
+  enPath: 1,
+  enShowPath: 1,
+  enPts: 4,
+  enInside: 0.19,
+  enP0X: -7.6,
+  enP0Y: 6.4,
+  enP0Z: -5,
+  enP1X: -3.15,
+  enP1Y: 4.35,
+  enP1Z: -2,
+  enP2X: 0.9,
+  enP2Y: 2.4,
+  enP2Z: 4,
+  enP3X: 4,
+  enP3Y: 3.5,
+  enP3Z: 9,
+  enReplay: 0,
+  /**
+   * หน้าการ์ตูน (ตาขาว+ลูกตาดำ+คิ้ว+ปากอ้า) — สัดส่วนเทียบกล่องหัว: กว้าง W / สูง H
+   * วัดจากภาพอ้างอิง (หน้ากว้าง ~620px) แล้วเลื่อนลงให้พ้นผม — ผมของ GLB คลุมหัวลงมาถึง
+   * ราว 45% ของกล่อง หน้าที่เห็นจริงคือครึ่งล่าง ทุกอย่างจึงวางเทียบแถบผิวที่เห็น
+   */
+  fcEye: 0.09,
+  fcGap: 0.145,
+  fcEyeY: -0.24,
+  fcPupil: 0.6,
+  fcPupilX: -0.02,
+  fcPupilY: 0.0,
+  fcLook: 0,
+  fcBrow: 0.07,
+  fcBrowY: 0.1,
+  fcBrowArc: 0.6,
+  fcBrowTilt: 7,
+  fcMouth: 0.065,
+  fcMouthH: 0.1,
+  fcMouthX: 0,
+  fcMouthY: -0.37,
+  /* ทั้งแผ่นหน้า: เลื่อน (×W, ×H, หน่วยหัว) หมุน (องศา) สเกล */
+  fcX: 0.06,
+  fcY: 0.07,
+  fcZ: 0,
+  fcRotX: 0,
+  fcRotY: 0,
+  fcRotZ: 0,
+  fcScale: 1.24,
+  fcLookEvery: 3,
+  fcBlinkEvery: 4,
   /* ขนาด mascot เทียบกับบอร์ด และระยะยกพ้นแผ่น */
   mascotScale: 1.01,
   mascotLift: 1.84,
   boardScale: 1.47,
   /* รูปทรงสเก็ตบอร์ด — ทุกค่าอยู่ในสเกลของกล่องหน่วย (ยาวรวมราว 1) */
-  bdLen: 0.56,
+  bdLen: 0.82,
   bdWide: 0.3,
-  bdThick: 0.022,
-  bdTip: 0.26,
-  bdKick: 21.8,
+  bdThick: 0.05,
+  /* ปลายเชิด: เริ่มยกที่กี่ส่วนของครึ่งความยาว / สูงเท่าไรเทียบความยาว / ท้องแอ่น */
+  bdKickAt: 0.52,
+  bdKick: 0.035,
+  bdConcave: 0.03,
   bdTruckX: 0.235,
   bdWheelR: 0.038,
   bdWheelW: 0.058,
@@ -243,19 +404,31 @@ export const DEFAULTS = {
   elbowZ: 14.5,
   /* ขนาดมือ (เฉพาะกำปั้น+นิ้ว) — ริกปั้นมือใหญ่กว่าปลายแขนมาก ย่อลงแล้วข้อมืออ่านเป็นข้อมือ */
   handScale: 1,
+  /* เลื่อนมือจากปลายแขน — x = ออกนอกตัว / y = ขึ้น / z = ไปหน้า */
+  handX: 0.05,
+  handY: 0.03,
+  handZ: 0.005,
   wristX: 4,
   wristY: 0,
   wristZ: 2.5,
   mugShX: -5,
   mugShY: 26,
   mugShZ: -39,
+  /* มือฝั่งแขน B — ริกไม่เคยมีปุ่มให้ข้างนี้มาก่อน */
+  mugWristX: 1.5,
+  mugWristY: 7.5,
+  mugWristZ: -10,
+  mugHandScale: 1,
+  mugHandX: 0.08,
+  mugHandY: 0.075,
+  mugHandZ: 0.01,
   mugElX: -31.5,
   mugElY: 84.5,
   mugElZ: -29.5,
 }
 
 // ขึ้นเวอร์ชันเมื่อชุดคีย์/ค่าเริ่มต้นเปลี่ยนแนว — ค่าที่ค้างในเบราว์เซอร์จะได้ไม่ทับของใหม่
-const KEY = 'newhero.tuner.v60'
+const KEY = 'newhero.tuner.v130'
 
 function load() {
   /**

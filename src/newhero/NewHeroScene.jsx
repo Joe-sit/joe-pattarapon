@@ -1,6 +1,6 @@
 import { Suspense, useLayoutEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { Grid } from '@react-three/drei'
+import { Environment, Grid, Lightformer } from '@react-three/drei'
 import * as THREE from 'three'
 import { Mascot } from '@/joespresso/scene/Mascot'
 import { useDisposable, makeRandom, gradientTexture, LOW_END, damp, clamp } from '@/joespresso/scene/utils'
@@ -12,7 +12,9 @@ import { Terrain } from '@/joespresso/scene/Terrain'
 import { Foliage } from '@/joespresso/scene/Foliage'
 import { StackedWindows } from './StackedWindows'
 import { Tetris } from './Tetris'
+import { CameraFX } from './CameraFX'
 import { Switch } from './Switch'
+import { Entrance } from './Entrance'
 
 /**
  * ฉาก hero ใหม่ — "โต้คลื่นบนริบบิ้นหมากรุก" (คอมพ์ 12739:337)
@@ -246,6 +248,25 @@ const clubGlyph = glyphTexture((ctx, s) => {
  * ค่อย ๆ เพิ่มตามระยะ — ได้ริบบิ้นที่ "ม้วนตัว" แบบภาพ ref ไม่ใช่แถบแบนราบ
  * uv แกน u คิดจากระยะจริงหารครึ่งความกว้าง — ช่องหมากรุกจึงเป็นจัตุรัสตลอดเส้น
  */
+/**
+ * เฟรมของผิวริบบิ้นที่พารามิเตอร์ t: จุดกึ่งกลางผิวบน (รวมคลื่น) ทิศสัมผัส และตั้งฉากผิว
+ * เป็นแหล่งเดียวของสูตร — ทั้ง geometry และ "ของที่วิ่งบนริบบิ้น" (ตัวละคร) ใช้ตัวนี้
+ * ไม่งั้นสองที่คำนวณคนละสูตรแล้วตัวละครลอย/จมจากผิวจริง
+ */
+const RIB_UP = new THREE.Vector3(0, 1, 0)
+function ribbonFrame(curve, t, wave, waves, out) {
+  const { P, T, S, N } = out
+  curve.getPointAt(t, P)
+  curve.getTangentAt(t, T)
+  S.crossVectors(T, RIB_UP).normalize()
+  const tw = Math.sin(t * Math.PI * 1.6 + 0.4) * 0.16 + t * 0.2 - 0.08
+  S.applyAxisAngle(T, tw)
+  N.crossVectors(S, T).normalize()
+  const lift = Math.sin(t * Math.PI * 2 * waves + 0.6) * wave
+  P.addScaledVector(N, lift)
+  return out
+}
+
 function ribbonGeometry(
   points,
   w = 3.1,
@@ -266,7 +287,7 @@ function ribbonGeometry(
   const T = new THREE.Vector3()
   const S = new THREE.Vector3()
   const N = new THREE.Vector3()
-  const UP = new THREE.Vector3(0, 1, 0)
+  const frame = { P, T, S, N }
   const hw = w / 2
   for (let i = 0; i <= segs; i++) {
     /**
@@ -275,25 +296,14 @@ function ribbonGeometry(
      * สองท่อนจะมีเฟสคนละชุดแล้วต่อกันไม่สนิทตรงรอยตัด
      */
     const t = from + (to - from) * (i / segs)
-    curve.getPointAt(t, P)
-    curve.getTangentAt(t, T)
-    S.crossVectors(T, UP).normalize()
     /**
      * บิดรอบแกนสัมผัสนิดเดียวพอ — มันคือถนนที่เอียงตามโค้ง ไม่ใช่ริบบิ้นที่ม้วนตัว
-     * บิดเยอะ (เคยใช้ 0.55) แล้วหน้ากระเบื้องหันหนีกล้องเป็นช่วง ๆ อ่านเป็นแถบผ้าลอย
+     * และคลื่นตามยาวยกตาม "แนวตั้งฉากกับผิว" ไม่ใช่แกน y ของโลก (สูตรอยู่ใน ribbonFrame)
      */
-    const tw = Math.sin(t * Math.PI * 1.6 + 0.4) * 0.16 + t * 0.2 - 0.08
-    S.applyAxisAngle(T, tw)
-    N.crossVectors(S, T).normalize()
-    /**
-     * คลื่นตามยาว — ยกผิวขึ้นลงตาม "แนวตั้งฉากกับผิว" ไม่ใช่ตามแกน y ของโลก
-     * ยกตามแกน y ริบบิ้นช่วงที่บิดจะยกเฉียง คลื่นเลยดูเหมือนถนนเป็นลูกคลื่นทั้งก้อน
-     * ยกตามแนวตั้งฉากได้ผ้าที่กระเพื่อมจริง และคลื่นแรงเท่ากันตลอดเส้นไม่ว่าบิดเท่าไร
-     */
-    const lift = Math.sin(t * Math.PI * 2 * waves + 0.6) * wave
-    const cx = P.x + N.x * lift
-    const cy = P.y + N.y * lift
-    const cz = P.z + N.z * lift
+    ribbonFrame(curve, t, wave, waves, frame)
+    const cx = P.x
+    const cy = P.y
+    const cz = P.z
     // สี่มุมต่อสเต็ป: บนซ้าย บนขวา ล่างซ้าย ล่างขวา (ล่าง = ถอยตามแนวตั้งฉากลงไป thick)
     pos.push(cx - S.x * hw, cy - S.y * hw, cz - S.z * hw)
     pos.push(cx + S.x * hw, cy + S.y * hw, cz + S.z * hw)
@@ -373,6 +383,48 @@ const GRID = {
  * ใช้ traverse แทน scene.overrideMaterial เพราะ override ของ three กินทั้ง scene —
  * พื้นหลังกับกริดจะกลายเป็นดินเหนียวไปด้วย แล้วจอจะเหลือแค่สีเดียวทั้งจอ
  */
+/**
+ * ผิวพลาสติกเงา — ทับค่าความด้าน/แรงสะท้อนของทุกวัสดุในฉาก
+ *
+ * "พลาสติก" ในภาษาของ PBR คือ: ไม่ใช่โลหะ (metalness 0) ผิวเรียบ (roughness ต่ำ)
+ * จึงสะท้อนแผงไฟจาก environment เป็นไฮไลต์นุ่ม ๆ และมีจุดสะท้อนคมจากไฟ key
+ * ไม่แตะสี — สีเดิมของทุกชิ้นอยู่ครบ เปลี่ยนแค่ "เนื้อวัสดุ"
+ *
+ * ทำแบบไล่ทับเป็นระยะ ไม่ใช่ครั้งเดียว: mascot กับของในพอร์ทัลสร้างวัสดุทีหลัง
+ * (โหลด GLB / สร้างใน effect) ทำครั้งเดียวตอน mount แล้วชิ้นที่มาทีหลังจะยังด้านอยู่
+ * เช็คจากกุญแจใน userData จึงเขียนซ้ำเฉพาะชิ้นที่ยังไม่ได้ค่าชุดนี้ — ราคาแทบศูนย์
+ *
+ * ข้าม: แก้ว (transmission) ที่มีสูตรของตัวเอง, วัสดุที่ไม่มี roughness (basic), หน้ากาก stencil
+ */
+function Gloss({ on, rough, env, children }) {
+  const g = useRef()
+  const frame = useRef(0)
+  useFrame(() => {
+    const root = g.current
+    if (!root) return
+    frame.current += 1
+    if (frame.current % 6 !== 0) return
+    const key = on ? `${rough}|${env}` : 'off'
+    root.traverse((o) => {
+      if (!o.material || o.userData.noClay) return
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (!('roughness' in m) || m.isMeshTransmissionMaterial || (m.transmission ?? 0) > 0) continue
+        if (m.userData.glossKey === key) continue
+        // จำค่าเดิมครั้งแรกที่เจอ — ปิดแล้วต้องคืนเนื้อวัสดุเดิมได้ ไม่ใช่ค้างเงา
+        if (m.userData.glossOrig === undefined) {
+          m.userData.glossOrig = { roughness: m.roughness, metalness: m.metalness, env: m.envMapIntensity }
+        }
+        const o0 = m.userData.glossOrig
+        m.roughness = on ? rough : o0.roughness
+        m.metalness = on ? 0 : o0.metalness
+        m.envMapIntensity = on ? env : o0.env
+        m.userData.glossKey = key
+      }
+    })
+  })
+  return <group ref={g}>{children}</group>
+}
+
 function Clay({ on, children }) {
   const g = useRef()
   const mat = useMemo(
@@ -841,6 +893,41 @@ function Squiggle({ color = '#59d3a8', ...props }) {
 /** จุดหมุนของริบบิ้น = ปากช่องบานที่ 2 ตรงที่มันโผล่ออกมา (พิกัดในกลุ่มแถบหน้าต่าง) */
 const RIBBON_PIVOT = [-3.5, 2.45, 0.7]
 
+/** จุดควบคุมริบบิ้นหลัก — พิกัดในกลุ่มแถบหน้าต่าง (ดูคำอธิบายใน CheckerRibbon) */
+export const RIBBON_PATH = [
+    /**
+     * ช่วงหลัง: ในโพรงบานที่ 1 → ลอดหลังกรอบ → ปากช่องบานที่ 2
+     *
+     * ชุดจุดนี้ได้จากการค้นหา ไม่ใช่การกะ: วัด "มุมที่ทิศทางเส้นหักต่อหนึ่งสเต็ป"
+     * ตลอดเส้นแล้วเลือกชุดที่ค่าสูงสุดต่ำที่สุด — มุมหักคือสิ่งที่ทำให้ริบบิ้นตะแคง
+     * จนเห็นเป็นสันบางแล้วบานออกตรงรอยต่อ ไม่ใช่รูโหว่ในเรขาคณิต
+     *
+     * ได้ 1.51° จากเดิม 2.08° (ลองด้วยมือก่อนหน้านี้ได้ 4.32° คือแย่ลง — เลยต้องวัด)
+     *
+     * เงื่อนไขที่ล็อกไว้ระหว่างค้นหา: จุดปากช่องคงเดิมเป๊ะ และความยาวรวมต่างจากเดิม
+     * ไม่เกิน 0.7% เพราะเฟสของคลื่นคิดจากระยะตามเส้น ถ้ายาวเปลี่ยนมากคลื่นจะเลื่อน
+     * ไปทั้งเส้น รวมช่วงหน้าที่จัดไว้แล้ว
+     */
+    new THREE.Vector3(-9.6, 2.7, -3.9),
+    new THREE.Vector3(-8.3, 2.66, -3.0),
+    new THREE.Vector3(-6.1, 2.58, -2.1),
+    new THREE.Vector3(-4.6, 2.52, -1.1),
+    new THREE.Vector3(-3.5, 2.45, 0.7),
+    /**
+     * ขาออกต้องลด x ท้องถิ่นลงขณะที่ z เพิ่ม
+     *
+     * แกน +z ของกลุ่มชี้ออกมาทางกล้อง "เยื้องขวา" (sin26° ≈ 0.44) เดินตรงตาม z
+     * อย่างเดียวจะลอยไปทับบานที่ 3 แล้วเลยไปโซนข้อความ ถอย x ไปทางซ้ายพอ ๆ กัน
+     * จึงได้เส้นที่พุ่งเข้าหาคนดูตรง ๆ แล้วดำดิ่งออกขอบล่าง
+     */
+    new THREE.Vector3(-3.7, 2.0, 3.2),
+    new THREE.Vector3(-4.1, 0.8, 7.0),
+    new THREE.Vector3(-4.9, -1.4, 11.0),
+    // ปลายต้องพ้นขอบล่างของเฟรม ไม่ใช่จบกลางอากาศ — เอียงซ้ายเพิ่มไม่ให้ไปทับโซนข้อความ
+    new THREE.Vector3(-7.0, -4.8, 16.0),
+]
+
+
 /**
  * ของที่อยู่ "ในหน้าต่าง" — วาดเฉพาะพิกเซลที่ stencil ถูกทำเครื่องหมายไว้โดยหน้าต่าง
  *
@@ -895,18 +982,21 @@ function InsideWindow({ children }) {
  * กรอบหน้าต่างให้สวย จะวางตรงไหนก็ได้ตราบใดที่ยังอยู่หลังระนาบบาน — ผูกสองเรื่องนี้
  * เข้าด้วยกันเมื่อไร การขยับบานทีเดียวจะพังทั้งสองฝั่ง
  */
+/** จุดควบคุมริบบิ้นในพอร์ทัล — พิกัดท้องถิ่นของ mesh (ก่อน offset/rot/scale) */
+export const PORTAL_PATH = [
+  new THREE.Vector3(-46, 10, -16),
+  new THREE.Vector3(-26, 4, -8),
+  new THREE.Vector3(-8, 0, -2),
+  new THREE.Vector3(12, -3, 2),
+  new THREE.Vector3(32, -8, 10),
+  new THREE.Vector3(52, -16, 22),
+]
+
 function PortalRibbon({ width, thick, wave, waves, scale, offset, rot }) {
   const geo = useMemo(
     () =>
       ribbonGeometry(
-        [
-          new THREE.Vector3(-46, 10, -16),
-          new THREE.Vector3(-26, 4, -8),
-          new THREE.Vector3(-8, 0, -2),
-          new THREE.Vector3(12, -3, 2),
-          new THREE.Vector3(32, -8, 10),
-          new THREE.Vector3(52, -16, 22),
-        ],
+        PORTAL_PATH,
         width,
         thick,
         wave,
@@ -1046,41 +1136,7 @@ function CheckerRibbon({ width, thick, wave, waves, scale, offset, rot }) {
    *
    * แกน +z ของกลุ่มนี้ชี้ออกมาทางกล้องเยื้องขวา (หมุน 26°) — ไล่ z ขึ้นคือวิ่งเข้าหาคนดู
    */
-  const PATH = useMemo(
-    () => [
-        /**
-         * ช่วงหลัง: ในโพรงบานที่ 1 → ลอดหลังกรอบ → ปากช่องบานที่ 2
-         *
-         * ชุดจุดนี้ได้จากการค้นหา ไม่ใช่การกะ: วัด "มุมที่ทิศทางเส้นหักต่อหนึ่งสเต็ป"
-         * ตลอดเส้นแล้วเลือกชุดที่ค่าสูงสุดต่ำที่สุด — มุมหักคือสิ่งที่ทำให้ริบบิ้นตะแคง
-         * จนเห็นเป็นสันบางแล้วบานออกตรงรอยต่อ ไม่ใช่รูโหว่ในเรขาคณิต
-         *
-         * ได้ 1.51° จากเดิม 2.08° (ลองด้วยมือก่อนหน้านี้ได้ 4.32° คือแย่ลง — เลยต้องวัด)
-         *
-         * เงื่อนไขที่ล็อกไว้ระหว่างค้นหา: จุดปากช่องคงเดิมเป๊ะ และความยาวรวมต่างจากเดิม
-         * ไม่เกิน 0.7% เพราะเฟสของคลื่นคิดจากระยะตามเส้น ถ้ายาวเปลี่ยนมากคลื่นจะเลื่อน
-         * ไปทั้งเส้น รวมช่วงหน้าที่จัดไว้แล้ว
-         */
-        new THREE.Vector3(-9.6, 2.7, -3.9),
-        new THREE.Vector3(-8.3, 2.66, -3.0),
-        new THREE.Vector3(-6.1, 2.58, -2.1),
-        new THREE.Vector3(-4.6, 2.52, -1.1),
-        new THREE.Vector3(-3.5, 2.45, 0.7),
-        /**
-         * ขาออกต้องลด x ท้องถิ่นลงขณะที่ z เพิ่ม
-         *
-         * แกน +z ของกลุ่มชี้ออกมาทางกล้อง "เยื้องขวา" (sin26° ≈ 0.44) เดินตรงตาม z
-         * อย่างเดียวจะลอยไปทับบานที่ 3 แล้วเลยไปโซนข้อความ ถอย x ไปทางซ้ายพอ ๆ กัน
-         * จึงได้เส้นที่พุ่งเข้าหาคนดูตรง ๆ แล้วดำดิ่งออกขอบล่าง
-         */
-        new THREE.Vector3(-3.7, 2.0, 3.2),
-        new THREE.Vector3(-4.1, 0.8, 7.0),
-        new THREE.Vector3(-4.9, -1.4, 11.0),
-        // ปลายต้องพ้นขอบล่างของเฟรม ไม่ใช่จบกลางอากาศ — เอียงซ้ายเพิ่มไม่ให้ไปทับโซนข้อความ
-        new THREE.Vector3(-7.0, -4.8, 16.0),
-    ],
-    [],
-  )
+  const PATH = RIBBON_PATH
 
   /**
    * ริบบิ้นเส้นนี้เริ่มที่ "ปากช่องบานที่ 2" ไม่มีหางลากไปข้างหลังอีกแล้ว
@@ -1208,6 +1264,56 @@ function Surfer(props) {
  */
 const RAD = Math.PI / 180
 
+/**
+ * gizmo เส้นทางวางเอง — dev เท่านั้น
+ * เส้นผ่าน waypoint (สีเขียว) จบที่ตำแหน่งตัวละคร (สีส้ม) อัปเดตจากแผงทุกเฟรม
+ */
+function PathGizmo() {
+  const tube = useRef()
+  const balls = useRef([])
+  const last = useRef('')
+  const curve = useMemo(
+    () => new THREE.CatmullRomCurve3(Array.from({ length: 5 }, () => new THREE.Vector3()), false, 'catmullrom', 0.5),
+    [],
+  )
+  // ท่อแทนเส้น 1px — WebGL วาดเส้นได้บางเดียว มองไม่เห็นบนฉากที่มีลายเยอะ
+  useFrame(() => {
+    const t = getTuner()
+    const n = Math.min(4, Math.max(1, Math.round(t.enPts)))
+    const key = [n, t.skaterX, t.skaterY, t.skaterZ, ...Array.from({ length: n }, (_, i) => `${t[`enP${i}X`]},${t[`enP${i}Y`]},${t[`enP${i}Z`]}`)].join('|')
+    for (let i = 0; i < 4; i += 1) {
+      const b = balls.current[i]
+      if (!b) continue
+      b.visible = i < n
+      if (i < n) b.position.set(t[`enP${i}X`], t[`enP${i}Y`], t[`enP${i}Z`])
+    }
+    if (key === last.current || !tube.current) return
+    last.current = key
+    curve.points.length = n + 1
+    for (let i = 0; i < n; i += 1) {
+      ;(curve.points[i] ?? (curve.points[i] = new THREE.Vector3())).set(t[`enP${i}X`], t[`enP${i}Y`], t[`enP${i}Z`])
+    }
+    ;(curve.points[n] ?? (curve.points[n] = new THREE.Vector3())).set(t.skaterX, t.skaterY, t.skaterZ)
+    curve.updateArcLengths()
+    const old = tube.current.geometry
+    tube.current.geometry = new THREE.TubeGeometry(curve, 80, 0.14, 6, false)
+    old?.dispose()
+  })
+  return (
+    <group>
+      <mesh ref={tube} renderOrder={5}>
+        <meshBasicMaterial color="#6ee7b7" depthTest={false} transparent opacity={0.9} />
+      </mesh>
+      {[0, 1, 2, 3].map((i) => (
+        <mesh key={i} ref={(m) => (balls.current[i] = m)} renderOrder={6}>
+          <sphereGeometry args={[0.55, 14, 10]} />
+          <meshBasicMaterial color={i === 0 ? '#f59e0b' : '#6ee7b7'} depthTest={false} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
 function CameraRig() {
   useFrame((state, dt) => {
     const cam = state.camera
@@ -1267,6 +1373,40 @@ function Scene() {
    * ฉากใน portal ใช้กล้องตัวเดียวกัน พิกัดโลกจึงตรงกันเป๊ะ ไม่ต้องชดเชยอะไร
    * ส่วนที่อยู่หลังบานกระจกจะถูกเห็นผ่านหน้าต่าง ส่วนที่พ้นออกมาแล้วเห็นจากฉากหลัก
    */
+  /**
+   * เส้นทางให้ตัวละครไถลบนริบบิ้นจริง — เส้นเดียวกับ geometry + เมทริกซ์ของกลุ่มที่ห่อมัน
+   * (หมุนรอบปากช่อง, ออฟเซ็ต, สเกล) แปลงเป็นพิกัดกลุ่มแถบหน้าต่างซึ่งเป็นพิกัดของตัวละคร
+   */
+  const ride = useMemo(() => {
+    const curve = new THREE.CatmullRomCurve3(RIBBON_PATH, false, 'catmullrom', 0.6)
+    const piv = new THREE.Vector3(...RIBBON_PIVOT)
+    const m = new THREE.Matrix4()
+      .makeTranslation(piv.x, piv.y, piv.z)
+      .multiply(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(t.ribbonRotX * RAD, t.ribbonRotY * RAD, t.ribbonRotZ * RAD)))
+      .multiply(new THREE.Matrix4().makeTranslation(-piv.x, -piv.y, -piv.z))
+      .multiply(new THREE.Matrix4().makeTranslation(t.ribbonX, t.ribbonY, t.ribbonZ))
+      .multiply(new THREE.Matrix4().makeScale(t.ribbonScale, t.ribbonScale, t.ribbonScale))
+    // t ของ "ปากช่องบานที่ 2" บนเส้นหลัก — จุดที่ริบบิ้นหน้าเริ่มถูกวาด (ดู tCut ใน CheckerRibbon)
+    const exit = RIBBON_PATH[4]
+    const P = new THREE.Vector3()
+    let mouthT = 0
+    let bestD = Infinity
+    for (let i = 0; i <= 600; i++) {
+      const d = curve.getPointAt(i / 600, P).distanceTo(exit)
+      if (d < bestD) {
+        bestD = d
+        mouthT = i / 600
+      }
+    }
+    return {
+      curve,
+      matrix: m,
+      wave: t.ribbonWave,
+      waves: t.ribbonWaves,
+      frame: ribbonFrame,
+      mouthT,
+    }
+  }, [t.ribbonRotX, t.ribbonRotY, t.ribbonRotZ, t.ribbonX, t.ribbonY, t.ribbonZ, t.ribbonScale, t.ribbonWave, t.ribbonWaves])
   const ribbon = (
     <CheckerRibbon
       width={t.ribbonW}
@@ -1281,7 +1421,7 @@ function Scene() {
   // ref ไม่มีพื้น ของทุกชิ้นลอยในที่ว่าง — ตารางพื้นเป็นแค่ตัวช่วยตอนจัดมุม
   const showGrid = t.grid > 0.5
   return (
-    <>
+    <Gloss on={t.gloss > 0.5 && !clay} rough={t.glossRough} env={t.glossEnv}>
       {clay ? (
         /**
          * ไฟแบบ studio ของวิวพอร์ต: key เฉียงบนซ้าย, fill อ่อนฝั่งตรงข้าม, rim จากหลัง
@@ -1319,7 +1459,71 @@ function Scene() {
           <directionalLight position={[7, 1, 5]} intensity={t.fillIntensity} color="#cfe0ff" />
           {/* rim: จากหลัง ตัดขอบตัวละครออกจากแผงขาวข้างหลัง */}
           <directionalLight position={[2, 6, -9]} intensity={t.rimIntensity} color="#ffffff" />
+          {/**
+           * แผงไฟนุ่ม (Environment + Lightformer) — หัวใจของหน้าตาแบบ claymorphism
+           *
+           * ไฟจุด/ไฟทิศทางให้ "ขอบเงาคม" เสมอ ต่อให้ลด intensity ลงก็ยังเป็นเงาที่มีขอบ
+           * ดินน้ำมันไม่ใช่แบบนั้น: มันรับแสงจากแผงกว้าง ๆ รอบตัว ไล่จากสว่างไปมืดยาว ๆ
+           * ไม่มีจุดไฮไลต์แข็ง ๆ Lightformer คือแผงแบบนั้น — วางเป็นวัตถุเรืองแสงในฉาก
+           * แล้วอบเป็น environment map ให้ทุกผิวเอาไปใช้
+           *
+           * frames={1} อบครั้งเดียวตอนขึ้นฉาก ไม่ได้เรนเดอร์ซ้ำทุกเฟรม
+           * (ไม่มีอะไรในแผงไฟขยับ อบใหม่ทุกเฟรมคือจ่ายค่า cube render ฟรี ๆ)
+           */}
+          <Environment resolution={128} frames={1}>
+            {/* แผงหลักเฉียงบนซ้าย อุ่น — ตรงทิศเดียวกับ key ให้เงาไปทางเดียวกัน */}
+            <Lightformer
+              form="rect"
+              intensity={t.envIntensity * 2.2}
+              position={[-6, 8, 8]}
+              scale={[14, 14, 1]}
+              color="#fff1dc"
+            />
+            {/* แผงรองฝั่งตรงข้าม เย็น รับสีพื้นน้ำเงินของหน้า */}
+            <Lightformer
+              form="rect"
+              intensity={t.envIntensity}
+              position={[8, 2, 5]}
+              scale={[10, 10, 1]}
+              color="#d5e6ff"
+            />
+            {/* แผงล่าง อุ่น — แสงสะท้อนขึ้นมาจากพื้น ทำให้ใต้คางกับใต้แขนไม่ทึบ */}
+            <Lightformer
+              form="ring"
+              intensity={t.envIntensity * 0.7}
+              position={[0, -8, 4]}
+              scale={16}
+              color="#ffdcae"
+            />
+          </Environment>
         </>
+      )}
+
+      {/**
+       * เอฟเฟกต์กล้อง — ต้องอยู่ในฉาก เพราะมันเข้าไปแทนลูปวาดของ r3f (useFrame priority 1)
+       * ปิดไว้ (fx = 0) แล้วไม่มีต้นทุนอะไรเลย ฉากวาดตามปกติ
+       */}
+      {(t.fx > 0.5 || t.rimFx > 0.5) && (
+        <CameraFX
+          rim={t.rimFx > 0.5 ? t.rimFxInt : 0}
+          rimW={t.rimFxW}
+          rimSoft={t.rimFxSoft}
+          rimThresh={t.rimFxThresh}
+          rimMix={t.rimFxMix}
+          rimAngle={t.rimFxAngle}
+          rimFall={t.rimFxFall}
+          rimShade={t.rimFxShade}
+          rimBack={t.rimFxBack}
+          fish={t.fxFish}
+          skewX={t.fxSkewX}
+          skewY={t.fxSkewY}
+          zoom={t.fxZoom}
+          chroma={t.fxChroma}
+          bulge={t.fxBulge}
+          bulgeR={t.fxBulgeR}
+          bulgeX={t.fxBulgeX}
+          bulgeY={t.fxBulgeY}
+        />
       )}
 
       <Backdrop clay={clay} />
@@ -1405,24 +1609,53 @@ function Scene() {
           <Switch
             len={t.bcLen}
             radius={t.bcRadius}
+            thickness={t.bcThick}
+            knobSize={t.bcKnob}
+            knobThick={t.bcKnobThick}
+            knobProud={t.bcKnobProud}
             pos={t.bcPos}
             opacity={t.bcOpacity}
             icon={t.bcIcon}
+            outline={t.bcOutline}
+            outlineAlpha={t.bcOutlineAlpha}
+            showEdges={t.bcEdges > 0.5}
+            edgeAngle={t.bcEdgeAngle}
+            glass={t.bcGlass}
+            blur={t.bcBlur}
             position={[t.bcX, t.bcY, t.bcZ]}
             rotation={[t.bcRotX * RAD, t.bcRotY * RAD, t.bcRotZ * RAD]}
             scale={t.bcScale}
           />
         )}
+        {/* เส้นทางวางเอง (debug): เส้น + ลูกบอลที่ waypoint ในพิกัดกลุ่มนี้ */}
+        {import.meta.env.DEV && t.enPath > 0.5 && t.enShowPath > 0.5 && <PathGizmo />}
         {/* ตัวละครอยู่ในพิกัดกลุ่มเดียวกับริบบิ้น จะได้วางบนถนนได้ตรง ๆ ไม่ต้องแปลงพิกัด */}
+        {/**
+         * ตัวละครห่อด้วย Entrance: กลุ่มนอกถือปลายทาง (ค่าจากแผง) กลุ่มในวิ่งเข้ามาจาก
+         * ในหน้าต่าง — ค่า skaterX/Y/Z จึงยังหมายถึง "ที่หยุด" เหมือนเดิม
+         */}
         {skater && (
+          <Entrance
+            replay={t.enReplay}
+            ride={t.enRide > 0.5 ? ride : null}
+            pathMode={t.enPath > 0.5}
+            position={[t.skaterX, t.skaterY, t.skaterZ]}
+            rotation={[t.skaterRotX * RAD, t.skaterRotY * RAD, t.skaterRotZ * RAD]}
+            scale={t.skaterScale}
+          >
           <Rider
             bob={t.idle > 0.5}
             breathe={t.breathe > 0.5}
             idleAmp={t.idleAmp}
             idleSpeed={t.idleSpeed}
-            position={[t.skaterX, t.skaterY, t.skaterZ]}
-            rotation={[t.skaterRotX * RAD, t.skaterRotY * RAD, t.skaterRotZ * RAD]}
-            scale={t.skaterScale}
+            rimPower={t.rimPower}
+            rimBoost={t.rimBoost}
+            rimEdge={t.rimEdge}
+            rimSoft={t.rimSoft}
+            rimDirMix={t.rimDirMix}
+            rimYaw={t.rimYaw}
+            rimPitch={t.rimPitch}
+            flatBands={t.flatBands}
             mascotScale={t.mascotScale}
             mascotLift={t.mascotLift}
             boardScale={t.boardScale}
@@ -1434,12 +1667,39 @@ function Scene() {
               deckLen: t.bdLen,
               deckWide: t.bdWide,
               deckThick: t.bdThick,
-              tipLen: t.bdTip,
-              kick: t.bdKick * RAD,
+              kickStart: t.bdKickAt,
+              kickH: t.bdKick,
+              concave: t.bdConcave,
               truckX: t.bdTruckX,
               wheelR: t.bdWheelR,
               wheelW: t.bdWheelW,
               deckY: t.bdRideY,
+            }}
+            facePose={{
+              eye: t.fcEye,
+              gap: t.fcGap,
+              eyeY: t.fcEyeY,
+              pupil: t.fcPupil,
+              pupilX: t.fcPupilX,
+              pupilY: t.fcPupilY,
+              look: t.fcLook,
+              brow: t.fcBrow,
+              browY: t.fcBrowY,
+              browArc: t.fcBrowArc,
+              browTilt: t.fcBrowTilt * RAD,
+              mouth: t.fcMouth,
+              mouthH: t.fcMouthH,
+              mouthX: t.fcMouthX,
+              mouthY: t.fcMouthY,
+              x: t.fcX,
+              y: t.fcY,
+              z: t.fcZ,
+              rotX: t.fcRotX * RAD,
+              rotY: t.fcRotY * RAD,
+              rotZ: t.fcRotZ * RAD,
+              scale: t.fcScale,
+              lookEvery: t.fcLookEvery,
+              blinkEvery: t.fcBlinkEvery,
             }}
             torsoPose={{
               leanX: t.leanX * RAD,
@@ -1488,17 +1748,28 @@ function Scene() {
               elbowY: t.elbowY * RAD,
               elbowZ: t.elbowZ * RAD,
               handScale: t.handScale,
+              handX: t.handX,
+              handY: t.handY,
+              handZ: t.handZ,
               wristX: t.wristX * RAD,
               wristY: t.wristY * RAD,
               wristZ: t.wristZ * RAD,
               mugShX: t.mugShX * RAD,
               mugShY: t.mugShY * RAD,
               mugShZ: t.mugShZ * RAD,
+              mugHandScale: t.mugHandScale,
+              mugHandX: t.mugHandX,
+              mugHandY: t.mugHandY,
+              mugHandZ: t.mugHandZ,
+              mugWristX: t.mugWristX * RAD,
+              mugWristY: t.mugWristY * RAD,
+              mugWristZ: t.mugWristZ * RAD,
               mugElX: t.mugElX * RAD,
               mugElY: t.mugElY * RAD,
               mugElZ: t.mugElZ * RAD,
             }}
           />
+          </Entrance>
         )}
       </group>
       </group>
@@ -1641,7 +1912,7 @@ function Scene() {
       </Clay>
 
       <CameraRig />
-    </>
+    </Gloss>
   )
 }
 

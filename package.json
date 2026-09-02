@@ -16,6 +16,7 @@
     "@react-three/fiber": "^9.6.1",
     "@react-three/rapier": "^2.2.0",
     "@studio-freight/lenis": "^1.0.42",
+    "@tabler/icons-react": "^3.46.0",
     "@vercel/analytics": "^1.2.2",
     "flubber": "^0.4.2",
     "gsap": "^3.14.2",

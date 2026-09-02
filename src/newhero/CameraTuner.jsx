@@ -1,5 +1,42 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
+import {
+  IconAdjustments,
+  IconAperture,
+  IconAppWindow,
+  IconArrowLeft,
+  IconArrowRight,
+  IconArrowsMaximize,
+  IconArrowsMinimize,
+  IconBalloon,
+  IconBrush,
+  IconBulb,
+  IconChevronDown,
+  IconChevronRight,
+  IconCompass,
+  IconCopy,
+  IconDoorEnter,
+  IconFilter,
+  IconGridDots,
+  IconHandFinger,
+  IconHandStop,
+  IconMoodSmile,
+  IconMountain,
+  IconPlayerPause,
+  IconPlayerPlay,
+  IconPuzzle,
+  IconRestore,
+  IconRipple,
+  IconRuler,
+  IconShirt,
+  IconShoe,
+  IconSkateboard,
+  IconStack2,
+  IconToggleRight,
+  IconUser,
+  IconVideo,
+  IconWaveSine,
+} from '@tabler/icons-react'
 import { DEFAULTS, READOUT, REF, getTuner, projectGuides, resetTuner, setTuner, useTuner } from './tuner'
 
 /**
@@ -26,6 +63,20 @@ const GROUPS = [
       ['camY', -10, 30, 0.1],
       ['camZ', -10, 60, 0.1],
       ['fitMax', 1, 2, 0.01, 'ถอยเมื่อจอแคบ'],
+    ],
+  },
+  {
+    name: 'เอฟเฟกต์กล้อง',
+    rows: [
+      ['fxFish', -1, 1, 0.005, 'fisheye (+นูน / -เว้า)'],
+      ['fxSkewX', -1, 1, 0.005, 'เอียงตามแกน x'],
+      ['fxSkewY', -1, 1, 0.005, 'เอียงตามแกน y'],
+      ['fxZoom', 0.4, 2, 0.005, 'ซูม'],
+      ['fxChroma', 0, 1, 0.005, 'เหลื่อมสีขอบ'],
+      ['fxBulge', -1, 1, 0.005, 'เลนส์นูนเฉพาะจุด (+ขยาย / -ยุบ)'],
+      ['fxBulgeR', 0.02, 1.5, 0.005, 'รัศมีวง'],
+      ['fxBulgeX', 0, 1, 0.005, 'จุดกึ่งกลาง x บนจอ'],
+      ['fxBulgeY', 0, 1, 0.005, 'จุดกึ่งกลาง y บนจอ'],
     ],
   },
   {
@@ -134,9 +185,19 @@ const GROUPS = [
     rows: [
       ['bcLen', 1, 5, 0.05, 'ความยาวราง (เท่าความสูง)'],
       ['bcPos', 0, 1, 0.01, 'ตำแหน่งปุ่ม 0=ปิด 1=เปิด'],
+      ['bcKnob', 0.2, 1.3, 0.01, 'ขนาดปุ่ม'],
+      ['bcKnobThick', 0.05, 1.5, 0.01, 'ความหนาปุ่ม'],
+      ['bcKnobProud', -0.5, 0.5, 0.005, 'ปุ่มล้ำพ้นหน้าราง'],
       ['bcRadius', 0.05, 2, 0.01, 'ครึ่งความสูงราง'],
+      ['bcThick', 0.1, 4, 0.01, 'ความหนา (extrusion)'],
       ['bcOpacity', 0.05, 1, 0.01, 'ความทึบ'],
       ['bcIcon', 0.1, 1, 0.01, 'ขนาดไอคอน'],
+      ['bcOutline', 0, 0.15, 0.002, 'ความหนาเส้นขอบ'],
+      ['bcOutlineAlpha', 0, 1, 0.01, 'ความเข้มเส้นขอบ'],
+      ['bcEdges', 0, 1, 1, 'แสดงสันของ extrusion'],
+      ['bcEdgeAngle', 1, 90, 1, '° เกณฑ์มุมของสัน'],
+      ['bcGlass', 0, 1, 0.01, 'ความเป็นกระจก'],
+      ['bcBlur', 0, 1, 0.01, 'ความฝ้า (เบลอของหลัง)'],
       ['bcScale', 0.1, 12, 0.05, 'สเกล'],
       ['bcX', -60, 60, 0.5],
       ['bcY', -60, 60, 0.5],
@@ -144,6 +205,45 @@ const GROUPS = [
       ['bcRotX', -180, 180, 0.5, '°'],
       ['bcRotY', -180, 180, 0.5, '°'],
       ['bcRotZ', -180, 180, 0.5, '°'],
+    ],
+  },
+  {
+    name: 'ทางเข้า (ไหลออกจากหน้าต่าง)',
+    rows: [
+      ['enPts', 1, 4, 1, 'เส้นวางเอง: ใช้กี่จุด'],
+      ['enInside', 0, 1, 0.01, 'เส้นวางเอง: อยู่ในพอร์ทัลถึง (สัดส่วนเส้น)'],
+      ['enP0X', -30, 30, 0.05, 'จุด 1 x (ส้ม)'],
+      ['enP0Y', -20, 20, 0.05, 'จุด 1 y'],
+      ['enP0Z', -30, 20, 0.05, 'จุด 1 z'],
+      ['enP1X', -30, 30, 0.05, 'จุด 2 x'],
+      ['enP1Y', -20, 20, 0.05, 'จุด 2 y'],
+      ['enP1Z', -30, 20, 0.05, 'จุด 2 z'],
+      ['enP2X', -30, 30, 0.05, 'จุด 3 x'],
+      ['enP2Y', -20, 20, 0.05, 'จุด 3 y'],
+      ['enP2Z', -30, 20, 0.05, 'จุด 3 z'],
+      ['enP3X', -30, 30, 0.05, 'จุด 4 x'],
+      ['enP3Y', -20, 20, 0.05, 'จุด 4 y'],
+      ['enP3Z', -30, 20, 0.05, 'จุด 4 z'],
+      ['enDelay', 0, 5, 0.05, 'วิ หน่วงก่อนเริ่ม'],
+      ['enDur', 0.2, 6, 0.05, 'วิ ระยะเวลา'],
+      ['enX', -30, 30, 0.05, 'จุดเริ่ม x'],
+      ['enY', -20, 20, 0.05, 'จุดเริ่ม y'],
+      ['enZ', -30, 20, 0.05, 'จุดเริ่ม z (ลบ = หลังบาน)'],
+      ['enMidX', -30, 30, 0.05, 'จุดกลาง x (ปากบานที่ 2)'],
+      ['enMidY', -20, 20, 0.05, 'จุดกลาง y'],
+      ['enMidZ', -30, 20, 0.05, 'จุดกลาง z'],
+      ['enArc', -5, 5, 0.05, 'โค้งยกกลางทาง'],
+      ['enSpin', -360, 360, 1, '° หมุนตัวตอนออก'],
+      ['enBank', -90, 90, 0.5, '° เอียงข้างระหว่างวิ่ง'],
+      ['enScale', 0.05, 2, 0.01, 'สเกลตอนเริ่ม'],
+      ['enOver', 0, 4, 0.05, 'เลยเป้าแล้วดีดกลับ'],
+      ['enT0', -0.6, 1, 0.005, 'ริบบิ้น: เริ่มที่ t (ลบ = ลึกเข้าไปในบาน 1)'],
+      ['enBackZ', 0, 30, 0.1, 'ในพอร์ทัล: ลึกหลังบานได้ไม่เกิน'],
+      ['enMouthPad', -0.1, 0.2, 0.005, 'ริบบิ้น: โผล่พ้นกรอบหลังปากช่องเท่าไร'],
+      ['enT1', 0, 1, 0.005, 'ริบบิ้น: ออกจากเส้นที่ t'],
+      ['enUp', -1, 2, 0.01, 'ริบบิ้น: ยกพ้นผิว'],
+      ['enFace', -180, 180, 1, '° ริบบิ้น: หันหน้าเทียบทิศเส้น'],
+      ['enBlend', 0.05, 1, 0.01, 'ริบบิ้น: ช่วงท้ายละลายเข้าท่าจริง'],
     ],
   },
   {
@@ -166,11 +266,31 @@ const GROUPS = [
   {
     name: 'แสง',
     rows: [
+      ['glossRough', 0, 1, 0.01, 'พลาสติก: ความด้าน (ต่ำ = เงา)'],
+      ['glossEnv', 0, 4, 0.01, 'พลาสติก: แรงสะท้อนแผงไฟ'],
       ['ambIntensity', 0, 2, 0.01, 'ambient'],
       ['hemiIntensity', 0, 2, 0.01, 'ฟ้า/พื้น'],
       ['keyIntensity', 0, 4, 0.01, 'key'],
       ['fillIntensity', 0, 3, 0.01, 'fill'],
-      ['rimIntensity', 0, 3, 0.01, 'rim'],
+      ['rimIntensity', 0, 3, 0.01, 'rim (ไฟหลัง)'],
+      ['rimPower', 0.5, 16, 0.1, 'ความคมของ rim ที่ผิว'],
+      ['rimBoost', 0, 3, 0.01, 'ความสว่างของ rim ที่ผิว'],
+      ['rimFxInt', 0, 4, 0.01, 'rim ขอบภาพ: ความแรง'],
+      ['rimFxW', 1, 60, 0.5, 'rim ขอบภาพ: กว้าง (px)'],
+      ['rimFxFall', 0.3, 5, 0.05, 'rim ขอบภาพ: ไล่จางจากขอบ (สูง = จางเร็ว)'],
+      ['rimFxShade', 0, 1, 0.01, 'rim ขอบภาพ: ติดเฉพาะผิวที่หันหาไฟ'],
+      ['rimFxBack', 0, 3, 0.05, 'rim ขอบภาพ: ไฟอยู่หลังตัวแค่ไหน'],
+      ['rimFxSoft', 0, 2, 0.01, 'rim ขอบภาพ: นุ่ม'],
+      ['rimFxThresh', 0.002, 0.3, 0.001, 'rim ขอบภาพ: เกณฑ์ความลึก'],
+      ['rimFxMix', 0, 1, 0.01, 'rim ขอบภาพ: เฉพาะฝั่งไฟ (0 = รอบตัว)'],
+      ['rimFxAngle', -180, 180, 1, '° rim ขอบภาพ: ทิศไฟบนจอ (90 = บน)'],
+      ['rimEdge', 0, 1, 0.01, 'fresnel: เกณฑ์ขอบ (0 = ไม่ตัด)'],
+      ['rimSoft', 0.005, 0.5, 0.005, 'ความนุ่มของเกณฑ์'],
+      ['rimDirMix', 0, 1, 0.01, 'ขึ้นเฉพาะฝั่งไฟขอบ (0 = รอบตัว)'],
+      ['rimYaw', -180, 180, 1, '° ทิศไฟขอบ (180 = จากหลัง)'],
+      ['rimPitch', -90, 90, 1, '° ไฟขอบสูง/ต่ำ'],
+      ['flatBands', 0, 6, 1, 'ตัดแสงเป็นชั้น (0 = ปิด)'],
+      ['envIntensity', 0, 4, 0.01, 'แผงไฟนุ่ม (env)'],
       ['exposure', 0.3, 2.5, 0.01, 'exposure'],
     ],
   },
@@ -179,6 +299,35 @@ const GROUPS = [
     rows: [
       ['idleAmp', 0, 4, 0.01, 'แรง'],
       ['idleSpeed', 0.1, 4, 0.01, 'เร็ว'],
+    ],
+  },
+  {
+    name: 'หน้า / ตา',
+    rows: [
+      ['fcX', -0.5, 0.5, 0.005, 'ทั้งหน้า: ซ้าย/ขวา (×W)'],
+      ['fcY', -0.5, 0.5, 0.005, 'ทั้งหน้า: ขึ้น/ลง (×H)'],
+      ['fcZ', -0.3, 0.3, 0.002, 'ทั้งหน้า: ยื่นออก/จมเข้า'],
+      ['fcRotX', -45, 45, 0.5, '° ทั้งหน้า: ก้ม/เงย'],
+      ['fcRotY', -90, 90, 0.5, '° ทั้งหน้า: หันซ้าย/ขวา'],
+      ['fcRotZ', -45, 45, 0.5, '° ทั้งหน้า: เอียง'],
+      ['fcScale', 0.3, 3, 0.01, 'ทั้งหน้า: สเกล'],
+      ['fcEye', 0.05, 0.35, 0.005, 'ตาขาว: รัศมี (×W)'],
+      ['fcGap', 0, 0.45, 0.005, 'ตาขาว: ห่างกลาง (×W)'],
+      ['fcEyeY', -0.4, 0.4, 0.005, 'ฐานตา สูง/ต่ำ (×H)'],
+      ['fcPupil', 0.1, 0.95, 0.01, 'ลูกตาดำ: ขนาดเทียบตาขาว (0.5 = ครึ่ง)'],
+      ['fcPupilX', -0.15, 0.15, 0.005, 'ลูกตาดำ: มองซ้าย/ขวา'],
+      ['fcPupilY', -0.06, 0.15, 0.005, 'ลูกตาดำ: สูงจากฐาน (ลบ = จมใต้ฐาน)'],
+      ['fcLook', 0, 0.15, 0.005, 'ระยะกวาดตา (0 = นิ่ง)'],
+      ['fcBrow', 0.03, 0.3, 0.005, 'คิ้ว: รัศมีโค้ง (×W)'],
+      ['fcBrowY', 0, 0.5, 0.005, 'คิ้ว: สูงจากฐานตา (×H)'],
+      ['fcBrowArc', 0.2, 1.5, 0.05, 'คิ้ว: ความโค้ง (แบน→กลม)'],
+      ['fcBrowTilt', -45, 45, 0.5, '° คิ้ว: เอียง'],
+      ['fcMouth', 0.02, 0.3, 0.005, 'ปาก: กว้าง (×W)'],
+      ['fcMouthH', 0.05, 0.6, 0.005, 'ปาก: สูง (×H)'],
+      ['fcMouthX', -0.3, 0.3, 0.005, 'ปาก: ซ้าย/ขวา'],
+      ['fcMouthY', -0.5, 0.3, 0.005, 'ปาก: สูง/ต่ำ (×H)'],
+      ['fcLookEvery', 0.5, 10, 0.1, 'วิ เปลี่ยนจุดมองทุก ๆ'],
+      ['fcBlinkEvery', 0.5, 12, 0.1, 'วิ กระพริบทุก ๆ'],
     ],
   },
   {
@@ -215,8 +364,9 @@ const GROUPS = [
       ['bdLen', 0.1, 1.2, 0.005, 'ยาวแผ่นกลาง'],
       ['bdWide', 0.08, 0.6, 0.005, 'กว้างแผ่น'],
       ['bdThick', 0.004, 0.08, 0.002, 'หนาแผ่น'],
-      ['bdTip', 0.05, 0.5, 0.005, 'ยาวหัว/ท้าย'],
-      ['bdKick', 0, 60, 0.5, '° เชิดหัว/ท้าย'],
+      ['bdKickAt', 0.1, 0.95, 0.01, 'เริ่มเชิดที่'],
+      ['bdKick', 0, 0.2, 0.002, 'ความสูงปลายเชิด'],
+      ['bdConcave', 0, 0.25, 0.002, 'ท้องแอ่น'],
       ['bdTruckX', 0.05, 0.5, 0.005, 'ระยะทรัค'],
       ['bdWheelR', 0.01, 0.12, 0.002, 'รัศมีล้อ'],
       ['bdWheelW', 0.01, 0.12, 0.002, 'หนาล้อ'],
@@ -245,6 +395,9 @@ const GROUPS = [
       ['elbowY', -180, 180, 0.5, '° ศอก'],
       ['elbowZ', -180, 180, 0.5, '° ศอก (เหยียด ≈ 20)'],
       ['handScale', 0.3, 2, 0.01, 'ขนาดมือ'],
+      ['handX', -2, 2, 0.005, 'เลื่อนมือออกจากตัว'],
+      ['handY', -2, 2, 0.005, 'เลื่อนมือขึ้น/ลง'],
+      ['handZ', -2, 2, 0.005, 'เลื่อนมือหน้า/หลัง'],
       ['wristX', -180, 180, 0.5, '° ข้อมือ'],
       ['wristY', -180, 180, 0.5, '° ข้อมือ'],
       ['wristZ', -180, 180, 0.5, '° ข้อมือ'],
@@ -262,6 +415,13 @@ const GROUPS = [
       ['mugShX', -180, 180, 0.5, '° ไหล่'],
       ['mugShY', -180, 180, 0.5, '° ไหล่'],
       ['mugShZ', -180, 180, 0.5, '° ไหล่ (กางออก ≈ -60)'],
+      ['mugHandScale', 0.3, 2, 0.01, 'ขนาดมือ'],
+      ['mugHandX', -2, 2, 0.005, 'เลื่อนมือออกจากตัว'],
+      ['mugHandY', -2, 2, 0.005, 'เลื่อนมือขึ้น/ลง'],
+      ['mugHandZ', -2, 2, 0.005, 'เลื่อนมือหน้า/หลัง'],
+      ['mugWristX', -180, 180, 0.5, '° ข้อมือ'],
+      ['mugWristY', -180, 180, 0.5, '° ข้อมือ'],
+      ['mugWristZ', -180, 180, 0.5, '° ข้อมือ'],
       ['mugElX', -180, 180, 0.5, '° ศอก'],
       ['mugElY', -180, 180, 0.5, '° ศอก'],
       ['mugElZ', -180, 180, 0.5, '° ศอก'],
@@ -285,14 +445,93 @@ const GROUPS = [
   },
 ]
 
+/**
+ * สวิตช์เปิด/ปิดของแต่ละกลุ่ม — วางไว้ที่หัวกลุ่มที่มันคุม ไม่ใช่กองรวมกันข้างบน
+ * (หาเจอจากบริบท: อยากปิดเตตริสก็ไปที่กลุ่มเตตริส)
+ */
+const GROUP_TOGGLES = {
+  'เอฟเฟกต์กล้อง': [['fx', 'เปิด']],
+  'หน้าต่าง': [['portal', 'พอร์ทัล'], ['portalWall', 'ผนังพอร์ทัล']],
+  'พื้น': [['grid', 'ตารางพื้น']],
+  'ของลอย (ยกทั้งชุด)': [['props', 'ของลอย']],
+  'ริบบิ้นในพอร์ทัล': [['joe', 'ฉาก joespresso'], ['joeSky', 'ฟ้า'], ['joeTerrain', 'เนิน'], ['joeFoliage', 'ต้นไม้']],
+  'หน้าต่างซ้อน (ในพอร์ทัล)': [['sw', 'เปิด']],
+  'บล็อกเตตริส (ในพอร์ทัล)': [['te', 'เปิด']],
+  'สวิตช์ (หน้าหน้าต่าง)': [['bc', 'เปิด']],
+  'ทางเข้า (ไหลออกจากหน้าต่าง)': [['en', 'เปิด'], ['enPath', 'เส้นวางเอง'], ['enShowPath', 'โชว์เส้น'], ['enRide', 'ตามริบบิ้น']],
+  'ตัวละคร': [['skater', 'ตัวละคร']],
+  'แสง': [['rimFx', 'rim ขอบภาพ'], ['gloss', 'พลาสติกเงา'], ['clay', 'clay']],
+  'ไหวเบา ๆ': [['idle', 'ไหวเบา ๆ'], ['breathe', 'ไหวข้อต่อ']],
+}
+
+/** ไอคอนหัวกลุ่ม (Tabler) — กวาดตาหากลุ่มได้เร็วกว่าอ่านชื่อ */
+const GROUP_ICONS = {
+  'กล้อง': IconVideo,
+  'เอฟเฟกต์กล้อง': IconAperture,
+  'แกนหมุน': IconCompass,
+  'หน้าต่าง': IconAppWindow,
+  'พื้น': IconGridDots,
+  'ของลอย (ยกทั้งชุด)': IconBalloon,
+  'ริบบิ้นในพอร์ทัล': IconMountain,
+  'หน้าต่างซ้อน (ในพอร์ทัล)': IconStack2,
+  'บล็อกเตตริส (ในพอร์ทัล)': IconPuzzle,
+  'สวิตช์ (หน้าหน้าต่าง)': IconToggleRight,
+  'ทางเข้า (ไหลออกจากหน้าต่าง)': IconDoorEnter,
+  'ตัวละคร': IconUser,
+  'แสง': IconBulb,
+  'ไหวเบา ๆ': IconWaveSine,
+  'หน้า / ตา': IconMoodSmile,
+  'ลำตัว': IconShirt,
+  'ขา': IconShoe,
+  'สเก็ตบอร์ด': IconSkateboard,
+  'แขน A (ข้างที่เล็งด้วยแกนแขน)': IconHandStop,
+  'แขน B (ข้างที่คิดจากท่าพัก)': IconHandFinger,
+  'ริบบิ้น': IconRipple,
+}
+const TOGGLE_ICONS = { skater: IconUser, portal: IconAppWindow, props: IconBalloon, clay: IconBrush, grid: IconGridDots }
+
+/** ไอคอนขนาดข้อความ วางแนวเดียวกับตัวหนังสือ */
+function Ic({ icon: I, size = 13 }) {
+  if (!I) return null
+  return <I size={size} stroke={1.9} style={{ verticalAlign: '-2px', marginRight: 4, flex: 'none' }} />
+}
+
+/** สวิตช์ที่ใช้บ่อยสุด — อยู่บนสุดเสมอ ไม่ต้องเลื่อนหา */
+const QUICK_TOGGLES = [
+  ['skater', 'ตัวละคร'],
+  ['portal', 'พอร์ทัล'],
+  ['props', 'ของลอย'],
+  ['clay', 'clay'],
+  ['grid', 'ตารางพื้น'],
+]
+
+const GREEN = '#6ee7b7'
+const PANEL_KEY = 'newhero.panel'
+
+/** สถานะของตัวแผงเอง (กลุ่มไหนเปิด, ชิดซ้าย/ขวา, ...) — คนละที่กับค่าที่จูน */
+function loadPanel() {
+  try {
+    return { open: { กล้อง: true }, side: 'right', collapsed: false, ...JSON.parse(localStorage.getItem(PANEL_KEY) || '{}') }
+  } catch {
+    return { open: { กล้อง: true }, side: 'right', collapsed: false }
+  }
+}
+function savePanel(p) {
+  try {
+    localStorage.setItem(PANEL_KEY, JSON.stringify(p))
+  } catch {
+    /* โหมดส่วนตัว — ไม่จำข้ามรีเฟรชก็ยังใช้ได้ */
+  }
+}
+
 const box = {
   position: 'fixed',
   top: 12,
-  right: 12,
   zIndex: 60,
-  width: 300,
+  width: 340,
   maxHeight: 'calc(100svh - 24px)',
-  overflowY: 'auto',
+  display: 'flex',
+  flexDirection: 'column',
   overscrollBehavior: 'contain',
   background: 'rgba(18,18,20,0.92)',
   color: '#e8e8e8',
@@ -304,6 +543,8 @@ const box = {
 }
 const btn = {
   cursor: 'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
   background: 'rgba(255,255,255,0.08)',
   color: '#e8e8e8',
   border: '1px solid rgba(255,255,255,0.16)',
@@ -311,13 +552,47 @@ const btn = {
   padding: '4px 8px',
   font: 'inherit',
 }
+const btnOn = { ...btn, background: 'rgba(110,231,183,0.22)' }
+const field = {
+  background: 'rgba(255,255,255,0.06)',
+  border: '1px solid rgba(255,255,255,0.14)',
+  borderRadius: 4,
+  color: '#e8e8e8',
+  font: 'inherit',
+  padding: '2px 4px',
+}
+
+/** ค่าเท่ากับค่าเริ่มต้นไหม — เผื่อเศษทศนิยมจากสไลเดอร์ */
+const isDefault = (k, v) => Math.abs(v - DEFAULTS[k]) < 1e-9
 
 function Row({ k, min, max, step, unit }) {
   const t = useTuner()
   const v = t[k]
+  const changed = !isDefault(k, v)
+  /** shift + ลูกศร = ก้าวละ 10 เท่า — ลากไกล ๆ ไม่ต้องกดค้าง */
+  const onKey = (e) => {
+    if (!e.shiftKey) return
+    const dir = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : 0
+    if (!dir) return
+    e.preventDefault()
+    setTuner({ [k]: Math.min(max, Math.max(min, +(v + dir * step * 10).toFixed(6))) })
+  }
   return (
-    <label style={{ display: 'grid', gridTemplateColumns: '78px 1fr 62px', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
-      <span style={{ opacity: 0.72 }}>{k}</span>
+    <div style={{ display: 'grid', gridTemplateColumns: '96px 1fr 62px', gap: 6, alignItems: 'center' }}>
+      <span
+        onDoubleClick={() => setTuner({ [k]: DEFAULTS[k] })}
+        title={`${unit || ''}\nค่าเริ่มต้น ${DEFAULTS[k]} — ดับเบิลคลิกเพื่อคืนค่า`}
+        style={{ cursor: 'pointer', lineHeight: 1.2, overflow: 'hidden' }}
+      >
+        <span style={{ color: changed ? GREEN : 'inherit', opacity: changed ? 1 : 0.78 }}>
+          {changed ? '● ' : ''}{k}
+        </span>
+        {unit && (
+          <span style={{ display: 'block', opacity: 0.42, fontSize: 9.5, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+            {unit}
+          </span>
+        )}
+      </span>
       <input
         type="range"
         min={min}
@@ -325,25 +600,17 @@ function Row({ k, min, max, step, unit }) {
         step={step}
         value={v}
         onChange={(e) => setTuner({ [k]: Number(e.target.value) })}
-        style={{ cursor: 'pointer', accentColor: '#6ee7b7' }}
+        onKeyDown={onKey}
+        style={{ cursor: 'pointer', accentColor: GREEN, minWidth: 0 }}
       />
       <input
         type="number"
         step={step}
         value={v}
         onChange={(e) => setTuner({ [k]: Number(e.target.value) })}
-        style={{
-          width: 62,
-          background: 'rgba(255,255,255,0.06)',
-          border: '1px solid rgba(255,255,255,0.14)',
-          borderRadius: 4,
-          color: '#e8e8e8',
-          font: 'inherit',
-          padding: '2px 4px',
-        }}
-        title={unit || ''}
+        style={{ ...field, width: 62 }}
       />
-    </label>
+    </div>
   )
 }
 
@@ -357,11 +624,11 @@ function Readout() {
   return (
     <div style={{ display: 'grid', gap: 2, padding: '5px 8px', background: 'rgba(255,255,255,0.05)', borderRadius: 6 }}>
       <div style={{ opacity: 0.6 }}>ตำแหน่ง mascot ในโลก</div>
-      <div style={{ color: '#6ee7b7' }}>
+      <div style={{ color: GREEN }}>
         x {READOUT.x.toFixed(2)}  y {READOUT.y.toFixed(2)}  z {READOUT.z.toFixed(2)}
       </div>
       <div style={{ opacity: 0.6, marginTop: 2 }}>ฝ่าเท้า / หน้าแผ่นบอร์ด</div>
-      <div style={{ color: Math.abs(READOUT.gap) < 0.01 ? '#6ee7b7' : '#f4a4a4' }}>
+      <div style={{ color: Math.abs(READOUT.gap) < 0.01 ? GREEN : '#f4a4a4' }}>
         {READOUT.sole.toFixed(3)} / {READOUT.deck.toFixed(3)} (ห่าง {READOUT.gap.toFixed(3)})
       </div>
       <div style={{ opacity: 0.6 }}>ชิ้นต่ำสุด: {READOUT.low || '-'}</div>
@@ -373,12 +640,8 @@ function Toggle({ k, label }) {
   const t = useTuner()
   const on = t[k] > 0.5
   return (
-    <button
-      type="button"
-      onClick={() => setTuner({ [k]: on ? 0 : 1 })}
-      style={{ ...btn, background: on ? 'rgba(110,231,183,0.22)' : btn.background }}
-    >
-      {on ? '●' : '○'} {label}
+    <button type="button" onClick={() => setTuner({ [k]: on ? 0 : 1 })} style={on ? btnOn : btn}>
+      {on ? '●' : '○'} <Ic icon={TOGGLE_ICONS[k]} />{label}
     </button>
   )
 }
@@ -390,7 +653,7 @@ function Guides() {
   const cell = (now, want, tol = 3) => {
     const ok = Math.abs(now - want) <= tol
     return (
-      <span style={{ color: ok ? '#6ee7b7' : '#f4a4a4' }}>
+      <span style={{ color: ok ? GREEN : '#f4a4a4' }}>
         {now.toFixed(1)} <span style={{ opacity: 0.5 }}>/ {want}</span>
       </span>
     )
@@ -404,12 +667,166 @@ function Guides() {
   )
 }
 
+/** กลุ่มพับได้ พร้อมสวิตช์ของกลุ่มที่หัว และป้ายบอกว่ามีกี่ค่าที่แก้ไปแล้ว */
+function Group({ g, open, onToggle, rows }) {
+  const t = useTuner()
+  const changed = g.rows.filter(([k]) => !isDefault(k, t[k])).length
+  const toggles = GROUP_TOGGLES[g.name]
+  return (
+    <div style={{ display: 'grid', gap: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={onToggle}
+          style={{ ...btn, border: 0, background: 'transparent', padding: '3px 0', flex: '1 1 auto', textAlign: 'left', opacity: 0.85 }}
+        >
+          <Ic icon={open ? IconChevronDown : IconChevronRight} size={12} />
+          <Ic icon={GROUP_ICONS[g.name]} />
+          {g.name}
+          {changed > 0 && <span style={{ color: GREEN, marginLeft: 6 }}>●{changed}</span>}
+        </button>
+        {toggles?.map(([k, label]) => <Toggle key={k} k={k} label={label} />)}
+      </div>
+      {open && g.name.startsWith('ทางเข้า') && <EntranceBar />}
+      {open && rows.map(([k, min, max, step, unit]) => <Row key={k} k={k} min={min} max={max} step={step} unit={unit} />)}
+    </div>
+  )
+}
+
+/**
+ * แถบควบคุมทางเข้า — เล่น / หยุด / ลากดูตำแหน่ง อยู่ที่หัวกลุ่มให้กดได้ทันที
+ *
+ * ปุ่มเล่นต้องปลดหยุดให้ด้วย ไม่งั้นกดแล้วภาพไม่ขยับ (ค้างอยู่ที่ enScrub) แล้วดูเหมือนปุ่มเสีย
+ * แถบลากใช้ได้เฉพาะตอนหยุด — ตอนเล่นอยู่ค่ามันถูกเวลาเขียนทับทุกเฟรม
+ */
+function EntranceBar() {
+  const t = useTuner()
+  const paused = t.enPause > 0.5
+  const from = t.enFrom
+  const to = t.enTo
+  const partial = from > 0.001 || to < 0.999
+  const slider = (value, onChange, extra) => (
+    <input
+      type="range"
+      min={0}
+      max={1}
+      step={0.005}
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+      style={{ width: 88, cursor: 'pointer', accentColor: GREEN, ...extra }}
+    />
+  )
+  return (
+    <div style={{ display: 'grid', gap: 3, width: '100%', padding: '2px 0 4px' }}>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          style={btn}
+          title={partial ? 'เล่นวนซ้ำเฉพาะช่วงที่เลือก' : 'เล่นใหม่ตั้งแต่ต้น'}
+          onClick={() => setTuner({ enPause: 0, enReplay: getTuner().enReplay + 1 })}
+        >
+          <Ic icon={IconPlayerPlay} />
+          {partial ? 'เล่นช่วงนี้' : 'เล่น'}
+        </button>
+        <button
+          type="button"
+          style={paused ? btnOn : btn}
+          title="หยุดค้าง แล้วลากแถบ ตำแหน่ง ดูทีละจุด"
+          onClick={() => setTuner({ enPause: paused ? 0 : 1 })}
+        >
+          <Ic icon={paused ? IconPlayerPlay : IconPlayerPause} />
+          {paused ? 'เล่นต่อ' : 'หยุด'}
+        </button>
+        <button
+          type="button"
+          style={btn}
+          title="คืนช่วงเป็นทั้งเส้น"
+          onClick={() => setTuner({ enFrom: 0, enTo: 1 })}
+        >
+          <Ic icon={IconRestore} />เต็มเส้น
+        </button>
+      </div>
+      {/* เริ่ม/จบ = ขอบของช่วงที่จะเล่น — ตั้งแล้วปุ่มเล่นจะวนซ้ำเฉพาะช่วงนี้ */}
+      <label style={{ display: 'grid', gridTemplateColumns: '34px 1fr 34px', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
+        <span style={{ opacity: 0.7 }}>เริ่ม</span>
+        {slider(from, (v) => setTuner({ enFrom: Math.min(v, to - 0.005) }))}
+        <span style={{ opacity: 0.7 }}>{from.toFixed(2)}</span>
+      </label>
+      <label style={{ display: 'grid', gridTemplateColumns: '34px 1fr 34px', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
+        <span style={{ opacity: 0.7 }}>จบ</span>
+        {slider(to, (v) => setTuner({ enTo: Math.max(v, from + 0.005) }))}
+        <span style={{ opacity: 0.7 }}>{to.toFixed(2)}</span>
+      </label>
+      <label style={{ display: 'grid', gridTemplateColumns: '34px 1fr 34px', gap: 4, alignItems: 'center', cursor: paused ? 'pointer' : 'not-allowed' }}>
+        <span style={{ opacity: paused ? 0.7 : 0.3 }}>ตำแหน่ง</span>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.005}
+          value={t.enScrub}
+          disabled={!paused}
+          title={paused ? 'ลากดูทีละตำแหน่งในช่วงที่เลือก' : 'กดหยุดก่อนถึงจะลากได้'}
+          onChange={(e) => setTuner({ enScrub: Number(e.target.value) })}
+          style={{ cursor: paused ? 'pointer' : 'not-allowed', opacity: paused ? 1 : 0.3, accentColor: GREEN }}
+        />
+        <span style={{ opacity: paused ? 0.7 : 0.3 }}>{t.enScrub.toFixed(2)}</span>
+      </label>
+    </div>
+  )
+}
+
+/** ช่อง A/B — จำค่าทั้งชุดไว้เทียบสองแบบสลับกันดูได้ทันที */
+function Snapshot({ slot }) {
+  const key = `${PANEL_KEY}.snap.${slot}`
+  const [has, setHas] = useState(() => !!localStorage.getItem(key))
+  return (
+    <span style={{ display: 'inline-flex', gap: 2 }}>
+      <button
+        type="button"
+        style={btn}
+        title={`จำค่าปัจจุบันไว้ในช่อง ${slot}`}
+        onClick={() => {
+          localStorage.setItem(key, JSON.stringify(getTuner()))
+          setHas(true)
+        }}
+      >
+        จำ {slot}
+      </button>
+      <button
+        type="button"
+        style={{ ...btn, opacity: has ? 1 : 0.4 }}
+        disabled={!has}
+        title={`เรียกค่าจากช่อง ${slot}`}
+        onClick={() => {
+          try {
+            setTuner(JSON.parse(localStorage.getItem(key)))
+          } catch {
+            /* ช่องว่าง */
+          }
+        }}
+      >
+        เรียก {slot}
+      </button>
+    </span>
+  )
+}
+
 export function CameraTuner() {
-  const [open, setOpen] = useState(true)
+  const [panel, setPanelState] = useState(loadPanel)
+  const setPanel = (patch) => setPanelState((p) => {
+    const next = { ...p, ...patch }
+    savePanel(next)
+    return next
+  })
+  const [q, setQ] = useState('')
+  const [changedOnly, setChangedOnly] = useState(false)
   const [ref, setRef] = useState('off')
   const [opacity, setOpacity] = useState(0.5)
   const [crop, setCrop] = useState(false)
   const [stage, setStage] = useState(null)
+  const [showCheck, setShowCheck] = useState(false)
+  const t = useTuner()
 
   // ครอบจอเป็นอัตราส่วนของชีท — เขียนลง :root ให้หน้าเพจอ่านไปใช้
   useEffect(() => {
@@ -423,6 +840,36 @@ export function CameraTuner() {
   useEffect(() => {
     setStage(document.getElementById('newhero-stage'))
   }, [])
+
+  /**
+   * กรอง: พิมพ์ค้นหาแล้วเหลือเฉพาะแถวที่ชื่อคีย์/คำอธิบาย/ชื่อกลุ่มตรง
+   * เปิด "เฉพาะที่แก้" แล้วเหลือแถวที่ค่าไม่เท่าค่าเริ่มต้น — ใช้ตอนจะคัดลอกไปวาง
+   * กำลังค้น = ทุกกลุ่มที่เจอถูกกางออกให้เลย ไม่ต้องไปกดเปิดทีละกลุ่ม
+   */
+  const query = q.trim().toLowerCase()
+  const visible = useMemo(
+    () =>
+      GROUPS.map((g) => {
+        const groupHit = query && g.name.toLowerCase().includes(query)
+        const rows = g.rows.filter(([k, , , , unit]) => {
+          if (changedOnly && isDefault(k, t[k])) return false
+          if (!query || groupHit) return true
+          return k.toLowerCase().includes(query) || (unit || '').toLowerCase().includes(query)
+        })
+        return { g, rows }
+      }).filter(({ rows }) => rows.length > 0 || (!query && !changedOnly)),
+    [query, changedOnly, t],
+  )
+  const filtering = !!query || changedOnly
+  const changedCount = Object.keys(DEFAULTS).filter((k) => !isDefault(k, t[k])).length
+
+  const copy = (onlyChanged) => {
+    const keys = Object.keys(DEFAULTS).filter((k) => !onlyChanged || !isDefault(k, t[k]))
+    const body = keys.map((k) => `  ${k}: ${t[k]},`).join('\n')
+    navigator.clipboard?.writeText(onlyChanged ? body + '\n' : `export const DEFAULTS = {\n${body}\n}\n`)
+  }
+
+  const side = panel.side === 'left' ? { left: 12 } : { right: 12 }
 
   return (
     <>
@@ -452,107 +899,141 @@ export function CameraTuner() {
        * แล้วขยับหน้าเอง แผงที่เลื่อนในตัวเองจึงไม่ได้รับล้อเลย — แอตทริบิวต์นี้คือทางออก
        * มาตรฐานของ Lenis สำหรับกล่องที่ต้องเลื่อนเองได้
        */}
-      <div style={box} data-lenis-prevent>
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          style={{ ...btn, width: '100%', borderRadius: '10px 10px 0 0', border: 0, textAlign: 'left', padding: '7px 10px' }}
-        >
-          {open ? '▾' : '▸'} ปรับมุมกล้อง /new-hero
-        </button>
-        {open && (
-          <div style={{ display: 'grid', gap: 8, padding: 10 }}>
-            <Guides />
-            <Readout />
+      <div style={{ ...box, ...side, width: panel.collapsed ? 'auto' : box.width }} data-lenis-prevent>
+        {/* หัวแผง: ยุบ/ขยาย, ย้ายข้าง — ไม่เลื่อนไปกับเนื้อหา */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', borderBottom: panel.collapsed ? 0 : '1px solid rgba(255,255,255,0.1)' }}>
+          <button
+            type="button"
+            onClick={() => setPanel({ collapsed: !panel.collapsed })}
+            style={{ ...btn, border: 0, background: 'transparent', padding: '2px 4px', flex: 1, textAlign: 'left' }}
+          >
+            <Ic icon={panel.collapsed ? IconChevronRight : IconChevronDown} size={12} />
+            <Ic icon={IconAdjustments} />
+            ปรับฉาก /new-hero
+            {changedCount > 0 && <span style={{ color: GREEN, marginLeft: 6 }}>●{changedCount}</span>}
+          </button>
+          {!panel.collapsed && (
+            <button type="button" style={btn} title="ย้ายแผงไปอีกข้าง" onClick={() => setPanel({ side: panel.side === 'left' ? 'right' : 'left' })}>
+              <Ic icon={panel.side === 'left' ? IconArrowRight : IconArrowLeft} />
+            </button>
+          )}
+        </div>
 
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              <Toggle k="props" label="ของลอย" />
-              <Toggle k="clay" label="clay" />
-              <Toggle k="grid" label="ตารางพื้น" />
-              <Toggle k="portal" label="พอร์ทัล" />
-              <Toggle k="joe" label="ฉาก joespresso" />
-              <Toggle k="joeSky" label="ฟ้า" />
-              <Toggle k="joeTerrain" label="เนิน" />
-              <Toggle k="joeFoliage" label="ต้นไม้" />
-              <Toggle k="portalWall" label="ผนังพอร์ทัล" />
-              <Toggle k="sw" label="หน้าต่างซ้อน" />
-              <Toggle k="te" label="เตตริส" />
-              <Toggle k="bc" label="สวิตช์" />
-              <Toggle k="skater" label="ตัวละคร" />
-              <Toggle k="idle" label="ไหวเบา ๆ" />
-              <Toggle k="breathe" label="ไหวข้อต่อ" />
-            </div>
-
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              {[
-                ['off', 'ปิด ref'],
-                ['sheet', 'ชีทเส้น'],
-                ['color', 'ภาพสี'],
-              ].map(([v, label]) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setRef(v)}
-                  style={{ ...btn, background: ref === v ? 'rgba(110,231,183,0.22)' : btn.background }}
-                >
-                  {label}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => setCrop((c) => !c)}
-                style={{ ...btn, background: crop ? 'rgba(110,231,183,0.22)' : btn.background }}
-                title="ครอบจอเป็นอัตราส่วน 1199x735 เท่าชีท"
-              >
-                กรอบ ref
-              </button>
-            </div>
-            {ref !== 'off' && (
-              <label style={{ display: 'grid', gridTemplateColumns: '78px 1fr', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
-                <span style={{ opacity: 0.72 }}>ความทึบ</span>
+        {!panel.collapsed && (
+          <>
+            {/* แถบเครื่องมือ: ค้นหา + ตัวกรอง + สวิตช์ที่ใช้บ่อย — ติดบนสุดตลอด */}
+            <div style={{ display: 'grid', gap: 6, padding: '8px 10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', gap: 4 }}>
                 <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={opacity}
-                  onChange={(e) => setOpacity(Number(e.target.value))}
-                  style={{ cursor: 'pointer', accentColor: '#6ee7b7' }}
+                  type="search"
+                  value={q}
+                  placeholder="ค้นหาคีย์ / คำอธิบาย / กลุ่ม…"
+                  onChange={(e) => setQ(e.target.value)}
+                  style={{ ...field, flex: 1, padding: '4px 6px' }}
                 />
-              </label>
-            )}
-
-            {GROUPS.map((g) => (
-              <div key={g.name} style={{ display: 'grid', gap: 4 }}>
-                <div style={{ opacity: 0.5, marginTop: 2 }}>{g.name}</div>
-                {g.rows.map(([k, min, max, step, unit]) => (
-                  <Row key={k} k={k} min={min} max={max} step={step} unit={unit} />
-                ))}
+                <button
+                  type="button"
+                  style={changedOnly ? btnOn : btn}
+                  title="แสดงเฉพาะค่าที่ต่างจากค่าเริ่มต้น"
+                  onClick={() => setChangedOnly((c) => !c)}
+                >
+                  <Ic icon={IconFilter} />ที่แก้
+                </button>
               </div>
-            ))}
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {QUICK_TOGGLES.map(([k, label]) => <Toggle key={k} k={k} label={label} />)}
+                <button type="button" style={showCheck ? btnOn : btn} onClick={() => setShowCheck((c) => !c)}>
+                  <Ic icon={IconRuler} />ตรวจ/ref
+                </button>
+              </div>
+              {!filtering && (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button type="button" style={btn} onClick={() => setPanel({ open: Object.fromEntries(GROUPS.map((g) => [g.name, true])) })}>
+                    <Ic icon={IconArrowsMaximize} />ขยายทั้งหมด
+                  </button>
+                  <button type="button" style={btn} onClick={() => setPanel({ open: {} })}>
+                    <Ic icon={IconArrowsMinimize} />ย่อทั้งหมด
+                  </button>
+                </div>
+              )}
+            </div>
 
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button
-                type="button"
-                style={btn}
-                onClick={() => {
-                  const t = getTuner()
-                  const body = Object.keys(DEFAULTS)
-                    .map((k) => `  ${k}: ${t[k]},`)
-                    .join('\n')
-                  navigator.clipboard?.writeText(`export const DEFAULTS = {\n${body}\n}\n`)
-                }}
-              >
-                คัดลอกค่า
-              </button>
-              <button type="button" style={btn} onClick={resetTuner}>
-                คืนค่าเริ่มต้น
-              </button>
+            <div style={{ overflowY: 'auto', display: 'grid', gap: 10, padding: 10, alignContent: 'start' }}>
+              {showCheck && (
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <Guides />
+                  <Readout />
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {[
+                      ['off', 'ปิด ref'],
+                      ['sheet', 'ชีทเส้น'],
+                      ['color', 'ภาพสี'],
+                    ].map(([v, label]) => (
+                      <button key={v} type="button" onClick={() => setRef(v)} style={ref === v ? btnOn : btn}>
+                        {label}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setCrop((c) => !c)}
+                      style={crop ? btnOn : btn}
+                      title="ครอบจอเป็นอัตราส่วน 1199x735 เท่าชีท"
+                    >
+                      กรอบ ref
+                    </button>
+                  </div>
+                  {ref !== 'off' && (
+                    <label style={{ display: 'grid', gridTemplateColumns: '96px 1fr', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
+                      <span style={{ opacity: 0.72 }}>ความทึบ</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        value={opacity}
+                        onChange={(e) => setOpacity(Number(e.target.value))}
+                        style={{ cursor: 'pointer', accentColor: GREEN }}
+                      />
+                    </label>
+                  )}
+                </div>
+              )}
+
+              {visible.length === 0 && <div style={{ opacity: 0.5 }}>ไม่มีแถวที่ตรง</div>}
+              {visible.map(({ g, rows }) => (
+                <Group
+                  key={g.name}
+                  g={g}
+                  rows={rows}
+                  open={filtering || !!panel.open[g.name]}
+                  onToggle={() => setPanel({ open: { ...panel.open, [g.name]: !panel.open[g.name] } })}
+                />
+              ))}
             </div>
-            <div style={{ opacity: 0.45 }}>
-              คัดลอกแล้ววางทับ DEFAULTS ใน src/newhero/tuner.js เพื่อยึดค่าเป็นถาวร
+
+            {/* ท้ายแผง: คัดลอก / คืนค่า / ช่อง A-B — ติดล่างตลอด */}
+            <div style={{ display: 'grid', gap: 6, padding: '8px 10px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                <button type="button" style={btn} onClick={() => copy(false)} title="คัดลอก DEFAULTS ทั้งก้อน วางทับใน tuner.js">
+                  <Ic icon={IconCopy} />คัดลอกทั้งหมด
+                </button>
+                <button type="button" style={btn} onClick={() => copy(true)} title="คัดลอกเฉพาะบรรทัดที่ต่างจากค่าเริ่มต้น">
+                  คัดลอกที่แก้ ({changedCount})
+                </button>
+                <button type="button" style={btn} onClick={resetTuner}>
+                  <Ic icon={IconRestore} />คืนค่าเริ่มต้น
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ opacity: 0.5 }}>เทียบ</span>
+                <Snapshot slot="A" />
+                <Snapshot slot="B" />
+              </div>
+              <div style={{ opacity: 0.4, fontSize: 9.5 }}>
+                ดับเบิลคลิกชื่อคีย์ = คืนค่าเดิม · shift+ลูกศรบนสไลเดอร์ = ก้าว ×10
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
     </>

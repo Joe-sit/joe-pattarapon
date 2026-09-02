@@ -169,6 +169,17 @@ const SKATE_ARM = {
   wristY: 0,
   wristZ: 0,
   handScale: 1,
+  /** เลื่อนมือจากปลายแขน — x = ออกนอกตัว, y = ขึ้น, z = ไปหน้า (หน่วยของ mascot) */
+  handX: 0,
+  handY: 0,
+  handZ: 0,
+  mugWristX: 0,
+  mugWristY: 0,
+  mugWristZ: 0,
+  mugHandScale: 1,
+  mugHandX: 0,
+  mugHandY: 0,
+  mugHandZ: 0,
   mugShX: 0,
   mugShY: 0,
   mugShZ: -1.05,
@@ -198,6 +209,8 @@ function debugMat(i) {
 const HEAD_SCALE = 0.92
 
 // ตัวช่วยชั่วคราวใน useFrame — ปั้นใหม่ทุกเฟรมคือขยะให้ GC เก็บ 60 ครั้ง/วินาที
+const RIM_DIR = new THREE.Vector3()
+const DEG = Math.PI / 180
 const TMP_Q = new THREE.Quaternion()
 const TMP_E = new THREE.Euler()
 const INTRO_EYE = new THREE.Vector3()
@@ -232,6 +245,20 @@ const HEAD_PITCH_LIM = 0.3
 const TMP_V = new THREE.Vector3()
 const TMP_V2 = new THREE.Vector3()
 const TMP_Q2 = new THREE.Quaternion()
+/** ท่าพักว่าง ๆ สำหรับข้อต่อที่ไม่มี rest เก็บไว้ — อ่านอย่างเดียว ห้ามเขียนทับ */
+const IDENT_Q = new THREE.Quaternion()
+
+/**
+ * เลื่อนข้อต่อออกจากตำแหน่งตั้งต้น — จำตำแหน่งเดิมไว้ครั้งแรกแล้วเขียนทับจากค่านั้นทุกเฟรม
+ *
+ * บวกเข้าตำแหน่งปัจจุบันตรง ๆ คือค่าจะสะสมทุกเฟรมจนชิ้นส่วนลอยหลุดออกไป
+ * x คูณทิศ outward ของแขนข้างนั้น ค่าบวกจึงแปลว่า "ออกนอกตัว" เหมือนกันทั้งสองข้าง
+ */
+function movePart(part, arm, x = 0, y = 0, z = 0) {
+  if (!part) return
+  const b = (part.userData.basePos ??= part.position.clone())
+  part.position.set(b.x + x * (arm?.userData.outward ?? 1), b.y + y, b.z - z)
+}
 // IK ท่ายกแก้วดื่ม (ฉาก 2)
 // เล็งแขนชี้: ท่าตั้งต้นกับแกนแขนของท่านั้น
 const AIM_DEF = new THREE.Quaternion()
@@ -442,6 +469,18 @@ export function Mascot({
   skydive = false,
   /** ท่ายืนเล่นสเก็ต — ย่อเข่าลึก บิดลำตัว กางแขนเป็น T (ดูภาพ ref 12739:335) */
   skate = false,
+  /** ความคมของ rim (ค่าสูง = ขอบบางเฉียบ) — ใช้กับท่า skate */
+  rimPower = 4.2,
+  /** ความสว่างของ rim */
+  rimBoost = 0.5,
+  /** ขอบเขตของขอบ (0 = fresnel ล้วน) ความนุ่มของเกณฑ์ น้ำหนักทิศไฟ และทิศไฟ (องศา, โลก) */
+  rimEdge = 0,
+  rimSoft = 0.1,
+  rimDirMix = 0,
+  rimYaw = 160,
+  rimPitch = 35,
+  /** ตัดแสงเป็นชั้น (0/1 = ไล่เฉดปกติ, 2-4 = แบนแบบเวกเตอร์) */
+  flatBands = 0,
   /** สเกลทั้งแขน (ทั้งสองข้าง) — ใช้ตอนจูนสัดส่วนแขนกับลำตัว */
   armScale = 1,
   /** สเกลเฉพาะท่อนล่าง+มือ — แยกจาก armScale เพราะมือของ mascot ใหญ่กว่าสัดส่วนแขน */
@@ -463,6 +502,12 @@ export function Mascot({
    * หมุนสะโพกกลับเท่ากัน เท้าจึงอยู่กับที่ — ริกตัวนี้ไม่มีข้อต่อเอวให้หมุนตรง ๆ
    */
   torsoPose = null,
+  /**
+   * หน้าการ์ตูนในท่า skate — สัดส่วนเทียบกล่องหัว (W กว้าง / H สูง) ดู face ใน useFrame
+   * { eye, gap, eyeY, pupil, pupilX, pupilY, look, brow, browY, browArc, browTilt,
+   *   mouth, mouthH, mouthX, mouthY, lookEvery, blinkEvery }
+   */
+  facePose = null,
   /** ไหวเบา ๆ ของท่า skate — ปิดเพื่อจับท่านิ่งตอนจูน */
   poseIdle = true,
   /** ซ่อนแก้วกาแฟ — ฉากที่ตัวละครไม่ได้อยู่โหมดทำงาน (เช่นกำลังโต้คลื่น) ถือแก้วแล้วประหลาด */
@@ -694,6 +739,8 @@ export function Mascot({
     // GLB export แยก material ให้ทุก mesh ถึงจะสีเดียวกัน (ผมดำ 6 ชิ้น = 6 material)
     // ยุบตามหน้าตาจริง — ลด state change ต่อเฟรม และ addRim ก็คอมไพล์ shader ครั้งเดียวต่อสี
     const matCache = new Map()
+    /** วัสดุที่ใส่ rim ไว้ — เก็บรายชื่อไว้ให้แผง debug ปรับความคม/ความแรงได้ทีหลัง */
+    const rimMats = []
     const shared = (src) => {
       const key = `${src.type}|${src.color?.getHexString()}|${src.opacity}|${src.transparent}|${src.map?.uuid ?? ''}`
       let m = matCache.get(key)
@@ -710,6 +757,7 @@ export function Mascot({
         // — ลูกตาเป็น MeshBasicMaterial ชิ้นเดียวในโมเดล จึงหายไปทั้งคู่
         if (m.isMeshStandardMaterial) {
           addRim(m, { color: '#FFF3DC', intensity: 0.5, power: 4.2 })
+          rimMats.push(m)
         }
         matCache.set(key, m)
       }
@@ -772,6 +820,91 @@ export function Mascot({
         e.castShadow = false // ตายื่นพ้นผิวหน้านิดเดียว ถ้าทอดเงาจะกลายเป็นรอยด่างข้างตา
         addCatchlights(e, n)
       }
+    }
+
+    /**
+     * หน้าการ์ตูนของท่า skate — ตาขาวครึ่งวงกลม + ลูกตาดำ + คิ้วโค้ง + ปากอ้าเป็นวงรี
+     *
+     * GLB มีแค่ตาดำสองแท่ง ภาพอ้างอิงเป็นหน้า "ตกใจ/ตื่นเต้น" ที่มีตาขาว คิ้ว และปาก
+     * ปั้นเป็นแผ่นแบนแปะบนผิวหน้า ในสเปซของกลุ่มหัว จึงหันตาม/ก้มเงยตามหัวเสมอ
+     *
+     * ทุกขนาดเป็นสัดส่วนของความกว้าง (W) / ความสูง (H) ของกล่องหัว — ไม่มีตัวเลขหน่วยโลก
+     * geometry ทุกชิ้นขนาดหน่วย 1 แล้วไปตั้ง scale ตอน useFrame ให้ปุ่มปรับสดได้โดยไม่ต้องปั้นใหม่
+     */
+    if (skate && parts.head && parts.eye.length) {
+      const head = parts.head
+      const parent = parts.eye[0].parent
+      /**
+       * คิดทุกอย่างในพิกัดของกลุ่มที่แปะหน้า (parent) ไม่ใช่พิกัดโลก
+       *
+       * ตอนตั้งโครง ตัวละครอาจถูกย่อ/ขยายอยู่โดยกลุ่มแม่ (เช่นทางเข้าที่เริ่มตัวเล็ก 0.45 เท่า)
+       * วัดขนาดหัวเป็นหน่วยโลกแล้วเอาไปตั้งเป็น scale/ตำแหน่งในพิกัดหัว = ผิดสเกลเท่านั้นพอดี
+       * ทุกชิ้นหดเข้าหากึ่งกลางหัวแล้วไปโผล่บนผม ใช้เมทริกซ์สัมพัทธ์ parent→head จึงไม่ขึ้นกับใคร
+       */
+      model.updateMatrixWorld(true)
+      head.geometry.computeBoundingBox()
+      const hb = head.geometry.boundingBox
+      const rel = parent.matrixWorld.clone().invert().multiply(head.matrixWorld)
+      const hc = hb.getCenter(new THREE.Vector3()).applyMatrix4(rel)
+      const relScale = new THREE.Vector3().setFromMatrixScale(rel)
+      const relRot = new THREE.Quaternion().setFromRotationMatrix(rel)
+      // หน้าอยู่ฝั่งไหน: ทิศจากกลางหัวไปกึ่งกลางระหว่างตาสองข้าง (ตาเป็นลูกของ parent อยู่แล้ว)
+      const eyeMid = new THREE.Vector3()
+      parts.eye.forEach((e) => eyeMid.add(e.position))
+      eyeMid.multiplyScalar(1 / parts.eye.length)
+      const nRaw = eyeMid.clone().sub(hc).setY(0).normalize()
+      // ล็อกเข้ากับแกนกล่องหัว — ตาไม่ได้อยู่กึ่งกลางเป๊ะ ทิศดิบเฉียง แผ่นจะโผล่พ้นมุมกล่อง
+      const nHead = nRaw.clone().applyQuaternion(TMP_Q.copy(relRot).invert())
+      if (Math.abs(nHead.x) > Math.abs(nHead.z)) nHead.set(Math.sign(nHead.x), 0, 0)
+      else nHead.set(0, 0, Math.sign(nHead.z))
+      const n = nHead.applyQuaternion(relRot).setY(0).normalize()
+      const sizeW = hb.getSize(new THREE.Vector3()).multiply(relScale)
+      // กว้าง = ด้านที่ตั้งฉากกับทิศหน้าในระนาบนอน, ลึก = ด้านตามทิศหน้า
+      const side = new THREE.Vector3().crossVectors(n, new THREE.Vector3(0, 1, 0)).normalize()
+      const W = Math.abs(side.x) * sizeW.x + Math.abs(side.z) * sizeW.z
+      const D = Math.abs(n.x) * sizeW.x + Math.abs(n.z) * sizeW.z
+      const H = sizeW.y
+
+      /**
+       * หน้าเป็น "texture" แผ่นเดียวแนบผิวหน้า ไม่ใช่ชิ้นลอยหลายชิ้น
+       *
+       * วาดตา/คิ้ว/ปากลง canvas แล้วแปะเป็น map บนแผ่นขนาดเท่าหน้ากล่อง (W×H) ห่างผิว
+       * แค่ 0.002 + polygonOffset กันแย่งความลึก จึงอ่านเป็นลายบนผิว ไม่มีขอบลอย/เงาแยก
+       * แอนิเมชันคือการวาด canvas ใหม่ทุกเฟรม (512² ราคาถูกมาก) — ลูกตาดำ "อยู่ใน" ตาขาว
+       * ด้วย clip path ของ canvas ตรง ๆ ไม่ต้องใช้ clipping plane ของ GPU
+       */
+      const size = 512
+      const canvas = document.createElement('canvas')
+      canvas.width = size
+      canvas.height = size
+      const tex = new THREE.CanvasTexture(canvas)
+      tex.colorSpace = THREE.SRGBColorSpace
+      tex.anisotropy = 4
+      const mat = new THREE.MeshBasicMaterial({
+        map: tex,
+        transparent: true,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -4,
+        polygonOffsetUnits: -4,
+      })
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat)
+      plane.castShadow = false
+      plane.receiveShadow = false
+      plane.userData.keepColor = true
+      plane.userData.noMerge = true
+      parent.add(plane)
+      plane.position.copy(hc).addScaledVector(n, D / 2 + 0.002)
+      plane.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n)
+      plane.userData.basePos = plane.position.clone()
+      plane.userData.baseQuat = plane.quaternion.clone()
+
+      const face = { group: plane, W, H, canvas, ctx: canvas.getContext('2d'), tex, size }
+      rig.current.face = face
+      // ตาดำเดิมของ GLB ไม่ใช้ในหน้าแบบนี้
+      parts.eye.forEach((e) => {
+        e.visible = false
+      })
     }
 
     // GLB มีผมแค่บล็อกบน — เติมแผ่นผมคลุมท้ายทอยลงถึงต้นคอ
@@ -1578,8 +1711,6 @@ export function Mascot({
       // หน้าตัดโคนกำปั้นจึงไม่บรรจบกับปลายท่อนแขน เห็นเป็นก้อนเหลื่อมกันอยู่
       // แกนพาดผ่านศูนย์กลางฝ่ามืออยู่แล้ว จึงเหลือแค่เลื่อนตามแกน ไม่ต้องดึงเข้าด้านข้างอีก
       const along = armEnd - F * 0.2 - handLo
-      // จุดต่อจริงระหว่างปลายแขนกับมือ (ในสเปซไหล่) — ที่นี่คือที่ที่ข้อมือควรหมุนรอบ
-      arm.wrist.userData.jointInShoulder = axis.clone().multiplyScalar(armEnd - F * 0.2)
       const move = axis.clone().multiplyScalar(along)
       arm.wrist.position.add(move.applyQuaternion(arm.elbow.quaternion.clone().invert()))
       model.updateMatrixWorld(true)
@@ -1679,47 +1810,28 @@ export function Mascot({
         // ซึ่งเป็นทรงแบนสูง พอยืดออกไปเลยได้ไม้บรรทัดแทนที่จะเป็นนิ้ว
         const thick = rowW * 0.36
 
-        const finger = new THREE.Mesh(
-          new THREE.BoxGeometry(thick, len, thick),
-          index.o.userData.clayFrom ?? index.o.material,
-        )
-        finger.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
-        // โคนนิ้วทาบที่เดิมของข้อนิ้ว แล้วยืดออกไปข้างหน้าอย่างเดียว
-        finger.position.copy(index.c).addScaledVector(dir, (len - knuckleLen) / 2)
-        finger.castShadow = finger.receiveShadow = true
-        // ซ่อนข้อนิ้วเดิม กล่องใหม่คลุมตำแหน่งเดียวกัน จะได้ไม่ z-fight
-        index.o.visible = false
-        wrist.add(finger)
-        rig.current.pointFinger = finger
+        /**
+         * ท่า skate ไม่ชี้ — เก็บกำปั้นเดิมไว้ ไม่ยืดนิ้วชี้ออกมา
+         * (แขนกางไว้ทรงตัว นิ้วที่ชี้ค้างอ่านเป็น "ชี้ไปที่อะไร" ทั้งที่ไม่มีอะไรให้ชี้)
+         */
+        if (!skate) {
+          const finger = new THREE.Mesh(
+            new THREE.BoxGeometry(thick, len, thick),
+            index.o.userData.clayFrom ?? index.o.material,
+          )
+          finger.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
+          // โคนนิ้วทาบที่เดิมของข้อนิ้ว แล้วยืดออกไปข้างหน้าอย่างเดียว
+          finger.position.copy(index.c).addScaledVector(dir, (len - knuckleLen) / 2)
+          finger.castShadow = finger.receiveShadow = true
+          // ซ่อนข้อนิ้วเดิม กล่องใหม่คลุมตำแหน่งเดียวกัน จะได้ไม่ z-fight
+          index.o.visible = false
+          wrist.add(finger)
+          rig.current.pointFinger = finger
+        }
       }
 
       alignHandToArm(armPoint)
       rebuildForearm(armPoint)
-
-      /**
-       * ท่า skate: ย้ายจุดหมุนข้อมือไปไว้ที่ "รอยต่อปลายแขน-มือ" จริง
-       *
-       * centerPivot วางจุดหมุนไว้กลางก้อนที่กลุ่มข้อมือถืออยู่ ซึ่งอยู่กลางมือ ไม่ใช่ที่ข้อ
-       * หมุนแล้วมือจึงเหวี่ยงเป็นวงรอบตัวเอง หลุดออกจากปลายแขนเป็นรอยสะดุด อ่านเป็น
-       * ข้อศอกอันที่สองแทนที่จะเป็นข้อมือ ย้ายจุดหมุนแล้วชดเชยตำแหน่งลูกกลับเท่าเดิม —
-       * ท่าปัจจุบันไม่เปลี่ยน แต่หมุนแล้วงอถูกที่
-       *
-       * ทำเฉพาะท่า skate: ท่ายืนของ /joespresso จูนค่ามุมข้อมือมาบนจุดหมุนเดิม
-       */
-      if (skate && armPoint.wrist.userData.jointInShoulder) {
-        const wrist = armPoint.wrist
-        const elbow = armPoint.elbow
-        // สเปซไหล่ -> สเปซศอก (พ่อของข้อมือ)
-        const pElbow = wrist.userData.jointInShoulder
-          .clone()
-          .sub(elbow.position)
-          .applyQuaternion(elbow.quaternion.clone().invert())
-        const delta = pElbow.clone().sub(wrist.position)
-        wrist.position.copy(pElbow)
-        const inLocal = delta.applyQuaternion(wrist.quaternion.clone().invert())
-        wrist.children.forEach((c) => c.position.sub(inLocal))
-        model.updateMatrixWorld(true)
-      }
 
       // ท่า "เก็บแขนแนบตัว" ของแขนชี้ — ใช้ตอน scroll เข้าฉาก 2 (ยกแก้วดื่ม ไม่ควรชี้ค้างไว้)
       // ไม่ได้ตั้งมุมเอา แต่คำนวณจากแกนแขนจริง (ต้นแขน -> ปลายแขน ที่ rebuildForearm วัดไว้)
@@ -1730,6 +1842,77 @@ export function Mascot({
           pAxis.clone().normalize(),
           new THREE.Vector3(0.05 * (armPoint.outward ?? 1), -1, 0).normalize(),
         )
+      }
+
+      /**
+       * ท่า skate: คืนชิ้นปลายแขนจากกลุ่มข้อมือกลับไปอยู่กับข้อศอก
+       *
+       * mkArm ตัดกลุ่มข้อมือด้วยระดับ y ที่ 42% ของช่วงปลายแขน ชิ้นปลายแขนจึงตกอยู่ในกลุ่ม
+       * ข้อมือไปด้วย หมุนข้อมือทีไรปลายแขนกวาดตามทั้งท่อน — เป็นเหตุที่สไลเดอร์ข้อมือกับ
+       * ข้อศอกให้ผลเหมือนกัน
+       *
+       * แยกด้วย "ฝั่งของจุดหมุนข้อมือตามแกนแขน" ไม่ใช่ขนาดชิ้น: ฝ่ามือกับปลายแขนใหญ่พอ ๆ กัน
+       * แต่คนละฝั่งของข้อเสมอ ทำตรงนี้เพราะทุกอย่างที่ต้องวัดจากโครงเดิมทำเสร็จหมดแล้ว
+       * และต้องมาก่อน mergeArm ไม่งั้นทั้งท่อนถูกรวมเป็นเมชเดียวแล้วแยกไม่ได้อีก
+       */
+      if (skate && armPoint.shoulder.userData.armAxis) {
+        const wrist = armPoint.wrist
+        // แกนแขนในสเปซของข้อมือ — วัดว่าชิ้นไหนอยู่ไกลจากไหล่แค่ไหนตามความยาวแขน
+        const axis = armPoint.shoulder.userData.armAxis
+          .clone()
+          .applyQuaternion(TMP_Q.copy(armPoint.elbow.quaternion).invert())
+          .applyQuaternion(TMP_Q2.copy(wrist.quaternion).invert())
+          .normalize()
+        const parts = []
+        wrist.children.forEach((o) => {
+          if (!o.isMesh) return
+          o.updateMatrix()
+          o.geometry.computeBoundingBox()
+          const bb = o.geometry.boundingBox
+          const c = bb.getCenter(new THREE.Vector3()).applyMatrix4(o.matrix)
+          // ระยะที่ขอบใกล้ไหล่ที่สุดของชิ้นนี้อยู่ — ใช้หาว่าเนื้อมือเริ่มตรงไหน
+          let lo = Infinity
+          for (const x of [bb.min.x, bb.max.x])
+            for (const y of [bb.min.y, bb.max.y])
+              for (const z of [bb.min.z, bb.max.z])
+                lo = Math.min(lo, TMP_V.set(x, y, z).applyMatrix4(o.matrix).dot(axis))
+          parts.push({ o, d: c.dot(axis), lo })
+        })
+        if (parts.length > 1) {
+          /**
+           * แบ่งปลายแขนกับมือที่ "ช่องว่างที่กว้างที่สุด" ตามแกนแขน
+           *
+           * แยกด้วยขนาดชิ้นไม่ได้ ฝ่ามือกับปลายแขนใหญ่พอ ๆ กัน แต่ตามแนวแขนมันแยกกันชัด:
+           * ปลายแขนอยู่ราว 0.1-0.4 ส่วนกำปั้นกับนิ้วอยู่ 0.8 ขึ้นไป ช่องตรงกลางคือข้อมือ
+           */
+          const sorted = [...parts].sort((a, b) => a.d - b.d)
+          let cut = 0
+          let gap = 0
+          for (let i = 1; i < sorted.length; i += 1) {
+            const g = sorted[i].d - sorted[i - 1].d
+            if (g > gap) {
+              gap = g
+              cut = (sorted[i].d + sorted[i - 1].d) / 2
+            }
+          }
+          const arm = parts.filter((p) => p.d < cut)
+          const hand = parts.filter((p) => p.d >= cut)
+          if (arm.length && hand.length) {
+            // ชิ้นปลายแขนกลับไปอยู่กับข้อศอก — ต้องทำก่อน mergeArm ไม่งั้นถูกรวมเป็นเมชเดียวกับมือ
+            arm.forEach((p) => armPoint.elbow.attach(p.o))
+            /**
+             * แล้วเลื่อนจุดหมุนข้อมือไปไว้ที่โคนมือ ชดเชยตำแหน่งลูกกลับเท่าเดิม
+             *
+             * mkArm วางจุดหมุนไว้ที่ 42% ของช่วงปลายแขน ซึ่งอยู่กลางท่อนแขน ไม่ใช่ที่ข้อ
+             * หมุนแล้วมือจะเหวี่ยงเป็นวงกว้างหลุดออกจากแขน แทนที่จะพับอยู่กับที่
+             */
+            const lo = Math.min(...hand.map((p) => p.lo))
+            const shift = axis.clone().multiplyScalar(lo)
+            wrist.position.add(shift.clone().applyQuaternion(wrist.quaternion))
+            wrist.children.forEach((c) => c.position.sub(shift))
+            model.updateMatrixWorld(true)
+          }
+        }
       }
 
       // รายชื่อชิ้นส่วนแขน เรียงจากบ่าออกไปหาปลายนิ้ว — ใช้กับโหมดทาสีแยกชิ้น (slider 'แยกสีชิ้นแขน')
@@ -1744,6 +1927,8 @@ export function Mascot({
     const armMug = cloneMirroredArm(armPoint)
     rig.current.mugShoulder = armMug?.shoulder
     rig.current.mugElbow = armMug?.elbow
+    // ข้อมือของแขนนี้ไม่เคยถูกเก็บไว้ ท่ายืนไม่ได้ใช้ — ท่า skate ต้องหมุนมือข้างนี้ได้ด้วย
+    rig.current.mugWrist = armMug?.wrist
 
     if (armMug) {
       /**
@@ -1873,17 +2058,25 @@ export function Mascot({
 
     headGroup.current = g
     eyes.current = parts.eye
+    /** กึ่งกลางระหว่างตาสองข้าง — ใช้บอกว่าตาไหนซ้าย/ขวาตอนเลื่อนออกจากกัน */
+    const eyeMidX = parts.eye.length
+      ? parts.eye.reduce((a, e) => a + e.position.x, 0) / parts.eye.length
+      : 0
     eyes.current.forEach((e) => {
       e.userData.baseScale = e.scale.clone()
+      e.userData.basePos = e.position.clone()
+      e.userData.side = e.position.x >= eyeMidX ? 1 : -1
       // โหมดปั้น (ClayMode ใน App.jsx) ทาเทาทั้งฉาก — เว้นตาไว้ ไม่งั้นดูไม่ออกว่าหัวหันทางไหน
       e.userData.keepColor = true
     })
 
+    rig.current.rimMats = rimMats
     model.userData.rig = rig.current
     model.userData.headGroup = g
     model.userData.eyes = parts.eye
 
   }, [model, skate])
+
 
 
   /**
@@ -1932,6 +2125,8 @@ export function Mascot({
   const bodyTurn = useRef(0)
   const cur = useRef({ x: 0, y: 0 })
   const blink = useRef({ next: 2, closing: 0 })
+  /** กวาดตา (ท่า skate): เป้าหมายสุ่ม + ค่าปัจจุบันที่หน่วงตาม */
+  const gaze = useRef({ next: 1.5, tx: 0, ty: 0, x: 0, y: 0 })
   // บีต eyes — ตาโต + ประกาย
   const eyeGrow = useRef(0)
   // มุมหันหัวช่วง intro — เป็นสปริง จึงต้องเก็บทั้งมุม ความเร็ว และมุมที่คอตามหลัง
@@ -2656,6 +2851,32 @@ export function Mascot({
      * (userData ถูกก๊อบผ่าน JSON ตอนโคลน) จึงคิดต่อจาก quaternion ท่าพักของมันเอง
      */
     if (skate) {
+      /**
+       * ปรับ rim สด ๆ — power คุมความคม (สูง = ขอบบางเฉียบ), intensity คุมความสว่าง
+       * เขียนทับ uniform ตรง ๆ ไม่ recompile shader จึงไม่กระตุกตอนลากสไลเดอร์
+       */
+      if (rig.current.rimMats) {
+        /**
+         * ทิศไฟขอบ: องศาในโลก -> เวกเตอร์หน่วย -> view space ของกล้องเฟรมนี้
+         * shader คิดใน view space (normal/vViewPosition อยู่ที่นั่น) ทิศไฟจึงต้องตามกล้อง
+         * ไม่งั้นพอกล้องขยับ ขอบจะย้ายไปอยู่คนละฝั่งของตัว
+         */
+        const yaw = rimYaw * DEG
+        const pitch = rimPitch * DEG
+        RIM_DIR.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch))
+          .transformDirection(state.camera.matrixWorldInverse)
+        for (const m of rig.current.rimMats) {
+          const u = m.userData.rimU
+          if (!u) continue
+          u.rimPower.value = rimPower
+          u.rimIntensity.value = rimBoost
+          u.rimBands.value = flatBands
+          u.rimEdge.value = rimEdge
+          u.rimSoft.value = rimSoft
+          u.rimDirMix.value = rimDirMix
+          u.rimDir.value.copy(RIM_DIR)
+        }
+      }
       const t = state.clock.elapsedTime
       /**
        * ไหวคนละความถี่ ไม่เป็นเท่าตัวกัน — ผลรวมไม่วนซ้ำให้ตาจับ
@@ -2726,6 +2947,13 @@ export function Mascot({
           .copy(r.pointWrist.userData.rest)
           .multiply(TMP_Q.setFromEuler(TMP_E.set(ap.wristX, ap.wristY, ap.wristZ)))
         /**
+         * เลื่อนมือออกจากปลายแขน — เขียนจากตำแหน่งตั้งต้นทุกเฟรม ไม่ใช่บวกสะสม
+         *
+         * บวกสะสมแล้วค่าจะไหลไปเรื่อย ๆ ทุกเฟรมจนมือหลุดออกนอกจอ
+         * x คูณทิศ outward ให้ค่าบวกแปลว่า "ออกนอกตัว" เหมือนกันทั้งสองข้าง
+         */
+        movePart(r.pointWrist, r.pointShoulder, ap.handX, ap.handY, ap.handZ)
+        /**
          * ย่อ/ขยายเฉพาะ "มือ"
          *
          * ริกนี้ปั้นมือใหญ่กว่าปลายแขนมาก (กำปั้น+นิ้วยาวรวมราว 0.7 หน่วย ส่วนปลายแขนราว 0.2)
@@ -2769,6 +2997,17 @@ export function Mascot({
           ud.baseY + (ap.mugUp ?? 0),
           ud.baseZ - (ap.mugFwd ?? 0),
         )
+      }
+      // มือฝั่งแก้ว — โครงเดียวกับแขนอีกข้าง (เป็นสำเนากระจก) จึงคุมด้วยวิธีเดียวกัน
+      if (r.mugWrist) {
+        const rest = r.mugWrist.userData.rest
+        r.mugWrist.quaternion
+          .copy(rest ?? IDENT_Q)
+          .multiply(
+            TMP_Q.setFromEuler(TMP_E.set(ap.mugWristX ?? 0, ap.mugWristY ?? 0, ap.mugWristZ ?? 0)),
+          )
+        r.mugWrist.scale.setScalar(ap.mugHandScale ?? 1)
+        movePart(r.mugWrist, r.mugShoulder, ap.mugHandX, ap.mugHandY, ap.mugHandZ)
       }
       // ศอกฝั่งแก้วอยู่ที่ท่าพักพอดี — บิดเพิ่มเมื่อไรปลายแขนจะหักออกจากแนวท่อนบนทันที
       if (r.mugElbow?.userData.rest) {
@@ -2860,10 +3099,33 @@ export function Mascot({
 
     // กระพริบตา: ย่อแกน Y ของ mesh ตา
     const b = blink.current
+    const fp = skate ? facePose : null
     b.next -= delta
     if (b.next <= 0) {
       b.closing = 0.13
-      b.next = 2.4 + Math.random() * 3.6
+      b.next = fp ? (fp.blinkEvery ?? 4.2) * (0.6 + Math.random() * 0.85) : 2.4 + Math.random() * 3.6
+      // นาน ๆ ทีกระพริบสองครั้งติด — คนจริงทำ ทำให้ไม่อ่านเป็นนาฬิกา
+      if (fp && Math.random() < 0.22) b.next = 0.32
+    }
+    /**
+     * กวาดตา: เลือกจุดมองใหม่เป็นระยะ แล้วค่อย ๆ เลื่อนไป (ไม่กระโดด)
+     * บางครั้งกลับมามองตรง — ถ้าสุ่มไปเรื่อยจะดูเหมือนหาอะไรตลอดเวลา
+     */
+    const gz = gaze.current
+    if (fp) {
+      gz.next -= delta
+      if (gz.next <= 0) {
+        gz.next = (fp.lookEvery ?? 3) * (0.5 + Math.random())
+        if (Math.random() < 0.35) {
+          gz.tx = 0
+          gz.ty = 0
+        } else {
+          gz.tx = Math.random() * 2 - 1
+          gz.ty = (Math.random() * 2 - 1) * 0.5
+        }
+      }
+      gz.x = damp(gz.x, gz.tx, 0.14, dt)
+      gz.y = damp(gz.y, gz.ty, 0.14, dt)
     }
     // ระหว่าง close-up ของ intro ห้ามกระพริบตามจังหวะสุ่ม — บีตนี้มีกระพริบของมันเอง
     // (จังหวะเดียว calm ดูท้ายฟังก์ชัน) กระพริบสุ่มจะไปซ้อนจังหวะนั้นพอดี
@@ -2898,6 +3160,111 @@ export function Mascot({
      */
     const iFace = intro.playing ? intro.b.face : 0
     const iBlink = iFace > 0 ? Math.sin(clamp(seg(iFace, 0.4, 0.62), 0, 1) * Math.PI) : 0
+
+    /**
+     * หน้าการ์ตูน (ท่า skate): จัดวางทุกชิ้นจากสัดส่วน W/H ทุกเฟรม — ปุ่มปรับเห็นผลทันที
+     * กระพริบ = บีบตาขาว/ลูกตาดำลงหาฐาน (origin ของตาขาวอยู่ที่ฐานพอดี)
+     * ลูกตาดำเลื่อนตามจุดมอง (gz) แต่ไม่หลุดออกนอกตาขาว
+     */
+    const face = rig.current.face
+    if (face && fp) {
+      const { W, H, ctx, size, tex } = face
+      // หน่วยหัว -> พิกเซล canvas (กว้าง W เต็มแผ่น สูง H เต็มแผ่น)
+      const sx = size / W
+      const sy = size / H
+      const X = (x) => size / 2 + x * sx
+      const Y = (y) => size / 2 - y * sy
+      const eyeR = (fp.eye ?? 0.16) * W
+      const gap = (fp.gap ?? 0.22) * W
+      const baseY = (fp.eyeY ?? -0.04) * H
+      // ลูกตาดำเป็นสัดส่วนของตาขาว — ย่อ/ขยายตาขาวแล้วยังเห็นขาวรอบ ๆ เท่าเดิม
+      const pr = eyeR * Math.min(0.95, fp.pupil ?? 0.5)
+      const look = (fp.look ?? 0.06) * W
+      const maxOff = Math.max(0, eyeR - pr)
+      const px = Math.max(-maxOff, Math.min(maxOff, (fp.pupilX ?? 0) * W + gz.x * look))
+      const py = Math.max(-pr * 0.9, Math.min(eyeR - pr, (fp.pupilY ?? 0.0) * W + gz.y * look * 0.5))
+      const browR = (fp.brow ?? 0.12) * W
+      const browY = baseY + (fp.browY ?? 0.2) * H
+      const browArc = fp.browArc ?? 0.6
+      const browTilt = fp.browTilt ?? 0.12
+      const t = state.clock.elapsedTime
+      // ปากขยับหายใจนิด ๆ — วงรีที่นิ่งสนิทอ่านเป็นสติกเกอร์
+      const breathe = 1 + 0.035 * Math.sin(t * 2.1)
+      const mouthW = (fp.mouth ?? 0.1) * W
+      const mouthH = (fp.mouthH ?? 0.26) * H * breathe
+      const mouthX = (fp.mouthX ?? 0) * W
+      const mouthY = (fp.mouthY ?? -0.22) * H
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.clearRect(0, 0, size, size)
+      // ทั้งหน้า: เลื่อน/หมุน/สเกล รอบกึ่งกลางแผ่น
+      ctx.translate(size / 2 + (fp.x ?? 0) * size, size / 2 - (fp.y ?? 0) * size)
+      ctx.rotate(-(fp.rotZ ?? 0))
+      ctx.scale(fp.scale ?? 1, fp.scale ?? 1)
+      ctx.translate(-size / 2, -size / 2)
+
+      for (const side of [-1, 1]) {
+        const cx = X(side * gap)
+        const cy = Y(baseY)
+        const rx = eyeR * sx
+        const ry = eyeR * sy * k
+        // ตาขาว: ครึ่งวงกลม (วงรีตามสัดส่วนพิกเซล) ฐานแบนที่ cy — กระพริบ = ry ยุบลงหาฐาน
+        ctx.save()
+        ctx.beginPath()
+        ctx.ellipse(cx, cy, rx, Math.max(0.5, ry), 0, Math.PI, 0, false)
+        ctx.closePath()
+        ctx.fillStyle = '#ffffff'
+        ctx.fill()
+        // ลูกตาดำอาศัยอยู่ในตาขาว: clip ด้วยรูปตาขาว แล้วค่อยวาด
+        ctx.clip()
+        ctx.beginPath()
+        ctx.ellipse(cx + px * sx, cy - py * sy * k, pr * sx, Math.max(0.5, pr * sy * k), 0, 0, Math.PI * 2)
+        ctx.fillStyle = '#262424'
+        ctx.fill()
+        ctx.restore()
+        // คิ้ว: ส่วนโค้งด้านบน หนา ~0.22 ของรัศมี เอียงเข้าหาหางตา
+        ctx.save()
+        ctx.translate(cx, Y(browY))
+        ctx.rotate(-side * browTilt)
+        ctx.scale(1, browArc)
+        ctx.beginPath()
+        ctx.arc(0, 0, browR * sx, Math.PI * 1.15, Math.PI * 1.85)
+        ctx.lineWidth = browR * sx * 0.22
+        ctx.lineCap = 'round'
+        ctx.strokeStyle = '#E19A73'
+        ctx.stroke()
+        ctx.restore()
+      }
+      // ปาก: แท่งมนแนวตั้ง + ลิ้นครึ่งวงกลมที่ก้น
+      const mw = mouthW * sx
+      const mh = mouthH * sy
+      const mcx = X(mouthX)
+      const mcy = Y(mouthY)
+      ctx.save()
+      ctx.beginPath()
+      ctx.roundRect(mcx - mw / 2, mcy - mh / 2, mw, mh, mw / 2)
+      ctx.fillStyle = '#7D2F1A'
+      ctx.fill()
+      ctx.clip()
+      ctx.beginPath()
+      ctx.ellipse(mcx, mcy + mh / 2 - mw * 0.1, mw * 0.36, mw * 0.36, 0, Math.PI, 0, false)
+      ctx.fillStyle = '#A65A3C'
+      ctx.fill()
+      ctx.restore()
+      tex.needsUpdate = true
+
+      // แผ่นหน้า: ยื่นออก/จมเข้า และก้ม-เงย/หันซ้ายขวา ของทั้งแผ่น (เลื่อน/เอียงทำใน canvas แล้ว)
+      const g = face.group
+      g.position
+        .copy(g.userData.basePos)
+        .add(TMP_V.set(0, 0, fp.z ?? 0).applyQuaternion(g.userData.baseQuat))
+      g.quaternion
+        .copy(g.userData.baseQuat)
+        .multiply(TMP_Q.setFromEuler(TMP_E.set(fp.rotX ?? 0, fp.rotY ?? 0, 0)))
+      g.visible = true
+    } else if (face) {
+      face.group.visible = false
+    }
 
     eyes.current.forEach((e) => {
       const base = e.userData.baseScale

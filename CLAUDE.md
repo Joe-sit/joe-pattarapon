@@ -24,6 +24,10 @@ task touches rather than the index alone.
 Installed with `npx skills add emalorenzo/three-agent-skills`; `npx skills list`
 shows what is present and which agents can see it.
 
+Other skills live alongside them — animation, scroll, design, asset pipelines.
+`.agents/skills/README.md` indexes all of them and says which reference file to
+open for which task; read that before hunting through the folders.
+
 ## Checks
 
 Run both after any edit:
