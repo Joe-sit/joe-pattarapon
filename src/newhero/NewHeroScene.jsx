@@ -535,88 +535,6 @@ function SoftCircles() {
 const PANEL_BAND = '#8ccf90'
 const PANEL_BAND_LINE = '#c6e7bd'
 
-/**
- * แสงเรืองพาสเทลหลังบานหน้าต่าง — ก้อนสีนุ่ม ๆ ชมพู/ม่วง/ฟ้า ซ้อนกันแบบ additive
- *
- * ภาพอ้างอิงเป็น "หมอกสี" ฟุ้งอยู่หลังกระจก ไม่ใช่ขอบเรืองแสงคม — จึงเป็นแผ่นไล่สีรัศมี
- * (radial gradient) ที่จางถึงศูนย์ที่ขอบ วางหลังระนาบบานเล็กน้อย ไม่เขียน depth ของในพอร์ทัล
- * จะทับมันในช่องหน้าต่าง เหลือเป็นรัศมีรอบกรอบ — ตรงกับที่ตาเห็นใน ref
- *
- * แต่ละบานมี 3 ก้อน คนละสี คนละมุม ลอยเลี้ยงตัวช้า ๆ (ความถี่ไม่เป็นเท่าตัวกัน)
- * เท็กซ์เจอร์รัศมีสร้างครั้งเดียวทั้งไฟล์ — ทุกก้อนใช้ร่วมกัน สีมาจาก material.color
- */
-const GLOW_TEX = (() => {
-  const size = 256
-  const c = document.createElement('canvas')
-  c.width = size
-  c.height = size
-  const ctx = c.getContext('2d')
-  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
-  g.addColorStop(0, 'rgba(255,255,255,1)')
-  g.addColorStop(0.35, 'rgba(255,255,255,0.55)')
-  g.addColorStop(0.7, 'rgba(255,255,255,0.12)')
-  g.addColorStop(1, 'rgba(255,255,255,0)')
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, size, size)
-  const tex = new THREE.CanvasTexture(c)
-  tex.colorSpace = THREE.SRGBColorSpace
-  return tex
-})()
-/** สีของก้อนแสง — ชุดพาสเทลจากภาพอ้างอิง (ชมพู ม่วงลาเวนเดอร์ ฟ้า พีช) วนใช้ตามลำดับ */
-const GLOW_COLORS = ['#f9a8d4', '#c4b5fd', '#7dd3fc', '#fdba74', '#a5f3fc', '#f0abfc']
-
-function PortalGlow({ w, h, seed = 0, ...props }) {
-  const refs = useRef([])
-  const rnd = useMemo(() => makeRandom(31 + seed * 7), [seed])
-  const blobs = useMemo(
-    () =>
-      [0, 1, 2].map((i) => ({
-        color: GLOW_COLORS[(seed * 3 + i) % GLOW_COLORS.length],
-        // ตำแหน่งเทียบขนาดบาน (กระจายไปคนละมุม) ความถี่/เฟสสุ่มคงที่ต่อ seed
-        ox: (rnd() - 0.5) * 0.9,
-        oy: (rnd() - 0.5) * 0.9,
-        sc: 0.75 + rnd() * 0.6,
-        f1: 0.18 + rnd() * 0.16,
-        f2: 0.13 + rnd() * 0.14,
-        ph: rnd() * Math.PI * 2,
-      })),
-    [rnd, seed],
-  )
-  useFrame(({ clock }) => {
-    const t = getTuner()
-    const time = clock.elapsedTime * t.pgSpeed
-    const base = Math.max(w, h) * t.pgSize
-    blobs.forEach((b, i) => {
-      const m = refs.current[i]
-      if (!m) return
-      m.position.set(
-        b.ox * w * t.pgSpread + Math.sin(time * b.f1 + b.ph) * w * 0.08,
-        b.oy * h * t.pgSpread + Math.cos(time * b.f2 + b.ph) * h * 0.06,
-        -0.02 * i,
-      )
-      m.scale.setScalar(base * b.sc)
-      m.material.opacity = t.pgIntensity
-    })
-  })
-  return (
-    <group {...props}>
-      {blobs.map((b, i) => (
-        <mesh key={i} ref={(m) => (refs.current[i] = m)} renderOrder={-3} userData={{ noClay: true }}>
-          <planeGeometry args={[1, 1]} />
-          <meshBasicMaterial
-            map={GLOW_TEX}
-            color={b.color}
-            transparent
-            depthWrite={false}
-            blending={THREE.AdditiveBlending}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
-    </group>
-  )
-}
-
 function Panel({ w = 5.2, h = 6.5, d = 1.7, band = 0, cells = 0, stripe = false, portal = false, tint = INNER_BG, ...props }) {
   /**
    * หน้าต่าง = ช่องมองทะลุไปอีกฉาก ทำด้วย stencil buffer
@@ -1742,23 +1660,14 @@ function Scene() {
           // เรียงสมมาตรรอบศูนย์ ระยะห่างเท่ากันทุกช่อง ไม่ว่าจะกี่ใบ
           const x = t.panelX + (i - (Math.round(t.panelCount) - 1) / 2) * t.panelGap
           return (
-            <group key={i}>
-              {t.pg > 0.5 && !clay && (
-                <PortalGlow
-                  position={[x, t.panelBase + t.panelH / 2, -t.panelD / 2 - t.pgBack]}
-                  w={t.panelW}
-                  h={t.panelH}
-                  seed={i}
-                />
-              )}
-              <Panel
-                position={[x, t.panelBase + t.panelH / 2, 0]}
-                w={t.panelW}
-                h={t.panelH}
-                d={t.panelD}
-                portal={portal}
-              />
-            </group>
+            <Panel
+              key={i}
+              position={[x, t.panelBase + t.panelH / 2, 0]}
+              w={t.panelW}
+              h={t.panelH}
+              d={t.panelD}
+              portal={portal}
+            />
           )
         })}
         {ribbon}

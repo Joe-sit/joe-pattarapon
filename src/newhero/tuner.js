@@ -218,13 +218,6 @@ export const DEFAULTS = {
   panelX: 6.36,
   panelZ: -11,
   panelBase: -1.6,
-  /* แสงเรืองพาสเทลหลังบาน — ความแรง ขนาด (×ด้านยาวของบาน) การกระจาย ความเร็วลอย ระยะถอยหลังบาน */
-  pg: 1,
-  pgIntensity: 0.55,
-  pgSize: 1.1,
-  pgSpread: 0.6,
-  pgSpeed: 0.6,
-  pgBack: 0.4,
   /* พื้น */
   gridY: 0,
   gridCell: 0.2,
@@ -335,7 +328,7 @@ export const DEFAULTS = {
   fcGap: 0.145,
   fcEyeY: -0.24,
   fcPupil: 0.6,
-  fcPupilX: -0.02,
+  fcPupilX: 0.055,
   fcPupilY: 0.0,
   fcLook: 0,
   fcBrow: 0.07,
@@ -450,7 +443,7 @@ export const DEFAULTS = {
 }
 
 // ขึ้นเวอร์ชันเมื่อชุดคีย์/ค่าเริ่มต้นเปลี่ยนแนว — ค่าที่ค้างในเบราว์เซอร์จะได้ไม่ทับของใหม่
-const KEY = 'newhero.tuner.v133'
+const KEY = 'newhero.tuner.v135'
 
 function load() {
   /**
