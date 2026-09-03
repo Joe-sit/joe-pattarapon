@@ -1,19 +1,21 @@
-import { Suspense, useLayoutEffect, useMemo, useRef } from 'react'
+import { Suspense, useMemo, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Environment, Grid, Lightformer, MeshTransmissionMaterial } from '@react-three/drei'
 import * as THREE from 'three'
 import { Mascot } from '@/joespresso/scene/Mascot'
-import { useDisposable, makeRandom, gradientTexture, LOW_END, damp, clamp } from '@/joespresso/scene/utils'
+import { useDisposable, makeRandom, gradientTexture, LOW_END, damp, clamp, addCel, makeCelUniforms } from '@/joespresso/scene/utils'
 import { DEFAULTS, getTuner, useTuner } from './tuner'
 import { roundedBoxGeo } from './geo'
 import { Rider } from './Rider'
-import { DAY_SKY, Sky } from '@/joespresso/scene/Sky'
-import { Terrain } from '@/joespresso/scene/Terrain'
-import { Foliage } from '@/joespresso/scene/Foliage'
+import { DAY_SKY } from '@/joespresso/scene/Sky'
+import { Globe } from './Globe'
 import { StackedWindows } from './StackedWindows'
 import { Tetris } from './Tetris'
 import { CameraFX } from './CameraFX'
 import { Switch } from './Switch'
+import { Cursor } from './Cursor'
+import { Appear } from './Appear'
+import { IntroClock, introTime, outBack as introBack } from './intro'
 import { Entrance } from './Entrance'
 
 /**
@@ -346,7 +348,7 @@ function ribbonGeometry(
  */
 function Float({ children, amp = 0.28, rot = 0.06, phase = 0, speed = 1, ...props }) {
   const ref = useRef()
-  useFrame(({ clock }) => {
+  useFrame(() => {
     const g = ref.current
     if (!g) return
     const t = clock.elapsedTime * speed + phase
@@ -396,19 +398,53 @@ const GRID = {
  *
  * ข้าม: แก้ว (transmission) ที่มีสูตรของตัวเอง, วัสดุที่ไม่มี roughness (basic), หน้ากาก stencil
  */
-function Gloss({ on, rough, env, children }) {
+function Gloss({ on, rough, env, cel, children }) {
   const g = useRef()
   const frame = useRef(0)
+  /**
+   * uniform ของ cel shading — ชุดเดียวทั้งฉาก (ดู makeCelUniforms)
+   * ค่าถูกเขียนทุกเฟรมจาก tuner ราคาแค่ assignment ไม่กี่ตัว
+   */
+  const celU = useMemo(makeCelUniforms, [])
   useFrame(() => {
     const root = g.current
     if (!root) return
     frame.current += 1
-    if (frame.current % 6 !== 0) return
+    celU.celOn.value = cel ? 1 : 0
+    if (cel) {
+      celU.celEdge.value = cel.edge
+      celU.celHiEdge.value = cel.hiEdge
+      celU.celSoft.value = cel.soft
+      celU.celShadow.value = cel.shadow
+      celU.celLit.value = cel.lit
+      celU.celHi.value = cel.hi
+      celU.celTint.value = cel.tint
+    }
+    /**
+     * ทุก 2 เฟรม (ไม่ใช่ 6) — ตัวละครโหลดทีหลัง วัสดุที่โผล่ใหม่ต้องได้ cel ก่อนถูก compile
+     * ครั้งแรก ไม่งั้น compile สองรอบ (รอบสองสะดุดกลางท่าไหลเข้าฉาก) traverse ราคาถูกมาก
+     */
+    if (frame.current % 2 !== 0) return
     const key = on ? `${rough}|${env}` : 'off'
     root.traverse((o) => {
       if (!o.material || o.userData.noClay) return
       for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-        if (!('roughness' in m) || m.isMeshTransmissionMaterial || (m.transmission ?? 0) > 0) continue
+        /**
+         * แก้วของ drei (MeshTransmissionMaterial) ตั้ง transmission ของวัสดุฐานเป็น 0 แล้วเก็บ
+         * ค่าจริงไว้ใน uniform `_transmission` — เช็คแค่ m.transmission จึงหลุด แล้วแก้วโดน
+         * roughness 1 + cel ทับ กลายเป็นฝ้าขาวเม็ด ๆ ทั้งก้อน
+         */
+        if (
+          !('roughness' in m) ||
+          m.isMeshTransmissionMaterial ||
+          m.uniforms?._transmission ||
+          (m.transmission ?? 0) > 0
+        ) continue
+        if (!m.userData.celApplied) {
+          addCel(m, celU)
+          // วัสดุที่ compile ไปแล้วต้องขอโปรแกรมใหม่ — onBeforeCompile ที่เพิ่มทีหลังไม่ถูกเรียกเอง
+          m.needsUpdate = true
+        }
         if (m.userData.glossKey === key) continue
         // จำค่าเดิมครั้งแรกที่เจอ — ปิดแล้วต้องคืนเนื้อวัสดุเดิมได้ ไม่ใช่ค้างเงา
         if (m.userData.glossOrig === undefined) {
@@ -432,26 +468,35 @@ function Clay({ on, children }) {
     [],
   )
   useDisposable(mat)
-  useLayoutEffect(() => {
+  /**
+   * สลับวัสดุทุกเฟรม (ราคาแค่ traverse) ไม่ใช่ครั้งเดียวใน effect
+   *
+   * ของเดิมเป็น useLayoutEffect ที่จำ "วัสดุตอนนั้น" ไว้ใน Map แล้วคืนตอน cleanup — พัง
+   * สองทาง: (1) deps มี children จึงรันใหม่ทุกครั้งที่แผงขยับ (2) มันจำวัสดุของตัวละครไว้
+   * "ก่อน" rig ของ Mascot จะสลับเป็นวัสดุจริง (layout effect มาก่อน effect) พอแผงขยับครั้งถัดไป
+   * cleanup ก็เอาวัสดุดิบของ GLB (ที่ Entrance เคยติด stencil ไว้) ยัดกลับ — หัวเลยหายไปอยู่
+   * ในพอร์ทัล เห็นแต่ก้อนผมหลัง
+   *
+   * ทำแบบเดียวกับ Gloss: เดินทุกเฟรม เจอชิ้นที่ยังไม่ใช่ดินก็สลับแล้วจดของจริงไว้ใน
+   * userData.clayFrom (ชื่อเดียวกับที่ Mascot ใช้หาวัสดุจริงอยู่แล้ว) ปิดโหมดก็คืนจากตรงนั้น
+   * ข้าม: หน้ากาก stencil ของหน้าต่าง (noClay) และชิ้นที่ต้องคงสี (keepColor เช่น ตา/หน้า)
+   */
+  useFrame(() => {
     const root = g.current
     if (!root) return
-    // จำวัสดุเดิมไว้ทุกชิ้น ปิดโหมดแล้วต้องคืนสีกลับได้ ไม่ใช่ต้องรีเฟรชหน้า
-    const orig = new Map()
     root.traverse((o) => {
-      if (!o.material) return
-      /**
-       * ข้ามหน้ากาก stencil ของหน้าต่าง
-       *
-       * หน้ากากเป็นวัสดุที่ไม่เขียนสีแต่เขียน stencil ถ้าถูกแทนด้วยดินเหนียว มันจะ
-       * กลายเป็นแผ่นทึบและเลิกทำเครื่องหมาย stencil — ฉากในพอร์ทัลหายทั้งหมด
-       * (อาการคือ "กด clay แล้วของในหน้าต่างหายเกลี้ยง")
-       */
-      if (o.userData.noClay) return
-      orig.set(o, o.material)
-      if (on) o.material = mat
+      if (!o.material || o.userData.noClay || o.userData.keepColor) return
+      if (on) {
+        if (o.material !== mat) {
+          o.userData.clayFrom = o.material
+          o.material = mat
+        }
+      } else if (o.material === mat && o.userData.clayFrom) {
+        o.material = o.userData.clayFrom
+        delete o.userData.clayFrom
+      }
     })
-    return () => orig.forEach((m, o) => (o.material = m))
-  }, [mat, on, children])
+  })
   return <group ref={g}>{children}</group>
 }
 
@@ -844,7 +889,7 @@ function Confetti({ count = 26 }) {
   const Q = useMemo(() => new THREE.Quaternion(), [])
   const V = useMemo(() => new THREE.Vector3(), [])
   const E = useMemo(() => new THREE.Euler(), [])
-  useFrame(({ clock }) => {
+  useFrame(() => {
     const mesh = ref.current
     if (!mesh) return
     const t = clock.elapsedTime
@@ -1001,11 +1046,13 @@ function PortalRibbon({ width, thick, wave, waves, scale, offset, rot }) {
         thick,
         wave,
         waves,
-        260,
+        RIB_SEGS,
       ),
     [width, thick, wave, waves],
   )
   useDisposable(geo)
+  // อินโทร: วาดจากท้ายสุดในหน้าต่างมาถึงปากบาน ก่อนส่งไม้ต่อให้เส้นข้างนอก
+  useRibbonDraw(geo, 'portal')
   const tex = useMemo(() => {
     const t = checkerTex.clone()
     t.needsUpdate = true
@@ -1024,13 +1071,8 @@ function PortalRibbon({ width, thick, wave, waves, scale, offset, rot }) {
 function WindowWorld({
   z = -46,
   ribbon,
-  joespresso,
-  jScale = 1,
-  jx = 0,
-  jy = 0,
-  jz = 0,
-  jRot = [0, 0, 0],
-  parts = { sky: true, terrain: true, foliage: true },
+  /** ลูกโลกจิ๋ว: null = ไม่แสดง */
+  globe,
   wall = true,
   hemi = 0.7,
   /** ชื่อ keyLight ไม่ใช่ key — `key` เป็นชื่อสงวนของ React ส่งเป็น prop ไม่ได้ */
@@ -1068,21 +1110,28 @@ function WindowWorld({
       {/* พื้นหลังขาวสว่างกว่าเดิมมาก ไฟจึงต้องลดลง ไม่งั้นของในฉากจะซีดจนกลืนกับผนัง */}
       <hemisphereLight intensity={hemi} color="#ffffff" groundColor="#c9d4e8" />
       <directionalLight position={[-8, 10, 6]} intensity={keyLight} color="#fff2e2" />
-      {joespresso && (
+      {globe && (
         /**
-         * ฉาก joespresso — ยกมาเฉพาะชิ้นภูมิทัศน์ (ฟ้า/เนิน/ต้นไม้)
-         *
-         * ตัว Scene ของหน้านั้นเป็น <Canvas> ของตัวเอง ซ้อนเข้ามาไม่ได้ ต้องประกอบจาก
-         * ชิ้นส่วนแทน และเลือกเฉพาะชิ้นที่ไม่พึ่งสโตร์ของหน้านั้น — Panels/Slogan/WorkDesk
-         * อ่านสถานะ scroll/intro ของ /joespresso ซึ่งไม่มีในหน้านี้ จะได้ท่าค้างหรือพัง
-         *
-         * ฉากนั้นปั้นมาที่สเกลของมันเอง ต้องย่อและดันลงให้พอดีกรอบหน้าต่าง
+         * ลูกโลกจิ๋ววนลูป — แทนภูมิทัศน์ joespresso เดิม (ฟ้า/เนิน/ต้นไม้) ที่เอาออกไป
+         * ปั้นที่รัศมี 1 ต้องขยายและวางให้พอดีกรอบหน้าต่าง
          */
-        <group position={[jx, jy, jz]} rotation={jRot} scale={jScale}>
-          {parts.sky && <Sky noBackdrop />}
-          {parts.terrain && <Terrain />}
-          {parts.foliage && <Foliage />}
-        </group>
+        <Globe
+          spinBoost={globe.spinBoost}
+          position={globe.pos}
+          rotation={globe.rot}
+          scale={globe.scale}
+          speed={globe.speed}
+          seed={globe.seed}
+          road={globe.road}
+          bushes={globe.bushes}
+          cones={globe.cones}
+          rounds={globe.rounds}
+          mushrooms={globe.mushrooms}
+          flowers={globe.flowers}
+          berries={globe.berries}
+          pebbles={globe.pebbles}
+          propScale={globe.propScale}
+        />
       )}
       {stack && (
         <StackedWindows
@@ -1117,6 +1166,39 @@ function WindowWorld({
 }
 
 /** ริบบิ้นหมากรุกเส้นหลัก */
+/** จำนวนสเต็ปของริบบิ้น (ทั้งในพอร์ทัลและข้างนอก) — ใช้ทั้งตอนสร้างและตอนนับ index ที่วาดในอินโทร */
+const RIB_SEGS = 260
+
+/**
+ * อินโทร: ริบบิ้น "วาด" ต่อเนื่องเป็นเส้นเดียว — เริ่มจากเส้นในพอร์ทัล (ท้ายสุดในหน้าต่าง) ไล่มาถึง
+ * ปากบาน แล้วต่อด้วยเส้นข้างนอกจนสุดปลาย ความคืบหน้ารวม 0..1 ผ่อนแบบ ease-out ทีเดียวทั้งเส้น
+ * แล้วค่อยแบ่งช่วงให้สองชิ้นตาม inRibSplit (สัดส่วนของเส้นในพอร์ทัล) จังหวะจึงไม่สะดุดที่รอยต่อ
+ *
+ * ไม่สร้าง geometry ใหม่ แค่จำกัดจำนวน index ที่วาดของแต่ละกลุ่มวัสดุ (ผิวบน 6 index/สเต็ป
+ * สันข้าง+ผิวล่าง 18) geometry เรียงสเต็ปตามทิศการวิ่ง จึงงอกไปข้างหน้าพอดี
+ * onStep(e) = ความคืบหน้าท้องถิ่น 0..1 ของชิ้นนี้ (ให้เส้นข้างนอกใช้ก่อคลื่น)
+ */
+function useRibbonDraw(geo, part, onStep) {
+  const drawn = useRef(-1)
+  useFrame(() => {
+    const t = getTuner()
+    let local = 1
+    if (t.intro > 0.5) {
+      const u = Math.min(1, Math.max(0, (introTime() - t.inRibAt) / Math.max(0.01, t.inRibDur)))
+      const e = 1 - Math.pow(1 - u, 3)
+      const f = Math.min(0.95, Math.max(0.05, t.inRibSplit))
+      local = part === 'portal' ? Math.min(1, e / f) : Math.min(1, Math.max(0, (e - f) / (1 - f)))
+    }
+    const k = Math.round(RIB_SEGS * local)
+    if (k === drawn.current) return
+    drawn.current = k
+    const [top, rest] = geo.groups
+    if (top) top.count = k * 6
+    if (rest) rest.count = k * 18
+    onStep?.(local)
+  })
+}
+
 function CheckerRibbon({ width, thick, wave, waves, scale, offset, rot }) {
   /**
    * เส้นทางเป็น "ถนน" ที่วิ่งเข้าหาคนดู ไม่ใช่แถบพาดขวางจอ
@@ -1166,10 +1248,27 @@ function CheckerRibbon({ width, thick, wave, waves, scale, offset, rot }) {
   }, [PATH])
 
   const geoFront = useMemo(
-    () => ribbonGeometry(PATH, width, thick, wave, waves, 260, tCut, 1),
+    () => ribbonGeometry(PATH, width, thick, wave, waves, RIB_SEGS, tCut, 1),
     [PATH, width, thick, wave, waves, tCut],
   )
   useDisposable(geoFront)
+  /** ตำแหน่งจุดยอดชุด "คลื่นเต็ม" กับ "แบน" — อินโทรผสมสองชุดนี้ให้คลื่นค่อย ๆ ก่อตัวตอนวาด */
+  const wavePos = useMemo(() => {
+    const full = geoFront.attributes.position.array.slice()
+    const flatGeo = ribbonGeometry(PATH, width, thick, 0, waves, RIB_SEGS, tCut, 1)
+    const flat = flatGeo.attributes.position.array.slice()
+    flatGeo.dispose()
+    return { full, flat }
+  }, [geoFront, PATH, width, thick, waves, tCut])
+  // คลื่นก่อตัวตามหลังปลายที่กำลังวาด: ผสมตำแหน่งจุดยอดจากแบน → คลื่นเต็ม
+  useRibbonDraw(geoFront, 'outer', (e) => {
+    const arr = geoFront.attributes.position.array
+    const { full, flat } = wavePos
+    for (let i = 0; i < arr.length; i += 1) arr[i] = flat[i] + (full[i] - flat[i]) * e
+    geoFront.attributes.position.needsUpdate = true
+    if (e >= 1) geoFront.computeVertexNormals()
+  })
+
   /**
    * anisotropy สูงสุดเท่าที่การ์ดรองรับ — ตัวชี้ขาดความคมของผิวที่วางเกือบขนานสายตา
    *
@@ -1287,7 +1386,7 @@ function GlassRibbon({ width, thick, scale, offset, rot, rough, transmission, ch
  */
 function Surfer(props) {
   const bob = useRef()
-  useFrame(({ clock }) => {
+  useFrame(() => {
     const g = bob.current
     if (!g) return
     const t = clock.elapsedTime
@@ -1399,9 +1498,19 @@ function CameraRig() {
     // ถอยได้จำกัด — ถอยเกิน 1.25 เท่าแล้วครึ่งบนของจอเหลือแต่พื้นหลังว่าง เสียเฟรมกว่าโดนตัด
     const t = getTuner()
     const fit = clamp(1.62 / (state.size.width / state.size.height), 1, t.fitMax)
-    cam.position.z = damp(cam.position.z, t.camZ * fit, 0.06, dt)
-    cam.position.x = damp(cam.position.x, t.camX - (fit - 1) * 2.1 + state.pointer.x * 0.6, 0.06, dt)
-    cam.position.y = damp(cam.position.y, t.camY + state.pointer.y * 0.4, 0.06, dt)
+    /**
+     * อินโทรของกล้อง: เริ่มจากมุมที่เข้าใกล้/ต่ำ/เฉียงกว่า แล้วค่อย ๆ ถอยกลับมาที่มุมจริง
+     * ฉากมีชั้นลึก (หน้าต่าง → ริบบิ้น → ตัวละคร → ของลอยหน้าสุด) กล้องที่เคลื่อนคือสิ่งที่
+     * ทำให้เห็น parallax ของชั้นเหล่านั้น — ทุกอย่างโผล่บนกล้องนิ่งจะแบนเหมือนสไลด์
+     */
+    const it = t.intro > 0.5 ? introTime() : 99
+    const k = it < 0 ? 1 : Math.pow(1 - Math.min(1, it / Math.max(0.05, t.inCamDur)), 5)
+    const dollyZ = t.inCamDolly * k
+    const dollyX = t.inCamX * k
+    const dollyY = t.inCamY * k
+    cam.position.z = damp(cam.position.z, t.camZ * fit + dollyZ, 0.06, dt)
+    cam.position.x = damp(cam.position.x, t.camX - (fit - 1) * 2.1 + state.pointer.x * 0.6 + dollyX, 0.06, dt)
+    cam.position.y = damp(cam.position.y, t.camY + state.pointer.y * 0.4 + dollyY, 0.06, dt)
     // fov มาจากแผงปรับ — เปลี่ยนแล้วต้อง updateProjectionMatrix เอง
     if (cam.fov !== t.fov) {
       cam.fov = t.fov
@@ -1414,7 +1523,7 @@ function CameraRig() {
      * แล้วเส้น horizon ก็เลื่อนตาม — perspective ที่วัดมาจาก ref จะไม่นิ่ง
      */
     cam.rotation.order = 'YXZ'
-    cam.rotation.set(-t.pitch * RAD, 0, 0)
+    cam.rotation.set(-t.pitch * RAD, t.inCamYaw * RAD * k, 0)
   })
   return null
 }
@@ -1436,14 +1545,72 @@ function Scene() {
   const portal = t.portal > 0.5 && !clay
   const grid = clay ? GRID.clay : GRID.color
   // exposure อยู่บนตัว renderer ไม่ใช่ใน scene graph จึงต้องเขียนเองเมื่อค่าเปลี่ยน
+  /**
+   * เรื่องราวของอินโทร (ฟังก์ชันอ่านทุกเฟรม ไม่ผ่าน React):
+   * เคอร์เซอร์พุ่งเข้ามาแล้ว "คลิก" → สวิตช์สับจากปิดเป็นเปิด (เด้งเกินนิด) → ดาวในหน้าต่าง
+   * หมุนติ้วตอนบานเปิดแล้วค่อยผ่อนเป็นความเร็วปกติ
+   */
+  const clickAt = t.enDelay + t.enDur + t.inPropAt + t.inClickAt
+  const swPos = useMemo(
+    () => () => {
+      const tt = getTuner()
+      if (tt.intro < 0.5) return tt.bcPos
+      const u = (introTime() - clickAt) / 0.35
+      if (u <= 0) return 0
+      return tt.bcPos * (u >= 1 ? 1 : introBack(u, 1.7))
+    },
+    [clickAt],
+  )
+  const cuPress = useMemo(
+    () => () => {
+      const tt = getTuner()
+      if (tt.intro < 0.5) return 0
+      const u = (introTime() - clickAt + 0.14) / 0.28
+      return u <= 0 || u >= 1 ? 0 : Math.sin(u * Math.PI)
+    },
+    [clickAt],
+  )
+  const gbSpin = useMemo(
+    () => () => {
+      const tt = getTuner()
+      if (tt.intro < 0.5) return 0
+      const it = introTime()
+      return it < 0 ? 0 : tt.inGlobeSpin * Math.exp(-it * 1.2)
+    },
+    [],
+  )
+  const flat = t.flat > 0.5 && !clay
+  const flatTone = flat && t.flatTone < 0.5
   useFrame(({ gl }) => {
     if (gl.toneMappingExposure !== t.exposure) gl.toneMappingExposure = t.exposure
+    /**
+     * โหมดแบนไม่เอา ACES — มันบีบสีสด ๆ ให้หม่นและไล่เฉดกลับเข้ามาในชั้นที่ตั้งใจให้แบน
+     * three ตรวจ toneMapping ของ renderer ทุกครั้งที่ setProgram จึงสลับได้โดยไม่ต้อง needsUpdate
+     */
+    const tm = flatTone ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping
+    if (gl.toneMapping !== tm) gl.toneMapping = tm
   })
+  /** cel shading: โหมดแบนบังคับผิวด้าน (roughness 1) แล้วตัดแสงเป็น 3 ชั้นที่ shader */
+  const cel = flat
+    ? {
+        edge: t.flatEdge,
+        hiEdge: t.flatHiEdge,
+        soft: t.flatSoft,
+        shadow: t.flatShadow,
+        lit: t.flatLit,
+        hi: t.flatHi,
+        tint: t.flatTint,
+      }
+    : null
   /**
    * ริบบิ้นตัวเดียวกัน ใช้ทั้งในฉากของหน้าต่างและในฉากหลัก
    *
    * ฉากใน portal ใช้กล้องตัวเดียวกัน พิกัดโลกจึงตรงกันเป๊ะ ไม่ต้องชดเชยอะไร
    * ส่วนที่อยู่หลังบานกระจกจะถูกเห็นผ่านหน้าต่าง ส่วนที่พ้นออกมาแล้วเห็นจากฉากหลัก
+   */
+  /**
+   * เส้นทางให้ตัวละครไถลบนริบบิ้นจริง — เส้นเดียวกับ geometry + เมทริกซ์ของกลุ่มที่ห่อมัน
+   * (หมุนรอบปากช่อง, ออฟเซ็ต, สเกล) แปลงเป็นพิกัดกลุ่มแถบหน้าต่างซึ่งเป็นพิกัดของตัวละคร
    */
   /**
    * เส้นทางให้ตัวละครไถลบนริบบิ้นจริง — เส้นเดียวกับ geometry + เมทริกซ์ของกลุ่มที่ห่อมัน
@@ -1493,7 +1660,13 @@ function Scene() {
   // ref ไม่มีพื้น ของทุกชิ้นลอยในที่ว่าง — ตารางพื้นเป็นแค่ตัวช่วยตอนจัดมุม
   const showGrid = t.grid > 0.5
   return (
-    <Gloss on={t.gloss > 0.5 && !clay} rough={t.glossRough} env={t.glossEnv}>
+    <Gloss
+      on={(flat || t.gloss > 0.5) && !clay}
+      rough={flat ? 1 : t.glossRough}
+      env={flat ? t.flatEnv : t.glossEnv}
+      cel={cel}
+    >
+      <IntroClock />
       {clay ? (
         /**
          * ไฟแบบ studio ของวิวพอร์ต: key เฉียงบนซ้าย, fill อ่อนฝั่งตรงข้าม, rim จากหลัง
@@ -1586,6 +1759,7 @@ function Scene() {
           rimFall={t.rimFxFall}
           rimShade={t.rimFxShade}
           rimBack={t.rimFxBack}
+          tone={flatTone ? 0 : 1}
           fish={t.fxFish}
           skewX={t.fxSkewX}
           skewY={t.fxSkewY}
@@ -1660,14 +1834,18 @@ function Scene() {
           // เรียงสมมาตรรอบศูนย์ ระยะห่างเท่ากันทุกช่อง ไม่ว่าจะกี่ใบ
           const x = t.panelX + (i - (Math.round(t.panelCount) - 1) / 2) * t.panelGap
           return (
-            <Panel
+            /* อินโทร: บานโผล่ทีละบานจากซ้ายไปขวา (ขยายจากศูนย์ เลยเป้านิดแล้วดีดกลับ) */
+            <Appear
               key={i}
+              at={t.inWinAt + i * t.inWinStep}
+              dur={t.inWinDur}
+              over={t.inOver}
+              rise={t.inWinRise}
+              tilt={t.inWinTilt * RAD}
               position={[x, t.panelBase + t.panelH / 2, 0]}
-              w={t.panelW}
-              h={t.panelH}
-              d={t.panelD}
-              portal={portal}
-            />
+            >
+              <Panel w={t.panelW} h={t.panelH} d={t.panelD} portal={portal} />
+            </Appear>
           )
         })}
         {ribbon}
@@ -1693,6 +1871,12 @@ function Scene() {
          * วางเทียบกับปากหน้าต่างได้ตรง ๆ และยังตามไปด้วยเมื่อหมุน bandYaw
          */}
         {t.bc > 0.5 && (
+          <Appear
+            at={t.enDelay + t.enDur + t.inPropAt + t.inPropGap}
+            dur={t.inPropDur}
+            over={t.inOver}
+            from={[-3 * t.inPropDist, -0.5 * t.inPropDist, -5 * t.inPropDist]}
+          >
           <Switch
             len={t.bcLen}
             radius={t.bcRadius}
@@ -1701,6 +1885,7 @@ function Scene() {
             knobThick={t.bcKnobThick}
             knobProud={t.bcKnobProud}
             pos={t.bcPos}
+            posAt={swPos}
             opacity={t.bcOpacity}
             icon={t.bcIcon}
             outline={t.bcOutline}
@@ -1709,10 +1894,35 @@ function Scene() {
             edgeAngle={t.bcEdgeAngle}
             glass={t.bcGlass}
             blur={t.bcBlur}
+            env={t.bcEnv}
+            ior={t.bcIor}
+            chroma={t.bcChroma}
             position={[t.bcX, t.bcY, t.bcZ]}
             rotation={[t.bcRotX * RAD, t.bcRotY * RAD, t.bcRotZ * RAD]}
             scale={t.bcScale}
           />
+          </Appear>
+        )}
+        {/* เคอร์เซอร์พิกเซล — ของลอยหน้าหน้าต่าง นอกพอร์ทัล พิกัดกลุ่มเดียวกับสวิตช์ */}
+        {t.cu > 0.5 && (
+          <Appear
+            at={t.enDelay + t.enDur + t.inPropAt}
+            dur={t.inPropDur}
+            over={t.inOver}
+            from={[3 * t.inPropDist, 2 * t.inPropDist, -5 * t.inPropDist]}
+          >
+          <Cursor
+            pressAt={cuPress}
+            aim={t.cuAim}
+            aimMax={t.cuAimMax * RAD}
+            aimEase={t.cuAimEase}
+            depth={t.cuDepth}
+            outline={t.cuOutline}
+            position={[t.cuX, t.cuY, t.cuZ]}
+            rotation={[t.cuRotX * RAD, t.cuRotY * RAD, t.cuRotZ * RAD]}
+            scale={t.cuScale}
+          />
+          </Appear>
         )}
         {/* เส้นทางวางเอง (debug): เส้น + ลูกบอลที่ waypoint ในพิกัดกลุ่มนี้ */}
         {import.meta.env.DEV && t.enPath > 0.5 && t.enShowPath > 0.5 && <PathGizmo />}
@@ -1761,6 +1971,20 @@ function Scene() {
               wheelR: t.bdWheelR,
               wheelW: t.bdWheelW,
               deckY: t.bdRideY,
+            }}
+            followOverride={{
+              headYaw: t.hf > 0.5 ? t.hfYaw : 0,
+              headPitch: t.hf > 0.5 ? t.hfPitch : 0,
+              headRoll: t.hf > 0.5 ? t.hfRoll : 0,
+              headEase: t.hfEase,
+              headBaseYaw: t.hfBaseYaw,
+              headBaseRoll: t.hfBaseRoll,
+              headBasePitch: t.hfBasePitch,
+              headFollow: t.hfFollow,
+              headCurve: t.hfCurve,
+              headDead: t.hfDead,
+              headBounce: t.hfBounce,
+              headIdleBack: t.hfIdleBack,
             }}
             facePose={{
               eye: t.fcEye,
@@ -1865,17 +2089,25 @@ function Scene() {
         <InsideWindow>
           <WindowWorld
             z={t.portalZ}
-            joespresso={t.joe > 0.5}
-            jScale={t.joeScale}
-            jx={t.joeX}
-            jy={t.joeY}
-            jz={t.joeZ}
-            jRot={[t.joeRotX * RAD, t.joeRotY * RAD, t.joeRotZ * RAD]}
-            parts={{
-              sky: t.joeSky > 0.5,
-              terrain: t.joeTerrain > 0.5,
-              foliage: t.joeFoliage > 0.5,
-            }}
+            globe={
+              t.gb > 0.5 && {
+                pos: [t.gbX, t.gbY, t.gbZ],
+                rot: [t.gbRotX * RAD, t.gbRotY * RAD, t.gbRotZ * RAD],
+                scale: t.gbScale,
+                speed: t.gbSpeed,
+                seed: Math.round(t.gbSeed),
+                road: t.gbRoad,
+                bushes: Math.round(t.gbBushes),
+                cones: Math.round(t.gbCones),
+                rounds: Math.round(t.gbRounds),
+                mushrooms: Math.round(t.gbMushrooms),
+                flowers: Math.round(t.gbFlowers),
+                berries: Math.round(t.gbBerries),
+                pebbles: Math.round(t.gbPebbles),
+                propScale: t.gbProp,
+                spinBoost: gbSpin,
+              }
+            }
             wall={t.portalWall > 0.5}
             hemi={t.portalHemi}
             keyLight={t.portalKey}

@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { MeshTransmissionMaterial } from '@react-three/drei'
 
@@ -89,9 +90,13 @@ function bakeGradient(geo, from, to, dir = [1, -1, 0]) {
  * เก็บเป็นสีจริงสองตัว ไม่ใช่รูปไล่สี: อบเข้าไปเป็นสีต่อจุดยอด (vertex color) ได้เลย
  * ไม่ต้องพึ่ง uv ของ ExtrudeGeometry ซึ่งไม่ได้ไล่ตามที่ตาเห็นว่าเป็น "ยาวไปตามราง"
  */
-const TRACK = ['#f2fab4', '#d2e78d']
-/** ปุ่ม: หน้าสว่าง ผนังข้างเข้มลงเป็นเขียวอมน้ำเงิน — ไล่ตามความลึก ไม่ใช่ตามแนวทแยง */
-const KNOB = ['#4ec95c', '#2b7f6a']
+/**
+ * ตามภาพ ref: รางเป็นแก้วใสแทบไม่มีสี อมฟ้าม่วงจาง ๆ ตรงมุมล่างขวา (ที่หนาที่สุด)
+ * ไม่ใช่แก้วสีเขียวอมเหลืองแบบก่อน — สีของฉากหลังต้องลอดผ่านมาเป็นตัวให้สีแทน
+ */
+const TRACK = ['#ffffff', '#dfe3ff']
+/** ปุ่ม: แผ่นม่วงแบนด้าน หน้าสว่าง ผนังข้างเข้มลง — ไล่ตามความลึก ไม่ใช่ตามแนวทแยง */
+const KNOB = ['#9b6cff', '#6b3fe6']
 const ICON = '#ffffff'
 /**
  * ซ่อนเส้นขอบเฉพาะตอนถูกวาดลงบัฟเฟอร์ของกระจก (transmission) ไม่ใช่ทุกบัฟเฟอร์
@@ -102,8 +107,8 @@ const ICON = '#ffffff'
  *   2. แตะ material ที่ส่งมาโดยไม่ดูว่าเป็นของใคร — โหมด clay สลับทุกชิ้นให้ใช้วัสดุก้อนเดียว
  *      ปิด colorWrite ทีเดียวเลยดับทั้งฉาก → แตะเฉพาะวัสดุที่ติดป้าย OUTLINE_TAG ของตัวเอง
  */
-const OUTLINE_TAG = { switchOutline: true }
-function hideInBuffers(renderer, material) {
+export const OUTLINE_TAG = { switchOutline: true }
+export function hideInBuffers(renderer, material) {
   if (!material.userData?.switchOutline) return
   const rt = renderer.getRenderTarget()
   material.colorWrite = rt === null || rt.userData?.mainPass === true
@@ -118,6 +123,8 @@ export function Switch({
   radius = 0.5,
   /** ตำแหน่งปุ่ม 0 = ปิด (ซ้าย) 1 = เปิด (ขวา) */
   pos = 1,
+  /** ตำแหน่งปุ่มแบบอ่านทุกเฟรม (clock) => 0..1 — ทับ pos เมื่อมี (ใช้ทำท่าสับสวิตช์ในอินโทร) */
+  posAt = null,
   /** ความทึบของราง 1 = ทึบ */
   opacity = 0.8,
   /** ขนาดไอคอนเทียบรัศมีปุ่ม */
@@ -138,6 +145,10 @@ export function Switch({
   thickness = 1.3,
   /** ขนาดปุ่มเทียบครึ่งความสูงราง — 1 = ชนขอบบน-ล่างพอดี */
   knobSize = 1,
+  /** แรงสะท้อนแผงไฟบนผิวแก้ว, ดัชนีหักเห, การแยกสี */
+  env = 1,
+  ior = 1.4,
+  chroma = 0.03,
   /** ความหนาปุ่มเทียบความหนาราง */
   knobThick = 0.66,
   /** หน้าปุ่มล้ำพ้นผิวหน้าราง เทียบความหนาราง */
@@ -201,6 +212,8 @@ export function Switch({
    */
   const iconSize = kr * 2 * icon
   const bars = useMemo(() => {
+    // icon 0 = ไม่มีไอคอน (ภาพ ref ปุ่มเป็นแผ่นม่วงเรียบ ๆ)
+    if (icon <= 0) return []
     /** [x1, y1, x2, y2] ในระบบพิกัดของ SVG: จุดกำเนิดมุมบนซ้าย แกน y ชี้ลง */
     const SEGS = [
       [6.72, 9.114, 3.257, 12], // < ท่อนบน
@@ -235,6 +248,12 @@ export function Switch({
    */
   const travel = w / 2 - radius + radius * 0.3
   const knobX = (Math.min(1, Math.max(0, pos)) * 2 - 1) * travel
+  const knobRef = useRef()
+  useFrame(({ clock }) => {
+    if (!posAt || !knobRef.current) return
+    const v = Math.min(1.2, Math.max(-0.2, posAt(clock)))
+    knobRef.current.position.x = (v * 2 - 1) * travel
+  })
 
   /**
    * เส้นขอบแบบ inverted hull — ก็อปทรงเดิม ขยายออกนิดหนึ่ง แล้ววาดเฉพาะหลังชิ้น
@@ -281,15 +300,16 @@ export function Switch({
           vertexColors
           transmission={glass}
           thickness={depth * 0.9}
-          ior={1.4}
+          ior={ior}
           roughness={0}
           anisotropicBlur={blur * 6}
-          chromaticAberration={0.03}
+          chromaticAberration={chroma}
+          envMapIntensity={env}
           distortion={0}
-          samples={6}
+          samples={10}
           resolution={512}
           attenuationDistance={depth * 9}
-          attenuationColor={TRACK[0]}
+          attenuationColor={TRACK[1]}
           transparent
           opacity={opacity}
           depthWrite
@@ -344,7 +364,7 @@ export function Switch({
         </lineSegments>
       )}
       {/* ปุ่มจมอยู่ในเนื้อราง หน้าปุ่มเกือบชิดหน้าราง */}
-      <group position={[knobX, 0, depth / 2 - kd / 2 + depth * knobProud]}>
+      <group ref={knobRef} position={[knobX, 0, depth / 2 - kd / 2 + depth * knobProud]}>
         <mesh geometry={knob}>
           <meshBasicMaterial vertexColors toneMapped={false} />
         </mesh>

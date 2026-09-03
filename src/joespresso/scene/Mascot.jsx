@@ -2124,6 +2124,8 @@ export function Mascot({
   // มุมที่ลำตัวหันตามหัวในโหมด screenFollow — คิดที่บล็อกหัว เอาไปใช้ที่บล็อกลำตัว
   const bodyTurn = useRef(0)
   const cur = useRef({ x: 0, y: 0 })
+  /** พฤติกรรมตามเมาส์: ความเร็ว (โหมดสปริง) เป้าที่ปั้นรูปแล้ว และเวลาที่เมาส์ขยับล่าสุด */
+  const folState = useRef({ vx: 0, vy: 0, lx: 0, ly: 0, lastMove: 0, idle: 0 })
   const blink = useRef({ next: 2, closing: 0 })
   /** กวาดตา (ท่า skate): เป้าหมายสุ่ม + ค่าปัจจุบันที่หน่วงตาม */
   const gaze = useRef({ next: 1.5, tx: 0, ty: 0, x: 0, y: 0 })
@@ -2167,8 +2169,55 @@ export function Mascot({
       pointer.current.x = clamp(state.pointer.x, -1, 1)
       pointer.current.y = clamp(-state.pointer.y, -1, 1)
     }
-    cur.current.x = damp(cur.current.x, pointer.current.x, fol.headEase, dt)
-    cur.current.y = damp(cur.current.y, pointer.current.y, fol.headEase, dt)
+    /**
+     * พฤติกรรมการตามเมาส์ (ทุกค่า optional — ไม่ส่งมา = พฤติกรรมเดิม)
+     *   headDead   จุดบอดกลางจอ: เมาส์ขยับในรัศมีนี้ (0..1) หัวไม่ขยับ
+     *   headCurve  โค้งตอบสนอง: 1 = เส้นตรง, >1 = แถวกลางเบา ขอบจอแรง, <1 = ไวตั้งแต่กลาง
+     *   headFollow ตามมาก/น้อย: คูณระยะทั้งหมด (0 = ไม่ตาม)
+     *   headBounce สปริง: 0 = หน่วงเฉย ๆ (damp), >0 = เลยเป้าแล้วดีดกลับ
+     *   headIdleBack วินาทีที่เมาส์นิ่งแล้วหัวค่อย ๆ กลับท่าตั้งต้น (0 = ไม่กลับ)
+     */
+    const fs = folState.current
+    const now = state.clock.elapsedTime
+    let tx = pointer.current.x
+    let ty = pointer.current.y
+    if (Math.abs(tx - fs.lx) + Math.abs(ty - fs.ly) > 0.002) {
+      fs.lastMove = now
+      fs.lx = tx
+      fs.ly = ty
+    }
+    const dead = fol.headDead ?? 0
+    const curve = fol.headCurve ?? 1
+    const pr = Math.hypot(tx, ty)
+    if (pr > 1e-6) {
+      const rr = Math.min(1, Math.max(0, (pr - dead) / Math.max(1e-3, 1 - dead)))
+      const shaped = Math.pow(rr, curve)
+      tx *= shaped / pr
+      ty *= shaped / pr
+    }
+    const idleBack = fol.headIdleBack ?? 0
+    // นิ่งเกินกำหนด: ค่อย ๆ ลดน้ำหนักการตามลงจนศูนย์ภายใน ~1 วินาที แล้วคืนทันทีที่เมาส์ขยับ
+    fs.idle = damp(fs.idle, idleBack > 0 && now - fs.lastMove > idleBack ? 1 : 0, 0.06, dt)
+    const strength = (fol.headFollow ?? 1) * (1 - fs.idle)
+    tx *= strength
+    ty *= strength
+    const bounce = fol.headBounce ?? 0
+    if (bounce > 0) {
+      /**
+       * สปริงหน่วง: ความถี่ธรรมชาติคิดจาก headEase (ให้ความไวใกล้เคียง damp เดิม)
+       * bounce ลดอัตราหน่วงลงจากวิกฤต (1) จึงเลยเป้าแล้วดีดกลับ
+       */
+      const omega = -60 * Math.log(1 - Math.min(0.95, fol.headEase)) * 1.6
+      const zeta = 1 - bounce * 0.85
+      fs.vx += (-2 * zeta * omega * fs.vx - omega * omega * (cur.current.x - tx)) * dt
+      fs.vy += (-2 * zeta * omega * fs.vy - omega * omega * (cur.current.y - ty)) * dt
+      cur.current.x += fs.vx * dt
+      cur.current.y += fs.vy * dt
+    } else {
+      cur.current.x = damp(cur.current.x, tx, fol.headEase, dt)
+      cur.current.y = damp(cur.current.y, ty, fol.headEase, dt)
+      fs.vx = fs.vy = 0
+    }
     const { x, y } = cur.current
 
     // หันหลัง: แกน local กลับด้าน ต้องสลับทิศให้หัวยังหันตามเมาส์บนจอถูกฝั่ง
@@ -2752,6 +2801,8 @@ export function Mascot({
      */
     if (skydive) {
       const t = state.clock.elapsedTime
+      // ท่าโดดร่มไม่มีชุดค่าเริ่มต้นของตัวเอง — ไม่ส่ง armPose มา = ไม่มี offset
+      const ap = armPose ?? {}
       /** ไหวช้า ๆ คนละความถี่ ไม่เป็นเท่าตัวกัน — ผลรวมจึงไม่วนซ้ำให้ตาจับได้ */
       const w1 = Math.sin(t * 1.15)
       const w2 = Math.sin(t * 0.87 + 2.2)
@@ -2810,18 +2861,6 @@ export function Mascot({
       for (const k of ['L', 'R']) {
         const s = k === 'L' ? -1 : 1
         const hip = r[`hip${k}`]
-        /**
-         * ระยะห่างของขาต้อง "เลื่อนจุดสะโพก" ไม่ใช่หมุน hipY ให้กางออก
-         *
-         * การหมุนทำให้เท้ากวาดเป็นส่วนโค้ง ยิ่งกางยิ่งยกสูงและถอยหลัง ฝ่าเท้าจึงหลุด
-         * จากแผ่นบอร์ดทันที เลื่อนตำแหน่งข้อต่อแทนแล้วขาทั้งท่อนขนานกันไป ระดับเท้าคงเดิม
-         *
-         * จำตำแหน่งเดิมไว้ครั้งแรก แล้วเขียนจากค่านั้นทุกเฟรม ไม่ใช่บวกสะสม
-         */
-        if (hip) {
-          const bp = (hip.userData.basePos ??= hip.position.clone())
-          hip.position.set(bp.x + s2 * (LEG.spread ?? 0), bp.y, bp.z + s2 * (LEG.stagger ?? 0))
-        }
         if (hip?.userData.baseRot) {
           const br = hip.userData.baseRot
           hip.rotation.set(br.x - 0.62 + w3 * 0.1, br.y, br.z + s * 0.62)

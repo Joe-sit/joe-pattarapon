@@ -46,6 +46,7 @@ const FRAG = /* glsl */ `
   uniform vec2 uRimDir;
   uniform vec3 uRimColor;
   uniform float uExposure;
+  uniform float uTone;
   uniform float uRimFall;
   uniform float uRimShade;
   uniform vec3 uRimL;
@@ -210,7 +211,9 @@ const FRAG = /* glsl */ `
       vec3 r = uRimColor * (rimGlow(uvG) * uRim);
       col = 1.0 - (1.0 - col) * (1.0 - clamp(r, 0.0, 1.0));
     }
-    gl_FragColor = vec4(toSRGB(acesFilmic(col)), 1.0);
+    // uTone 0 = ไม่ tone map (โหมดแบน) แค่คูณ exposure แล้วตัดที่ 1
+    col = uTone > 0.5 ? acesFilmic(col) : clamp(col * uExposure, 0.0, 1.0);
+    gl_FragColor = vec4(toSRGB(col), 1.0);
   }
 `
 
@@ -236,6 +239,8 @@ export function CameraFX({
   rimFall = 1.5,
   rimShade = 0.7,
   rimBack = 0.6,
+  /** 1 = ACES ตามปกติ, 0 = ไม่ tone map (โหมดแบน) */
+  tone = 1,
 }) {
   const { gl, scene, camera, size, viewport } = useThree()
   const self = useRef()
@@ -299,6 +304,7 @@ export function CameraFX({
         uRimDir: { value: new THREE.Vector2(0, 1) },
         uRimColor: { value: new THREE.Color('#fff3dc') },
         uExposure: { value: 1 },
+        uTone: { value: 1 },
         uRimFall: { value: 1.5 },
         uRimShade: { value: 0.7 },
         uRimL: { value: new THREE.Vector3(0, 1, 0) },
@@ -341,6 +347,7 @@ export function CameraFX({
     m.uRimDir.value.set(Math.cos(rimAngle * Math.PI / 180), Math.sin(rimAngle * Math.PI / 180))
     m.uRimColor.value.set(rimColor)
     m.uExposure.value = gl.toneMappingExposure
+    m.uTone.value = tone
     m.uRimFall.value = rimFall
     m.uRimShade.value = rimShade
     // ทิศไฟ 3 มิติใน view space: ทิศบนจอ + ถอยไปหลังตัว (z ลบ = ไกลจากกล้อง)

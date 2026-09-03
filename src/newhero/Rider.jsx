@@ -45,6 +45,8 @@ export function Rider({
   legPose = null,
   torsoPose = null,
   facePose = null,
+  /** หัวหันตามเมาส์ — ทับค่าจาก leva ของ Mascot (null = ใช้ค่าเดิม) */
+  followOverride = null,
   boardSpec = null,
   boardRot = [0, 0.26, 0],
   boardOffset = [0, 0, 0],
@@ -206,6 +208,7 @@ export function Rider({
               legPose={legPose}
               torsoPose={torsoPose}
               facePose={facePose}
+              followOverride={followOverride}
               poseIdle={breathe}
             />
           </Suspense>

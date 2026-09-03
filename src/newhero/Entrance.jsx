@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { getTuner } from './tuner'
+import { armIntro, introTime, resetIntro } from './intro'
 
 /**
  * ทางเข้าของตัวละคร — ไหลออกมาจากในหน้าต่าง (พอร์ทัล) แล้วมาหยุดที่ท่าปัจจุบัน
@@ -95,13 +96,41 @@ export function Entrance({ replay = 0, ride = null, pathMode = false, children, 
   useEffect(() => {
     t0.current = null
     seen.current = 0
+    // เล่นทางเข้าใหม่ = เล่นอินโทรทั้งฉากใหม่ (หน้าต่าง/ริบบิ้น/ของลอย ฟังนาฬิกาเดียวกัน)
+    resetIntro()
   }, [replay])
 
-  useFrame(({ clock }) => {
+  useFrame((_, dt) => {
     const g = inner.current
     const o = outer.current
     if (!g || !o || !o.parent) return
     const t = getTuner()
+    /**
+     * ไม่เริ่มนับเวลาจนกว่าตัวละครจะขึ้นครบและถูกวาดไปแล้วสองสามเฟรม
+     *
+     * mascot โหลดแบบ async และเฟรมแรกที่มันขึ้นคือเฟรมที่ shader ทั้งชุดคอมไพล์
+     * (วัดได้ราว 230ms) ถ้านับเวลาตั้งแต่ mount ตัวละครจะโผล่กลางทางพร้อมกระตุก
+     * หนึ่งครั้ง — รอให้มันยืนนิ่งอยู่ที่จุดเริ่มในหน้าต่างก่อน แล้วค่อยออกตัว
+     *
+     * จุดนี้คือ "ศูนย์เวลาของอินโทรทั้งฉาก" ด้วย (ดู intro.js) จึงทำก่อนเช็คว่าเปิดทางเข้าไหม
+     */
+    if (t0.current === null) {
+      /**
+       * "ขึ้นครบ" = มี mesh มากพอที่จะเป็นตัวละคร ไม่ใช่แค่สเก็ตบอร์ด (บอร์ดมาก่อนตั้งแต่ mount
+       * ราว 10 ชิ้น ตัวละครมาทีหลังอีก 40+) และเฟรมต้องเดินปกติแล้ว — เฟรมที่คอมไพล์ shader
+       * กิน dt ครึ่งวินาที ถ้านับเฟรมนั้นด้วย นาฬิกาอินโทรจะกระโดดข้ามช่วงต้นไปทั้งท่อน
+       */
+      let meshes = 0
+      g.traverseVisible((c) => {
+        if (c.isMesh) meshes += 1
+      })
+      if (meshes >= 30 && dt < 0.06) seen.current += 1
+      else seen.current = 0
+      if (seen.current >= WARMUP_FRAMES) {
+        armIntro()
+        t0.current = 0
+      }
+    }
     if (t.en < 0.5) {
       g.position.set(0, 0, 0)
       g.rotation.set(0, 0, 0)
@@ -112,33 +141,19 @@ export function Entrance({ replay = 0, ride = null, pathMode = false, children, 
       }
       return
     }
-
-    /**
-     * ไม่เริ่มนับเวลาจนกว่าตัวละครจะขึ้นครบและถูกวาดไปแล้วสองสามเฟรม
-     *
-     * mascot โหลดแบบ async และเฟรมแรกที่มันขึ้นคือเฟรมที่ shader ทั้งชุดคอมไพล์
-     * (วัดได้ราว 230ms) ถ้านับเวลาตั้งแต่ mount ตัวละครจะโผล่กลางทางพร้อมกระตุก
-     * หนึ่งครั้ง — รอให้มันยืนนิ่งอยู่ที่จุดเริ่มในหน้าต่างก่อน แล้วค่อยออกตัว
-     */
-    if (t0.current === null) {
-      let hasMesh = false
-      g.traverseVisible((c) => {
-        if (c.isMesh) hasMesh = true
-      })
-      if (hasMesh) seen.current += 1
-      if (seen.current >= WARMUP_FRAMES) t0.current = clock.elapsedTime
-    }
     /**
      * หยุดชั่วคราว (debug): แช่ความคืบหน้าไว้ที่ enScrub แล้วลากดูทีละจุดบนเส้นได้
      * ต้องรีเซ็ตนาฬิกาตอนเลิกหยุดด้วย ไม่งั้นเวลาที่เดินไประหว่างหยุดจะดันให้กระโดดไปท้ายเส้นทันที
      */
     const paused = t.enPause > 0.5
-    if (paused) pausedAt.current = clock.elapsedTime
+    // เวลาของทางเข้า = นาฬิกาอินโทร (ตัดเพดาน dt แล้ว) จึงไม่กระโดดตอน shader คอมไพล์
+    const now = introTime()
+    if (paused) pausedAt.current = now
     else if (pausedAt.current !== null) {
-      if (t0.current !== null) t0.current += clock.elapsedTime - pausedAt.current
+      if (t0.current !== null) t0.current += now - pausedAt.current
       pausedAt.current = null
     }
-    const raw = t0.current === null ? 0 : (clock.elapsedTime - t0.current - t.enDelay) / Math.max(0.05, t.enDur)
+    const raw = t0.current === null ? 0 : (now - t0.current - t.enDelay) / Math.max(0.05, t.enDur)
     /**
      * เล่นเฉพาะช่วงที่เลือก: enFrom → enTo (0 = ต้นเส้น, 1 = ตำแหน่งจบ)
      *
@@ -193,7 +208,14 @@ export function Entrance({ replay = 0, ride = null, pathMode = false, children, 
       }
       ;(pts[n] ?? (pts[n] = new THREE.Vector3())).set(0, 0, 0)
       WAY.updateArcLengths()
-      const u = smooth(0, 1, p)
+      /**
+       * จังหวะ: ช่วงแรก (ในพอร์ทัล) ค่อย ๆ ไถลถึงระยะ 1-enBurstAmt ของเส้น แล้วช่วงท้าย
+       * "พุ่ง" ออกมาเร็ว ๆ แบบสเก็ตลงเนินแล้วเหิน — ออกตัวแรงแล้วผ่อนตอนถึงเป้า (ease-out กำลังห้า)
+       * enBurstAt = สัดส่วนเวลาที่เริ่มพุ่ง, enBurstAmt = สัดส่วนระยะทางที่ใช้พุ่ง (0 = ไม่พุ่ง)
+       */
+      const bAt = Math.min(0.95, Math.max(0.05, t.enBurstAt))
+      const bAmt = Math.min(0.95, Math.max(0, t.enBurstAmt))
+      const u = smooth(0, bAt, p) * (1 - bAmt) + outQuint(smooth(bAt, 1, p)) * bAmt
       WAY.getPointAt(u, RIDE_POS)
       WAY.getTangentAt(Math.min(0.999, u), WAY_TAN)
       // เลยเป้าแล้วดีดกลับ ตามแนวเข้าเป้า
@@ -210,6 +232,15 @@ export function Entrance({ replay = 0, ride = null, pathMode = false, children, 
       const settle = smooth(1 - t.enBlend, 1, p)
       g.rotation.set(0, dy * (1 - settle), t.enBank * RAD * Math.sin(Math.PI * u) * (1 - settle))
       g.scale.setScalar(t.enScale + (1 - t.enScale) * u)
+      /**
+       * ลงพื้น: ยุบแล้วเด้ง (squash & stretch) หลังถึงเป้า — น้ำหนักของการลงจากการเหิน
+       * สปริงหน่วง 2 รอบใน 0.6 วิ แกน y ยุบ แกน x/z ป่องชดเชย ปริมาตรเท่าเดิม
+       */
+      if (!partial && raw > 1 && t.enSquash > 0) {
+        const l = Math.min(1, (raw - 1) * Math.max(0.05, t.enDur) / 0.6)
+        const sq = t.enSquash * Math.exp(-4 * l) * Math.sin(l * Math.PI * 3)
+        g.scale.set(1 + sq * 0.5, 1 - sq, 1 + sq * 0.5)
+      }
       const wantInside = u < t.enInside
       if (wantInside !== inside.current) {
         setInside(g, wantInside)

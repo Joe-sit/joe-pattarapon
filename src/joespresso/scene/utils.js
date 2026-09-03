@@ -185,3 +185,77 @@ export function addRim(material, { color = '#FFF3DC', power = 2.4, intensity = 0
   return material
 }
 
+
+/**
+ * uniform ชุดกลางของ cel shading — ทุกวัสดุในฉากถือชุดเดียวกัน เขียน .value ทีเดียวเปลี่ยนหมด
+ * (เหตุผลเดียวกับ addRim: โปรแกรมถูกแชร์ ตัวอ้างอิงจาก onBeforeCompile ใช้ไม่ได้)
+ */
+export function makeCelUniforms() {
+  return {
+    celOn: { value: 0 },
+    /** เกณฑ์ (แสง/สีเนื้อ) ที่ผิวเปลี่ยนจากเงาเป็นสว่าง และจากสว่างเป็นไฮไลต์ */
+    celEdge: { value: 0.5 },
+    celHiEdge: { value: 1.15 },
+    /** ความนุ่มของรอยต่อระหว่างชั้น (0 = คมแบบเวกเตอร์) */
+    celSoft: { value: 0.05 },
+    /** ความสว่างของชั้นเงา / ชั้นสว่าง (เทียบกับสีเนื้อ) และความขาวของไฮไลต์ */
+    celShadow: { value: 0.62 },
+    celLit: { value: 1 },
+    celHi: { value: 0.22 },
+    /** เงาเอียงไปทางม่วง/น้ำเงินแบบภาพเวกเตอร์ (0 = เงาเป็นสีเนื้อเข้มเฉย ๆ) */
+    celTint: { value: 0.35 },
+  }
+}
+
+/**
+ * ฉีด cel shading (แบน 3 ชั้น) เข้า material — หน้าตาแบบภาพเวกเตอร์: สีเนื้อ / เงาเข้ม / ไฮไลต์
+ *
+ * ไม่ได้ปัดสีที่คำนวณแล้วทีละช่อง (เนื้อสีเพี้ยน) แต่วัด "อัตราส่วนแสงต่อสีเนื้อ" แล้วเลือกชั้น
+ * ผลลัพธ์จึงเป็นสีเนื้อเดิมคูณค่าคงที่ต่อชั้น — ไม่มีไล่เฉด ไม่มี specular โผล่
+ * ทำงานร่วมกับ addRim ได้ (rim ถูกบวกก่อน แล้วค่อยถูกตัดชั้น)
+ * ปิดด้วย celOn = 0 โดยไม่ต้อง compile ใหม่
+ */
+export function addCel(material, u) {
+  if (material.userData.celApplied) return material
+  material.userData.celApplied = true
+  const prev = material.onBeforeCompile
+  material.onBeforeCompile = (shader, renderer) => {
+    prev?.call(material, shader, renderer)
+    for (const k in u) shader.uniforms[k] = u[k]
+    /**
+     * ถ้ามี rim (addRim) อยู่แล้ว ให้ตัดชั้นก่อนบวก rim — rim จะได้ยังโผล่บนผิวที่แบนแล้ว
+     * ไม่ใช่ถูกทิ้งไปตอนแทนค่า outgoingLight
+     */
+    const anchor = shader.fragmentShader.includes('vec3 rimN') ? 'vec3 rimN' : '#include <opaque_fragment>'
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nuniform float celOn;\nuniform float celEdge;\nuniform float celHiEdge;\nuniform float celSoft;\nuniform float celShadow;\nuniform float celLit;\nuniform float celHi;\nuniform float celTint;',
+      )
+      .replace(
+        anchor,
+        [
+          'if (celOn > 0.5) {',
+          '  const vec3 celW = vec3(0.2126, 0.7152, 0.0722);',
+          '  float celBase = max(dot(diffuseColor.rgb, celW), 1e-4);',
+          '  float celR = dot(outgoingLight, celW) / celBase;',
+          '  float celK = smoothstep(celEdge - celSoft, celEdge + celSoft, celR);',
+          '  float celH = smoothstep(celHiEdge - celSoft, celHiEdge + celSoft, celR);',
+          '  vec3 celSh = diffuseColor.rgb * celShadow * mix(vec3(1.0), vec3(0.86, 0.80, 1.14), celTint);',
+          '  vec3 celLt = diffuseColor.rgb * celLit;',
+          /**
+           * ไฮไลต์ = สีเนื้ออ่อนขึ้น ไม่ใช่ผสมไปหาขาว — ผสมหาขาวทำให้ของสีเข้ม (ผมดำ, บอร์ดเขียวเข้ม)
+           * กลายเป็นเทา เพราะอัตราส่วนแสง/สีเนื้อของสีเข้มพุ่งสูงจาก specular กับ rim ที่ไม่ได้
+           * คูณกับสีเนื้อ (ผมดำในภาพเวกเตอร์ก็ยังดำ แค่มีแถบอ่อนกว่านิดเดียว)
+           */
+          '  vec3 celHiC = celLt + celHi * (celLt * 0.8 + 0.06);',
+          '  outgoingLight = mix(mix(celSh, celLt, celK), celHiC, celH);',
+          '}',
+          anchor,
+        ].join('\n'),
+      )
+  }
+  const prevKey = material.customProgramCacheKey
+  material.customProgramCacheKey = () => `${prevKey ? prevKey.call(material) : ''}|cel`
+  return material
+}

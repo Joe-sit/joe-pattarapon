@@ -7,7 +7,7 @@ import { Logo } from '@/joespresso/Logo'
 import { ExperienceTunnel } from '@/sections/tunnel/ExperienceTunnel'
 import { AnchorNav } from '@/components/AnchorNav'
 import { SITE } from '@/config/site'
-import { OpenToWorkMarquee } from '@/components/OpenToWorkMarquee'
+import { OpenToWorkRibbon } from '@/sections/ribbonstory/OpenToWorkRibbon'
 /** ฉาก 3D ของจอแรก — แยก chunk ไม่ให้ถ่วงจอที่เหลือ */
 const NewHeroScene = lazy(() => import('@/newhero/NewHeroScene'))
 import heroLife from '@/assets/v2final/hero-life.svg'
@@ -359,9 +359,9 @@ export function Portfolio2026FinalPage() {
         </div>
       </Screen>
 
-      {/* แถบ Open to work — คั่นจอ hero กับ What I Do เหมือนหน้า /2026
-          ชิดขอบทั้งสองจอ ไม่เว้นระยะ เพื่อให้อ่านเป็นเส้นแบ่งไม่ใช่บล็อกลอย */}
-      <OpenToWorkMarquee />
+      {/* Open to work — เล่าด้วยการเลื่อน: ริบบิ้นเวกเตอร์สามบีต OPEN · TO · WORK ซ้อนชั้นและพลิ้ว
+          จบเป็นแถบคั่นเต็มความกว้างชิดขอบล่างของจอ ต่อเข้าจอ What I Do (ดู sections/ribbonstory) */}
+      <OpenToWorkRibbon />
 
       {/* ── จอ 2: สิ่งที่ทำ ───────────────────────────────────────────────
           ใช้ section ตัวเดียวกับหน้า /2026 (กระเบื้องสกิลที่กางทีละใบตามระยะ scroll
