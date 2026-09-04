@@ -1,4 +1,4 @@
-import { Suspense, useMemo, useRef } from 'react'
+import { Suspense, useEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Environment, Grid, Lightformer, MeshTransmissionMaterial } from '@react-three/drei'
 import * as THREE from 'three'
@@ -16,7 +16,9 @@ import { Switch } from './Switch'
 import { Cursor } from './Cursor'
 import { Appear } from './Appear'
 import { IntroClock, introTime, outBack as introBack } from './intro'
-import { Entrance } from './Entrance'
+import { Entrance, entranceBlend, entranceSample, entranceU } from './Entrance'
+import { portalRide } from './portalRide'
+import { entranceLift } from './entranceLift'
 
 /**
  * ฉาก hero ใหม่ — "โต้คลื่นบนริบบิ้นหมากรุก" (คอมพ์ 12739:337)
@@ -1038,6 +1040,22 @@ export const PORTAL_PATH = [
 ]
 
 function PortalRibbon({ width, thick, wave, waves, scale, offset, rot }) {
+  const mesh = useRef()
+  const curve = useMemo(() => new THREE.CatmullRomCurve3(PORTAL_PATH, false, 'catmullrom', 0.6), [])
+  useEffect(() => {
+    portalRide.curve = curve
+    return () => {
+      if (portalRide.curve === curve) portalRide.curve = null
+    }
+  }, [curve])
+  useEffect(() => {
+    portalRide.mesh = mesh.current
+    portalRide.wave = wave
+    portalRide.waves = waves
+    return () => {
+      if (portalRide.mesh === mesh.current) portalRide.mesh = null
+    }
+  }, [wave, waves, scale, offset, rot])
   const geo = useMemo(
     () =>
       ribbonGeometry(
@@ -1060,7 +1078,7 @@ function PortalRibbon({ width, thick, wave, waves, scale, offset, rot }) {
   }, [])
   useDisposable(tex)
   return (
-    <mesh geometry={geo} position={offset} rotation={rot} scale={scale}>
+    <mesh ref={mesh} geometry={geo} position={offset} rotation={rot} scale={scale}>
       <meshStandardMaterial attach="material-0" map={tex} roughness={0.85} side={THREE.DoubleSide} />
       <meshStandardMaterial attach="material-1" color={GREEN_DEEP} roughness={0.75} side={THREE.DoubleSide} />
     </mesh>
@@ -1436,52 +1454,69 @@ function Surfer(props) {
 const RAD = Math.PI / 180
 
 /**
- * gizmo เส้นทางวางเอง — dev เท่านั้น
- * เส้นผ่าน waypoint (สีเขียว) จบที่ตำแหน่งตัวละคร (สีส้ม) อัปเดตจากแผงทุกเฟรม
+ * gizmo เส้นทางเข้า — dev เท่านั้น
+ *
+ * จุดพวกนี้ไม่ได้ตั้งเอง แต่วัดจากกึ่งกลางความกว้างของริบบิ้น (ดู ribbonWaypoints ใน Entrance)
+ * ใช้ตัวคิดเดียวกับตัวละครเป๊ะ เส้นที่เห็นจึงเป็นเส้นที่มันวิ่งจริง ไม่ใช่เส้นที่วาดเลียนแบบไว้
  */
-function PathGizmo() {
+const GIZ_SEGS = 120
+const GIZ_F = { P: new THREE.Vector3(), T: new THREE.Vector3(), S: new THREE.Vector3(), N: new THREE.Vector3() }
+const GIZ_V = new THREE.Vector3()
+const GIZ_END = new THREE.Vector3()
+const GIZ_REST = new THREE.Vector3()
+const GIZ_TAN = new THREE.Vector3()
+
+/** กลุ่มที่ gizmo อยู่ = พิกัดเดียวกับริบบิ้นเส้นหลักและตัวละคร */
+const gizmoParent = (mesh) => mesh?.parent ?? mesh
+
+function PathGizmo({ ride }) {
   const tube = useRef()
-  const balls = useRef([])
   const last = useRef('')
   const curve = useMemo(
-    () => new THREE.CatmullRomCurve3(Array.from({ length: 5 }, () => new THREE.Vector3()), false, 'catmullrom', 0.5),
+    () => new THREE.CatmullRomCurve3(Array.from({ length: GIZ_SEGS + 1 }, () => new THREE.Vector3()), false, 'catmullrom', 0.5),
     [],
   )
   // ท่อแทนเส้น 1px — WebGL วาดเส้นได้บางเดียว มองไม่เห็นบนฉากที่มีลายเยอะ
   useFrame(() => {
     const t = getTuner()
-    const n = Math.min(4, Math.max(1, Math.round(t.enPts)))
-    const key = [n, t.skaterX, t.skaterY, t.skaterZ, ...Array.from({ length: n }, (_, i) => `${t[`enP${i}X`]},${t[`enP${i}Y`]},${t[`enP${i}Z`]}`)].join('|')
-    for (let i = 0; i < 4; i += 1) {
-      const b = balls.current[i]
-      if (!b) continue
-      b.visible = i < n
-      if (i < n) b.position.set(t[`enP${i}X`], t[`enP${i}Y`], t[`enP${i}Z`])
-    }
-    if (key === last.current || !tube.current) return
+    if (!ride || !tube.current) return
+    /**
+     * สร้างใหม่เฉพาะตอนค่าที่กำหนดรูปเส้นเปลี่ยน — ทั้งของทางเข้าและของตัวริบบิ้นเอง
+     * (เส้นเกาะผิวริบบิ้น ขยับริบบิ้นทีเดียวเส้นต้องตามไปด้วย)
+     */
+    const key = [
+      t.enPT0, t.enT0, t.enT1, t.enUp, t.enBackZ, t.enBlend, t.enBurstAt, t.enBurstAmt,
+      t.skaterX, t.skaterY, t.skaterZ,
+      t.ribbonX, t.ribbonY, t.ribbonZ, t.ribbonRotX, t.ribbonRotY, t.ribbonRotZ,
+      t.ribbonScale, t.ribbonWave, t.ribbonWaves,
+      t.prX, t.prY, t.prZ, t.prRotX, t.prRotY, t.prRotZ, t.prScale, t.prWave, t.prWaves,
+      entranceLift.value.toFixed(2),
+    ].join('|')
+    if (key === last.current) return
     last.current = key
-    curve.points.length = n + 1
-    for (let i = 0; i < n; i += 1) {
-      ;(curve.points[i] ?? (curve.points[i] = new THREE.Vector3())).set(t[`enP${i}X`], t[`enP${i}Y`], t[`enP${i}Z`])
+    /**
+     * เส้นที่วาด = สูตรเดียวกับที่ตัวละครใช้ทุกบรรทัด (ระยะทางตามจังหวะพุ่ง + คลื่นของผิว
+     * + การเลื่อนเข้าที่หยุดช่วงท้าย) ไม่ใช่เส้นที่วาดเลียนแบบไว้คนละสูตร
+     */
+    entranceSample(ride, t, 1, GIZ_END, GIZ_TAN, GIZ_F, gizmoParent(tube.current), null, entranceLift.value)
+    for (let i = 0; i <= GIZ_SEGS; i += 1) {
+      const pp = i / GIZ_SEGS
+      entranceSample(ride, t, entranceU(t, pp), GIZ_V, GIZ_TAN, GIZ_F, gizmoParent(tube.current), null, entranceLift.value)
+      const bl = entranceBlend(t, pp)
+      curve.points[i]
+        .copy(GIZ_V)
+        .addScaledVector(GIZ_END, -bl)
+        .addScaledVector(GIZ_REST.set(t.skaterX, t.skaterY, t.skaterZ), bl)
     }
-    ;(curve.points[n] ?? (curve.points[n] = new THREE.Vector3())).set(t.skaterX, t.skaterY, t.skaterZ)
     curve.updateArcLengths()
     const old = tube.current.geometry
-    tube.current.geometry = new THREE.TubeGeometry(curve, 80, 0.14, 6, false)
+    tube.current.geometry = new THREE.TubeGeometry(curve, 200, 0.1, 6, false)
     old?.dispose()
   })
   return (
-    <group>
-      <mesh ref={tube} renderOrder={5}>
-        <meshBasicMaterial color="#6ee7b7" depthTest={false} transparent opacity={0.9} />
-      </mesh>
-      {[0, 1, 2, 3].map((i) => (
-        <mesh key={i} ref={(m) => (balls.current[i] = m)} renderOrder={6}>
-          <sphereGeometry args={[0.55, 14, 10]} />
-          <meshBasicMaterial color={i === 0 ? '#f59e0b' : '#6ee7b7'} depthTest={false} />
-        </mesh>
-      ))}
-    </group>
+    <mesh ref={tube} renderOrder={5}>
+      <meshBasicMaterial color="#6ee7b7" depthTest={false} transparent opacity={0.9} />
+    </mesh>
   )
 }
 
@@ -1925,7 +1960,7 @@ function Scene() {
           </Appear>
         )}
         {/* เส้นทางวางเอง (debug): เส้น + ลูกบอลที่ waypoint ในพิกัดกลุ่มนี้ */}
-        {import.meta.env.DEV && t.enPath > 0.5 && t.enShowPath > 0.5 && <PathGizmo />}
+        {import.meta.env.DEV && t.enPath > 0.5 && t.enShowPath > 0.5 && <PathGizmo ride={ride} />}
         {/* ตัวละครอยู่ในพิกัดกลุ่มเดียวกับริบบิ้น จะได้วางบนถนนได้ตรง ๆ ไม่ต้องแปลงพิกัด */}
         {/**
          * ตัวละครห่อด้วย Entrance: กลุ่มนอกถือปลายทาง (ค่าจากแผง) กลุ่มในวิ่งเข้ามาจาก
@@ -1934,7 +1969,8 @@ function Scene() {
         {skater && (
           <Entrance
             replay={t.enReplay}
-            ride={t.enRide > 0.5 ? ride : null}
+            ride={ride}
+            rideMode={t.enRide > 0.5}
             pathMode={t.enPath > 0.5}
             position={[t.skaterX, t.skaterY, t.skaterZ]}
             rotation={[t.skaterRotX * RAD, t.skaterRotY * RAD, t.skaterRotZ * RAD]}
