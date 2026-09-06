@@ -18,15 +18,24 @@ import { useEffect, useMemo, useRef } from 'react'
  *
  * ของเรา: สามบีต OPEN · TO · WORK — แต่ละบีตเป็นริบบิ้น "คนละแผ่น" แผ่นใหม่เข้ามาจากล่าง
  * ทับแผ่นเก่าที่ถูกดันขึ้นไปซ้อนเป็นชั้น ทุกแผ่นพลิ้วตามเวลา (ไม่ผูกกับ scroll) ช่วงท้ายทุกแผ่น
- * ย่อและเลื่อนมาต่อกันเป็นป้ายเดียว พื้นขาว→เทา
+ * ย่อและเลื่อนมาต่อกันเป็นป้ายเดียว พื้นน้ำเงินตลอดเรื่องตามโทนของหน้า
  *
  * ค่าที่เปลี่ยนทุกเฟรมเขียนลง DOM ตรง ๆ ผ่าน ref (setAttribute) ไม่ผ่าน setState
  */
 
+/**
+ * สีแถบ = ชุด accent ของหน้า (--v3-* ใน portfolio2026final.css) ไม่ใช่ดำ/แดง/เขียวนีออนตามคลิป ref
+ *
+ * เงื่อนไขของการเลือก: ทุกแถบต้องอ่านออกทั้งบนพื้นน้ำเงินตอนไถล และตอนจบที่มันต่อกันเป็นแถบคั่น
+ * บนพื้นน้ำเงินเดียวกับจอถัดไป — สีที่ใกล้น้ำเงินจึงใช้เป็นพื้นแถบไม่ได้ เหลือ ส้ม/ทราย/เขียว
+ * ตัวอักษรเลือกให้ตัดกับพื้นแถบของตัวเอง (บนส้ม/เขียวเข้มใช้ ink อ่อน, บนทรายใช้น้ำเงินเข้ม)
+ *
+ * WORK ใช้เขียวของกรอบ #OpenToWork ใน LinkedIn (#01754f) — คำเดียวกัน คนดูจำสีนี้ได้อยู่แล้ว
+ */
 const BEATS = [
-  { word: 'OPEN', bg: '#000000', ink: '#ffffff', speed: 0.9, phase: 0.0 },
-  { word: 'TO', bg: '#ff1a1a', ink: '#111111', speed: 1.15, phase: 2.1 },
-  { word: 'WORK', bg: '#12ff7c', ink: '#111111', speed: 0.75, phase: 4.0 },
+  { word: 'OPEN', bg: '#fd5000', ink: '#f0f0f0', speed: 0.9, phase: 0.0 },
+  { word: 'TO', bg: '#e2d7cb', ink: '#2052cd', speed: 1.15, phase: 2.1 },
+  { word: 'WORK', bg: '#01754f', ink: '#f0f0f0', speed: 0.75, phase: 4.0 },
 ]
 
 /** กรอบภาพของ SVG (คงสัดส่วน 16:9 แล้ว slice ให้เต็มจอ) */
@@ -81,7 +90,7 @@ export function OpenToWorkRibbon({ id = 'open-to-work' }: { id?: string }) {
       const ride = clamp01(p / RIDE_END)
       /**
        * ช่วงท้ายสองจังหวะตามเฟรม 060–074:
-       *   o1 (060→070) ทุกแผ่นแยกออกเป็นพัด ปลายขวาลู่ไปจุดเดียว แผ่นล่าสุดใหญ่สุด พื้นเป็นเทา
+       *   o1 (060→070) ทุกแผ่นแยกออกเป็นพัด ปลายขวาลู่ไปจุดเดียว แผ่นล่าสุดใหญ่สุด
        *   o2 (070→074) พัดหุบ แผ่นย่อลงแล้วเลื่อนมาต่อกันเป็นป้ายเดียว
        */
       const o1 = smooth(clamp01((p - RIDE_END) / 0.15))
@@ -148,14 +157,17 @@ export function OpenToWorkRibbon({ id = 'open-to-work' }: { id?: string }) {
       })
 
       /**
-       * พื้น: ขาว → เทาอ่อนตอนเป็นพัด (เฟรม 063) → น้ำเงินของหน้าตอนต่อเป็นแถบคั่น
-       * แถบจึงนั่งบนพื้นเดียวกับจอถัดไป อ่านเป็นเส้นแบ่ง ไม่ใช่หน้าเทาอีกหน้า
+       * พื้นเป็นน้ำเงินของหน้า แต่ "ทึบขึ้นเรื่อย ๆ" ตอนเข้าเรื่อง ไม่ใช่แผ่นทึบที่เลื่อนมาทับ
+       *
+       * ฉาก 3D ของจอแรกเป็นชั้นตรึงเต็มจออยู่ข้างหลัง (ดู Portfolio2026FinalPage) ถ้าจอนี้
+       * ทึบตั้งแต่พิกเซลแรก ขอบบนของมันจะกวาดผ่านฉากเป็นเส้นคาดขวางจอ — ริบบิ้นสามมิติถูก
+       * หั่นครึ่งกลางอากาศ ค่อย ๆ ทึบแทน ฉากจึงจางหายไปใต้เรื่องใหม่ ไม่มีขอบให้เห็น
        */
-      const g1 = 255 - 25 * o1
-      const rC = Math.round(lerp(g1, 0x26, o2))
-      const gC = Math.round(lerp(g1, 0x5a, o2))
-      const bC = Math.round(lerp(g1, 0xda, o2))
-      if (stage.current) stage.current.style.background = `rgb(${rC} ${gC} ${bC})`
+      const veil = Math.min(1, Math.max(0, p / 0.18))
+      if (stage.current) {
+        const o = veil * veil * (3 - 2 * veil)
+        stage.current.style.background = `rgba(38, 90, 218, ${o.toFixed(3)})`
+      }
       // พลิ้วตลอดเวลาที่อยู่ในจอ — แต่พอต่อเป็นป้ายแล้วนิ่งสนิท หยุดลูป รอเฉพาะ scroll
       if (visible && o2 < 1) raf = requestAnimationFrame(render)
     }
@@ -181,7 +193,7 @@ export function OpenToWorkRibbon({ id = 'open-to-work' }: { id?: string }) {
 
   return (
     <section id={id} data-screen={id} ref={section} className="relative h-[420svh] w-full">
-      <div ref={stage} className="sticky top-0 h-[100svh] w-full overflow-clip bg-white">
+      <div ref={stage} className="sticky top-0 h-[100svh] w-full overflow-clip">
         <svg
           className="block h-full w-full"
           viewBox={`0 0 ${VW} ${VH}`}
