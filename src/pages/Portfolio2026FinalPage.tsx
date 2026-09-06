@@ -8,6 +8,7 @@ import { ExperienceTunnel } from '@/sections/tunnel/ExperienceTunnel'
 import { AnchorNav } from '@/components/AnchorNav'
 import { SITE } from '@/config/site'
 import { OpenToWorkRibbon } from '@/sections/ribbonstory/OpenToWorkRibbon'
+import { setCruise, setSceneOn } from '@/newhero/scrolly'
 /** ฉาก 3D ของจอแรก — แยก chunk ไม่ให้ถ่วงจอที่เหลือ */
 const NewHeroScene = lazy(() => import('@/newhero/NewHeroScene'))
 import heroLife from '@/assets/v2final/hero-life.svg'
@@ -233,6 +234,8 @@ export function Portfolio2026FinalPage() {
   // จอ What I Do ยกมาทั้งก้อนจาก /2026 — สองอันนี้คือของที่ section นั้นต้องการ
   const scrollyRef = useRef<HTMLDivElement>(null)
   const skillsRef = useRef<HTMLElement | null>(null)
+  /** บล็อกตัวหนังสือของจอแรก — จางออกตอนฉากเริ่มไหล (เขียน style ตรง ๆ ไม่ผ่าน state) */
+  const copyRef = useRef<HTMLDivElement>(null)
   const skill = useSkillStory(scrollyRef, skillsRef)
 
   /**
@@ -255,7 +258,8 @@ export function Portfolio2026FinalPage() {
   }, [commenting])
 
   useEffect(() => {
-    const hero = document.getElementById('hero')
+    // เฝ้าแผ่นที่ถูกตรึง ไม่ใช่ตัว section — section สูงสามวิวพอร์ต จึงไม่มีทางเห็นถึงครึ่งตัวเอง
+    const hero = document.getElementById('hero-pin')
     if (!hero) return
     const io = new IntersectionObserver((entries) => setOnHero(entries[0].isIntersecting), {
       threshold: 0.5,
@@ -264,8 +268,73 @@ export function Portfolio2026FinalPage() {
     return () => io.disconnect()
   }, [])
 
+  /**
+   * จอแรกเลื่อนออกแบบพารัลแลกซ์ — แต่ทำ "ในฉาก" ไม่ใช่เลื่อนตัวแคนวาส
+   *
+   * เคยเลื่อนตัวแคนวาสขึ้นช้ากว่าหน้า ผลคือขอบล่างของแคนวาสลอยขึ้นมากลางจอ เห็นเป็นเส้น
+   * ตัดขวางที่ริบบิ้นถูกตัดจบดื้อ ๆ แล้วสีก็ไม่ต่อกัน (พื้นฉากไล่จบเข้มกว่าพื้นจอถัดไป)
+   * — แคนวาสจึงอยู่นิ่งเต็มจอเหมือนเดิม แล้วส่งความคืบหน้าเข้าไปให้กล้องขยับแทน
+   * ของในฉากอยู่คนละระยะลึกอยู่แล้ว กล้องขยับนิดเดียวก็ได้พารัลแลกซ์จริงมาฟรี ๆ
+   * (ดู CameraRig ใน newhero/NewHeroScene.jsx และ newhero/scrolly.js)
+   *
+   * เหลือชั้นตัวหนังสือที่ยังเลื่อนใน DOM — มันคือชั้นที่อยู่ใกล้สุด จึงต้องไปเร็วกว่าเพื่อน
+   *
+   * เขียน transform ลง DOM ตรง ๆ ไม่ผ่าน state: ค่านี้เปลี่ยนทุกเฟรมที่เลื่อน ถ้าเป็น state
+   * หน้าทั้งหน้า (รวมแคนวาส 3D) จะ re-render ตามการเลื่อน อ่านค่าใน rAF ครั้งเดียวต่อเฟรม
+   * ไม่ใช่ทุก event ของ scroll ซึ่งยิงถี่กว่าเฟรม
+   */
+  useEffect(() => {
+    const sec = document.getElementById('hero')
+    if (!sec) return
+    let raf = 0
+    const read = () => {
+      raf = 0
+      const r = sec.getBoundingClientRect()
+      const vh = Math.max(1, window.innerHeight)
+      const y = Math.max(0, -r.top)
+      const p = Math.min(1, y / vh)
+      setCruise(p)
+      // พ้นสองวิวพอร์ตแล้วจอถัดไปทึบเต็มที่ ฉากข้างหลังไม่มีใครเห็น — สั่งหยุดวาด
+      setSceneOn(y < vh * 2)
+      const copy = copyRef.current
+      if (copy) {
+        copy.style.transform = `translate3d(0, ${(-y * 0.16).toFixed(1)}px, 0)`
+        // จางออกตอนจอแรกกำลังพ้นไป ไม่ใช่ค้างทับเรื่องถัดไป
+        const f = Math.min(1, Math.max(0, (p - 0.25) / 0.45))
+        copy.style.opacity = String(1 - f * f * (3 - 2 * f))
+      }
+    }
+    const on = () => {
+      if (!raf) raf = requestAnimationFrame(read)
+    }
+    window.addEventListener('scroll', on, { passive: true })
+    window.addEventListener('resize', on)
+    read()
+    return () => {
+      window.removeEventListener('scroll', on)
+      window.removeEventListener('resize', on)
+      if (raf) cancelAnimationFrame(raf)
+      setCruise(0)
+    }
+  }, [])
+
   return (
-    <div ref={rootRef} className="v3 relative w-full">
+    <div ref={rootRef} className="v3 relative w-full bg-[var(--v3-blue)]">
+      {/**
+       * ฉาก 3D เป็นชั้นตรึงเต็มวิวพอร์ต ไม่ได้อยู่ในกล่องของจอแรก
+       *
+       * ถ้าอยู่ในจอแรก (สูงวิวพอร์ตเดียว) พอเลื่อนพ้น ทุกอย่างในฉากถูกตัดจบที่ขอบกล่อง —
+       * เห็นเป็นเส้นคาดขวางจอที่ริบบิ้นถูกหั่นครึ่ง แล้วสีสองฝั่งก็ไม่ต่อกัน ตรึงไว้เต็มจอ
+       * แทน ฉากจึงไม่มีขอบให้เห็นเลย จอถัดไปเลื่อนมาทับมันเองตามลำดับการวาด
+       * (section ถัดไปเป็น positioned และอยู่หลังในเอกสาร จึงวาดทับชั้นนี้)
+       *
+       * รับเมาส์ไม่ได้ (pointer-events) ไม่งั้นมันจะกินคลิกของทั้งหน้าไปหมด
+       */}
+      <div className="pointer-events-none fixed inset-0">
+        <Suspense fallback={null}>
+          <NewHeroScene />
+        </Suspense>
+      </div>
       <TopBar />
       {/* ราวจุดนำสายตา — ตัวเดียวกับที่ใช้ในเวอร์ชัน Vue (branch `2026`)
           ในแบบมีทุกจอยกเว้นจอแรก จึงจางหายตอนอยู่ที่ hero */}
@@ -274,8 +343,12 @@ export function Portfolio2026FinalPage() {
         className={onHero ? 'pointer-events-none opacity-0' : undefined}
       />
 
-      {/* ── จอ 1: หัวเรื่อง ────────────────────────────────────────────── */}
-      <Screen id="hero">
+      {/* ── จอ 1: หัวเรื่อง ──────────────────────────────────────────────
+          โปร่งใส ไม่มีพื้นของตัวเอง — ฉากที่ตรึงไว้ข้างบนคือพื้นของจอนี้ จอแรกจึงไม่มีขอบ
+          ให้ตัดกับจอถัดไป เหลือแค่ตัวหนังสือที่เลื่อนออกเร็วกว่าฉาก (พารัลแลกซ์) */}
+      <section id="hero" data-screen="hero" className="relative h-[100svh] w-full">
+        <div id="hero-pin" className="absolute inset-0">
+        <div className="relative mx-auto h-full w-full max-w-[1440px]">
         {/* ชั้นรับคลิกของโหมดคอมเมนต์ — คลุมทั้งจอแรก ปักหมุดตรงที่คลิก
             อยู่ต่ำกว่าเนื้อหา (z-0 ของ Screen) แต่สูงกว่าแคนวาส 3D ซึ่งไม่รับคลิกอยู่แล้ว */}
         {commenting && (
@@ -300,23 +373,11 @@ export function Portfolio2026FinalPage() {
           </div>
         )}
 
-        {/**
-         * ฉาก hero ตัวใหม่ — หน้าต่างสามมิติ + ถนนหมากรุก + ตัวละครบนสเก็ตบอร์ด
-         *
-         * กินเต็มจอแรก ไม่ใช่ครึ่งใดครึ่งหนึ่ง เพราะกล้องของฉากถูกแก้จากเส้น perspective
-         * ของแบบไว้แล้ว (ดู docs/new-hero-handoff.md) การไปบีบกรอบให้เหลือครึ่งจอ
-         * เท่ากับเปลี่ยนอัตราส่วนที่ค่ากล้องชุดนั้นคิดมา ของจะเลื่อนหลุดตำแหน่งทันที
-         * องค์ประกอบถูกจัดไว้แล้วให้ของอยู่ซ้าย เหลือที่ว่างฝั่งขวาให้ตัวหนังสือ
-         */}
-        <div className="absolute inset-0 h-[100svh]">
-          <Suspense fallback={null}>
-            <NewHeroScene />
-          </Suspense>
-        </div>
-
         {/* จอแรกไหลตามความสูงจริงของวิวพอร์ต ไม่ใช่พิกัดตายตัวจากแบบ 1024
             หัวเรื่องอยู่กลาง ประโยคปิดถูกดันลงไปติดล่างด้วย mt-auto */}
-        <div className="pointer-events-none relative z-10 ml-auto flex h-[100svh] w-[min(46%,560px)] flex-col pt-[clamp(72px,16svh,164px)] pr-[clamp(24px,4.7vw,68px)] pb-[clamp(24px,14svh,143px)]">
+        <div
+          ref={copyRef}
+          className="pointer-events-none relative z-10 will-change-transform ml-auto flex h-[100svh] w-[min(46%,560px)] flex-col pt-[clamp(72px,16svh,164px)] pr-[clamp(24px,4.7vw,68px)] pb-[clamp(24px,14svh,143px)]">
           {/* my-auto ไม่ใช่ justify-center — ประโยคปิดถูกตรึงไว้ล่างสุด ที่ว่างที่เหลือ
               จึงต้องถูกแบ่งรอบหัวเรื่องเอง ไม่งั้นมันจะถูกดันไปชนแถบเมนูด้านบน */}
           <div className="my-auto flex flex-col gap-[clamp(12px,3.5svh,36px)]">
@@ -357,7 +418,9 @@ export function Portfolio2026FinalPage() {
             Comment tool
           </button>
         </div>
-      </Screen>
+        </div>
+        </div>
+      </section>
 
       {/* Open to work — เล่าด้วยการเลื่อน: ริบบิ้นเวกเตอร์สามบีต OPEN · TO · WORK ซ้อนชั้นและพลิ้ว
           จบเป็นแถบคั่นเต็มความกว้างชิดขอบล่างของจอ ต่อเข้าจอ What I Do (ดู sections/ribbonstory) */}

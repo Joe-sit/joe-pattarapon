@@ -36,7 +36,7 @@ function capsuleSlab(w, h, depth) {
   g.translate(0, 0, -depth / 2)
   return g
 }
-import { useDisposable } from '@/joespresso/scene/utils'
+import { useDisposable, LOW_END } from '@/joespresso/scene/utils'
 
 /**
  * อบสีไล่ระดับลงไปในเรขาคณิตเป็นสีต่อจุดยอด
@@ -307,7 +307,16 @@ export function Switch({
           envMapIntensity={env}
           distortion={0}
           samples={10}
-          resolution={512}
+          /**
+           * ความละเอียดของบัฟเฟอร์ที่กระจก "ถ่ายฉากหลังของตัวเอง" ลงไป
+           *
+           * 512 คือที่มาของรอยหยัก: ภาพนั้นถูกยืดกลับมาเต็มพื้นที่ของราง ขอบสีที่ตัดกันแรง
+           * (ก้อนเขียว/ลูกบอลม่วงหลังกระจก) จึงกลายเป็นขั้นบันไดที่ตาจับได้ทันที และเพราะ
+           * ior = 1 ไม่มีการหักเหมาช่วยกลบ สิ่งที่เห็นคือพิกเซลของบัฟเฟอร์ตรง ๆ
+           * 1024 ยังเหลือขั้นบันไดจาง ๆ ที่ขอบก้อนเขียว (ลองแล้ว) 2048 ถึงจะหมดจริง
+           * เครื่องอ่อนคงไว้ที่ 512 — ค่านี้คือการเรนเดอร์ฉากซ้ำอีกรอบต่อเฟรม ไม่ใช่แค่ตัวเลข
+           */
+          resolution={LOW_END ? 512 : 2048}
           attenuationDistance={depth * 9}
           attenuationColor={TRACK[1]}
           transparent

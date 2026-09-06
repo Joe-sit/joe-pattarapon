@@ -15,10 +15,13 @@ import { CameraFX } from './CameraFX'
 import { Switch } from './Switch'
 import { Cursor } from './Cursor'
 import { Appear } from './Appear'
-import { IntroClock, introTime, outBack as introBack } from './intro'
+import { IntroClock, introTime, introWants, outBack as introBack } from './intro'
+import { setNewHeroReady } from './ready'
 import { Entrance, entranceBlend, entranceSample, entranceU } from './Entrance'
 import { portalRide } from './portalRide'
 import { entranceLift } from './entranceLift'
+import { ridePose } from './ridePose'
+import { cruiseGrow, cruisePull, useSceneOn } from './scrolly'
 
 /**
  * ฉาก hero ใหม่ — "โต้คลื่นบนริบบิ้นหมากรุก" (คอมพ์ 12739:337)
@@ -258,15 +261,22 @@ const clubGlyph = glyphTexture((ctx, s) => {
  * ไม่งั้นสองที่คำนวณคนละสูตรแล้วตัวละครลอย/จมจากผิวจริง
  */
 const RIB_UP = new THREE.Vector3(0, 1, 0)
-function ribbonFrame(curve, t, wave, waves, out) {
+/**
+ * tv = "เฟสตามเส้น" แยกจาก t ที่ใช้หาจุด — ปกติเท่ากัน
+ *
+ * ริบบิ้นช่วงต่อ (CruiseRibbon) เป็นเส้นคนละเส้นที่งอกจากปลายเส้นหลัก ถ้ามันคิดคลื่นกับ
+ * การบิดจาก t ของตัวเอง (เริ่มใหม่ที่ 0) ผิวสองท่อนจะกระโดดคนละเฟสตรงรอยต่อทันที
+ * — ส่งเฟสที่นับต่อจากเส้นหลัก (tv = 1 + ...) เข้ามาแทน รอยต่อจึงเรียบเป็นเส้นเดียว
+ */
+function ribbonFrame(curve, t, wave, waves, out, tv = t) {
   const { P, T, S, N } = out
   curve.getPointAt(t, P)
   curve.getTangentAt(t, T)
   S.crossVectors(T, RIB_UP).normalize()
-  const tw = Math.sin(t * Math.PI * 1.6 + 0.4) * 0.16 + t * 0.2 - 0.08
+  const tw = Math.sin(tv * Math.PI * 1.6 + 0.4) * 0.16 + tv * 0.2 - 0.08
   S.applyAxisAngle(T, tw)
   N.crossVectors(S, T).normalize()
-  const lift = Math.sin(t * Math.PI * 2 * waves + 0.6) * wave
+  const lift = Math.sin(tv * Math.PI * 2 * waves + 0.6) * wave
   P.addScaledVector(N, lift)
   return out
 }
@@ -280,6 +290,11 @@ function ribbonGeometry(
   segs = 300,
   from = 0,
   to = 1,
+  /**
+   * ต่อจากเส้นอื่น: tv0/tvK คือเฟสคลื่นที่นับต่อมา (ดู ribbonFrame) และ sOff คือระยะตามเส้น
+   * ที่สะสมมาแล้ว ซึ่ง uv ต้องนับต่อ ไม่งั้นลายหมากรุกเริ่มนับหนึ่งใหม่ตรงรอยต่อ
+   */
+  phase = null,
 ) {
   const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.6)
   const len = curve.getLength()
@@ -304,7 +319,7 @@ function ribbonGeometry(
      * บิดรอบแกนสัมผัสนิดเดียวพอ — มันคือถนนที่เอียงตามโค้ง ไม่ใช่ริบบิ้นที่ม้วนตัว
      * และคลื่นตามยาวยกตาม "แนวตั้งฉากกับผิว" ไม่ใช่แกน y ของโลก (สูตรอยู่ใน ribbonFrame)
      */
-    ribbonFrame(curve, t, wave, waves, frame)
+    ribbonFrame(curve, t, wave, waves, frame, phase ? phase.tv0 + t * phase.tvK : t)
     const cx = P.x
     const cy = P.y
     const cz = P.z
@@ -322,7 +337,7 @@ function ribbonGeometry(
      * u หารด้วยความกว้างเต็ม ไม่ใช่ครึ่งความกว้าง — ต้องขยับคู่กัน ไม่งั้นช่องจะไม่จัตุรัส
      * (v ครอบ 1 หน่วยเทกซ์เจอร์ต่อความกว้าง u ก็ต้องครอบ 1 หน่วยต่อระยะเท่าความกว้าง)
      */
-    const u = (t * len) / w
+    const u = ((phase ? phase.sOff : 0) + t * len) / w
     uv.push(u, 0, u, 1, u, 0, u, 1)
     if (i < segs) {
       const a = i * 4
@@ -1203,7 +1218,13 @@ function useRibbonDraw(geo, part, onStep) {
     let local = 1
     if (t.intro > 0.5) {
       const u = Math.min(1, Math.max(0, (introTime() - t.inRibAt) / Math.max(0.01, t.inRibDur)))
-      const e = 1 - Math.pow(1 - u, 3)
+      /**
+       * smootherstep ไม่ใช่ ease-out กำลังสาม — สูตรเดียวกับ ribbonDrawn ใน Entrance.jsx
+       *
+       * ease-out กำลังสามเทน้ำหนักไปที่ช่วงต้น: ท่อนในพอร์ทัล (40% แรก) ถูกวาดจบใน 0.25 วิ
+       * ทั้งที่ทั้งเส้นยาว 1.6 วิ — เห็นเป็นเส้นกระเด็นออกมาแล้วค่อย ๆ คลานต่อ
+       */
+      const e = u * u * u * (u * (u * 6 - 15) + 10)
       const f = Math.min(0.95, Math.max(0.05, t.inRibSplit))
       local = part === 'portal' ? Math.min(1, e / f) : Math.min(1, Math.max(0, (e - f) / (1 - f)))
     }
@@ -1319,6 +1340,92 @@ function CheckerRibbon({ width, thick, wave, waves, scale, offset, rot }) {
       </mesh>
     </group>
     </group>
+    </group>
+  )
+}
+
+/**
+ * ช่วงต่อของริบบิ้น — งอกจากปลายเส้นหลักตอนคนดูเลื่อนจอ แล้วกวาดขึ้นไปบรรจบขอบขวาของเฟรม
+ *
+ * จอแรกไม่ได้จบด้วยการตัดภาพ: ริบบิ้นเส้นเดิมยาวต่อออกไปเรื่อย ๆ ตามการเลื่อน ตัวละครไถล
+ * ตามปลายที่กำลังงอก แล้วทั้งคู่ออกไปทางขวาเพื่อส่งต่อให้จอถัดไป (ดู scrolly.js)
+ *
+ * ทำไมเป็นเมชคนละใบ ไม่ใช่ต่อจุดควบคุมเข้าไปในเส้นเดิม: พารามิเตอร์ t ของเส้นเดิมถูกใช้
+ * เป็น "เฟส" ของคลื่นและการบิด และค่าที่จูนไว้ทั้งชุด (enT0/enT1/ตำแหน่งปากช่อง) อ้างอิง t
+ * ชุดนั้น — ต่อจุดเข้าไปคือยืด t ทั้งเส้น ของที่จูนมาทั้งหมดเลื่อนหมดในครั้งเดียว
+ * ใบใหม่จึงต่อท้ายแทน โดยรับ "เฟสที่นับต่อ" กับ "ระยะตามเส้นที่สะสมมา" ไปคิด (ดู ribbonFrame)
+ *
+ * จุดควบคุมได้จากการฉายกลับ: เลือกจุดในพิกัดจอ (ndc) ที่อยากให้เส้นผ่าน แล้วแปลงกลับเป็น
+ * พิกัดกลุ่มแถบหน้าต่างด้วยกล้องจริงของฉาก — ปลายเส้นจึงจบที่ขอบขวาพอดี ไม่ใช่กะเอา
+ * จุดแรกคือปลายเส้นหลักเป๊ะ และจุดที่สองอยู่บนแนวสัมผัสเดิม รอยต่อจึงไม่มีหักศอก
+ */
+export const CRUISE_PATH = [
+  new THREE.Vector3(-7, -4.8, 16),
+  new THREE.Vector3(-7.5, -5.7, 17.2),
+  new THREE.Vector3(-6.2, -6.4, 18.2),
+  new THREE.Vector3(-2.8, -6.5, 19.4),
+  new THREE.Vector3(1.6, -6, 21.2),
+  new THREE.Vector3(6.4, -5, 23.8),
+  new THREE.Vector3(11.6, -3.6, 27.2),
+  new THREE.Vector3(17.4, -1.9, 31),
+]
+
+const CRUISE_SEGS = 200
+
+/** เส้นกับความยาว คิดครั้งเดียวตอนโหลดโมดูล — จุดควบคุมเป็นค่าคงที่ ไม่ได้ขึ้นกับปุ่มไหน */
+export const CRUISE_CURVE = new THREE.CatmullRomCurve3(CRUISE_PATH, false, 'catmullrom', 0.6)
+export const CRUISE_LEN = CRUISE_CURVE.getLength()
+export const RIBBON_LEN = new THREE.CatmullRomCurve3(RIBBON_PATH, false, 'catmullrom', 0.6).getLength()
+
+/** ความคืบหน้าของการวาดใบต่อ (0..1 ของใบนี้) — ปลายล้ำหน้าตัวละครไว้เล็กน้อยตาม cruLead */
+function cruiseDrawn(t, split) {
+  const g = cruiseGrow(t)
+  if (g <= split) return 0
+  return Math.min(1, (g - split) / Math.max(0.01, 1 - split) + Math.max(0, t.cruLead))
+}
+
+function useCruiseDraw(geo, split) {
+  const drawn = useRef(-1)
+  useFrame(() => {
+    const k = Math.round(CRUISE_SEGS * cruiseDrawn(getTuner(), split))
+    if (k === drawn.current) return
+    drawn.current = k
+    const [top, rest] = geo.groups
+    if (top) top.count = k * 6
+    if (rest) rest.count = k * 18
+  })
+}
+
+function CruiseRibbon({ width, thick, wave, waves, scale, offset, rot, split }) {
+  const geo = useMemo(
+    () =>
+      ribbonGeometry(CRUISE_PATH, width, thick, wave, waves, CRUISE_SEGS, 0, 1, {
+        tv0: 1,
+        tvK: CRUISE_LEN / RIBBON_LEN,
+        sOff: RIBBON_LEN,
+      }),
+    [width, thick, wave, waves],
+  )
+  useDisposable(geo)
+  useCruiseDraw(geo, split)
+  const maxAniso = useThree((st) => st.gl.capabilities.getMaxAnisotropy())
+  const tex = useMemo(() => {
+    const x = checkerTex.clone()
+    x.anisotropy = maxAniso
+    x.needsUpdate = true
+    return x
+  }, [maxAniso])
+  useDisposable(tex)
+  return (
+    <group position={RIBBON_PIVOT} rotation={rot}>
+      <group position={[-RIBBON_PIVOT[0], -RIBBON_PIVOT[1], -RIBBON_PIVOT[2]]}>
+        <group position={offset} scale={scale}>
+          <mesh geometry={geo}>
+            <meshStandardMaterial attach="material-0" map={tex} roughness={0.85} side={THREE.DoubleSide} />
+            <meshStandardMaterial attach="material-1" color={GREEN_DEEP} roughness={0.75} side={THREE.DoubleSide} />
+          </mesh>
+        </group>
+      </group>
     </group>
   )
 }
@@ -1520,6 +1627,52 @@ function PathGizmo({ ride }) {
   )
 }
 
+/**
+ * ท่าขาที่เขียนใหม่ทุกเฟรม — วัตถุใบเดิมตลอด ไม่ได้สร้างใหม่ต่อเฟรม
+ *
+ * Mascot อ่าน legPose ข้างใน useFrame ของมันเอง การแก้ค่าในวัตถุใบเดิมจึงมีผลทันที
+ * โดยไม่ต้อง re-render — ถ้าสร้างวัตถุใหม่ทุกเฟรมเพื่อส่งเป็น prop ฉากทั้งฉากจะถูก
+ * reconcile ใหม่ทุกเฟรม ซึ่งแพงกว่างานที่มันทำหลายเท่า
+ *
+ * การย่อ: เข่ารับเต็ม สะโพกรับครึ่ง ข้อเท้ารับเศษที่เหลือ — สัดส่วนของการย่อจริง ถ้างอ
+ * แต่เข่าอย่างเดียวลำตัวจะทิ่มไปข้างหน้าและฝ่าเท้าเปิดหลุดจากบอร์ด ส่วนความสูงของตัวไม่ต้อง
+ * ชดเชยเอง: entranceSample วัดระยะจากจุดกำเนิดถึงฝ่าเท้าใหม่ทุกเฟรมอยู่แล้ว ขาสั้นลง
+ * ตัวก็นั่งต่ำลงตามเอง (ดู soleOffset)
+ */
+const LEG_HIP_SHARE = 0.5
+const LEG_ANKLE_SHARE = 0.35
+
+function LegDrive({ pose, torso }) {
+  useFrame(() => {
+    const t = getTuner()
+    const c = ridePose.crouch
+    /**
+     * ลำตัวก้มลงตามการย่อด้วย — คนย่อรับแรงไม่ได้ย่อแต่ขาโดยที่อกยังตั้งตรง
+     * นี่คือส่วนที่ตาอ่านออกชัดที่สุด เพราะขาถูกกางเกงกับบอร์ดบังไปครึ่งหนึ่งอยู่แล้ว
+     */
+    torso.leanX = t.leanX * RAD
+    torso.leanZ = t.leanZ * RAD
+    torso.foldX = t.foldX * RAD + c * 0.55
+    torso.foldY = t.foldY * RAD
+    torso.foldZ = t.foldZ * RAD
+    torso.headX = t.headX * RAD - c * 0.25
+    pose.spread = t.legSpread
+    pose.stagger = t.legStagger
+    pose.L.hipX = t.hipLX * RAD - c * LEG_HIP_SHARE
+    pose.L.hipY = t.hipLY * RAD
+    pose.L.hipZ = t.hipLZ * RAD
+    pose.L.knee = t.kneeL * RAD + c
+    pose.L.ankle = t.ankleL * RAD + c * LEG_ANKLE_SHARE
+    pose.R.hipX = t.hipRX * RAD - c * LEG_HIP_SHARE
+    pose.R.hipY = t.hipRY * RAD
+    pose.R.hipZ = t.hipRZ * RAD
+    // ขาหลังรับแรงมากกว่าขาหน้าเล็กน้อย — น้ำหนักลงส้นหลังตอนกดรับ ไม่ใช่ย่อเท่ากันสองข้าง
+    pose.R.knee = t.kneeR * RAD + c * 1.15
+    pose.R.ankle = t.ankleR * RAD + c * LEG_ANKLE_SHARE
+  }, -900)
+  return null
+}
+
 function CameraRig() {
   useFrame((state, dt) => {
     const cam = state.camera
@@ -1539,13 +1692,28 @@ function CameraRig() {
      * ทำให้เห็น parallax ของชั้นเหล่านั้น — ทุกอย่างโผล่บนกล้องนิ่งจะแบนเหมือนสไลด์
      */
     const it = t.intro > 0.5 ? introTime() : 99
-    const k = it < 0 ? 1 : Math.pow(1 - Math.min(1, it / Math.max(0.05, t.inCamDur)), 5)
+    /**
+     * ผ่อนแบบ smootherstep ไม่ใช่ยกกำลังห้า
+     *
+     * (1-x)^5 มีความชัน -5 ที่จุดเริ่ม กล้องจึงออกตัวด้วยความเร็วสูงสุดทันทีที่อินโทรเริ่ม
+     * ยิ่งย่นเวลาลงยิ่งอ่านเป็นกระตุกหนึ่งครั้ง — smootherstep ความเร็วเป็นศูนย์ทั้งหัวและท้าย
+     */
+    const cx = it < 0 ? 0 : Math.min(1, it / Math.max(0.05, t.inCamDur))
+    const k = 1 - cx * cx * cx * (cx * (cx * 6 - 15) + 10)
     const dollyZ = t.inCamDolly * k
     const dollyX = t.inCamX * k
     const dollyY = t.inCamY * k
-    cam.position.z = damp(cam.position.z, t.camZ * fit + dollyZ, 0.06, dt)
+    /**
+     * ช่วงไหล: กล้องถอยและลดระดับ เปิดพื้นที่ให้เส้นที่กำลังงอก
+     *
+     * ปลายเส้นหลักจบต่ำกว่าขอบล่างของเฟรม (ตั้งใจ — จอแรกต้องเห็นถนนพุ่งออกนอกจอ)
+     * ถ้ากล้องอยู่ที่เดิม ช่วงต้นของการงอกจะเกิดใต้ขอบจอทั้งหมด คนดูเห็นแค่ตัวละครหายไป
+     * ถอยกล้องก่อนแล้วค่อยงอก (cruStart) ทั้งเส้นจึงอยู่ในเฟรมตลอดทาง
+     */
+    const pull = cruisePull(t)
+    cam.position.z = damp(cam.position.z, t.camZ * fit + dollyZ + t.cruZoom * pull, 0.06, dt)
     cam.position.x = damp(cam.position.x, t.camX - (fit - 1) * 2.1 + state.pointer.x * 0.6 + dollyX, 0.06, dt)
-    cam.position.y = damp(cam.position.y, t.camY + state.pointer.y * 0.4 + dollyY, 0.06, dt)
+    cam.position.y = damp(cam.position.y, t.camY + state.pointer.y * 0.4 + dollyY + t.cruDrop * pull, 0.06, dt)
     // fov มาจากแผงปรับ — เปลี่ยนแล้วต้อง updateProjectionMatrix เอง
     if (cam.fov !== t.fov) {
       cam.fov = t.fov
@@ -1651,6 +1819,15 @@ function Scene() {
    * เส้นทางให้ตัวละครไถลบนริบบิ้นจริง — เส้นเดียวกับ geometry + เมทริกซ์ของกลุ่มที่ห่อมัน
    * (หมุนรอบปากช่อง, ออฟเซ็ต, สเกล) แปลงเป็นพิกัดกลุ่มแถบหน้าต่างซึ่งเป็นพิกัดของตัวละคร
    */
+  /** วัตถุใบเดียวตลอดอายุฉาก — LegDrive เขียนทับค่าในนี้ทุกเฟรม */
+  const legPose = useRef({
+    spread: 0,
+    stagger: 0,
+    L: { hipX: 0, hipY: 0, hipZ: 0, knee: 0, ankle: 0 },
+    R: { hipX: 0, hipY: 0, hipZ: 0, knee: 0, ankle: 0 },
+  }).current
+  /** ท่าลำตัว — ใบเดิมตลอดเช่นกัน (ดู LegDrive) */
+  const torsoPose = useRef({ leanX: 0, leanZ: 0, foldX: 0, foldY: 0, foldZ: 0, headX: 0 }).current
   const ride = useMemo(() => {
     const curve = new THREE.CatmullRomCurve3(RIBBON_PATH, false, 'catmullrom', 0.6)
     const piv = new THREE.Vector3(...RIBBON_PIVOT)
@@ -1672,6 +1849,12 @@ function Scene() {
         mouthT = i / 600
       }
     }
+    /**
+     * ช่วงไหล: ระยะที่เหลือทั้งหมด = ปลายเส้นหลักที่ยังไม่ได้ไถล (enT1 → 1) + ใบต่อทั้งใบ
+     * split = สัดส่วนของท่อนแรกในระยะนั้น ตัวละครจึงข้ามรอยต่อด้วยความเร็วเท่าเดิม
+     * ไม่ใช่ครึ่งเวลาต่อท่อนทั้งที่สองท่อนยาวไม่เท่ากัน
+     */
+    const restLen = Math.max(0, 1 - t.enT1) * RIBBON_LEN
     return {
       curve,
       matrix: m,
@@ -1679,8 +1862,13 @@ function Scene() {
       waves: t.ribbonWaves,
       frame: ribbonFrame,
       mouthT,
+      cruise: {
+        curve: CRUISE_CURVE,
+        tvK: CRUISE_LEN / RIBBON_LEN,
+        split: restLen / Math.max(1e-6, restLen + CRUISE_LEN),
+      },
     }
-  }, [t.ribbonRotX, t.ribbonRotY, t.ribbonRotZ, t.ribbonX, t.ribbonY, t.ribbonZ, t.ribbonScale, t.ribbonWave, t.ribbonWaves])
+  }, [t.ribbonRotX, t.ribbonRotY, t.ribbonRotZ, t.ribbonX, t.ribbonY, t.ribbonZ, t.ribbonScale, t.ribbonWave, t.ribbonWaves, t.enT1])
   const ribbon = (
     <CheckerRibbon
       width={t.ribbonW}
@@ -1702,6 +1890,8 @@ function Scene() {
       cel={cel}
     >
       <IntroClock />
+      <SceneReady />
+      <LegDrive pose={legPose} torso={torsoPose} />
       {clay ? (
         /**
          * ไฟแบบ studio ของวิวพอร์ต: key เฉียงบนซ้าย, fill อ่อนฝั่งตรงข้าม, rim จากหลัง
@@ -1884,6 +2074,17 @@ function Scene() {
           )
         })}
         {ribbon}
+        {/* ช่วงต่อของถนน — งอกตามการเลื่อนจอ ไปจบที่ขอบขวา (ดู CruiseRibbon) */}
+        <CruiseRibbon
+          width={t.ribbonW}
+          thick={t.ribbonThick}
+          wave={t.ribbonWave}
+          waves={t.ribbonWaves}
+          scale={t.ribbonScale}
+          offset={[t.ribbonX, t.ribbonY, t.ribbonZ]}
+          rot={[t.ribbonRotX * RAD, t.ribbonRotY * RAD, t.ribbonRotZ * RAD]}
+          split={ride.cruise.split}
+        />
         {/* ริบบิ้นกระจก — พุ่งออกจากปากบานที่ 2 คนละชิ้นกับเส้นหมากรุก */}
         {t.gr > 0.5 && !clay && (
           <GlassRibbon
@@ -2048,32 +2249,8 @@ function Scene() {
               lookEvery: t.fcLookEvery,
               blinkEvery: t.fcBlinkEvery,
             }}
-            torsoPose={{
-              leanX: t.leanX * RAD,
-              leanZ: t.leanZ * RAD,
-              foldX: t.foldX * RAD,
-              foldY: t.foldY * RAD,
-              foldZ: t.foldZ * RAD,
-              headX: t.headX * RAD,
-            }}
-            legPose={{
-              spread: t.legSpread,
-              stagger: t.legStagger,
-              L: {
-                hipX: t.hipLX * RAD,
-                hipY: t.hipLY * RAD,
-                hipZ: t.hipLZ * RAD,
-                knee: t.kneeL * RAD,
-                ankle: t.ankleL * RAD,
-              },
-              R: {
-                hipX: t.hipRX * RAD,
-                hipY: t.hipRY * RAD,
-                hipZ: t.hipRZ * RAD,
-                knee: t.kneeR * RAD,
-                ankle: t.ankleR * RAD,
-              },
-            }}
+            torsoPose={torsoPose}
+            legPose={legPose}
             armPose={{
               /* เลื่อนโคนแขน — ไม่ใช่องศา จึงไม่คูณ RAD */
               aimOut: t.aimOut,
@@ -2280,9 +2457,51 @@ const heartGlyph = glyphTexture((ctx, s) => {
   ctx.fillText('♥', s / 2, s * 0.56)
 })
 
+/**
+ * บอกสปแลชว่า "ฉากวาดได้จริงแล้ว" — สามด่าน ไม่ใช่ด่านเดียว
+ *
+ * 1. ตัวละครขึ้นครบ: Entrance เป็นคนบอก (introWants) เพราะมันเป็นชิ้นที่มาช้าสุดในฉาก
+ *    GLB ถูกแตกเสร็จและเฟรมเดินแล้วมันถึงจะยกธง
+ * 2. คอมไพล์ให้จบตรงนี้เลย: gl.compile ไล่คอมไพล์ shader ของทุกวัสดุในฉากทีเดียว
+ *    ถ้าไม่สั่ง มันจะไปคอมไพล์ทีละวัสดุตอนวัตถุนั้นโผล่เข้าเฟรมจริง — ซึ่งคือ "ระหว่างอินโทร"
+ *    เฟรมนั้นค้างเป็นวินาที จังหวะที่จูนมาทั้งหมดพัง (เสียเวลาตรงนี้แทน สปแลชยังบังอยู่)
+ * 3. เฟรมเดินเป็นปกติติดกันสามเฟรม: คอมไพล์เสร็จแล้วยังมีเฟรมแรก ๆ ที่อัปโหลดเท็กซ์เจอร์
+ *    ขึ้น GPU อยู่ รอให้ผ่านไปก่อนค่อยเปิดผ้า
+ */
+const READY_FRAMES = 3
+const READY_DT = 0.06
+
+function SceneReady() {
+  const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
+  const camera = useThree((s) => s.camera)
+  const step = useRef({ compiled: false, good: 0, done: false })
+  useFrame((_, dt) => {
+    const st = step.current
+    if (st.done || !introWants()) return
+    if (!st.compiled) {
+      gl.compile(scene, camera)
+      st.compiled = true
+      return
+    }
+    if (dt > READY_DT) {
+      st.good = 0
+      return
+    }
+    st.good += 1
+    if (st.good < READY_FRAMES) return
+    st.done = true
+    setNewHeroReady()
+  }, -999)
+  return null
+}
+
 export default function NewHeroScene() {
+  // เลื่อนพ้นไปไกลจนไม่มีใครเห็นแล้ว = หยุดวาด (ดู setSceneOn ใน scrolly.js)
+  const on = useSceneOn()
   return (
     <Canvas
+      frameloop={on ? 'always' : 'never'}
       className="absolute inset-0"
       dpr={[1, LOW_END ? 1.5 : 2]}
       camera={{

@@ -1,6 +1,9 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import './portfolio2026final.css'
 import { Logo } from '@/joespresso/Logo'
+import { NewHeroSplash } from '@/newhero/NewHeroSplash'
+import { holdIntro, releaseIntro } from '@/newhero/intro'
+import { resetNewHeroReady } from '@/newhero/ready'
 import heroLife from '@/assets/v2final/hero-life.svg'
 import heroBubble from '@/assets/v2final/hero-ideas-bubble.svg'
 
@@ -23,6 +26,26 @@ const CameraTuner = lazy(() =>
 const MENU = ['About', 'Experiences', 'Works', 'Contact']
 
 export function NewHeroPage() {
+  /**
+   * กั้นอินโทรไว้จนสปแลชปิด แล้วอินโทรจะได้เริ่มนับหนึ่งตอนคนดูเห็นฉากจริง ๆ
+   *
+   * กั้นใน effect และกั้น "ทุกครั้งที่ effect ถูกติด" ไม่ใช่ครั้งเดียวตอน mount — StrictMode
+   * ในโหมด dev ถอด effect ทิ้งแล้วใส่กลับทันทีหลัง mount ระหว่างนั้น cleanup ข้างล่างเรียก
+   * releaseIntro ไปแล้ว ถ้าไม่กั้นซ้ำ นาฬิกาจะวิ่งอยู่หลังสปแลชจนอินโทรจบก่อนสปแลชเปิด
+   */
+  const [splash, setSplash] = useState(true)
+  useEffect(() => {
+    if (splash) holdIntro()
+  }, [splash])
+  useEffect(
+    () => () => {
+      // ออกจากหน้าไปกลางคันตอนสปแลชยังค้าง = ปล่อยธงทิ้งไว้ อินโทรของรอบหน้าจะไม่มีวันเริ่ม
+      releaseIntro()
+      // เข้ามาใหม่ต้องรอฉากใหม่คอมไพล์อีกรอบ ไม่ใช่ผ่านฉลุยเพราะธงเก่าค้างอยู่
+      resetNewHeroReady()
+    },
+    [],
+  )
   return (
     <main className="v3 relative h-svh w-full overflow-hidden bg-[#265ada] text-white">
       <style>{`
@@ -104,6 +127,15 @@ export function NewHeroPage() {
         <Suspense fallback={null}>
           <CameraTuner />
         </Suspense>
+      )}
+
+      {splash && (
+        <NewHeroSplash
+          onDone={() => {
+            setSplash(false)
+            releaseIntro()
+          }}
+        />
       )}
     </main>
   )

@@ -5,6 +5,8 @@ import { getTuner } from './tuner'
 import { armIntro, introTime, resetIntro } from './intro'
 import { portalRide } from './portalRide'
 import { entranceLift } from './entranceLift'
+import { cruiseGrow } from './scrolly'
+import { ridePose } from './ridePose'
 
 /**
  * ทางเข้าของตัวละคร — ไหลออกมาจากในหน้าต่าง (พอร์ทัล) แล้วมาหยุดที่ท่าปัจจุบัน
@@ -121,7 +123,7 @@ function outQuint(t) {
 function ribbonDrawn(t, part) {
   if (t.intro <= 0.5) return 1
   const u = Math.min(1, Math.max(0, (introTime() - t.inRibAt) / Math.max(0.01, t.inRibDur)))
-  const e = 1 - (1 - u) ** 3
+  const e = u * u * u * (u * (u * 6 - 15) + 10)
   const f = Math.min(0.95, Math.max(0.05, t.inRibSplit))
   return part === 'portal' ? Math.min(1, e / f) : Math.min(1, Math.max(0, (e - f) / (1 - f)))
 }
@@ -292,6 +294,39 @@ export function entranceSample(ride, t, u, out, tan, f, parent, nrm, lift = 0) {
   return split
 }
 
+/* ── ช่วงไหลท้าย hero ─────────────────────────────────────────────────────── */
+const CRU_F = { P: new THREE.Vector3(), T: new THREE.Vector3(), S: new THREE.Vector3(), N: new THREE.Vector3() }
+const CRU_A = new THREE.Vector3()
+const CRU_B = new THREE.Vector3()
+const CRU_TAN = new THREE.Vector3()
+const CRU_NRM = new THREE.Vector3()
+
+/**
+ * จุดบนเส้นทางของ "ช่วงไหล" ที่ความคืบหน้า s (0 = ตรงที่อินโทรจอด, 1 = ปลายใบต่อ)
+ *
+ * ระยะนี้พาดสองใบ: ปลายเส้นหลักที่ยังเหลือ (enT1 → 1) แล้วต่อด้วยใบต่อทั้งใบ แบ่งด้วย
+ * ride.cruise.split ซึ่งคิดจากความยาวจริงของสองท่อน ความเร็วจึงไม่กระตุกตรงรอยต่อ
+ * ผลลัพธ์อยู่ในพิกัดกลุ่มแม่ เหมือน entranceSample
+ */
+function cruisePoint(ride, t, s, out, tan, nrm, lift) {
+  const c = ride.cruise
+  const split = c.split
+  if (s <= split) {
+    const q = split <= 0 ? 1 : s / split
+    ribbonPoint(ride, t, t.enT1 + (1 - t.enT1) * q, out, CRU_F, nrm)
+    tan.copy(CRU_F.T).transformDirection(ride.matrix).normalize()
+  } else {
+    const q = Math.min(1, (s - split) / Math.max(1e-6, 1 - split))
+    // เฟสคลื่นนับต่อจากเส้นหลัก — สูตรเดียวกับที่ใบต่อใช้ปั้น geometry (ดู ribbonFrame)
+    ride.frame(c.curve, q, ride.wave * ribbonWaveNow(t), ride.waves, CRU_F, 1 + q * c.tvK)
+    out.copy(CRU_F.P).applyMatrix4(ride.matrix)
+    tan.copy(CRU_F.T).transformDirection(ride.matrix).normalize()
+    if (nrm) nrm.copy(CRU_F.N).transformDirection(ride.matrix).normalize()
+  }
+  if (nrm) out.addScaledVector(nrm, lift + t.enUp)
+  return out
+}
+
 /**
  * ระยะจากจุดกำเนิดของตัวละครลงไปถึงฝ่าเท้า (หน่วยของกลุ่มที่ห่อริบบิ้น)
  *
@@ -381,12 +416,23 @@ const PACE_N = 32
 const pace = {
   u: new Float32Array(PACE_N + 1),
   lean: new Float32Array(PACE_N + 1),
+  /** แรงกดตั้งฉากผิว ณ จุดนั้น (1 = น้ำหนักตัวปกติ) — ตัวสั่งว่าต้องย่อเข่าแค่ไหน */
+  load: new Float32Array(PACE_N + 1),
   key: '',
   ready: false,
 }
 const PACE_S = new Float32Array(PACE_N + 1)
 const PACE_Y = new Float32Array(PACE_N + 1)
 const PACE_K = new Float32Array(PACE_N + 1)
+/**
+ * ความโค้ง "ในระนาบตั้ง" — คนละตัวกับ PACE_K
+ *
+ * PACE_K คือความโค้งรอบแนวตั้งฉากผิว = เลี้ยวซ้าย/ขวา ซึ่งทำให้เอียงตัวเข้าโค้ง
+ * ตัวนี้คือความโค้งไปทางแนวตั้งฉากผิว = ท้องเนิน/ยอดเนิน ซึ่งทำให้ "หนักขึ้น/เบาลง"
+ * เก็บเป็น dT/ds ฉายลงแนวตั้งฉาก: บวก = เส้นแอ่นขึ้นรับตัว (ก้นเนิน) = ถูกอัด
+ */
+const PACE_KV = new Float32Array(PACE_N + 1)
+const PACE_DT = new THREE.Vector3()
 const PACE_TIME = new Float32Array(PACE_N + 1)
 const PACE_F = { P: new THREE.Vector3(), T: new THREE.Vector3(), S: new THREE.Vector3(), N: new THREE.Vector3() }
 const PACE_P = new THREE.Vector3()
@@ -396,11 +442,8 @@ const PACE_T0 = new THREE.Vector3()
 const PACE_N0 = new THREE.Vector3()
 const PACE_C = new THREE.Vector3()
 
-/** ความเร็วสัมพัทธ์ที่ความสูงปกติ h (0 = ยอด, 1 = ก้น) — v² = พลังงานที่ยอด + ที่ตกลงมา */
-function paceSpeed(h, grav) {
-  const top = Math.max(0.04, 1 - Math.min(0.98, grav))
-  return Math.sqrt(top + (1 - top) * h)
-}
+/** ความเร็วสะสมของแต่ละจุด (สัมพัทธ์ ไม่ใช่หน่วยจริง) — ดู buildPace */
+const PACE_V = new Float32Array(PACE_N + 1)
 
 /**
  * สร้างตาราง (สร้างใหม่เมื่อรูปเส้นเปลี่ยนเท่านั้น — ระหว่างอินโทรริบบิ้นยังก่อตัวอยู่)
@@ -410,7 +453,7 @@ function buildPace(ride, t, parent) {
   const key = [
     ribbonWaveNow(t),
     t.enTwo > 0.5 ? 1 : 0,
-    t.enT0, t.enT1, t.enPT0, t.enGrav, ride.mouthT, ride.wave, ride.waves,
+    t.enT0, t.enT1, t.enPT0, t.enGrav, t.enAccel, t.enAccelExp, ride.mouthT, ride.wave, ride.waves,
   ].join(',')
   if (pace.key === key) return
   pace.key = key
@@ -426,13 +469,31 @@ function buildPace(ride, t, parent) {
       const ang = Math.acos(Math.min(1, Math.max(-1, PACE_T0.dot(PACE_T))))
       const sign = Math.sign(PACE_C.crossVectors(PACE_T0, PACE_T).dot(PACE_N0)) || 1
       PACE_K[i] = (sign * ang) / ds
+      // ความโค้งในระนาบตั้ง = อัตราการเปลี่ยนทิศสัมผัส ฉายลงแนวตั้งฉากผิว
+      PACE_KV[i] = PACE_DT.subVectors(PACE_T, PACE_T0).divideScalar(ds).dot(PACE_N0)
     }
     PACE_S[i] = total
     PACE_PREV.copy(PACE_P)
     PACE_T0.copy(PACE_T)
   }
   PACE_K[0] = PACE_K[1]
+  PACE_KV[0] = PACE_KV[1]
   seamState.inside = wasInside
+
+  /**
+   * เส้นยาวเป็นศูนย์ = ยังไม่มีเส้นให้วิ่ง อย่าเผยแพร่ตาราง
+   *
+   * ตอนอินโทรเริ่ม ริบบิ้นยังวาดไม่ถึงท่อนนอกเลย (ribbonDrawn = 0) ทุกจุดที่สุ่มได้จึงถูก
+   * หนีบมาอยู่ที่จุดเดียวกันหมด ระยะทางรวมเป็น 0 — ตารางที่สร้างจากเส้นแบบนั้นไม่มีความหมาย
+   * และหารกันจนได้ NaN ไหลไปเป็นพารามิเตอร์ของเส้นโค้ง (getPointAt(NaN) พังทั้งฉาก)
+   *
+   * ล้างคีย์ด้วย เฟรมหน้าจะได้ลองใหม่ ระหว่างนี้ entranceU ใช้จังหวะตามเวลาล้วน ๆ ไปก่อน
+   */
+  if (!(PACE_S[PACE_N] > 1e-3)) {
+    pace.key = ''
+    pace.ready = false
+    return
+  }
 
   let yMin = Infinity
   let yMax = -Infinity
@@ -441,14 +502,60 @@ function buildPace(ride, t, parent) {
     if (PACE_Y[i] > yMax) yMax = PACE_Y[i]
   }
   const span = Math.max(1e-4, yMax - yMin)
+  const len = Math.max(1e-4, PACE_S[PACE_N])
+
+  /**
+   * ความเร็วสะสม ไม่ใช่ความเร็ว "ตามความสูง ณ จุดนั้น"
+   *
+   * เส้นทางจริงเกือบราบ: วัดได้ยาว 11.6 หน่วย แต่สูงต่ำต่างกันแค่ 1.1 หน่วย แถมครึ่งหลัง
+   * ไต่ขึ้น (+1.1) พลังงานศักย์ล้วน ๆ จึงให้ "ลงต้นเส้นแล้วช้าลงตอนท้าย" ซึ่งตรงข้ามกับที่ควรเห็น
+   * และเพราะช่วงความสูงแคบมาก เอามายืดเป็นช่วงความเร็วเต็มก็ได้แค่คลื่นเล็ก ๆ อ่านเป็นความเร็วคงที่
+   *
+   * ของจริงคือคนที่ผลักตัวออกมาแล้วเร่งต่อเนื่อง: v² โตเป็นเส้นตรงตามระยะทาง (= ความเร่งคงที่)
+   * แล้วบวกส่วนของความสูงจริงเข้าไปเป็นตัวปรุง (enGrav) ให้ยังขึ้นเนินหน่วง ลงเนินได้แรงส่ง
+   *   enAccel = ความเร็วปลายเป็นกี่เท่าของความเร็วต้น (1 = คงที่ทั้งเส้น)
+   */
+  const A = Math.max(1, t.enAccel)
+  const r2 = A ** 2 - 1
+  const w = Math.min(1, Math.max(0, t.enGrav))
+  const ex = Math.min(1, Math.max(0, t.enAccelExp))
+  const lnA = Math.log(A)
+  /**
+   * ทำให้ตัวแปรความเร็วจบที่ 1 พอดี ไม่งั้น enAccel เป็นตัวเลขหลอก
+   *
+   * x = ส่วนผสมของ "ระยะที่ผลักมาแล้ว" กับ "ความสูงที่เสียไป" — วัดจริงแล้วครึ่งหลังของเส้น
+   * ไต่ขึ้น (y -0.18 → +0.51) พจน์ความสูงจึงติดลบตอนท้าย x จบที่ 0.59 ไม่ใช่ 1 ความเร็ว
+   * ปลายที่ได้จึงเป็น 1.8 เท่าทั้งที่ตั้ง enAccel ไว้ 5.5 — หารด้วยค่าปลายเสียก่อน
+   */
+  let xEnd = 0
+  for (let i = 0; i <= PACE_N; i += 1) {
+    const xi = (1 - w) * (PACE_S[i] / len) + w * ((PACE_Y[0] - PACE_Y[i]) / span)
+    if (xi > xEnd) xEnd = xi
+  }
+  xEnd = Math.max(0.05, xEnd)
+  for (let i = 0; i <= PACE_N; i += 1) {
+    const push = PACE_S[i] / len
+    const fall = (PACE_Y[0] - PACE_Y[i]) / span
+    const x = Math.min(1, Math.max(0, ((1 - w) * push + w * fall) / xEnd))
+    /**
+     * สองแบบ ปลายทางเท่ากัน (ความเร็วสุดท้าย = enAccel เท่าของต้น) แต่รูปกราฟคนละเรื่อง:
+     *
+     *   ความเร่งคงที่  v = √(1 + r²x)  — เพิ่มเร็วตั้งแต่ต้นแล้วค่อย ๆ ตัน ครึ่งหลังเกือบคงที่
+     *   เอ็กซ์โพเนนเชียล v = A^x        — dv/ds แปรตาม v เอง ยิ่งเร็วยิ่งเร่งแรงขึ้น
+     *                                    ออกจากพอร์ทัลมาเนิบ ๆ แล้วทะยานช่วงท้าย
+     *
+     * enAccelExp ผสมสองเส้นนี้ (1 = เอ็กซ์โพเนนเชียลล้วน)
+     */
+    const vConst = Math.sqrt(Math.max(0.02, 1 + r2 * x))
+    const vExp = Math.exp(x * lnA)
+    PACE_V[i] = Math.max(0.05, vConst * (1 - ex) + vExp * ex)
+  }
 
   // เวลาสะสม: dt = ds / ความเร็วเฉลี่ยของช่วง
   PACE_TIME[0] = 0
-  let vPrev = paceSpeed((yMax - PACE_Y[0]) / span, t.enGrav)
   for (let i = 1; i <= PACE_N; i += 1) {
-    const v = paceSpeed((yMax - PACE_Y[i]) / span, t.enGrav)
-    PACE_TIME[i] = PACE_TIME[i - 1] + (PACE_S[i] - PACE_S[i - 1]) / (0.5 * (v + vPrev))
-    vPrev = v
+    PACE_TIME[i] =
+      PACE_TIME[i - 1] + (PACE_S[i] - PACE_S[i - 1]) / (0.5 * (PACE_V[i] + PACE_V[i - 1]))
   }
   const span2 = Math.max(1e-6, PACE_TIME[PACE_N])
 
@@ -461,14 +568,31 @@ function buildPace(ride, t, parent) {
     const f = Math.min(1, Math.max(0, (want - PACE_TIME[j]) / seg))
     pace.u[k] = (j + f) / PACE_N
     // มุมเอียง ณ u นั้น: atan(v²κ) — v เป็นความเร็วสัมพัทธ์ κ เป็นความโค้งจริงของเส้น
-    const u = pace.u[k]
-    const gi = Math.min(PACE_N, Math.max(0, Math.round(u * PACE_N)))
-    const v = paceSpeed((yMax - PACE_Y[gi]) / span, t.enGrav)
-    pace.lean[k] = Math.atan(v * v * PACE_K[gi] * span)
+    const gi = Math.min(PACE_N, Math.max(0, Math.round(pace.u[k] * PACE_N)))
+    pace.lean[k] = Math.atan(PACE_V[gi] * PACE_V[gi] * PACE_K[gi] * span)
+    /**
+     * แรงกด = น้ำหนักตัว + แรงเข้าสู่ศูนย์กลางในระนาบตั้ง (v²κ) + ส่วนของความชัน
+     *
+     * ก้นเนิน เส้นแอ่นขึ้นรับ แรงกดพุ่งเกิน 1 เท่า ขาต้องย่อรับ — ยอดเนินแรงกดหาย ขายืดขึ้น
+     * ส่วนความชันคือของที่คนเล่นสเก็ตทำก่อนถึงแรงจริง: เห็นเนินก็ย่อรอไว้แล้ว ไม่ได้รอโดนอัด
+     */
+    const dy = (PACE_Y[Math.max(0, gi - 1)] - PACE_Y[Math.min(PACE_N, gi + 1)]) / span
+    pace.load[k] = PACE_V[gi] * PACE_V[gi] * PACE_KV[gi] * span + dy * 0.6
   }
   pace.u[0] = 0
   pace.u[PACE_N] = 1
-  // เกลี่ยมุมเอียงสองรอบ — ความโค้งที่วัดจาก 32 จุดมีหนามเล็ก ๆ เอามาเป็นมุมตรง ๆ แล้วตัวสั่น
+  // กันของเสียหลุดออกไป: ตารางที่มีค่าไม่ใช่ตัวเลขแม้ช่องเดียวคือใช้ไม่ได้ทั้งใบ
+  for (let k = 0; k <= PACE_N; k += 1) {
+    if (!Number.isFinite(pace.u[k]) || !Number.isFinite(pace.lean[k]) || !Number.isFinite(pace.load[k])) {
+      pace.key = ''
+      pace.ready = false
+      return
+    }
+  }
+  /**
+   * เกลี่ยมุมเอียงกับแรงกด — ความโค้งที่วัดจาก 32 จุดมีหนามเล็ก ๆ เอามาใช้ตรง ๆ แล้วตัวสั่น
+   * แรงกดเกลี่ยหนักกว่า (4 รอบ) เพราะมันมาจากอนุพันธ์ชั้นสอง หนามจึงคมกว่ามุมเอียงเท่าตัว
+   */
   for (let pass = 0; pass < 2; pass += 1) {
     let prev = pace.lean[0]
     for (let i = 1; i < PACE_N; i += 1) {
@@ -476,6 +600,28 @@ function buildPace(ride, t, parent) {
       pace.lean[i] = 0.25 * prev + 0.5 * cur + 0.25 * pace.lean[i + 1]
       prev = cur
     }
+  }
+  for (let pass = 0; pass < 4; pass += 1) {
+    let prev = pace.load[0]
+    for (let i = 1; i < PACE_N; i += 1) {
+      const cur = pace.load[i]
+      pace.load[i] = 0.25 * prev + 0.5 * cur + 0.25 * pace.load[i + 1]
+      prev = cur
+    }
+  }
+  /**
+   * หักค่าเฉลี่ยออก — เก็บ "ส่วนต่างจากแรงปกติของเส้นนี้" ไม่ใช่ค่าสัมบูรณ์
+   *
+   * วัดจริงแล้วเส้นนี้ติดลบเกือบทั้งเส้น (ราว -0.6): มันโค้งหนีแนวตั้งฉากตลอดทาง = ตัวเบา
+   * ค้างตลอด ซึ่งไม่ใช่ข้อมูลที่เอาไปสั่งขาได้ (ตัดค่าลบทิ้งก็เหลือศูนย์ ขาไม่ขยับเลยทั้งเส้น
+   * — นี่คืออาการที่เห็น) ของที่ตาอ่านออกคือ "ตอนไหนหนักกว่า/เบากว่าปกติ" จึงเก็บส่วนต่าง
+   * แล้วปล่อยให้ค่าลบมีความหมายด้วย: ลบ = ยืดขาขึ้น (ลอยตามยอดเนิน) บวก = ย่อรับ
+   */
+  let mean = 0
+  for (let i = 0; i <= PACE_N; i += 1) mean += pace.load[i]
+  mean /= PACE_N + 1
+  for (let i = 0; i <= PACE_N; i += 1) {
+    pace.load[i] = Math.min(1.2, Math.max(-1.2, pace.load[i] - mean))
   }
   pace.ready = true
 }
@@ -509,16 +655,34 @@ function paceAt(arr, x) {
  * แยกออกมาเพราะ gizmo ต้องวาดเส้นเดียวกับที่ตัวละครวิ่ง ไม่ใช่เส้นที่เดาเอาเอง
  */
 function entranceEase(t, p) {
-  const bAt = Math.min(0.95, Math.max(0.05, t.enBurstAt))
   const bAmt = Math.min(0.95, Math.max(0, t.enBurstAmt))
+  /**
+   * 0 = เวลาเดินตรง ปล่อยให้ตารางฟิสิกส์คุมจังหวะทั้งหมด (ค่าเริ่มต้น)
+   *
+   * อีสซิ่งตัวเดิมเป็นรูปตัว S ทั้งช้าตอนต้นและช้าตอนท้าย พอเอาไปคูณกับตารางที่เร่งขึ้นเรื่อย ๆ
+   * ช่วงท้ายมันหักล้างกันพอดี อ่านเป็นความเร็วคงที่ ทั้งที่ตารางเร่งอยู่
+   */
+  if (bAmt <= 0) return p
+  const bAt = Math.min(0.95, Math.max(0.05, t.enBurstAt))
   return smooth(0, bAt, p) * (1 - bAmt) + outQuint(smooth(bAt, 1, p)) * bAmt
 }
 
 export function entranceU(t, p) {
   const e = entranceEase(t, p)
-  // ตารางยังไม่ถูกสร้าง (gizmo เรียกก่อนเฟรมแรก) หรือปิดฟิสิกส์ = ใช้จังหวะที่ตั้งเองล้วน ๆ
-  if (!pace.ready || t.enGrav <= 0) return e
-  return paceAt(pace.u, e)
+  // ตารางยังไม่ถูกสร้าง (gizmo เรียกก่อนเฟรมแรก) = ใช้จังหวะตามเวลาล้วน ๆ
+  if (!pace.ready) return e
+  const u = paceAt(pace.u, e)
+  return Number.isFinite(u) ? Math.min(1, Math.max(0, u)) : e
+}
+
+/**
+ * แรงกดตั้งฉากผิว ณ ความคืบหน้า p — ตัวเลขที่เอาไปแปลงเป็นการย่อเข่า
+ *
+ * 0 = แรงเท่าน้ำหนักตัว, บวก = ถูกอัด (ก้นเนิน/เส้นแอ่นรับ), ลบ = ตัวเบา (ยอดเนิน)
+ */
+export function entranceLoad(t, p) {
+  if (!pace.ready) return 0
+  return paceAt(pace.load, entranceEase(t, p))
 }
 
 /** มุมเอียงเข้าโค้ง (เรเดียน) ที่ความคืบหน้าตามเวลา p — 0 ถ้ายังไม่มีตาราง */
@@ -548,6 +712,8 @@ export function Entrance({ replay = 0, ride = null, rideMode = false, pathMode =
   const inside = useRef(false)
   /** เวลาที่กดหยุดไว้ — ใช้ชดเชยนาฬิกาตอนเล่นต่อ */
   const pausedAt = useRef(null)
+  /** ความเร็วของสปริงที่ขับการย่อเข่า (เรเดียน/วินาที) */
+  const crouchV = useRef(0)
   /** ระยะจากจุดกำเนิดถึงฝ่าเท้า — วัดครั้งเดียวตอนโมเดลขึ้นครบ */
   const sole = useRef(0)
 
@@ -591,6 +757,9 @@ export function Entrance({ replay = 0, ride = null, rideMode = false, pathMode =
       }
     }
     if (t.en < 0.5) {
+      // ปิดตัวละคร = ไม่มีใครไถล ท่าต้องกลับไปเป็นท่าที่จูนไว้ ไม่ใช่ค้างย่ออยู่
+      ridePose.crouch = 0
+      crouchV.current = 0
       g.position.set(0, 0, 0)
       g.rotation.set(0, 0, 0)
       g.scale.setScalar(1)
@@ -674,6 +843,37 @@ export function Entrance({ replay = 0, ride = null, rideMode = false, pathMode =
       const lift = soleOffset(g, sole) * grow * t.skaterScale
       // gizmo วาดเส้นด้วยค่าเดียวกัน มันไม่มีทางวัดเองได้ (ไม่ได้ถือตัวละครอยู่)
       entranceLift.value = lift
+      /**
+       * ย่อเข่ารับแรง — ขาเป็นตัวลดแรงกระแทก ไม่ใช่เสาแข็งที่ตัวเลื่อนไปตามเส้นเฉย ๆ
+       *
+       * เป้าหมายมาจากแรงกดจริงของเส้น (entranceLoad) ไม่ใช่คีย์เฟรมที่ตั้งเอง: ลงเนินถึงก้น
+       * เส้นแอ่นรับ แรงเกินหนึ่งเท่า เข่างอลง — พ้นก้นเนินแรงหาย ขาค่อยยืดกลับ
+       *
+       * เข้าเป้าแบบสปริงมีตัวหน่วง ไม่ใช่กระโดดตามค่าเป้าทันที: ขาคนมีมวลกับกล้ามเนื้อ
+       * มันตามแรงช้ากว่าแรงเสมอ และตัวหน่วงคือสิ่งที่ทำให้ไม่สั่นค้างหลังรับแรงจบ
+       * ผูกกับ dt จริง จังหวะจึงเท่ากันทุกอัตราเฟรม
+       */
+      /**
+       * สองส่วนบวกกัน ไม่ใช่คูณกัน: ส่วนที่ย่อรอไว้ (คงที่ตลอดช่วงไถล) กับส่วนที่รับแรงจริง
+       * ทั้งคู่เป็นเรเดียนตรง ๆ — คูณซ้อนกันเมื่อไรค่าจะหดเหลือไม่กี่องศาโดยไม่มีใครรู้ตัว
+       */
+      const ride01 = Math.sin(Math.PI * Math.min(1, Math.max(0, p)))
+      const load = entranceLoad(t, p)
+      /**
+       * ทั้งสองส่วนคูณด้วยหน้าต่างของการไถล (ride01) — ที่ปลายทั้งสองข้างต้องเป็นศูนย์เป๊ะ
+       * ท่าเริ่มกับท่าจอดคือท่าที่จูนไว้ ถ้าปล่อยให้ค่าแรงค้างอยู่ ท่าจอดจะเพี้ยนไปจากที่ตั้ง
+       *
+       * ค่าลบ = ตัวเบา ขายืดขึ้นได้ แต่ให้น้ำหนักครึ่งเดียวของฝั่งย่อ (ขายืดได้จำกัดกว่าย่อ)
+       */
+      const preload =
+        ride01 * (t.enCrouchBase + t.enCrouch * (load >= 0 ? load : load * 0.5))
+      crouchV.current += (preload - ridePose.crouch) * Math.max(0.5, t.enCrouchK) * dt
+      crouchV.current *= Math.exp(-Math.max(0.5, t.enCrouchDamp) * dt)
+      ridePose.crouch += crouchV.current * dt
+      if (!Number.isFinite(ridePose.crouch)) {
+        ridePose.crouch = 0
+        crouchV.current = 0
+      }
       entranceSample(ride, t, u, RIDE_POS, RIDE_TAN, RIDE_F, o.parent, RIDE_NRM, lift)
       // เลยเป้าแล้วดีดกลับ ตามแนวเข้าเป้า
       // เปิดใช้แบบไล่ระดับ ไม่ใช่สวิตช์ที่ p = 0.6 (สวิตช์ = ตำแหน่งกระตุกหนึ่งครั้งตรงนั้น)
@@ -747,6 +947,35 @@ export function Entrance({ replay = 0, ride = null, rideMode = false, pathMode =
         const sq = t.enSquash * Math.exp(-4 * l) * Math.sin(l * Math.PI * 3)
         g.scale.set(1 + sq * 0.5, 1 - sq, 1 + sq * 0.5)
       }
+      /**
+       * ช่วงไหล (คนดูเลื่อนจอ): ไถลต่อจากที่จอดไว้ ไปตามปลายเส้นที่กำลังงอกจนถึงขอบขวา
+       *
+       * บวก "ระยะที่เดินไปได้" ไม่ใช่เซ็ตตำแหน่งจากเส้นตรง ๆ — ท่าจอดตอนจบอินโทรเป็นค่าที่
+       * จูนไว้ ไม่ได้อยู่บนกึ่งกลางผิวเป๊ะ เซ็ตทับคือกระตุกหนึ่งครั้งตอนเริ่มเลื่อน
+       * ที่ s = 0 ผลต่างเป็นศูนย์พอดี จึงต่อจากท่าจอดได้เนียน
+       */
+      const cg = ride.cruise ? cruiseGrow(t) : 0
+      if (cg > 0) {
+        cruisePoint(ride, t, 0, CRU_A, CRU_TAN, CRU_NRM, lift)
+        o.parent.localToWorld(CRU_A)
+        o.worldToLocal(CRU_A)
+        cruisePoint(ride, t, cg, CRU_B, CRU_TAN, CRU_NRM, lift)
+        o.parent.localToWorld(CRU_B)
+        o.worldToLocal(CRU_B)
+        g.position.add(CRU_B).sub(CRU_A)
+        // หันตามเส้น: ค่อย ๆ เข้าท่าใน 12% แรกของช่วงไหล ไม่ใช่สะบัดหันทันทีที่เลื่อนจอ
+        const w = Math.min(1, cg / 0.12) * Math.min(1, Math.max(0, t.cruTurn))
+        if (w > 0) {
+          B_FWD.copy(CRU_TAN).normalize()
+          B_UP.copy(CRU_NRM).normalize()
+          B_SIDE.crossVectors(B_UP, B_FWD).normalize()
+          B_UP.crossVectors(B_FWD, B_SIDE).normalize()
+          BASIS.makeBasis(B_SIDE, B_UP, B_FWD)
+          Q_SURF.setFromRotationMatrix(BASIS)
+          g.quaternion.slerp(Q_TMP.copy(Q_REST).invert().multiply(Q_SURF), w)
+        }
+      }
+
       // อยู่หลังกรอบถึงเมื่อไร — entranceSample เป็นคนตอบ เพราะมันรู้ว่าตอนนี้อยู่ท่อนไหน
       const wantInside = seamState.inside
       if (wantInside !== inside.current) {
