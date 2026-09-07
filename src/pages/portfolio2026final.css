@@ -5,9 +5,21 @@
    ครั้งแรก ถ้าตั้งที่ :root มันจะไปย้อมทุกหน้าที่เหลือด้วย */
 .v3 {
   --v3-blue: #265ada;
+  /* พื้นรอบการ์ดฉาก — เทาอ่อนแบบกระดาษ ตัดกับน้ำเงินในการ์ด ขอบการ์ดจึงชัดโดยไม่ต้องตีเส้น */
+  --v3-shell: #e8eaf0;
+  /* หมึกบนพื้นเทาของหน้า (นอกการ์ด) — ตัวหนังสือในฉากยังใช้ --v3-ink สีอ่อนเหมือนเดิม */
+  --v3-shell-ink: #16181f;
+  /* ความสูงแถบเมนู = ขอบบนของการ์ดฉาก ทั้งสองต้องอ่านค่าเดียวกัน ไม่งั้นแถบจะทับการ์ด */
+  --v3-nav-h: clamp(56px, 9svh, 92px);
   --v3-blue-deep: #2052cd;
   --v3-green: #008254;
   --v3-ink: #f0f0f0;
+  /**
+   * หมึกของหัวเรื่อง hero — ขาว ตามแบบ
+   * ฟ้าหลังหัวเรื่องถูกดันให้อิ่มสีพอที่ตัวขาวจะอ่านออก (ดู BG_* ใน NewHeroScene)
+   * แยกตัวแปรจาก --v3-ink ไว้เพราะพื้นหลังจอแรกเปลี่ยนได้อิสระจากจอที่เหลือ
+   */
+  --v3-hero-ink: #ffffff;
   --v3-line: #d2d9d5;
   --v3-muted: #666;
   --v3-purple: #ad85fe;
@@ -22,7 +34,7 @@
   --v3-display: 'Momo Trust Display', 'Mona Sans', system-ui, sans-serif;
   --v3-body: 'Momo Trust Sans', 'Mona Sans', system-ui, sans-serif;
 
-  background: var(--v3-blue);
+  background: var(--v3-shell);
   color: var(--v3-ink);
   font-family: var(--v3-body);
 }

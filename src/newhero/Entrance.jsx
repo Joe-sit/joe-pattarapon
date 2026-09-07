@@ -49,6 +49,9 @@ const SEAM_SEGS = 12
 const DRAW_SOFT = 0.06
 /** สถานะของการสุ่มครั้งล่าสุด — ผู้เรียกอ่านต่อว่าตอนนี้ยังอยู่หลังกรอบหน้าต่างไหม */
 export const seamState = { inside: false }
+
+/** ที่พักตำแหน่งโลกของตัวละคร — ตัวเดียวใช้ซ้ำทุกเฟรม ไม่สร้าง Vector3 ใหม่ในลูป */
+const RIDE_WORLD = new THREE.Vector3()
 const SEAM_P = new THREE.Vector3()
 const SEAM_T = new THREE.Vector3()
 const SEAM_N = new THREE.Vector3()
@@ -796,6 +799,8 @@ export function Entrance({ replay = 0, ride = null, rideMode = false, pathMode =
     if (paused) p = from + span * Math.min(1, Math.max(0, t.enScrub))
     else if (partial) p = from + span * (raw <= 0 ? 0 : raw % 1)
     else p = Math.min(1, Math.max(0, raw))
+    // ประกาศความคืบหน้าให้ฉากอื่นอ่าน (ทิวทัศน์ในพอร์ทัลใช้ทยอยปลุกพืชขึ้นตามตัวละคร)
+    ridePose.p = p
 
     // จุดเริ่ม (พิกัดกลุ่มแม่) -> พิกัดท้องถิ่นของกลุ่มนอก
     o.parent.updateWorldMatrix(true, false)
@@ -1043,6 +1048,21 @@ export function Entrance({ replay = 0, ride = null, rideMode = false, pathMode =
     // เอียงข้างตามแรงเหวี่ยง — แรงสุดช่วงกลางทาง หายไปพอดีตอนหยุด
     g.rotation.set(0, t.enSpin * RAD * (1 - q), t.enBank * RAD * Math.sin(Math.PI * q) * (1 - q))
     g.scale.setScalar(t.enScale + (1 - t.enScale) * q)
+  })
+
+  /**
+   * ประกาศตำแหน่งโลกของตัวละครให้ฉากอื่นอ่าน — ทิวทัศน์ในพอร์ทัลใช้ปลุกพืชข้างทางที่เพิ่งผ่าน
+   *
+   * แยกเป็นลูปของตัวเองเพราะลูปหลักออกจากฟังก์ชันได้หลายทาง (โหมดตามริบบิ้น/ตามเส้น/หยุด)
+   * ถ้าไปเขียนในนั้นต้องไล่แปะทุกทางออกแล้ววันหนึ่งจะมีทางที่ลืม
+   */
+  useFrame(() => {
+    const g = inner.current
+    if (!g) return
+    g.getWorldPosition(RIDE_WORLD)
+    ridePose.wx = RIDE_WORLD.x
+    ridePose.wy = RIDE_WORLD.y
+    ridePose.wz = RIDE_WORLD.z
   })
 
   return (

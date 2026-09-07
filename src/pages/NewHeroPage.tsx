@@ -47,7 +47,7 @@ export function NewHeroPage() {
     [],
   )
   return (
-    <main className="v3 relative h-svh w-full overflow-hidden bg-[#265ada] text-white">
+    <main className="v3 relative h-svh w-full overflow-hidden bg-[#5cb8ee] text-[#16222c]">
       <style>{`
         /* หัวเรื่องหน้านี้แคบกว่าของ /2026-final เพราะแบ่งครึ่งจอให้ฉากสามมิติ
            ใช้สเกลของตัวเองแทนคลาส v3-h1 ที่คิดมาสำหรับบล็อกที่กว้างกว่านี้ */
@@ -87,7 +87,7 @@ export function NewHeroPage() {
       </div>
 
       <header className="relative z-10 flex items-center justify-between px-[clamp(24px,4.7vw,68px)] pt-[clamp(24px,5.5svh,56px)]">
-        <Logo width={80} height={28} color="#ffffff" className="shrink-0" />
+        <Logo width={80} height={28} color="#16222c" className="shrink-0" />
         <nav className="flex items-center gap-[clamp(16px,2.2vw,32px)] text-[15px] font-medium">
           {MENU.map((item) => (
             <span key={item}>{item}</span>
@@ -99,7 +99,7 @@ export function NewHeroPage() {
        * บล็อกข้อความชิดขวา กว้างราวหนึ่งในสามของจอตามคอมพ์ (x 986→1390 ของ 1440)
        * pointer-events ปิดไว้ทั้งชั้น ฉากข้างหลังจึงยังรับเมาส์ได้เต็มพื้นที่
        */}
-      <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-end pr-[clamp(24px,4.7vw,68px)] pl-[66%]">
+      <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-end pr-[clamp(24px,4.7vw,68px)] pl-[66%] text-[var(--v3-hero-ink)]">
         <div className="flex w-full flex-col gap-[clamp(10px,2.6svh,26px)]">
           <p className="nh-h1">Bring your</p>
           <div className="flex items-start gap-[clamp(10px,1.7vw,24px)]">

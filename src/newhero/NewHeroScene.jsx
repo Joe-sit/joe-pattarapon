@@ -7,8 +7,10 @@ import { useDisposable, makeRandom, gradientTexture, LOW_END, damp, clamp, addCe
 import { DEFAULTS, getTuner, useTuner } from './tuner'
 import { roundedBoxGeo } from './geo'
 import { Rider } from './Rider'
-import { DAY_SKY } from '@/joespresso/scene/Sky'
 import { Globe } from './Globe'
+import { EdgeClouds } from './EdgeClouds'
+import { SpaceBackdrop, Planets } from './Space'
+import { Landscape, SKY_STOPS } from './Landscape'
 import { StackedWindows } from './StackedWindows'
 import { Tetris } from './Tetris'
 import { CameraFX } from './CameraFX'
@@ -40,9 +42,16 @@ import { cruiseGrow, cruisePull, useSceneOn } from './scrolly'
 
 /* ---------- จานสี ----------
    ชุดน้ำเงินอ่านจากคอมพ์ 12739:158699 โดยสุ่มพิกเซล: พื้น #265ada / หน้าต่าง #3c6bde */
-const BG_TOP = '#2f66e2'
-const BG_MID = '#265ada'
-const BG_BOT = '#1e4dc4'
+/**
+ * พื้นหลังนอกพอร์ทัล = ท้องฟ้า
+ *
+ * ไล่แบบรัศมี ไม่ใช่ไล่เป็นแถบ: ในแบบ ฟ้าจางที่สุดตรงหลังตัวละครแล้วเข้มขึ้นเข้าหามุมทุกด้าน
+ * ซึ่งคือสิ่งที่ดันสายตาเข้ากลางเฟรมและทำให้ของกลางจอดูลอยออกมาจากพื้นหลัง
+ * ไล่เป็นแถบให้ค่าเดียวทั้งแถวนอน ของที่ขอบซ้าย-ขวาจึงจมกับพื้นหลังเท่ากับของกลางจอ
+ */
+const BG_CORE = '#cbe9fa'
+const BG_MID = '#5cb8ee'
+const BG_EDGE = '#2b96e4'
 const CREAM = '#3c6bde'
 /** เลขที่ใช้ทำเครื่องหมายพื้นที่ "ในหน้าต่าง" บน stencil buffer */
 const STENCIL_REF = 1
@@ -74,15 +83,31 @@ const RED = '#e8492e'
  */
 const HEAT_BG = '#22272e'
 const HEAT_LEVELS = ['#2d333b', '#1b4721', '#2f6b36', '#478b48', '#63c363']
+/** ความสว่างที่ช่องนั้นปล่อยออกมา (emissive) — ระดับ 0 ไม่เรือง */
+const HEAT_GLOW = ['#000000', '#1d5c28', '#3a9e46', '#5fd066', '#9dff8f']
 /** จำนวนแถว = วันในสัปดาห์ */
 const HEAT_ROWS = 7
 
-function heatmapTile(size = 1024) {
-  const c = document.createElement('canvas')
-  c.width = c.height = size
-  const ctx = c.getContext('2d')
+/**
+ * ตารางคอมมิต — คืนสองผืนที่ผังตรงกันเป๊ะ: สีจริง กับ "ช่องไหนสว่างแค่ไหน"
+ *
+ * ผืนเรืองต้องมาจากลูปเดียวกัน ไม่ใช่วาดซ้ำอีกรอบด้วย seed เดิม: ถ้าวันหนึ่งมีใครแก้กติกา
+ * การสุ่มระดับ แล้วลืมแก้อีกฟังก์ชัน แสงจะไปสว่างคนละช่องกับสีเขียว ซึ่งดูเหมือนบั๊กที่หา
+ * ไม่เจอ วาดพร้อมกันในลูปเดียวจึงผิดไม่ได้โดยโครงสร้าง
+ *
+ * ผืนเรือง: พื้นดำสนิท (ไม่เรืองเลย) ช่องที่มีคอมมิตสว่างตามระดับ — เอาไปเป็น emissiveMap
+ * ให้ช่องเขียวปล่อยแสงออกมาเองโดยไม่ขึ้นกับไฟในฉาก
+ */
+function heatmapTiles(size = 1024) {
+  const col = document.createElement('canvas')
+  const glo = document.createElement('canvas')
+  col.width = col.height = glo.width = glo.height = size
+  const ctx = col.getContext('2d')
+  const gtx = glo.getContext('2d')
   ctx.fillStyle = HEAT_BG
   ctx.fillRect(0, 0, size, size)
+  gtx.fillStyle = '#000000'
+  gtx.fillRect(0, 0, size, size)
 
   const cell = size / HEAT_ROWS
   // ช่องไฟกว้างขึ้นเล็กน้อย — ขอบช่องที่ชัดคือสิ่งที่ทำให้ตารางอ่านออกตอนอยู่ไกล
@@ -98,20 +123,206 @@ function heatmapTile(size = 1024) {
        */
       const u = rnd()
       const lv = u < 0.34 ? 0 : u < 0.56 ? 1 : u < 0.76 ? 2 : u < 0.91 ? 3 : 4
-      ctx.fillStyle = HEAT_LEVELS[lv]
       const bx = x * cell + pad
       const by = y * cell + pad
+      ctx.fillStyle = HEAT_LEVELS[lv]
       ctx.beginPath()
       ctx.roundRect(bx, by, box, box, r)
       ctx.fill()
+      // ระดับ 0 = วันที่ไม่มีคอมมิต ไม่ควรเรืองเลย ที่เหลือสว่างไล่ตามระดับ
+      if (lv > 0) {
+        gtx.fillStyle = HEAT_GLOW[lv]
+        gtx.beginPath()
+        gtx.roundRect(bx, by, box, box, r)
+        gtx.fill()
+      }
     }
   }
-  const tex = new THREE.CanvasTexture(c)
-  tex.colorSpace = THREE.SRGBColorSpace
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-  return tex
+  /**
+   * แสงล้นออกนอกช่อง — เอาผืนเรืองมาเบลอแล้วบวกทับตัวเอง
+   *
+   * ช่องสว่างเฉย ๆ ยังอ่านเป็น "สีเขียวสด" ไม่ใช่ "ไฟ" สิ่งที่ทำให้ตาตัดสินว่าเป็นแหล่งแสง
+   * คือขอบฟุ้งที่ล้นออกมาโดนพื้นรอบ ๆ ทำที่เทกซ์เจอร์ถูกกว่าใส่ bloom ทั้งจอมาก —
+   * bloom คือ post pass เต็มเฟรมหลายรอบทุกเฟรม ที่นี่คือเบลอครั้งเดียวตอนโหลด
+   */
+  const blurred = document.createElement('canvas')
+  blurred.width = blurred.height = size
+  const btx = blurred.getContext('2d')
+  btx.filter = `blur(${Math.round(cell * 0.3)}px)`
+  btx.drawImage(glo, 0, 0)
+  btx.filter = 'none'
+  gtx.globalCompositeOperation = 'lighter'
+  gtx.globalAlpha = 0.55
+  gtx.drawImage(blurred, 0, 0)
+  gtx.globalAlpha = 1
+  gtx.globalCompositeOperation = 'source-over'
+  const mk = (canvas) => {
+    const tex = new THREE.CanvasTexture(canvas)
+    tex.colorSpace = THREE.SRGBColorSpace
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+    return tex
+  }
+  return { color: mk(col), glow: mk(glo) }
 }
-const checkerTex = heatmapTile()
+const HEATMAP = heatmapTiles()
+const checkerTex = HEATMAP.color
+const checkerGlowTex = HEATMAP.glow
+
+/**
+ * ริบบิ้นทุกท่อนใช้วัสดุหน้าตาเดียวกัน — ช่องคอมมิตปล่อยแสงเองผ่าน emissiveMap
+ *
+ * emissive ไม่ใช่ "สีสว่าง": มันคือแสงที่ผิวปล่อยออกมาเอง ไม่ขึ้นกับไฟในฉาก ช่องเขียวจึง
+ * ยังสว่างตอนอยู่ด้านเงา ซึ่งเป็นสิ่งที่ทำให้อ่านว่าเป็นจอ/ไฟ ไม่ใช่สีทาบนแผ่น
+ * ผืน emissive มีพื้นดำสนิท พื้นถนนจึงไม่เรืองตาม มีแค่ช่องที่มีคอมมิต
+ */
+/**
+ * ช่องที่เมาส์เพิ่งลากผ่าน — วงแหวนขนาดคงที่ ไม่ใช่รายการที่โตได้
+ *
+ * เก็บเป็นอาร์เรย์ระดับโมดูลแล้วส่งเข้า uniform ทุกเฟรม ไม่ใช่ state ของ React:
+ * ค่านี้เปลี่ยนทุกครั้งที่เมาส์ขยับ ถ้าเป็น state จะ re-render ทั้งฉากตามการขยับเมาส์
+ *
+ * วงแหวนแค่แปดช่องพอ เพราะแต่ละช่องจางหมดในราวหนึ่งวินาที ลากเร็วแค่ไหนก็เห็นหางไม่เกินนี้
+ * — และมันคือลูป for ในเชดเดอร์ ยิ่งยาวยิ่งจ่ายทุกพิกเซลของถนน
+ */
+const HOVER_MAX = 8
+const hoverCell = new Float32Array(HOVER_MAX * 2)
+const hoverStart = new Float32Array(HOVER_MAX).fill(-999)
+let hoverNext = 0
+
+/** แตะช่องหนึ่ง — ช่องเดิมที่ยังไม่จางถูกต่อเวลา (เมาส์ค้างอยู่ = ยังสว่างค้าง ไม่กะพริบ) */
+function touchCell(cx, cy, now) {
+  for (let i = 0; i < HOVER_MAX; i++) {
+    if (hoverCell[i * 2] === cx && hoverCell[i * 2 + 1] === cy && now - hoverStart[i] < 1.2) {
+      hoverStart[i] = now
+      return
+    }
+  }
+  const i = hoverNext % HOVER_MAX
+  hoverNext += 1
+  hoverCell[i * 2] = cx
+  hoverCell[i * 2 + 1] = cy
+  hoverStart[i] = now
+}
+
+/**
+ * ตัวจับเมาส์บนผิวถนน — คืน prop ไปแปะที่ mesh
+ *
+ * ใช้ uv ของจุดที่ยิงโดน ไม่ใช่พิกัดโลก: ช่องคอมมิตถูกนิยามในพิกัดเทกซ์เจอร์ (floor(uv*7))
+ * ซึ่งเป็นตัวเดียวกับที่เชดเดอร์ใช้ ถนมันบิดเป็นคลื่นและขยับตลอด การแปลงกลับจากพิกัดโลก
+ * จึงไม่มีทางตรง
+ */
+function useCellHover() {
+  return useMemo(
+    () => ({
+      onPointerMove: (e) => {
+        if (!e.uv) return
+        touchCell(Math.floor(e.uv.x * HEAT_ROWS), Math.floor(e.uv.y * HEAT_ROWS), performance.now() / 1000)
+      },
+    }),
+    [],
+  )
+}
+
+function RibbonTopMaterial({ map, aniso = 1 }) {
+  const t = useTuner()
+  const ref = useRef()
+  // ผืนเรืองใช้ร่วมทุกท่อน (ผังเดียวกัน ไม่มีใครแก้ repeat) — ตั้ง anisotropy ให้เท่ากับผืนสี
+  if (checkerGlowTex.anisotropy !== aniso) {
+    checkerGlowTex.anisotropy = aniso
+    checkerGlowTex.needsUpdate = true
+  }
+  /**
+   * ระยิบระยับ — แต่ละช่องกะพริบคนละจังหวะ
+   *
+   * แก้ที่เชดเดอร์ ไม่ใช่วาดเทกซ์เจอร์ใหม่ทุกเฟรม: ต้องการให้ช่องแต่ละช่องมีเฟสของตัวเอง
+   * ซึ่งอ่านได้จากพิกัด uv ตรง ๆ (floor(uv * 7) = ช่องที่เท่าไร) การอัปโหลดแคนวาส 1024
+   * ใหม่ทุกเฟรมเพื่อผลเดียวกันคือจ่ายแบนด์วิดท์เปล่า ๆ
+   *
+   * คูณเข้ากับ totalEmissiveRadiance หลัง three คำนวณ emissive เสร็จ — ช่องที่ไม่เรือง
+   * (ระดับ 0 พื้นดำ) จึงยังไม่เรืองอยู่ดี การกะพริบไม่ไปปลุกช่องว่างให้สว่างขึ้นมา
+   */
+  const onCompile = useMemo(
+    () => (shader) => {
+      shader.uniforms.uTwTime = { value: 0 }
+      shader.uniforms.uTwAmt = { value: 0.55 }
+      shader.uniforms.uHitCell = { value: Array.from({ length: HOVER_MAX }, () => new THREE.Vector2(-999, -999)) }
+      shader.uniforms.uHitAge = { value: new Array(HOVER_MAX).fill(999) }
+      shader.uniforms.uHitInt = { value: 1 }
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+           uniform float uTwTime;
+           uniform float uTwAmt;
+           uniform vec2 uHitCell[${HOVER_MAX}];
+           uniform float uHitAge[${HOVER_MAX}];
+           uniform float uHitInt;
+           float twHash(vec2 p) {
+             return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+           }`,
+        )
+        .replace(
+          '#include <emissivemap_fragment>',
+          `#include <emissivemap_fragment>
+           {
+             vec2 cell = floor(vMapUv * ${HEAT_ROWS}.0);
+             float ph = twHash(cell) * 6.2831853;
+             /* ความถี่ต่างกันรายช่องด้วย ไม่งั้นทั้งผืนกะพริบเป็นจังหวะเดียวกันแค่เหลื่อมเฟส */
+             float sp = 0.7 + twHash(cell + 17.0) * 1.6;
+             float tw = 1.0 + uTwAmt * sin(uTwTime * sp + ph);
+             totalEmissiveRadiance *= tw;
+             /**
+              * ช่องที่เมาส์ผ่าน: สว่างขึ้นแล้วจางเอง
+              * ขาขึ้นสั้น ๆ (smoothstep) ไม่ใช่กระโดดเต็มทันที — กระโดดอ่านเป็นไฟกะพริบ
+              * ขาลงเป็นเอ็กซ์โพเนนเชียล ซึ่งคือรูปการจางของแสงจริง ไม่ใช่เส้นตรงที่ดับห้วน
+              */
+             float fill = 0.0;
+             for (int i = 0; i < ${HOVER_MAX}; i++) {
+               vec2 hc = uHitCell[i];
+               if (abs(hc.x - cell.x) > 0.5 || abs(hc.y - cell.y) > 0.5) continue;
+               float a = max(uHitAge[i], 0.0);
+               fill = max(fill, smoothstep(0.0, 0.11, a) * exp(-a * 1.7));
+             }
+             /**
+              * ตัดให้อยู่ในกรอบมนของช่อง ไม่ใช่เต็มสี่เหลี่ยมของกริด
+              * ค่า 0.16 (ช่องไฟ) กับ 0.24 (ความมน) เป็นชุดเดียวกับตอนวาดแคนวาส — ถ้าไม่ตัด
+              * แสงจะล้นไปทับร่องระหว่างช่อง แล้วอ่านเป็นแถบสี่เหลี่ยมทึบพาดถนน ไม่ใช่ช่องติดไฟ
+              */
+             vec2 f = abs(fract(vMapUv * ${HEAT_ROWS}.0) - 0.5) - (0.5 - 0.16);
+             float inCell = 1.0 - smoothstep(0.0, 0.035, length(max(f, 0.0)) - 0.055);
+             totalEmissiveRadiance += vec3(0.42, 1.0, 0.5) * fill * inCell * uHitInt;
+           }`,
+        )
+      if (ref.current) ref.current.userData.shader = shader
+    },
+    [],
+  )
+  useFrame(({ clock }) => {
+    const sh = ref.current && ref.current.userData.shader
+    if (!sh) return
+    sh.uniforms.uTwTime.value = clock.elapsedTime
+    sh.uniforms.uTwAmt.value = t.rbTwinkle
+    const now = performance.now() / 1000
+    for (let i = 0; i < HOVER_MAX; i++) {
+      sh.uniforms.uHitCell.value[i].set(hoverCell[i * 2], hoverCell[i * 2 + 1])
+      sh.uniforms.uHitAge.value[i] = now - hoverStart[i]
+    }
+    sh.uniforms.uHitInt.value = t.rbHover
+  })
+  return (
+    <meshStandardMaterial
+      ref={ref}
+      attach="material-0"
+      map={map}
+      emissiveMap={checkerGlowTex}
+      emissive="#ffffff"
+      emissiveIntensity={t.rbGlow}
+      roughness={0.85}
+      side={THREE.DoubleSide}
+      onBeforeCompile={onCompile}
+    />
+  )
+}
 
 /** ลายทางลูกกวาดแดง-ขาว — ปูรอบหน้าตัดของโดนัท */
 function candyStripes(size = 256) {
@@ -365,7 +576,9 @@ function ribbonGeometry(
  */
 function Float({ children, amp = 0.28, rot = 0.06, phase = 0, speed = 1, ...props }) {
   const ref = useRef()
-  useFrame(() => {
+  // นาฬิกามาจาก state ของเฟรม ไม่ใช่ตัวแปรลอย ๆ — ของเดิมอ้าง clock ที่ไม่มีอยู่จริง แล้วโยน
+  // ทุกเฟรม ไม่มีใครเห็นเพราะกลุ่ม props ถูกปิดไว้ ไม่เคยมี Float ตัวไหนถูกสร้างเลย
+  useFrame(({ clock }) => {
     const g = ref.current
     if (!g) return
     const t = clock.elapsedTime * speed + phase
@@ -517,6 +730,54 @@ function Clay({ on, children }) {
   return <group ref={g}>{children}</group>
 }
 
+/**
+ * ติดธงเงาให้ชิ้นในฉาก — ทำเป็น pass เดียว ไม่ใช่ใส่ prop ทีละ mesh
+ *
+ * ของในฉากนี้มาจากหลายที่ (GLB ของ mascot, ชิ้นที่ปั้นในโค้ด, ของในพอร์ทัล) การไล่ใส่
+ * castShadow/receiveShadow ทีละจุดคือแก้ไม่ครบแน่นอน — และของที่โผล่มาทีหลัง (โมเดล
+ * โหลดเสร็จช้า) จะไม่มีเงาโดยที่ไม่มีใครสังเกต จึงกวาดซ้ำช่วงต้นเหมือน pass อื่นในไฟล์นี้
+ *
+ * ใครได้ "ยิงเงา" บ้างคือเรื่องของราคา ไม่ใช่ความสวย: ทุกชิ้นที่ยิงเงาถูกวาดซ้ำอีกรอบใน
+ * shadow map ฉะนั้นของในพอร์ทัล (ทุ่ง + พืชหลักร้อยต้น) จึงรับเงาอย่างเดียว ไม่ยิง —
+ * เงาของพุ่มเล็ก ๆ ในกรอบหน้าต่างแทบไม่มีใครเห็น แต่มันคือ draw call ครึ่งฉาก
+ *
+ * ข้าม: พื้นหลัง/หน้ากาก stencil/กระจก/เมฆ (ของแบน ๆ ที่เกาะกล้อง เงาของมันไม่มีความหมาย
+ * และถ้าปล่อยให้บังแสง จะได้แผ่นดำคาดทั้งฉาก)
+ */
+function ShadowFlags({ on }) {
+  const scene = useThree((s) => s.scene)
+  const gl = useThree((s) => s.gl)
+  const frames = useRef(0)
+  /**
+   * ประตูวัดผลตอน dev — นับ draw call/สามเหลี่ยมจริงจากสคริปต์ภายนอกได้
+   * (renderer.info รีเซ็ตทุกเฟรม จึงต้องอ่านจาก rAF ของหน้าเอง ไม่ใช่จาก useFrame)
+   */
+  if (import.meta.env.DEV) {
+    window.__gl = gl
+    window.__scene = scene
+  }
+  useFrame(() => {
+    if (!on || frames.current > 240) return
+    frames.current += 1
+    // เดินเองแทน traverse เพราะต้องส่งต่อ "อยู่ในพอร์ทัลไหม" ลงไปตามกิ่ง
+    const walk = (o, inside) => {
+      const within = inside || o.userData.insidePortal === true
+      if (o.isMesh && !o.userData.shadowSet) {
+        const m = o.material
+        const skip = o.userData.noClay || o.renderOrder < 0 || (m && (m.isShaderMaterial || m.depthWrite === false))
+        o.userData.shadowSet = true
+        if (!skip) {
+          o.castShadow = !within
+          o.receiveShadow = true
+        }
+      }
+      for (const c of o.children) walk(c, within)
+    }
+    walk(scene, false)
+  })
+  return null
+}
+
 /** พื้นหลังไล่สีเกาะกล้อง — โหมด clay ใช้เทาเรียบแบบวิวพอร์ต ไม่มีตาราง */
 function Backdrop({ clay }) {
   const tex = useMemo(() => {
@@ -525,17 +786,19 @@ function Backdrop({ clay }) {
     const c = document.createElement('canvas')
     c.width = c.height = S
     const ctx = c.getContext('2d')
-    const g = CLAY ? ctx.createLinearGradient(0, 0, 0, S) : ctx.createLinearGradient(0, S, S, 0)
     if (CLAY) {
+      const g = ctx.createLinearGradient(0, 0, 0, S)
       g.addColorStop(0, CLAY_BG_TOP)
       g.addColorStop(1, CLAY_BG_BOT)
+      ctx.fillStyle = g
     } else {
-      // ใน ref มุมล่างซ้ายเขียวจัด ไล่ไปเป็น teal ทางขวาบน ไม่ใช่ไล่ตั้งขึ้น
-      g.addColorStop(0, BG_TOP)
+      // ศูนย์กลางเยื้องขวาบนเล็กน้อย = ตำแหน่งที่ตัวละครกับหัวเรื่องอยู่ ของจึงมีฟ้าจางรองหลัง
+      const g = ctx.createRadialGradient(S * 0.6, S * 0.44, S * 0.03, S * 0.5, S * 0.5, S * 0.82)
+      g.addColorStop(0, BG_CORE)
       g.addColorStop(0.5, BG_MID)
-      g.addColorStop(1, BG_BOT)
+      g.addColorStop(1, BG_EDGE)
+      ctx.fillStyle = g
     }
-    ctx.fillStyle = g
     ctx.fillRect(0, 0, S, S)
     const t = new THREE.CanvasTexture(c)
     t.colorSpace = THREE.SRGBColorSpace
@@ -597,7 +860,101 @@ function SoftCircles() {
 const PANEL_BAND = '#8ccf90'
 const PANEL_BAND_LINE = '#c6e7bd'
 
-function Panel({ w = 5.2, h = 6.5, d = 1.7, band = 0, cells = 0, stripe = false, portal = false, tint = INNER_BG, ...props }) {
+/**
+ * กระจกของพอร์ทัล — แผ่นบาง ๆ ปิดหน้าช่อง ให้ปากหน้าต่างอ่านเป็นบานกระจกหนา ไม่ใช่รูตัดทะลุ
+ *
+ * ไม่ได้ใช้ transmission จริง: วัสดุ transmission สุ่มตัวอย่างจากภาพฉากที่เรนเดอร์แยกรอบ
+ * ซึ่งไม่มีของในพอร์ทัล (ของพวกนั้นวาดผ่านเงื่อนไข stencil) กระจกจะกลายเป็นฝ้าที่มองเห็น
+ * ทิวทัศน์ข้างในหายไปทั้งบาน ที่นี่จึงวาด "สิ่งที่ตาใช้ตัดสินว่าเป็นกระจก" ตรง ๆ แทน:
+ *  · ขอบในมนรับแสง — ฝั่งไฟสว่าง ฝั่งตรงข้ามเงา คือสิ่งที่บอกว่าขอบมีความหนาและมน
+ *  · เงาจมเข้าไปตลอดขอบ — บอกว่าผิวข้างในอยู่ลึกกว่าระนาบหน้าบาน
+ *  · แถบแสงเฉียงบาง ๆ ทั้งบาน — การสะท้อนของแผ่นเรียบ
+ *
+ * ทิศของขอบมาจากเกรเดียนต์ของ SDF (dFdx/dFdy) ไม่ใช่มุมรอบจุดกึ่งกลาง: ที่มุมโค้ง
+ * สองอย่างนี้ต่างกันมาก ถ้าใช้มุมรอบจุดกึ่งกลาง ไฮไลต์จะไถลไม่เกาะขอบ
+ */
+const GLASS_U = {
+  uSize: { value: new THREE.Vector2(1, 1) },
+  uHalf: { value: new THREE.Vector2(1, 1) },
+  uR: { value: 1 },
+  uBevel: { value: 0.6 },
+  uInt: { value: 1 },
+  uSheen: { value: 0.12 },
+}
+
+let GLASS_MAT = null
+function glassMaterial() {
+  if (GLASS_MAT) return GLASS_MAT
+  GLASS_MAT = new THREE.ShaderMaterial({
+    uniforms: GLASS_U,
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false,
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec2 uSize, uHalf;
+      uniform float uR, uBevel, uInt, uSheen;
+      varying vec2 vUv;
+
+      float sdRound(vec2 p, vec2 b, float r) {
+        vec2 q = abs(p) - b + r;
+        return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+      }
+
+      void main() {
+        vec2 p = (vUv - 0.5) * uSize;
+        float d = sdRound(p, uHalf, uR);
+        /* นอกปากช่องไม่วาดเลย — แผ่นนี้เป็นกระจกในกรอบ ไม่ใช่ฝ้ารอบหน้าต่าง */
+        if (d > 0.0) discard;
+        /* 0 ที่ขอบ → 1 เมื่อลึกเข้าไปพ้นความหนาของขอบ */
+        float t = clamp(-d / uBevel, 0.0, 1.0);
+        vec2 g = normalize(vec2(dFdx(d), dFdy(d)) + 1e-6);
+        vec2 L = normalize(vec2(-0.62, 0.78));
+        float rim = pow(1.0 - t, 2.4);
+        float lit = dot(g, L) * rim;
+        float hi = max(lit, 0.0) * 0.72 * uInt;
+        float lo = max(-lit, 0.0) * 0.42 * uInt;
+        /* เงาจมรอบขอบทุกด้าน = ผิวข้างในอยู่ลึกกว่าหน้าบาน */
+        float inset = pow(1.0 - t, 3.0) * 0.24 * uInt;
+        /* แถบสะท้อนเฉียงพาดบาน — บางและจาง ไม่ใช่แผ่นฝ้า */
+        float band = abs((p.x * 0.55 + p.y) / (uHalf.y * 1.7) - 0.12);
+        float sheen = smoothstep(0.3, 0.0, band) * uSheen;
+        float film = 0.035 * uSheen * 8.0;
+        float bright = hi + sheen + film;
+        float dark = lo + inset;
+        float a = clamp(bright + dark, 0.0, 0.9);
+        vec3 col = mix(vec3(0.16, 0.28, 0.42), vec3(1.0), bright / (bright + dark + 1e-4));
+        gl_FragColor = vec4(col, a);
+      }
+    `,
+  })
+  return GLASS_MAT
+}
+
+/** กระจกของบานหนึ่งใบ — ทุกบานขนาดเท่ากัน จึงใช้วัสดุ/ยูนิฟอร์มชุดเดียวร่วมกัน */
+function PortalGlass({ w, h, r, z, bevel, intensity, sheen }) {
+  useFrame(() => {
+    GLASS_U.uSize.value.set(w, h)
+    GLASS_U.uHalf.value.set(w / 2, h / 2)
+    GLASS_U.uR.value = r
+    GLASS_U.uBevel.value = bevel
+    GLASS_U.uInt.value = intensity
+    GLASS_U.uSheen.value = sheen
+  })
+  return (
+    <mesh position={[0, 0, z]} material={glassMaterial()} renderOrder={6} userData={{ noClay: true }}>
+      <planeGeometry args={[w, h]} />
+    </mesh>
+  )
+}
+
+function Panel({ w = 5.2, h = 6.5, d = 1.7, band = 0, cells = 0, stripe = false, portal = false, glass = 0, glassBevel = 0.7, glassSheen = 0.12, tint = INNER_BG, ...props }) {
   /**
    * หน้าต่าง = ช่องมองทะลุไปอีกฉาก ทำด้วย stencil buffer
    *
@@ -650,6 +1007,17 @@ function Panel({ w = 5.2, h = 6.5, d = 1.7, band = 0, cells = 0, stripe = false,
           <planeGeometry args={[w * 0.6, h * 0.4]} />
           <meshBasicMaterial map={candyStripesGreen} />
         </mesh>
+      )}
+      {portal && glass > 0 && (
+        <PortalGlass
+          w={w}
+          h={h}
+          r={r}
+          z={d / 2 + 0.02}
+          bevel={glassBevel}
+          intensity={glass}
+          sheen={glassSheen}
+        />
       )}
     </group>
   )
@@ -777,6 +1145,77 @@ function TargetRing(props) {
         <circleGeometry args={[1.58, 48]} />
         <meshBasicMaterial map={tex} />
       </mesh>
+    </group>
+  )
+}
+
+/**
+ * จานสีของจิตรกร — แผ่นรูปไข่เบี้ยว เว้าเข้าตรงที่มือจับ มีรูสอดนิ้วโป้ง และก้อนสีหกก้อน
+ *
+ * วงรีธรรมดาไม่ใช่ถาดสี: ถาดสีอ่านออกจาก "ความไม่สมมาตร" — ด้านที่กว้างกลม (ที่วางสี)
+ * กับด้านที่สอบเข้าและเว้ารับอุ้งมือ ทั้งคู่หายไปทันทีถ้าใช้วงรี เหลือแค่แผ่นกลมมีจุด
+ * เส้นรอบรูปจึงเขียนเป็นเบซิเยร์ทีละช่วง ไม่ใช่ absellipse ช่วงเดียวจบ
+ *
+ * รูเป็น hole ของ Shape ไม่ใช่ทรงกระบอกที่เอามาลบ: ExtrudeGeometry ลบมุมให้เองพร้อมกับ
+ * ขอบนอกในครั้งเดียว ขอบรูจึงมนเท่ากับขอบจานโดยไม่ต้องทำ CSG ซึ่งฉากนี้ไม่มี
+ *
+ * ก้อนสีเป็นทรงกลมกดแบน วางจมลงไปครึ่งก้อน — สีที่บีบลงบนจานมันนูนไม่เท่ากันและไม่มีขอบคม
+ * และเรียงตามส่วนโค้งด้านกว้าง ไม่ใช่กระจายทั่วแผ่น (ที่ว่างกลางถาดคือที่ผสมสี)
+ */
+const PALETTE_BLOBS = [
+  { x: 0.04, y: 0.6, r: 0.15, c: '#3ec9a7' },
+  { x: 0.5, y: 0.46, r: 0.14, c: '#8f6ef0' },
+  { x: 0.78, y: 0.08, r: 0.15, c: '#f5c53d' },
+  { x: 0.7, y: -0.36, r: 0.14, c: '#4f7df9' },
+  { x: -0.42, y: 0.5, r: 0.14, c: '#ef5aa7' },
+  { x: 0.24, y: -0.5, r: 0.15, c: '#4fbe6e' },
+]
+
+function paletteShape() {
+  const s = new THREE.Shape()
+  // ด้านกว้าง: ขวา -> อ้อมยอด -> ซ้ายบน
+  s.moveTo(1.04, 0.02)
+  s.bezierCurveTo(1.04, 0.62, 0.66, 0.95, 0.16, 0.95)
+  s.bezierCurveTo(-0.3, 0.95, -0.62, 0.87, -0.82, 0.6)
+  // ด้านสอบ: ซ้ายบน -> ซ้ายล่าง
+  s.bezierCurveTo(-1.0, 0.36, -1.02, 0.02, -0.9, -0.2)
+  // เว้ารับอุ้งมือ — จุดควบคุมอยู่ "ในเนื้อ" เส้นจึงแอ่นเข้า ไม่ใช่ป่องออกเหมือนช่วงอื่น
+  s.bezierCurveTo(-0.72, -0.4, -0.66, -0.28, -0.42, -0.42)
+  // ก้นถาด: กลับออกไปทางขวาแล้วปิดวง
+  s.bezierCurveTo(-0.12, -0.6, 0.24, -0.78, 0.56, -0.74)
+  s.bezierCurveTo(0.88, -0.7, 1.04, -0.44, 1.04, 0.02)
+  // รูนิ้วโป้ง: อยู่ในช่วงที่ถาดสอบเข้า ใกล้รอยเว้า ไม่ใช่กลางแผ่น
+  const hole = new THREE.Path()
+  hole.absellipse(-0.5, 0.06, 0.21, 0.17, 0, Math.PI * 2, true, 0)
+  s.holes.push(hole)
+  return s
+}
+
+function Palette({ tint = '#f7f5ef', ...props }) {
+  const body = useMemo(() => {
+    const g = new THREE.ExtrudeGeometry(paletteShape(), {
+      depth: 0.15,
+      bevelEnabled: true,
+      bevelThickness: 0.075,
+      bevelSize: 0.075,
+      bevelSegments: 4,
+      curveSegments: 48,
+    })
+    g.center()
+    return g
+  }, [])
+  useDisposable(body)
+  return (
+    <group {...props}>
+      <mesh geometry={body}>
+        <meshStandardMaterial color={tint} roughness={0.72} />
+      </mesh>
+      {PALETTE_BLOBS.map((b) => (
+        <mesh key={b.c} position={[b.x, b.y, 0.14]} scale={[1, 1, 0.42]}>
+          <sphereGeometry args={[b.r, 20, 14]} />
+          <meshStandardMaterial color={b.c} roughness={0.45} />
+        </mesh>
+      ))}
     </group>
   )
 }
@@ -1034,7 +1473,12 @@ function InsideWindow({ children }) {
       }
     })
   })
-  return <group ref={g}>{children}</group>
+  // ธงให้ pass อื่นรู้ว่ากิ่งนี้อยู่ในพอร์ทัล (ดู ShadowFlags — ของในนี้ไม่ยิงเงา)
+  return (
+    <group ref={g} userData={{ insidePortal: true }}>
+      {children}
+    </group>
+  )
 }
 
 /**
@@ -1094,7 +1538,7 @@ function PortalRibbon({ width, thick, wave, waves, scale, offset, rot }) {
   useDisposable(tex)
   return (
     <mesh ref={mesh} geometry={geo} position={offset} rotation={rot} scale={scale}>
-      <meshStandardMaterial attach="material-0" map={tex} roughness={0.85} side={THREE.DoubleSide} />
+      <RibbonTopMaterial map={tex} />
       <meshStandardMaterial attach="material-1" color={GREEN_DEEP} roughness={0.75} side={THREE.DoubleSide} />
     </mesh>
   )
@@ -1107,13 +1551,15 @@ function WindowWorld({
   /** ลูกโลกจิ๋ว: null = ไม่แสดง */
   globe,
   wall = true,
+  /** ทิวทัศน์แบนในกรอบหน้าต่าง — null = ไม่แสดง */
+  land,
   hemi = 0.7,
   /** ชื่อ keyLight ไม่ใช่ key — `key` เป็นชื่อสงวนของ React ส่งเป็น prop ไม่ได้ */
   keyLight = 1.1,
   stack,
   tetris,
 }) {
-  const skyTex = useMemo(() => gradientTexture(DAY_SKY), [])
+  const skyTex = useMemo(() => gradientTexture(SKY_STOPS), [])
   useDisposable(skyTex)
 
   return (
@@ -1126,14 +1572,14 @@ function WindowWorld({
        */}
       {wall && (
         /**
-         * ผนังพอร์ทัลใช้ไล่สีฟ้าชุดเดียวกับฉาก joespresso (DAY_SKY)
+         * ผนังพอร์ทัลใช้ไล่สีฟ้าชุดเดียวกับท้องฟ้าของทิวทัศน์ (SKY_STOPS)
          *
          * ฉากนั้นมีผนังฟ้าของตัวเองอยู่แล้ว แต่มันกว้างแค่ 90 หน่วยและอยู่ที่ z -26
          * ของฉากเอง พอย่อ/เลื่อนฉากให้พอดีกรอบหน้าต่าง ขอบผนังนั้นจะโผล่เป็นเส้นตัด
          * กลางหน้าต่าง จึงปิดผนังของฉาก (noBackdrop) แล้วใช้ผนังใบนี้ใบเดียวแทน
          *
-         * สีดึงจากค่าที่ export มาจาก Sky.jsx ไม่ได้ก๊อบตัวเลขมาวาง — ก๊อบแล้ววันหนึ่ง
-         * จะแก้ที่เดียวแล้วอีกที่ไม่ตาม
+         * สีดึงจากค่าที่ export มาจาก Landscape.jsx ไม่ได้ก๊อบตัวเลขมาวาง — ก๊อบแล้ว
+         * วันหนึ่งจะแก้ที่เดียวแล้วอีกที่ไม่ตาม
          */
         <mesh position={[0, 0, -22]}>
           <planeGeometry args={[220, 150]} />
@@ -1164,6 +1610,21 @@ function WindowWorld({
           berries={globe.berries}
           pebbles={globe.pebbles}
           propScale={globe.propScale}
+        />
+      )}
+      {land && (
+        <Landscape
+          position={land.pos}
+          rotation={land.rot}
+          scale={land.scale}
+          spin={land.spin}
+          cloudSpeed={land.cloud}
+          seed={land.seed}
+          count={land.count}
+          grow={land.grow}
+          growLead={land.growLead}
+          growDur={land.growDur}
+          growStagger={land.growStagger}
         />
       )}
       {stack && (
@@ -1315,6 +1776,7 @@ function CheckerRibbon({ width, thick, wave, waves, scale, offset, rot }) {
    * เป็นวงกลมจึงเบลอทั้งที่ความละเอียดพอ ค่าเดิมตั้งไว้ตายตัวที่ 8 ซึ่งมักต่ำกว่า
    * ที่การ์ดทำได้ (ส่วนใหญ่ 16)
    */
+  const hover = useCellHover()
   const maxAniso = useThree((st) => st.gl.capabilities.getMaxAnisotropy())
   const tex = useMemo(() => {
     const t = checkerTex.clone()
@@ -1333,9 +1795,9 @@ function CheckerRibbon({ width, thick, wave, waves, scale, offset, rot }) {
     <group position={RIBBON_PIVOT} rotation={rot}>
     <group position={[-RIBBON_PIVOT[0], -RIBBON_PIVOT[1], -RIBBON_PIVOT[2]]}>
     <group position={offset} scale={scale}>
-      <mesh geometry={geoFront}>
+      <mesh geometry={geoFront} {...hover}>
         {/* ผิวบน = ตารางคอมมิต / ผิวล่างกับสันข้าง = สีทึบ ให้เห็นว่าเป็นแผ่นมีความหนา */}
-        <meshStandardMaterial attach="material-0" map={tex} roughness={0.85} side={THREE.DoubleSide} />
+        <RibbonTopMaterial map={tex} aniso={maxAniso} />
         <meshStandardMaterial attach="material-1" color={GREEN_DEEP} roughness={0.75} side={THREE.DoubleSide} />
       </mesh>
     </group>
@@ -1408,6 +1870,7 @@ function CruiseRibbon({ width, thick, wave, waves, scale, offset, rot, split }) 
   )
   useDisposable(geo)
   useCruiseDraw(geo, split)
+  const hover = useCellHover()
   const maxAniso = useThree((st) => st.gl.capabilities.getMaxAnisotropy())
   const tex = useMemo(() => {
     const x = checkerTex.clone()
@@ -1420,8 +1883,8 @@ function CruiseRibbon({ width, thick, wave, waves, scale, offset, rot, split }) 
     <group position={RIBBON_PIVOT} rotation={rot}>
       <group position={[-RIBBON_PIVOT[0], -RIBBON_PIVOT[1], -RIBBON_PIVOT[2]]}>
         <group position={offset} scale={scale}>
-          <mesh geometry={geo}>
-            <meshStandardMaterial attach="material-0" map={tex} roughness={0.85} side={THREE.DoubleSide} />
+          <mesh geometry={geo} {...hover}>
+            <RibbonTopMaterial map={tex} aniso={maxAniso} />
             <meshStandardMaterial attach="material-1" color={GREEN_DEEP} roughness={0.75} side={THREE.DoubleSide} />
           </mesh>
         </group>
@@ -1783,14 +2246,19 @@ function Scene() {
     [],
   )
   const flat = t.flat > 0.5 && !clay
-  const flatTone = flat && t.flatTone < 0.5
+  /** ACES เปิดเมื่อสั่งเท่านั้น (flatTone) — ไม่ได้ผูกกับโหมดแบนอีกแล้ว */
+  const aces = t.flatTone > 0.5
   useFrame(({ gl }) => {
     if (gl.toneMappingExposure !== t.exposure) gl.toneMappingExposure = t.exposure
     /**
-     * โหมดแบนไม่เอา ACES — มันบีบสีสด ๆ ให้หม่นและไล่เฉดกลับเข้ามาในชั้นที่ตั้งใจให้แบน
+     * ไม่เอา ACES เป็นค่าเริ่มต้น
+     *
+     * ACES ม้วนไฮไลต์เข้าหาขาว ผิวที่โดนไฟเกิน 1 (พื้นหญ้าที่หันขึ้นฟ้า) จึงกลายเป็นมิ้นต์ซีด
+     * ทั้งผืน — เขียวสดหายไปทั้งที่ค่าสีต้นทางยังเข้มอยู่ ปิดแล้วสีคงความอิ่มไว้ แลกกับต้อง
+     * คุมไม่ให้แสงรวมเกิน 1 มาก ๆ เอง (ดูค่าไฟใน tuner)
      * three ตรวจ toneMapping ของ renderer ทุกครั้งที่ setProgram จึงสลับได้โดยไม่ต้อง needsUpdate
      */
-    const tm = flatTone ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping
+    const tm = aces ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping
     if (gl.toneMapping !== tm) gl.toneMapping = tm
   })
   /** cel shading: โหมดแบนบังคับผิวด้าน (roughness 1) แล้วตัดแสงเป็น 3 ชั้นที่ shader */
@@ -1924,7 +2392,25 @@ function Scene() {
             groundColor="#ffd9a8"
           />
           {/* key: เฉียงบนซ้ายหน้า อุ่น — ตัวกำหนดทิศของเงาทั้งฉาก */}
-          <directionalLight position={[-5, 8, 7]} intensity={t.keyIntensity} color="#fff4e2" />
+          {/**
+           * key ยิงเงาจริง — ระยะไกลกว่าเดิมแต่ทิศเดิมเป๊ะ (คูณเวกเตอร์เดิมด้วย 3)
+           * แสงทิศทางไม่สนระยะ ย้ายออกไปได้ฟรี และกล้องเงาต้องครอบฉากทั้งแถบ
+           */}
+          <directionalLight
+            position={[-15, 24, 21]}
+            intensity={t.keyIntensity}
+            color="#fff4e2"
+            castShadow={t.sh > 0.5}
+            shadow-mapSize={[2048, 2048]}
+            shadow-bias={-0.0012}
+            shadow-normalBias={0.03}
+            shadow-camera-near={1}
+            shadow-camera-far={90}
+            shadow-camera-left={-34}
+            shadow-camera-right={34}
+            shadow-camera-top={26}
+            shadow-camera-bottom={-26}
+          />
           {/* fill: ฝั่งตรงข้าม เย็น รับสีพื้นน้ำเงินของหน้า ไม่ให้ด้านมืดเป็นดำตัน */}
           <directionalLight position={[7, 1, 5]} intensity={t.fillIntensity} color="#cfe0ff" />
           {/* rim: จากหลัง ตัดขอบตัวละครออกจากแผงขาวข้างหลัง */}
@@ -1984,7 +2470,7 @@ function Scene() {
           rimFall={t.rimFxFall}
           rimShade={t.rimFxShade}
           rimBack={t.rimFxBack}
-          tone={flatTone ? 0 : 1}
+          tone={aces ? 1 : 0}
           fish={t.fxFish}
           skewX={t.fxSkewX}
           skewY={t.fxSkewY}
@@ -1997,7 +2483,24 @@ function Scene() {
         />
       )}
 
-      <Backdrop clay={clay} />
+      {/**
+       * ฉากนอกพอร์ทัล: อวกาศ (sp) หรือพื้นหลังไล่สีน้ำเงินชุดเดิม
+       * โหมด clay ต้องเป็นเทาเรียบเสมอ — มันคือโหมดตรวจรูปทรง สีทุกอย่างต้องถูกถอดทิ้ง
+       */}
+      {t.sp > 0.5 && !clay ? (
+        <SpaceBackdrop seed={t.spSeed} stars={t.spStars} nebula={t.spNebula} />
+      ) : (
+        <Backdrop clay={clay} />
+      )}
+      <ShadowFlags on={t.sh > 0.5 && !clay} />
+      {/* ดาวเคราะห์หน้าสุด — เกาะขอบจอเป็นกรอบ ไม่ได้อยู่ในโลกของฉาก (ดู Space) */}
+      {t.pl > 0.5 && t.sp > 0.5 && !clay && (
+        <Planets dist={t.plDist} scale={t.plScale} drift={t.plDrift} spin={t.plSpin} />
+      )}
+      {/* เมฆหน้าสุด — เกาะขอบจอเป็นกรอบ ไม่ได้อยู่ในโลกของฉาก (ดู EdgeClouds) */}
+      {t.cl > 0.5 && !clay && (
+        <EdgeClouds dist={t.clDist} scale={t.clScale} drift={t.clDrift} />
+      )}
       {/**
        * พื้นตาราง — วางที่ y -7.2 ซึ่งเป็นระดับฐานของแผงพอดี แผงจึงยืนบนพื้นจริง ไม่ใช่ลอย
        * fade ก่อนถึงเส้น horizon ไม่งั้นเส้นจะถี่จนกลายเป็นแถบทึบตรงขอบฟ้า (moiré)
@@ -2069,7 +2572,15 @@ function Scene() {
               tilt={t.inWinTilt * RAD}
               position={[x, t.panelBase + t.panelH / 2, 0]}
             >
-              <Panel w={t.panelW} h={t.panelH} d={t.panelD} portal={portal} />
+              <Panel
+                w={t.panelW}
+                h={t.panelH}
+                d={t.panelD}
+                portal={portal}
+                glass={t.pw > 0.5 ? t.pwInt : 0}
+                glassBevel={t.pwBevel}
+                glassSheen={t.pwSheen}
+              />
             </Appear>
           )
         })}
@@ -2321,6 +2832,21 @@ function Scene() {
                 spinBoost: gbSpin,
               }
             }
+            land={
+              t.ls > 0.5 && {
+                pos: [t.lsX, t.lsY, t.lsZ],
+                rot: [t.lsRotX * RAD, t.lsRotY * RAD, t.lsRotZ * RAD],
+                scale: t.lsScale,
+                spin: t.lsSpin,
+                cloud: t.lsCloud,
+                seed: Math.round(t.lsSeed),
+                count: Math.round(t.lsCount),
+                grow: t.lsGrow > 0.5,
+                growLead: t.lsGrowLead,
+                growDur: t.lsGrowDur,
+                growStagger: t.lsGrowStagger,
+              }
+            }
             wall={t.portalWall > 0.5}
             hemi={t.portalHemi}
             keyLight={t.portalKey}
@@ -2363,9 +2889,28 @@ function Scene() {
           />
         </InsideWindow>
       )}
+      {/**
+       * จานสี — ของลอยนอกหน้าต่าง ไม่ได้อยู่ในกลุ่ม props
+       *
+       * กลุ่ม props ทั้งชุด (สามสิบชิ้น) ถูกปิดไว้ในค่าเริ่มต้น (tuner props = 0) ชิ้นนี้จึงอยู่
+       * ระดับฉากเป็นของตัวเอง เปิด/ปิดด้วยปุ่มของตัวเอง ตำแหน่งเป็นพิกัดโลกตรง ๆ
+       * (คำนวณจากตำแหน่งบนจอที่ต้องการ ฉายกลับผ่านกล้องจริงของฉาก)
+       */}
+      {t.pal > 0.5 && (
+        <Appear at={t.enDelay + t.enDur + t.inPropAt} dur={t.inPropDur} over={t.inOver}>
+          {/* ไม่มีการลอยเลี้ยงตัว — วางนิ่งตามมุมที่จูนไว้ */}
+          <group position={[t.palX, t.palY, t.palZ]}>
+            <Palette
+              scale={t.palScale}
+              rotation={[t.palRotX * RAD, t.palRotY * RAD, t.palRotZ * RAD]}
+            />
+          </group>
+        </Appear>
+      )}
       {props && (
         <>
           <BigDisc position={[9.2, -0.3, -13.5]} scale={1.15} />
+
           <TileBlock position={[7.6, -1.1, -6.5]} rotation={[0.08, -0.4, 0]} />
         </>
       )}
@@ -2501,6 +3046,7 @@ export default function NewHeroScene() {
   const on = useSceneOn()
   return (
     <Canvas
+      shadows="soft"
       frameloop={on ? 'always' : 'never'}
       className="absolute inset-0"
       dpr={[1, LOW_END ? 1.5 : 2]}

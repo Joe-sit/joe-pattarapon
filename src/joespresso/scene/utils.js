@@ -172,16 +172,32 @@ export function addRim(material, { color = '#FFF3DC', power = 2.4, intensity = 0
            * ก็ได้แสงติดมาด้วย ทั้งหัวเลยสว่างขึ้นเป็นเทา ๆ โดยเฉพาะผมสีดำ
            * ช่วงนี้ยึดกับเกณฑ์: ล่าง = เกณฑ์ × (1 - soft), บน = เกณฑ์ + soft × (1 - เกณฑ์)
            */
-          'rimF = rimEdge > 0.0 ? smoothstep(rimEdge * (1.0 - rimSoft), rimEdge + rimSoft * (1.0 - rimEdge), rimF) : rimF;',
+          /**
+           * ขอบกว้างอย่างน้อยหนึ่งพิกเซลเสมอ — ขอบที่เกิดจาก "การแรเงา" ไม่มีอะไรมาลบรอยหยัก
+           *
+           * MSAA ของแคนวาสสุ่มตัวอย่างเฉพาะขอบเรขาคณิต ขอบที่เกิดกลางเนื้อสามเหลี่ยม (rim,
+           * รอยต่อชั้นแสงของ cel) จึงเป็นขั้นบันไดเต็ม ๆ fwidth คือระยะที่ค่านั้นเปลี่ยนไปต่อ
+           * หนึ่งพิกเซล เกลี่ยเท่านั้นพอดี = คมที่สุดเท่าที่จอทำได้โดยไม่หยัก และไม่เบลอเกิน
+           * หนึ่งพิกเซลไม่ว่าจะซูมแค่ไหน (three 0.182 ใช้ WebGL2 อย่างเดียว fwidth จึงมีเสมอ
+           * ไม่ต้องประกาศ extension แบบสมัย WebGL1)
+           */
+          'float rimAA = fwidth(rimF);',
+          'rimF = rimEdge > 0.0 ? smoothstep(min(rimEdge * (1.0 - rimSoft), rimEdge - rimAA), max(rimEdge + rimSoft * (1.0 - rimEdge), rimEdge + rimAA), rimF) : rimF;',
           // ขึ้นเฉพาะฝั่งที่หันไปหาไฟขอบ (ถ่วงด้วย rimDirMix)
           'rimF *= mix(1.0, saturate(dot(rimN, normalize(rimDir))), rimDirMix);',
-          'rimF = rimBands > 1.5 ? step(0.5, rimF) : rimF;',
+          'rimF = rimBands > 1.5 ? smoothstep(0.5 - rimAA, 0.5 + rimAA, rimF) : rimF;',
           'outgoingLight += rimColor * rimF * rimIntensity;',
           '#include <opaque_fragment>',
         ].join('\n'),
       )
   }
-  material.customProgramCacheKey = () => 'rim'
+  /**
+   * กุญแจต้องเปลี่ยนเมื่อซอร์สของ shader เปลี่ยน
+   *
+   * three แคชโปรแกรมตามกุญแจนี้ ค่าคงที่เดิมแปลว่าแก้ shader แล้วมันยังหยิบโปรแกรมเก่ามาใช้
+   * (เห็นชัดตอน HMR: แก้ไฟล์นี้ทั้งฉากหายเพราะวัสดุใหม่ไปเจอโปรแกรมที่ไม่ตรงกัน)
+   */
+  material.customProgramCacheKey = () => 'rim-aa1'
   return material
 }
 
@@ -239,8 +255,13 @@ export function addCel(material, u) {
           '  const vec3 celW = vec3(0.2126, 0.7152, 0.0722);',
           '  float celBase = max(dot(diffuseColor.rgb, celW), 1e-4);',
           '  float celR = dot(outgoingLight, celW) / celBase;',
-          '  float celK = smoothstep(celEdge - celSoft, celEdge + celSoft, celR);',
-          '  float celH = smoothstep(celHiEdge - celSoft, celHiEdge + celSoft, celR);',
+          /**
+           * เกลี่ยอย่างน้อยหนึ่งพิกเซลเหมือน rim — celSoft = 0 คือขอบที่หยักที่สุด
+           * ชื่อ celAA ไม่ใช่ celW: celW ถูกใช้ไปแล้วเป็นเวกเตอร์ถ่วงน้ำหนักความสว่างข้างบน
+           */
+          '  float celAA = max(celSoft, fwidth(celR));',
+          '  float celK = smoothstep(celEdge - celAA, celEdge + celAA, celR);',
+          '  float celH = smoothstep(celHiEdge - celAA, celHiEdge + celAA, celR);',
           '  vec3 celSh = diffuseColor.rgb * celShadow * mix(vec3(1.0), vec3(0.86, 0.80, 1.14), celTint);',
           '  vec3 celLt = diffuseColor.rgb * celLit;',
           /**

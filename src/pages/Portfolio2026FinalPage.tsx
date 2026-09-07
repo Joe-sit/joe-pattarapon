@@ -5,6 +5,7 @@ import './portfolio2026.css'
 import { useSkillStory, WhatIDo } from '@/sections/whatido/WhatIDo'
 import { Logo } from '@/joespresso/Logo'
 import { ExperienceTunnel } from '@/sections/tunnel/ExperienceTunnel'
+import { BlobWipe } from '@/components/BlobWipe'
 import { AnchorNav } from '@/components/AnchorNav'
 import { SITE } from '@/config/site'
 import { OpenToWorkRibbon } from '@/sections/ribbonstory/OpenToWorkRibbon'
@@ -73,11 +74,11 @@ function TopBar() {
 
   return (
     <header
-      className={`pointer-events-none fixed inset-x-0 top-0 z-30 flex items-center justify-between px-[clamp(24px,4.4vw,64px)] pt-[clamp(20px,6svh,64px)] transition-[transform,opacity] duration-300 ease-out ${
+      className={`pointer-events-none fixed inset-x-0 top-0 z-30 flex h-[var(--v3-nav-h)] items-center justify-between px-[clamp(18px,3vw,44px)] transition-[transform,opacity] duration-300 ease-out ${
         hidden ? '-translate-y-full opacity-0' : 'translate-y-0 opacity-100'
       }`}
     >
-      <Logo width={93} height={32} color="var(--v3-ink)" className="shrink-0" />
+      <Logo width={93} height={32} color="var(--v3-shell-ink)" className="shrink-0" />
       {/* เหลือปุ่มเดียว — ลิงก์ในแถบซ้ำกับราวจุดด้านซ้ายที่พาไปทุกจออยู่แล้ว
           มุมขวาจึงเก็บไว้ให้สิ่งที่ราวนั้นทำแทนไม่ได้: เรซูเม่ที่ลิงก์ออกนอกหน้า */}
       <a
@@ -319,7 +320,7 @@ export function Portfolio2026FinalPage() {
   }, [])
 
   return (
-    <div ref={rootRef} className="v3 relative w-full bg-[var(--v3-blue)]">
+    <div ref={rootRef} className="v3 relative w-full">
       {/**
        * ฉาก 3D เป็นชั้นตรึงเต็มวิวพอร์ต ไม่ได้อยู่ในกล่องของจอแรก
        *
@@ -329,11 +330,22 @@ export function Portfolio2026FinalPage() {
        * (section ถัดไปเป็น positioned และอยู่หลังในเอกสาร จึงวาดทับชั้นนี้)
        *
        * รับเมาส์ไม่ได้ (pointer-events) ไม่งั้นมันจะกินคลิกของทั้งหน้าไปหมด
+       *
+       * ครอบด้วยการ์ดมุมมนแบบเดียวกับ .jp-hero-card ของ /joespresso: เว้นขอบแล้วตัดมุม
+       * ฉากจึงอ่านเป็น "จอในหน้า" ไม่ใช่พื้นหลังเต็มจอ
+       *
+       * ขอบบนของการ์ดเริ่มใต้แถบเมนูพอดี (--v3-nav-h) แถบจึงอยู่ "นอกฉาก" บนพื้นเทาของหน้า
+       * ไม่ใช่ลอยทับฉากเหมือนเดิม — โลโก้จึงต้องเป็นหมึกเข้ม ไม่ใช่ขาว
+       *
+       * ตัวห่อไม่รับเมาส์ แต่แคนวาสรับ ([&_canvas]) — ช่องคอมมิตบนถนนสว่างตามเมาส์
+       * ซึ่งต้องได้ pointermove จริง ๆ ถึงจะรู้ว่าโดนช่องไหน ส่วนที่ว่างรอบการ์ดยังคลิกทะลุได้
        */}
-      <div className="pointer-events-none fixed inset-0">
+      <div className="pointer-events-none fixed top-[var(--v3-nav-h)] right-[clamp(10px,1.5vw,22px)] bottom-[clamp(10px,1.5vw,22px)] left-[clamp(10px,1.5vw,22px)] overflow-hidden rounded-[clamp(18px,2.2vw,34px)] [&_canvas]:pointer-events-auto">
         <Suspense fallback={null}>
           <NewHeroScene />
         </Suspense>
+        {/* ม่านของเหลวที่ท่วมขึ้นมาตอนเลื่อนพ้นจอแรก — อยู่ในการ์ด มุมมนจึงตัดให้เอง */}
+        <BlobWipe />
       </div>
       <TopBar />
       {/* ราวจุดนำสายตา — ตัวเดียวกับที่ใช้ในเวอร์ชัน Vue (branch `2026`)
@@ -346,7 +358,10 @@ export function Portfolio2026FinalPage() {
       {/* ── จอ 1: หัวเรื่อง ──────────────────────────────────────────────
           โปร่งใส ไม่มีพื้นของตัวเอง — ฉากที่ตรึงไว้ข้างบนคือพื้นของจอนี้ จอแรกจึงไม่มีขอบ
           ให้ตัดกับจอถัดไป เหลือแค่ตัวหนังสือที่เลื่อนออกเร็วกว่าฉาก (พารัลแลกซ์) */}
-      <section id="hero" data-screen="hero" className="relative h-[100svh] w-full">
+      {/* จอแรกไม่กินเมาส์ทั้งจอ — ฉาก 3D อยู่ในชั้นตรึงที่อยู่ "หลัง" จอนี้ ถ้าจอนี้รับเมาส์
+          ทั้งกล่อง ถนนในฉากจะไม่มีวันรู้ว่าเมาส์ผ่าน (ช่องคอมมิตสว่างตามเมาส์)
+          ชิ้นที่ต้องกดได้ในจอนี้เปิด pointer-events ของตัวเองไว้แล้ว (ฟองคำพูด/ชั้นคอมเมนต์) */}
+      <section id="hero" data-screen="hero" className="pointer-events-none relative h-[100svh] w-full">
         <div id="hero-pin" className="absolute inset-0">
         <div className="relative mx-auto h-full w-full max-w-[1440px]">
         {/* ชั้นรับคลิกของโหมดคอมเมนต์ — คลุมทั้งจอแรก ปักหมุดตรงที่คลิก
@@ -377,7 +392,7 @@ export function Portfolio2026FinalPage() {
             หัวเรื่องอยู่กลาง ประโยคปิดถูกดันลงไปติดล่างด้วย mt-auto */}
         <div
           ref={copyRef}
-          className="pointer-events-none relative z-10 will-change-transform ml-auto flex h-[100svh] w-[min(46%,560px)] flex-col pt-[clamp(72px,16svh,164px)] pr-[clamp(24px,4.7vw,68px)] pb-[clamp(24px,14svh,143px)]">
+          className="pointer-events-none relative z-10 ml-auto flex h-[100svh] w-[min(46%,560px)] flex-col pt-[clamp(72px,16svh,164px)] pr-[clamp(24px,4.7vw,68px)] pb-[clamp(24px,14svh,143px)] text-[var(--v3-hero-ink)] will-change-transform">
           {/* my-auto ไม่ใช่ justify-center — ประโยคปิดถูกตรึงไว้ล่างสุด ที่ว่างที่เหลือ
               จึงต้องถูกแบ่งรอบหัวเรื่องเอง ไม่งั้นมันจะถูกดันไปชนแถบเมนูด้านบน */}
           <div className="my-auto flex flex-col gap-[clamp(12px,3.5svh,36px)]">

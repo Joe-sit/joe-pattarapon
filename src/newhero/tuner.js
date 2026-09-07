@@ -25,7 +25,7 @@ export const DEFAULTS = {
    * ลูกโลกจิ๋ววนลูปในพอร์ทัล (แทนฉาก joespresso เดิม) — รัศมี 1 ก่อนสเกล
    * gbSpeed = เรเดียน/วินาที ที่ดาวหมุนรอบแกนถนน
    */
-  gb: 1,
+  gb: 0,
   gbScale: 8,
   gbX: 20,
   gbY: -1.5,
@@ -45,12 +45,59 @@ export const DEFAULTS = {
   gbBerries: 15,
   gbPebbles: 19,
   gbProp: 0.95,
+  /**
+   * ทิวทัศน์ในพอร์ทัล (เนิน/ทาง/กังหัน) — ชิ้นที่มาแทนลูกโลกในกรอบหน้าต่าง
+   * lsSpin/lsCloud เป็นความเร็ว (rad/s และ หน่วย/วินาที) ไม่ใช่สัดส่วน
+   */
+  ls: 1,
+  lsScale: 0.91,
+  lsX: 1.5,
+  lsY: -0.5,
+  lsZ: 0,
+  lsRotX: 8,
+  lsRotY: 11,
+  lsRotZ: 0,
+  lsSpin: 0.5,
+  lsCloud: 0.25,
+  /** ผังของประดับ: เปลี่ยน seed = สุ่มผังใหม่, count = จำนวนชิ้นบนพื้น */
+  lsSeed: 7,
+  lsCount: 90,
+  /**
+   * พืชงอกตามตัวละคร
+   * lsGrowLead = ปล่อยตัวก่อนหัวคลื่นถึงกี่หน่วย (ระยะในทุ่ง)
+   * lsGrowDur = วินาทีที่ต้นหนึ่งใช้โตจนเต็ม, lsGrowStagger = วินาทีที่สุ่มบวกเข้าไปต่อต้น
+   */
+  lsGrow: 1,
+  lsGrowLead: 26,
+  lsGrowDur: 0.7,
+  lsGrowStagger: 0.6,
+  /**
+   * เมฆหน้าสุดที่ขอบจอ — clDist ยิ่งน้อยยิ่งอยู่หน้าและใหญ่, clDrift = แอมพลิจูดการไหว
+   */
+  cl: 1,
+  clDist: 15,
+  clScale: 1,
+  clDrift: 0.02,
+  /**
+   * อวกาศ (นอกพอร์ทัล) — พื้นหลังดาว/เนบิวลา + ดาวเคราะห์ลอยขอบจอ
+   * sp = ท้องฟ้าอวกาศแทนพื้นหลังไล่สีน้ำเงิน, pl = ดาวเคราะห์
+   * spSeed เปลี่ยน = สุ่มผังดาวใหม่ทั้งผืน
+   */
+  sp: 0,
+  spStars: 1,
+  spNebula: 1,
+  spSeed: 5,
+  pl: 0,
+  plDist: 22,
+  plScale: 1,
+  plDrift: 0.02,
+  plSpin: 0.06,
   /* ผนัง/ไฟของฉากในพอร์ทัล */
   /**
    * หน้าต่างโปรแกรมซ้อนกันเป็นรอยลาก (แบบ XP ค้าง) — ของประกอบฉากในพอร์ทัล
    * ระยะเลื่อนต้องเท่ากันทุกชั้น ไล่ไม่เท่ากันแล้วอ่านเป็นของสามชิ้นวางเรียง
    */
-  sw: 1,
+  sw: 0,
   swCount: 3,
   swW: 9,
   swH: 6.5,
@@ -73,7 +120,7 @@ export const DEFAULTS = {
    * บล็อกเตตริส — ของประกอบฉากในพอร์ทัลอีกชิ้น
    * teShape เป็นดัชนีของรูปทรง (0=S 1=Z 2=T 3=L 4=O 5=I) ค่าเริ่มต้นคือตัว S ตาม ref
    */
-  te: 1,
+  te: 0,
   teShape: 0,
   teDepth: 0.9,
   teRadius: 0.16,
@@ -137,9 +184,25 @@ export const DEFAULTS = {
   cuAim: 1,
   cuAimMax: 70,
   cuAimEase: 0.08,
+  /**
+   * กระจกปิดหน้าพอร์ทัล — pwBevel = ความหนาของขอบมน (หน่วยฉาก)
+   * pwSheen = ความเข้มของแถบสะท้อน/ฟิล์มทั้งบาน
+   */
+  pw: 1,
+  pwInt: 1,
+  pwBevel: 1.1,
+  pwSheen: 0.12,
+  /** เงาจริงจากไฟ key — ปิดแล้วฉากกลับไปไม่มีเงาตกกระทบ */
+  sh: 1,
+  /** ช่องคอมมิตบนริบบิ้นปล่อยแสงเอง (emissive) — 0 = แบนเหมือนสีทา */
+  rbGlow: 1.3,
+  /** ระยิบระยับของช่องคอมมิต — สัดส่วนที่ความสว่างแกว่งขึ้นลง (0 = นิ่ง) */
+  rbTwinkle: 0.55,
+  /** ความสว่างของช่องตอนเมาส์ผ่าน (0 = ไม่ตอบสนอง) */
+  rbHover: 1.2,
   portalWall: 1,
-  portalHemi: 0.7,
-  portalKey: 1.1,
+  portalHemi: 0.45,
+  portalKey: 0.8,
   prW: 13.1,
   prThick: 0.53,
   prWave: 2.35,
@@ -165,11 +228,11 @@ export const DEFAULTS = {
    * แสง — ambient ต่ำ แล้วไปเพิ่มที่ key/fill/rim
    * ดัน ambient สูงจะสว่างแบบแบน เพราะทุกหน้าได้แสงเท่ากันหมด
    */
-  ambIntensity: 0,
-  hemiIntensity: 0,
-  keyIntensity: 4,
-  fillIntensity: 1.2,
-  rimIntensity: 3,
+  ambIntensity: 0.18,
+  hemiIntensity: 0.4,
+  keyIntensity: 1.6,
+  fillIntensity: 0.55,
+  rimIntensity: 0.6,
   /* rim บนตัวละคร (fresnel ที่ผิว) — power = ความคมของขอบ / boost = ความสว่าง */
   rimPower: 9.9,
   rimBoost: 1.04,
@@ -183,8 +246,8 @@ export const DEFAULTS = {
    */
   /* ผิวพลาสติกเงาทั้งฉาก — roughness ต่ำ + สะท้อน environment แรงขึ้น (ไม่แตะสี) */
   gloss: 1,
-  glossRough: 0.28,
-  glossEnv: 1.4,
+  glossRough: 0.38,
+  glossEnv: 0.6,
   rimFx: 1,
   rimFxInt: 1.93,
   rimFxW: 9.5,
@@ -203,11 +266,12 @@ export const DEFAULTS = {
   /** ตัดแสงเป็นชั้น — 0 = ไล่เฉดปกติ, 3 = แบนแบบเวกเตอร์ */
   flatBands: 1,
   /**
-   * โหมดแบน (cel) ทั้งฉาก — ผิวด้าน ไม่มี specular แสงถูกตัดเป็น 3 ชั้น: เงา / สีเนื้อ / ไฮไลต์
+   * โหมดแบน (cel) ทั้งฉาก — ปิดไว้: ฉากนี้เอาแบบมีปริมาตรจริง (ไล่เฉดต่อเนื่อง + เงาตกกระทบ)
+   * เปิดเมื่อไรได้ภาพแบบเวกเตอร์แบน ซึ่งกลืนรายละเอียดของทรงกลม/ผิวโค้งทั้งหมด — ผิวด้าน ไม่มี specular แสงถูกตัดเป็น 3 ชั้น: เงา / สีเนื้อ / ไฮไลต์
    * เกณฑ์เป็น "แสงต่อสีเนื้อ" (key 4 ให้ราว 1.3 ที่หน้าตรงไฟ, fill 1.2 ให้ราว 0.4)
    * flatTone 0 = ปิด ACES ด้วย สีสดคงเดิม ไม่ถูกบีบให้หม่น
    */
-  flat: 1,
+  flat: 0,
   flatEdge: 0.5,
   flatHiEdge: 1.15,
   /** 0 = ขอบชั้นแสงคมสนิท (ค่าที่จูนแล้วบนจอจริง) */
@@ -219,8 +283,8 @@ export const DEFAULTS = {
   flatEnv: 0,
   flatTone: 0,
   /** แผงไฟนุ่มรอบฉาก (environment) — ตัวที่ให้หน้าตาแบบดินน้ำมัน */
-  envIntensity: 1.57,
-  exposure: 1,
+  envIntensity: 0.45,
+  exposure: 0.95,
   /**
    * เอฟเฟกต์กล้อง (post) — ปิดไว้เป็นค่าเริ่มต้น
    * fxFish บวก = นูนออก (fisheye) / ลบ = เว้าเข้า, fxSkew = เอียงภาพ, fxChroma = เหลื่อมสีขอบ
@@ -543,6 +607,16 @@ export const DEFAULTS = {
   mugElY: 84.5,
   mugElZ: -29.5,
 
+  /* ── จานสี (ของลอยนอกหน้าต่าง) ─────────────────────────────────────────── */
+  pal: 1,
+  palX: 2.2,
+  palY: -0.7,
+  palZ: -4,
+  palScale: 0.9,
+  palRotX: -41,
+  palRotY: 12,
+  palRotZ: -73,
+
   /* ── ย่อเข่ารับแรงตอนไถล — ดู entranceLoad ใน Entrance.jsx ─────────────── */
   /** ย่อได้ลึกสุดกี่เรเดียน ตอนแรงกดเต็มที่ */
   enCrouch: 0.62,
@@ -584,7 +658,7 @@ export const DEFAULTS = {
 }
 
 // ขึ้นเวอร์ชันเมื่อชุดคีย์/ค่าเริ่มต้นเปลี่ยนแนว — ค่าที่ค้างในเบราว์เซอร์จะได้ไม่ทับของใหม่
-const KEY = 'newhero.tuner.v170'
+const KEY = 'newhero.tuner.v182'
 
 function load() {
   /**

@@ -738,6 +738,9 @@ export function ExperienceTunnel({ id = "experiences" }: { id?: string }) {
             <Canvas
               aria-hidden
               className="absolute inset-0"
+              /* ชั้นนี้เป็นภาพประกอบล้วน ห้ามกินเมาส์ — r3f ใส่ pointerEvents ที่ style ของ
+                 ตัวห่อเอง คลาสจึงแพ้ ต้องสั่งที่ style ตรง ๆ (ฉาก hero ข้างล่างต้องได้ hover) */
+              style={{ pointerEvents: 'none' }}
               dpr={[1, 1.5]}
               camera={{ position: [0, 0, 0], fov: FOV_IN, near: 0.1, far: 90 }}
               /* preserveDrawingBuffer: ต้องอ่านพิกเซลกลับหนึ่งเฟรมตอนกระจกแตก (ดู CaptureOnBreak)
