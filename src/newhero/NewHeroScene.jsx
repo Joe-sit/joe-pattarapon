@@ -246,7 +246,7 @@ function RibbonTopMaterial({ map, aniso = 1 }) {
       shader.uniforms.uTwTime = { value: 0 }
       shader.uniforms.uTwAmt = { value: 0.55 }
       shader.uniforms.uHitCell = { value: Array.from({ length: HOVER_MAX }, () => new THREE.Vector2(-999, -999)) }
-      shader.uniforms.uHitAge = { value: new Array(HOVER_MAX).fill(999) }
+      shader.uniforms.uHitAge = { value: Array.from({ length: HOVER_MAX }, () => 999) }
       shader.uniforms.uHitInt = { value: 1 }
       shader.fragmentShader = shader.fragmentShader
         .replace(
