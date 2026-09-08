@@ -87,3 +87,17 @@ export function outBack(t, s = 1.4) {
   const x = Math.min(1, Math.max(0, t)) - 1
   return 1 + x * x * ((s + 1) * x + s)
 }
+
+/**
+ * เล่นอินโทรใหม่ทันที (ปุ่มในแผง debug)
+ *
+ * ปกติ Entrance เป็นคนติดอาวุธให้หลังตัวละครขึ้นครบ — แต่ปิดตัวละครแล้วจะไม่มีใครเรียก
+ * ทางนี้จึงออกตัวเองเลย ไม่ต้องรอ fallback สองวินาที
+ */
+export function replayIntro() {
+  intro.held = false
+  intro.wants = false
+  intro.armed = true
+  intro.time = 0
+  intro.waited = 0
+}

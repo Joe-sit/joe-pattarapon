@@ -270,7 +270,13 @@ export function addCel(material, u) {
            * คูณกับสีเนื้อ (ผมดำในภาพเวกเตอร์ก็ยังดำ แค่มีแถบอ่อนกว่านิดเดียว)
            */
           '  vec3 celHiC = celLt + celHi * (celLt * 0.8 + 0.06);',
-          '  outgoingLight = mix(mix(celSh, celLt, celK), celHiC, celH);',
+          /**
+           * บวก emissive กลับเข้าไป — ชั้นสีของ cel คิดจาก diffuseColor ล้วน ๆ ซึ่งทิ้งแสงที่
+           * ผิวปล่อยเองไปทั้งหมด (three รวม totalEmissiveRadiance ไว้ใน outgoingLight
+           * ก่อนหน้านี้แล้ว) ของที่ตั้งใจให้ "ติดไฟ" เช่นช่องคอมมิตบนถนน จึงดับสนิทเมื่อเปิด
+           * โหมดแบน ทั้งที่ควรสว่างได้ไม่ว่าจะเฉดแบนหรือไม่
+           */
+          '  outgoingLight = mix(mix(celSh, celLt, celK), celHiC, celH) + totalEmissiveRadiance;',
           '}',
           anchor,
         ].join('\n'),

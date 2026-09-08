@@ -29,6 +29,10 @@ export function Rider({
   idleAmp = 1,
   idleSpeed = 1,
   mascotScale = 0.5,
+  /** ปรับรองเท้า (dev) — ดู Shoe ใน Mascot.jsx */
+  shoe = null,
+  /** แขนจากโมเดล lumberjack — ดู lumberArms.js */
+  lumberArms = null,
   mascotLift = 0,
   boardScale = 1,
   armScale = 1,
@@ -190,6 +194,8 @@ export function Rider({
           <Suspense fallback={null}>
             <Mascot
               scale={mascotScale}
+              shoe={shoe}
+              lumberArms={lumberArms}
               isolated
               noIdle
               noMug

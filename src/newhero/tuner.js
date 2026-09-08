@@ -189,12 +189,26 @@ export const DEFAULTS = {
    * pwSheen = ความเข้มของแถบสะท้อน/ฟิล์มทั้งบาน
    */
   pw: 1,
-  pwInt: 1,
-  pwBevel: 1.1,
-  pwSheen: 0.12,
+  pwInt: 0.06,
+  pwBevel: 3,
+  pwSheen: 0,
   /** เงาจริงจากไฟ key — ปิดแล้วฉากกลับไปไม่มีเงาตกกระทบ */
   sh: 1,
   /** ช่องคอมมิตบนริบบิ้นปล่อยแสงเอง (emissive) — 0 = แบนเหมือนสีทา */
+  /**
+   * รองเท้า (โมเดล GLB) — sn = sneaker, snScale/ตำแหน่งอยู่ในพิกัดข้อเท้าของ rig
+   * ค่าเริ่มต้นคือค่าที่วัดจากกล่องขอบเขตของโมเดลเทียบบูทกล่องเดิม
+   */
+  /** แขนจากโมเดล lumberjack (la = lumber arms) — 0 = แขนเดิมของ mascot */
+  la: 1,
+  laScale: 1,
+  snScale: 0.34,
+  snX: 0,
+  snY: -0.057,
+  snZ: -0.17,
+  snRotX: 0,
+  snRotY: 0,
+  snRotZ: 0,
   rbGlow: 1.3,
   /** ระยิบระยับของช่องคอมมิต — สัดส่วนที่ความสว่างแกว่งขึ้นลง (0 = นิ่ง) */
   rbTwinkle: 0.55,
@@ -220,8 +234,8 @@ export const DEFAULTS = {
    * `idle` ขยับทั้งตัวละครและบอร์ดเป็นก้อนเดียว เท้ายังแนบแผ่นตลอด
    * `breathe` คือไหวระดับข้อต่อของ rig ซึ่งบอร์ดตามไม่ได้ — เท้าจะไถหลุดจากแผ่น
    */
-  idle: 0,
-  breathe: 0,
+  idle: 1,
+  breathe: 1,
   idleAmp: 1,
   idleSpeed: 1,
   /**
@@ -245,7 +259,7 @@ export const DEFAULTS = {
    * นี่คือตัวที่ทำงานจริงกับตัวละครทรงกล่อง (fresnel ด้านบนขึ้นแทบไม่เห็น)
    */
   /* ผิวพลาสติกเงาทั้งฉาก — roughness ต่ำ + สะท้อน environment แรงขึ้น (ไม่แตะสี) */
-  gloss: 1,
+  gloss: 0,
   glossRough: 0.38,
   glossEnv: 0.6,
   rimFx: 1,
@@ -271,7 +285,7 @@ export const DEFAULTS = {
    * เกณฑ์เป็น "แสงต่อสีเนื้อ" (key 4 ให้ราว 1.3 ที่หน้าตรงไฟ, fill 1.2 ให้ราว 0.4)
    * flatTone 0 = ปิด ACES ด้วย สีสดคงเดิม ไม่ถูกบีบให้หม่น
    */
-  flat: 0,
+  flat: 1,
   flatEdge: 0.5,
   flatHiEdge: 1.15,
   /** 0 = ขอบชั้นแสงคมสนิท (ค่าที่จูนแล้วบนจอจริง) */
@@ -420,7 +434,7 @@ export const DEFAULTS = {
   /** 1 = ไถลบนริบบิ้นในหน้าต่างก่อนแล้วส่งไม้ต่อ (มีรอยต่อ) · 0 = เส้นหลักเส้นเดียวตลอด */
   enTwo: 0,
   enShowPath: 1,
-  enReplay: 2,
+  enReplay: 3,
   /** ช่วงท้ายของทางเข้าพุ่งออกมาเร็ว ๆ: เริ่มพุ่งที่สัดส่วนเวลา / ใช้ระยะทางกี่ส่วน (0 = ไม่พุ่ง) */
   enBurstAt: 0.9,
   enBurstAmt: 0,
@@ -458,7 +472,7 @@ export const DEFAULTS = {
   inWinRise: 3,
   inWinTilt: -28,
   /** กล้อง: เริ่มจากออฟเซ็ต (เข้าใกล้/ต่ำ/เฉียง) แล้วถอยกลับที่มุมจริงใน inCamDur วิ */
-  inCamDolly: -4,
+  inCamDolly: -15,
   inCamX: -2.5,
   inCamY: -1.2,
   inCamYaw: -7,
@@ -658,7 +672,7 @@ export const DEFAULTS = {
 }
 
 // ขึ้นเวอร์ชันเมื่อชุดคีย์/ค่าเริ่มต้นเปลี่ยนแนว — ค่าที่ค้างในเบราว์เซอร์จะได้ไม่ทับของใหม่
-const KEY = 'newhero.tuner.v182'
+const KEY = 'newhero.tuner.v189'
 
 function load() {
   /**

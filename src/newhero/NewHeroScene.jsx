@@ -747,6 +747,7 @@ function Clay({ on, children }) {
 function ShadowFlags({ on }) {
   const scene = useThree((s) => s.scene)
   const gl = useThree((s) => s.gl)
+  const cam = useThree((s) => s.camera)
   const frames = useRef(0)
   /**
    * ประตูวัดผลตอน dev — นับ draw call/สามเหลี่ยมจริงจากสคริปต์ภายนอกได้
@@ -755,6 +756,7 @@ function ShadowFlags({ on }) {
   if (import.meta.env.DEV) {
     window.__gl = gl
     window.__scene = scene
+    window.__cam = cam
   }
   useFrame(() => {
     if (!on || frames.current > 240) return
@@ -2689,6 +2691,12 @@ function Scene() {
             scale={t.skaterScale}
           >
           <Rider
+            lumberArms={{ on: t.la > 0.5, scale: t.laScale }}
+            shoe={{
+              scale: t.snScale,
+              pos: [t.snX, t.snY, t.snZ],
+              rot: [t.snRotX * RAD, t.snRotY * RAD, t.snRotZ * RAD],
+            }}
             bob={t.idle > 0.5}
             breathe={t.breathe > 0.5}
             idleAmp={t.idleAmp}

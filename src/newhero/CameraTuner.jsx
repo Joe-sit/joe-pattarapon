@@ -44,6 +44,7 @@ import {
   IconWorld,
 } from '@tabler/icons-react'
 import { DEFAULTS, READOUT, REF, getTuner, projectGuides, resetTuner, setTuner, useTuner } from './tuner'
+import { replayIntro } from './intro'
 
 /**
  * แผงปรับมุมกล้อง/องค์ประกอบของ /new-hero — dev เท่านั้น
@@ -161,6 +162,19 @@ const GROUPS = [
       ['gbFlowers', 0, 30, 1, 'ดอกไม้'],
       ['gbBerries', 0, 15, 1, 'เบอร์รี่'],
       ['gbPebbles', 0, 60, 1, 'กรวดบนถนน'],
+    ],
+  },
+  {
+    name: 'รองเท้า',
+    rows: [
+      ['laScale', 0.3, 2, 0.01, 'แขน lumberjack: สเกล'],
+      ['snScale', 0.05, 0.8, 0.005, 'สเกล'],
+      ['snX', -0.6, 0.6, 0.005],
+      ['snY', -0.6, 0.6, 0.005],
+      ['snZ', -0.8, 0.8, 0.005],
+      ['snRotX', -180, 180, 0.5, '°'],
+      ['snRotY', -180, 180, 0.5, '°'],
+      ['snRotZ', -180, 180, 0.5, '°'],
     ],
   },
   {
@@ -623,6 +637,7 @@ const GROUP_TOGGLES = {
   'ของลอย (ยกทั้งชุด)': [['props', 'ของลอย']],
   'ลูกโลก (ในพอร์ทัล)': [['gb', 'เปิด']],
   'ทิวทัศน์ (ในพอร์ทัล)': [['ls', 'เปิด'], ['lsGrow', 'พืชงอกตามตัวละคร']],
+  'รองเท้า': [['la', 'แขน lumberjack']],
   'กระจกพอร์ทัล': [['pw', 'เปิด']],
   'อวกาศ (นอกพอร์ทัล)': [['sp', 'ท้องฟ้าอวกาศ'], ['spStars', 'ดาว'], ['spNebula', 'เนบิวลา'], ['pl', 'ดาวเคราะห์']],
   'เมฆขอบจอ (หน้าสุด)': [['cl', 'เปิด']],
@@ -651,6 +666,7 @@ const GROUP_ICONS = {
   'ริบบิ้นในพอร์ทัล': IconMountain,
   'ลูกโลก (ในพอร์ทัล)': IconWorld,
   'ทิวทัศน์ (ในพอร์ทัล)': IconMountain,
+  'รองเท้า': IconShoe,
   'กระจกพอร์ทัล': IconWindow,
   'อวกาศ (นอกพอร์ทัล)': IconPlanet,
   'เมฆขอบจอ (หน้าสุด)': IconCloud,
@@ -873,7 +889,35 @@ function Group({ g, open, onToggle, rows }) {
         {toggles?.map(([k, label]) => <Toggle key={k} k={k} label={label} />)}
       </div>
       {open && g.name.startsWith('ทางเข้า') && <EntranceBar />}
+      {open && g.name.startsWith('อินโทร') && <IntroBar />}
       {open && rows.map(([k, min, max, step, unit]) => <Row key={k} k={k} min={min} max={max} step={step} unit={unit} />)}
+    </div>
+  )
+}
+
+/**
+ * ปุ่มเล่นอินโทรใหม่ — ดูผลของค่าที่เพิ่งปรับโดยไม่ต้องรีหน้า
+ *
+ * มีตัวละครในฉาก = เล่นผ่าน enReplay ของ Entrance เพราะมันเป็นคนถือศูนย์เวลา (รอโมเดล
+ * ขึ้นครบก่อนออกตัว) ปิดตัวละครแล้วไม่มีใครติดอาวุธให้ จึงออกตัวเองด้วย replayIntro
+ */
+function IntroBar() {
+  const t = useTuner()
+  const off = t.intro < 0.5
+  return (
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center', width: '100%', padding: '2px 0 4px' }}>
+      <button
+        type="button"
+        style={off ? { ...btn, opacity: 0.45 } : btn}
+        disabled={off}
+        title={off ? 'เปิดอินโทรก่อน' : 'เล่นอินโทรทั้งฉากใหม่ตั้งแต่ต้น'}
+        onClick={() => {
+          if (getTuner().skater > 0.5) setTuner({ enPause: 0, enReplay: getTuner().enReplay + 1 })
+          else replayIntro()
+        }}
+      >
+        <Ic icon={IconPlayerPlay} />เล่นอินโทร
+      </button>
     </div>
   )
 }

@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { addRim, clamp, damp, lerp } from './utils'
+import { extractLumberArms, LUMBER_MODEL } from './lumberArms'
 import { scrollState } from '../scroll'
 import { introState } from '../intro'
 
@@ -16,6 +17,20 @@ const seg = (v, a, b) => {
 }
 
 const MODEL = '/mascot.glb'
+/**
+ * รองเท้าเป็นโมเดลจริง ไม่ใช่กล่องสองใบเหมือนเดิม
+ *
+ * ส่วนอื่นของตัวละครเป็นกล่องโดยตั้งใจ (ภาษาเดียวกันทั้งตัว) แต่รองเท้าเป็นชิ้นที่อยู่ติดพื้น
+ * และอยู่หน้าสุดของท่าไถล ตาจึงจับรายละเอียดตรงนี้ก่อนเพื่อน ที่เหลือยังเป็นกล่องเหมือนเดิม
+ */
+const SHOE_MODEL = '/models/stylized_cartoon_shoes.glb'
+/**
+ * วัดจากกล่องขอบเขตของโมเดล (ยาว z -0.83..3.19, กว้าง x ±1.09, สูง y -0.82..1.69)
+ * เทียบกับกล่องบูทเดิม (0.6 x 0.43 x 0.9 จุดกำเนิดที่ข้อเท้า พื้นรองเท้าอยู่ที่ y -0.255)
+ * ค่าพวกนี้คือการวางให้ "พื้นรองเท้าอยู่ระดับเดิม ปลายเท้าอยู่ที่เดิม" ไม่ใช่เลขที่ลองสุ่มมา
+ */
+const SHOE_SCALE = 0.24
+const SHOE_POS = [0, -0.057, -0.17]
 
 
 // GLB ที่ได้มาไม่มีชื่อ node เลย — จำแนกชิ้นส่วนจาก "สี material" แทน
@@ -96,8 +111,6 @@ function makeCoffeeCup() {
  */
 const JEANS = '#3E5C8F'
 const CUFF = '#5A7BAD'
-const BOOT = '#7A4E2E'
-const SOLE = '#5E3B22'
 
 /**
  * ความยาวขา วัดจาก comp: ขา = 46% ของความสูงทั้งตัว (หัว 23% ลำตัว 31%)
@@ -338,7 +351,55 @@ function addCatchlights(eye, worldNormal) {
 const THIGH_LEN = LEG_LEN * 0.52
 const SHIN_LEN = LEG_LEN - THIGH_LEN
 
-function Legs({ rig }) {
+/**
+ * รองเท้าหนึ่งข้าง — โคลนจาก GLB แล้วสะท้อนแกน x สำหรับเท้าอีกข้าง
+ *
+ * โมเดลมีรองเท้าสองข้างในไฟล์ แต่ใช้ข้างเดียวแล้วกลับด้านเอา: สองข้างในไฟล์วางไว้คนละ
+ * ตำแหน่งในฉากของมันเอง ซึ่งไม่เกี่ยวกับข้อเท้าของตัวละครนี้เลย จับมาข้างเดียวแล้วสะท้อน
+ * ควบคุมได้ตรงกว่า และประหยัดการโหลดรูปทรงซ้ำ
+ *
+ * โคลนด้วย useMemo เพราะ scene ของ useGLTF เป็นของแคช (ใช้ร่วมทุกที่ที่โหลดไฟล์นี้) —
+ * เอาไปแขวนใน scene graph ตรง ๆ แล้วข้างที่สองจะย้ายข้างแรกมาแทนที่ตัวเอง
+ */
+function Shoe({ side, cfg }) {
+  const { scene } = useGLTF(SHOE_MODEL)
+  const node = useMemo(() => {
+    /**
+     * เอาข้าง "Shoes001_1" ไม่ใช่ข้างแรกในไฟล์
+     *
+     * ไฟล์นี้จัดท่าโชว์ไว้: ข้างแรก (Shoes_0) ถูกหมุนเงย 40° ลอยอยู่เหนืออีกข้าง เอามาใช้
+     * ตรง ๆ แล้วรองเท้าจะเชิดขึ้นฟ้า ข้างที่สองวางราบ เหลือแค่หันเฉียง 16° ซึ่งล้างทิ้งได้
+     */
+    let one = null
+    scene.traverse((o) => {
+      if (!one && o.name === 'Shoes001_1') one = o
+    })
+    one = one ?? scene.children[0]
+    const c = one.clone(true)
+    c.position.set(0, 0, 0)
+    c.rotation.set(0, 0, 0)
+    c.scale.set(1, 1, 1)
+    c.traverse((o) => {
+      if (!o.isMesh) return
+      o.castShadow = true
+      o.receiveShadow = true
+    })
+    return c
+  }, [scene])
+  return (
+    <group
+      position={cfg?.pos ?? SHOE_POS}
+      rotation={cfg?.rot ?? [0, 0, 0]}
+      /* สะท้อนแกน x = เท้าอีกข้าง ด้าน normal กลับข้างไปด้วย three จึงต้องสลับ side ของวัสดุ
+         ซึ่ง r3f ทำให้เองตอนตรวจเจอ determinant ติดลบ — ไม่ต้องปั้นวัสดุชุดที่สอง */
+      scale={[(cfg?.scale ?? SHOE_SCALE) * (side < 0 ? -1 : 1), cfg?.scale ?? SHOE_SCALE, cfg?.scale ?? SHOE_SCALE]}
+    >
+      <primitive object={node} />
+    </group>
+  )
+}
+
+function Legs({ rig, shoe }) {
   /**
    * ขาข้างละ 3 ข้อ: สะโพก -> เข่า -> ข้อเท้า
    *
@@ -396,15 +457,7 @@ function Legs({ rig }) {
             if (rig && g) rig.current[`ankle${key}`] = g
           }}
         >
-          <mesh position={[0, 0, 0.14]} castShadow receiveShadow>
-            <boxGeometry args={[0.6, 0.34, 0.9]} />
-            {/* หนังรองเท้ากึ่งเงา — ภาษาเดียวกับ roughness ตามวัสดุของตัว GLB */}
-            <meshStandardMaterial color={BOOT} roughness={0.5} metalness={0} />
-          </mesh>
-          <mesh position={[0, -0.21, 0.14]} castShadow receiveShadow>
-            <boxGeometry args={[0.64, 0.09, 0.94]} />
-            <meshStandardMaterial color={SOLE} roughness={1} metalness={0} />
-          </mesh>
+          <Shoe side={side} cfg={shoe} />
         </group>
       </group>
     </group>
@@ -424,6 +477,16 @@ function Legs({ rig }) {
 
 export function Mascot({
   position = [0, 0, 0],
+  /**
+   * ปรับรองเท้าจากภายนอก: { scale, pos, rot } — null = ค่าที่วัดไว้ในไฟล์นี้
+   * มีไว้ให้แผงจูนของ /new-hero ลากได้ตอน dev ไม่ใช่ค่าที่หน้าอื่นต้องส่ง
+   */
+  shoe = null,
+  /**
+   * แขนจากโมเดล lumberjack แทนแขนของ GLB เดิม — { on, scale } (null/false = แขนเดิม)
+   * เปลี่ยนแค่ "เนื้อที่เห็น" ริกยังเป็นตัวเดิมทุกข้อ ท่าทาง/สไลเดอร์จึงทำงานเหมือนเดิมหมด
+   */
+  lumberArms = null,
   scale = 1,
   rotation = [0, 0, 0],
   /** true = หันหลังให้กล้อง (หัวยังหันตามเมาส์) */
@@ -2077,6 +2140,80 @@ export function Mascot({
 
   }, [model, skate])
 
+  /**
+   * สลับ "เนื้อแขน" เป็นของ lumberjack — ริกไม่ถูกแตะเลย
+   *
+   * ทำเป็นขั้นตอนแยกหลังริกสร้างเสร็จ ไม่ใช่ไปแก้ตอนปั้นริก เพราะโค้ดปั้นริกวัดทุกอย่างจาก
+   * เนื้อแขนของ GLB เดิม (ความยาวท่อน จุดหมุน ทิศที่มือชี้ การต่อนิ้ว) ถ้าเปลี่ยนเนื้อก่อน
+   * การวัดพวกนั้นจะอ้างของที่ไม่มีอยู่แล้ว — ที่นี่แค่ซ่อนของเดิมแล้วแขวนของใหม่ทับที่ข้อเดิม
+   *
+   * ของเดิมถูก "ซ่อน" ไม่ใช่ลบ: ท่าทาง/สไลเดอร์ยังเล็งชิ้นพวกนั้นอยู่ และ mesh ที่ visible
+   * เป็น false ไม่ถูกวาดอยู่แล้ว (ไม่มีราคาต่อเฟรม)
+   */
+  const lumber = useGLTF(LUMBER_MODEL)
+  const lumberParts = useMemo(() => extractLumberArms(lumber.scene), [lumber.scene])
+  useEffect(() => {
+    const on = !!lumberArms?.on
+    const r = rig.current
+    const chains = [
+      { side: 'L', joints: [r.pointShoulder, r.pointElbow, r.pointWrist] },
+      { side: 'R', joints: [r.mugShoulder, r.mugElbow, r.mugWrist] },
+    ]
+    const added = []
+    for (const { side, joints } of chains) {
+      const [shoulder, elbow, wrist] = joints
+      if (!shoulder || !elbow || !wrist) continue
+      // ซ่อน/คืนเนื้อแขนเดิมทั้งกิ่ง (ข้ามชิ้นที่เราเพิ่งแขวนเอง)
+      shoulder.traverse((o) => {
+        if (!o.isMesh || o.userData.lumber) return
+        if (on) {
+          if (o.userData.lumberHid === undefined) o.userData.lumberHid = o.visible
+          o.visible = false
+        } else if (o.userData.lumberHid !== undefined) {
+          o.visible = o.userData.lumberHid
+          delete o.userData.lumberHid
+        }
+      })
+      if (!on || !lumberParts) continue
+      const src = lumberParts[side] ?? lumberParts.R
+      if (!src) continue
+      const k = lumberArms.scale ?? 1
+      /**
+       * ความยาวของแต่ละท่อนเอาจากริกเอง (ระยะระหว่างข้อ) ไม่ใช่จากโมเดลต้นทาง
+       * แขนใหม่จึงยาวเท่าแขนเดิมเป๊ะ ท่าทางที่จูนไว้ทั้งหมดยังลงล็อกเหมือนเดิม
+       */
+      const upperLen = elbow.position.length()
+      const foreLen = wrist.position.length()
+      const segs = [
+        { geo: src.upper, at: shoulder, len: upperLen, col: HEX.shirt },
+        { geo: src.fore, at: elbow, len: foreLen, col: HEX.shirt },
+        { geo: src.hand, at: wrist, len: foreLen * 0.8, col: HEX.skin },
+      ]
+      for (const seg of segs) {
+        if (!seg.geo) continue
+        const mat = new THREE.MeshStandardMaterial({ color: `#${seg.col}`, roughness: 1, metalness: 0 })
+        const m = new THREE.Mesh(seg.geo, mat)
+        m.scale.setScalar(seg.len * k)
+        m.castShadow = true
+        m.receiveShadow = true
+        m.userData.lumber = true
+        seg.at.add(m)
+        added.push(m)
+      }
+    }
+    return () => {
+      for (const m of added) {
+        m.removeFromParent()
+        m.material.dispose()
+      }
+    }
+    /**
+     * ต้องผูกกับ skate ด้วย: เอฟเฟกต์ที่ปั้นริก (ข้างบน) รันใหม่เมื่อท่าเปลี่ยน แล้วสร้าง
+     * บ่า/แขนเสื้อชิ้นใหม่ทั้งชุด ถ้าไม่รันตาม ของใหม่จะโผล่ทับแขนที่เราแขวนไว้ (และแขน
+     * ของเราจะค้างอยู่กับกลุ่มเก่าที่ถูกทิ้งไปแล้ว)
+     */
+  }, [model, skate, lumberParts, lumberArms?.on, lumberArms?.scale])
+
 
 
   /**
@@ -3339,7 +3476,7 @@ export function Mascot({
     <>
       <group ref={root} position={position} scale={scale} rotation={rotation}>
         <primitive object={model} />
-        <Legs rig={rig} />
+        <Legs rig={rig} shoe={shoe} />
       </group>
       {/* จับลาก — อยู่นอก group ของ mascot เพราะตำแหน่งถูกเซ็ตเป็นพิกัด world ทุกเฟรม */}
       <mesh
@@ -3368,3 +3505,5 @@ export function Mascot({
 }
 
 useGLTF.preload(MODEL)
+useGLTF.preload(SHOE_MODEL)
+useGLTF.preload(LUMBER_MODEL)
