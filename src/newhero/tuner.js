@@ -202,6 +202,19 @@ export const DEFAULTS = {
   /** แขนจากโมเดล lumberjack (la = lumber arms) — 0 = แขนเดิมของ mascot */
   la: 1,
   laScale: 1,
+  /**
+   * ลายเสื้อ — ริ้วโค้งสองสีบนพื้นครีม (แบบใน Figma)
+   * shpSize = ขนาดลาย มีสามขั้นเท่านั้น 0 เล็ก / 1 กลาง / 2 ใหญ่, shpSeed = เมล็ดสุ่มของลาย
+   */
+  shp: 1,
+  shpSize: 2,
+  shpSeed: 5249,
+  wnd: 1,
+  wndAmp: 0.15,
+  wndFreq: 3.2,
+  wndSpd: 2.6,
+  wndDir: 0.6,
+  wndCloth: 0.06,
   snScale: 0.34,
   snX: 0,
   snY: -0.057,
@@ -433,7 +446,7 @@ export const DEFAULTS = {
   enPath: 1,
   /** 1 = ไถลบนริบบิ้นในหน้าต่างก่อนแล้วส่งไม้ต่อ (มีรอยต่อ) · 0 = เส้นหลักเส้นเดียวตลอด */
   enTwo: 0,
-  enShowPath: 1,
+  enShowPath: 0,
   enReplay: 3,
   /** ช่วงท้ายของทางเข้าพุ่งออกมาเร็ว ๆ: เริ่มพุ่งที่สัดส่วนเวลา / ใช้ระยะทางกี่ส่วน (0 = ไม่พุ่ง) */
   enBurstAt: 0.9,
@@ -672,7 +685,7 @@ export const DEFAULTS = {
 }
 
 // ขึ้นเวอร์ชันเมื่อชุดคีย์/ค่าเริ่มต้นเปลี่ยนแนว — ค่าที่ค้างในเบราว์เซอร์จะได้ไม่ทับของใหม่
-const KEY = 'newhero.tuner.v189'
+const KEY = 'newhero.tuner.v212'
 
 function load() {
   /**

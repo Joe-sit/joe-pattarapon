@@ -30,6 +30,8 @@ import { SITE } from '@/config/site'
 import { setEyeOpen, setIntroDone } from '@/stores/intro'
 import { useSceneReady } from '@/stores/ready'
 import { startIntro } from '@/joespresso/intro'
+import { holdIntro, releaseIntro } from '@/newhero/intro'
+import { useNewHeroReady, resetNewHeroReady } from '@/newhero/ready'
 import { useT } from '@/i18n/store'
 
 function Footer() {
@@ -60,6 +62,11 @@ export function App() {
   const [showSplash, setShowSplash] = useState(SPLASH_ON)
   // ฉาก 3D ของ joespresso รายงานตัวเองว่าโหลด+compile เสร็จ — สปแลชรออันนี้
   const sceneReady = useSceneReady()
+  /**
+   * /2026-final ใช้ฉากของ /new-hero ไม่ใช่ฉาก joespresso — สัญญาณ "วาดได้จริง" จึงคนละตัว
+   * ถ้าใช้ตัวเดิม สปแลชจะรอสัญญาณที่ไม่มีวันมา แถบโหลดค้างเต็มอยู่อย่างนั้น
+   */
+  const newHeroReady = useNewHeroReady()
   const location = useLocation()
   // ครอบหน้าลูกด้วย (/joespresso/toolbar) — กลุ่มนี้มี layout ของตัวเอง ไม่ใช้ shell ของเว็บ
   const isJoespresso = location.pathname.startsWith('/joespresso')
@@ -96,9 +103,31 @@ export function App() {
    */
   // /2026 ฝังฉาก 3D ใบเดียวกัน — ใช้สปแลช/การกั้น mount ชุดเดียวกับ /joespresso
   // ยกเว้น /joespresso/checker: ฉากทดลองไม่มี IntroClock — สปแลชที่รอ introState จะค้างกลางทาง
+  // /2026-final ก็ฝังฉากเดียวกัน และไม่มี "ตา" ให้เปิดออกเหมือนสปแลชหลัก — ใช้ชุดตัวอักษรด้วย
+  /**
+   * กั้นอินโทรของฉาก /new-hero ไว้ระหว่างสปแลชของ /2026-final
+   *
+   * อินโทรเป็นจังหวะที่นับเป็นวินาที ถ้าปล่อยให้เดินหลังสปแลช คนดูจะเห็นฉากที่เล่นจบไปแล้ว
+   * ปล่อยตอนรูเริ่มเปิด (onOpenStart) ฉากจึงเริ่มขยับพร้อมกับที่สปแลชบานออก
+   */
+  useEffect(() => {
+    if (!isV3 || !showSplash) return undefined
+    holdIntro()
+    return () => releaseIntro()
+  }, [isV3, showSplash])
+  /**
+   * ล้างธง "ฉากพร้อม" ตอนออกจากหน้าเท่านั้น
+   *
+   * เคยล้างในเอฟเฟกต์ข้างบนด้วย ซึ่งผิด: มันถูกถอดตอนสปแลชปิด (showSplash เปลี่ยน) ธงที่ฉาก
+   * เพิ่งตั้งจึงถูกลบทิ้งทันทีและไม่มีใครตั้งให้อีก — ของที่รอสัญญาณนี้ (หัวเรื่องสามมิติ)
+   * เลยไม่ขึ้นเลย
+   */
+  useEffect(() => () => resetNewHeroReady(), [])
+
   const landedOn3D =
     (landedOn.startsWith('/joespresso') && landedOn !== '/joespresso/checker') ||
-    landedOn === '/2026'
+    landedOn === '/2026' ||
+    landedOn === '/2026-final'
   /**
    * ฉากถูก mount ทันที ไม่รอสปแลช
    *
@@ -244,8 +273,9 @@ export function App() {
              ตอนนั้น — ใช้สปแลชตัวอักษรคั่นแทน (port จาก branch 2026) */
           <JoeLettersSplash
             onDone={finishSplash}
-            ready={sceneReady}
-            onOpenStart={startIntro}
+            ready={isV3 ? newHeroReady : sceneReady}
+            // เปิดรูเมื่อไหร่ อินโทรของฉากนั้นเริ่มเมื่อนั้น — คนละฉากคนละตัวปล่อย
+            onOpenStart={isV3 ? releaseIntro : startIntro}
           />
         ) : landedOn === '/mascot' ? (
           <JoeSplash onDone={finishSplash} />

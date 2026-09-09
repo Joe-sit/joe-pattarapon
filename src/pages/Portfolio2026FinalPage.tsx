@@ -4,14 +4,18 @@ import './portfolio2026final.css'
 import './portfolio2026.css'
 import { useSkillStory, WhatIDo } from '@/sections/whatido/WhatIDo'
 import { Logo } from '@/joespresso/Logo'
-import { ExperienceTunnel } from '@/sections/tunnel/ExperienceTunnel'
-import { BlobWipe } from '@/components/BlobWipe'
+
+import { CloudWipe } from '@/components/CloudWipe'
 import { AnchorNav } from '@/components/AnchorNav'
 import { SITE } from '@/config/site'
 import { OpenToWorkRibbon } from '@/sections/ribbonstory/OpenToWorkRibbon'
 import { setCruise, setSceneOn } from '@/newhero/scrolly'
+import { useIntroDone } from '@/stores/intro'
 /** ฉาก 3D ของจอแรก — แยก chunk ไม่ให้ถ่วงจอที่เหลือ */
 const NewHeroScene = lazy(() => import('@/newhero/NewHeroScene'))
+import { ExperienceTunnel } from '@/sections/tunnel/ExperienceTunnel'
+import { fadeToArt, Headline3D, Headline3DField, useHeadlineArt } from '@/sections/hero/Headline3D'
+
 import heroLife from '@/assets/v2final/hero-life.svg'
 import heroBubble from '@/assets/v2final/hero-ideas-bubble.svg'
 
@@ -78,14 +82,19 @@ function TopBar() {
         hidden ? '-translate-y-full opacity-0' : 'translate-y-0 opacity-100'
       }`}
     >
-      <Logo width={93} height={32} color="var(--v3-shell-ink)" className="shrink-0" />
+      <Logo
+        width={93}
+        height={32}
+        color="var(--v3-orange)"
+        className="v3-in shrink-0 [--v3-in-delay:60ms]"
+      />
       {/* เหลือปุ่มเดียว — ลิงก์ในแถบซ้ำกับราวจุดด้านซ้ายที่พาไปทุกจออยู่แล้ว
           มุมขวาจึงเก็บไว้ให้สิ่งที่ราวนั้นทำแทนไม่ได้: เรซูเม่ที่ลิงก์ออกนอกหน้า */}
       <a
         href={SITE.resumeUrl}
         target="_blank"
         rel="noreferrer"
-        className="pointer-events-auto flex cursor-pointer items-center justify-center rounded-full bg-[var(--v3-orange)] px-[clamp(16px,1.6vw,24px)] py-[clamp(8px,1vw,11px)] text-[clamp(12px,1vw,14px)] font-bold whitespace-nowrap text-white transition-colors duration-200 hover:brightness-110"
+        className="v3-in pointer-events-auto flex cursor-pointer items-center [--v3-in-delay:140ms] justify-center rounded-full bg-[var(--v3-orange)] px-[clamp(16px,1.6vw,24px)] py-[clamp(8px,1vw,11px)] text-[clamp(12px,1vw,14px)] font-bold whitespace-nowrap text-white transition-colors duration-200 hover:brightness-110"
       >
         Resume
       </a>
@@ -142,6 +151,8 @@ function HeroBubble({
   active: boolean
   onToggle: () => void
 }) {
+  const [bubbleEl, setBubbleEl] = useState<HTMLImageElement | null>(null)
+  const bubbleLive = useHeadlineArt(bubbleEl, heroBubble)
   return (
     <div
       className={`relative h-[clamp(46px,9.7svh,99px)] w-[clamp(98px,20.7svh,211px)] ${className}`}
@@ -153,7 +164,14 @@ function HeroBubble({
         aria-label="Leave a comment"
         className="absolute inset-0 cursor-pointer transition-transform hover:scale-[1.03] active:scale-100"
       >
-        <img src={heroBubble} alt="" className="absolute inset-0 h-full w-full" />
+        {/* ตัวฟองถูกยกไปเป็นทรงสามมิติในแคนวาสของหัวเรื่อง ภาพนี้เหลือไว้กันที่ในผังอย่างเดียว */}
+        <img
+          ref={setBubbleEl}
+          src={heroBubble}
+          alt=""
+          className="absolute inset-0 h-full w-full"
+          style={fadeToArt(bubbleLive)}
+        />
         {/* ในลูกโป่งมีแค่ไอคอน ไม่มีข้อความ — ตัวลูกโป่งบอกอยู่แล้วว่ามันคือคอมเมนต์ */}
         <span className="absolute inset-0 flex items-center justify-center pr-[8%]">
           <svg
@@ -219,6 +237,21 @@ function CommentPin({
   )
 }
 
+/** คำว่า LIFE — ภาพเวกเตอร์เดิมกันที่ไว้ในผัง ส่วนที่เห็นจริงคือทรงสามมิติในแคนวาสหัวเรื่อง */
+function LifeArt() {
+  const [el, setEl] = useState<HTMLImageElement | null>(null)
+  const live = useHeadlineArt(el, heroLife)
+  return (
+    <img
+      ref={setEl}
+      src={heroLife}
+      alt="LIFE"
+      className="h-[clamp(44px,9.2svh,94px)] w-auto"
+      style={fadeToArt(live)}
+    />
+  )
+}
+
 /** แผ่นเอียงที่ลอยหลังฉาก — ตำแหน่งเป็นสัดส่วนของจอ ไม่ใช่พิกเซลตายตัว */
 function Iso({ left, top }: { left: string; top: string }) {
   return <span className="v3-iso" style={{ left, top }} aria-hidden />
@@ -226,6 +259,8 @@ function Iso({ left, top }: { left: string; top: string }) {
 
 export function Portfolio2026FinalPage() {
   const [onHero, setOnHero] = useState(true)
+  /** สปแลชส่งไม้ต่อแล้ว — ชิ้นส่วนของจอแรกไถลขึ้นมาเข้าที่ */
+  const entered = useIntroDone()
   /** ฉากสามมิติพังอยู่หรือเปล่า — คุมจากช่องแชทในหัวเรื่อง */
   /** โหมดคอมเมนต์ (เคอร์เซอร์เป็นหมุดทั้งจอแรก) + ตำแหน่งที่ปักช่องพิมพ์ไว้ */
   const [commenting, setCommenting] = useState(false)
@@ -233,11 +268,14 @@ export function Portfolio2026FinalPage() {
   /** โหมดของจอแล็ปท็อปในฉาก — สลับจาก toolbar (design = ซิมมือถือ, dev = โค้ด) */
   const rootRef = useRef<HTMLDivElement>(null)
   // จอ What I Do ยกมาทั้งก้อนจาก /2026 — สองอันนี้คือของที่ section นั้นต้องการ
+  /** กรอบการ์ดที่ครอบฉาก 3D — กางออกเต็มจอตอนเลื่อนพ้นจอแรก */
+  const frameRef = useRef<HTMLDivElement>(null)
   const scrollyRef = useRef<HTMLDivElement>(null)
   const skillsRef = useRef<HTMLElement | null>(null)
   /** บล็อกตัวหนังสือของจอแรก — จางออกตอนฉากเริ่มไหล (เขียน style ตรง ๆ ไม่ผ่าน state) */
   const copyRef = useRef<HTMLDivElement>(null)
   const skill = useSkillStory(scrollyRef, skillsRef)
+
 
   /**
    * ราวซ้ายไม่มีในจอแรกตามแบบ จึงต้องรู้แค่ว่า "ยังอยู่จอแรกอยู่ไหม"
@@ -297,6 +335,12 @@ export function Portfolio2026FinalPage() {
       setCruise(p)
       // พ้นสองวิวพอร์ตแล้วจอถัดไปทึบเต็มที่ ฉากข้างหลังไม่มีใครเห็น — สั่งหยุดวาด
       setSceneOn(y < vh * 2)
+      const frame = frameRef.current
+      if (frame) {
+        // กางเสร็จก่อนเมฆถมเต็ม ฉากจึงเต็มจอตอนที่ยังเห็นมันอยู่ ไม่ใช่กางตอนถูกบังไปแล้ว
+        const o = Math.min(1, y / (vh * 0.55))
+        frame.style.setProperty('--v3-frame-open', (o * o * (3 - 2 * o)).toFixed(4))
+      }
       const copy = copyRef.current
       if (copy) {
         copy.style.transform = `translate3d(0, ${(-y * 0.16).toFixed(1)}px, 0)`
@@ -320,7 +364,7 @@ export function Portfolio2026FinalPage() {
   }, [])
 
   return (
-    <div ref={rootRef} className="v3 relative w-full">
+    <div ref={rootRef} className={`v3 relative w-full${entered ? ' v3-entered' : ''}`}>
       {/**
        * ฉาก 3D เป็นชั้นตรึงเต็มวิวพอร์ต ไม่ได้อยู่ในกล่องของจอแรก
        *
@@ -340,12 +384,15 @@ export function Portfolio2026FinalPage() {
        * ตัวห่อไม่รับเมาส์ แต่แคนวาสรับ ([&_canvas]) — ช่องคอมมิตบนถนนสว่างตามเมาส์
        * ซึ่งต้องได้ pointermove จริง ๆ ถึงจะรู้ว่าโดนช่องไหน ส่วนที่ว่างรอบการ์ดยังคลิกทะลุได้
        */}
-      <div className="pointer-events-none fixed top-[var(--v3-nav-h)] right-[clamp(10px,1.5vw,22px)] bottom-[clamp(10px,1.5vw,22px)] left-[clamp(10px,1.5vw,22px)] overflow-hidden rounded-[clamp(18px,2.2vw,34px)] [&_canvas]:pointer-events-auto">
+      <div
+        ref={frameRef}
+        className="v3-scene-frame pointer-events-none [&_canvas]:pointer-events-auto"
+      >
         <Suspense fallback={null}>
           <NewHeroScene />
         </Suspense>
-        {/* ม่านของเหลวที่ท่วมขึ้นมาตอนเลื่อนพ้นจอแรก — อยู่ในการ์ด มุมมนจึงตัดให้เอง */}
-        <BlobWipe />
+        {/* ม่านเมฆที่ลอยขึ้นมาถมตอนเลื่อนพ้นจอแรก — อยู่ในการ์ด มุมมนจึงตัดให้เอง */}
+        <CloudWipe />
       </div>
       <TopBar />
       {/* ราวจุดนำสายตา — ตัวเดียวกับที่ใช้ในเวอร์ชัน Vue (branch `2026`)
@@ -392,16 +439,25 @@ export function Portfolio2026FinalPage() {
             หัวเรื่องอยู่กลาง ประโยคปิดถูกดันลงไปติดล่างด้วย mt-auto */}
         <div
           ref={copyRef}
-          className="pointer-events-none relative z-10 ml-auto flex h-[100svh] w-[min(46%,560px)] flex-col pt-[clamp(72px,16svh,164px)] pr-[clamp(24px,4.7vw,68px)] pb-[clamp(24px,14svh,143px)] text-[var(--v3-hero-ink)] will-change-transform">
+          className="pointer-events-none relative z-10 ml-auto flex h-[100svh] w-[min(46%,560px)] flex-col pt-[clamp(72px,16svh,164px)] pr-[clamp(34px,3.4vw,54px)] pb-[clamp(24px,14svh,143px)] text-[var(--v3-hero-ink)] will-change-transform">
           {/* my-auto ไม่ใช่ justify-center — ประโยคปิดถูกตรึงไว้ล่างสุด ที่ว่างที่เหลือ
               จึงต้องถูกแบ่งรอบหัวเรื่องเอง ไม่งั้นมันจะถูกดันไปชนแถบเมนูด้านบน */}
-          <div className="my-auto flex flex-col gap-[clamp(12px,3.5svh,36px)]">
-            <p className="v3-h1">Bring your</p>
-            <div className="flex items-start gap-[clamp(10px,1.7vw,24px)]">
-              <p className="v3-h1">Ideas</p>
+          <Headline3DField
+            active={onHero}
+            className="v3-hero-skew my-auto flex flex-col items-end gap-[clamp(12px,3.5svh,36px)] text-right"
+          >
+            <Headline3D text="Bring your" className="v3-h1" />
+            {/* ฟองคำพูดอยู่ข้าง Ideas ตามแบบ และอยู่ในโฟลว์จริง — ขอบขวาของบรรทัดนี้จึงเป็น
+                ตัวฟอง ไม่ใช่ตัวอักษร คำว่า Ideas เลยเยื้องเข้ามาจากแนวขวาเท่าความกว้างฟอง
+                ซึ่งเป็นการจัดวางแบบเดียวกับในแบบ */}
+            <div className="flex items-center gap-[clamp(10px,1.7vw,24px)]">
+              <Headline3D text="Ideas" className="v3-h1" />
               {/* ปุ่มต้องอยู่เหนือชั้นรับคลิกของโหมดคอมเมนต์ ไม่งั้นกดปิดโหมดไม่ได้ */}
               <HeroBubble
-                className="pointer-events-auto z-50"
+                /* ถ่วงลงนิดหนึ่งให้กึ่งกลางฟองตรงกับกึ่งกลาง "ตัวอักษรที่เห็น" ไม่ใช่กึ่งกลาง
+                   กล่องบรรทัด — กล่องมี line-height 1 ตัวอักษรจึงกินพื้นที่ค่อนไปทางล่างของกล่อง
+                   ใช้ margin ไม่ใช่ translate: ทรงสามมิติของฟองอ่านตำแหน่งจากผัง */
+                className="v3-in pointer-events-auto z-50 mt-[clamp(5px,1.1svh,13px)] [--v3-in-delay:640ms]"
                 active={commenting}
                 onToggle={() => {
                   setPin(null)
@@ -410,13 +466,13 @@ export function Portfolio2026FinalPage() {
               />
             </div>
             <div className="flex items-end gap-[clamp(10px,1.7vw,24px)]">
-              <p className="v3-h1">to</p>
+              <Headline3D text="to" className="v3-h1" />
               {/* คำว่า LIFE เป็นตัวอักษรที่ถูกวาดเป็นรูป ไม่ใช่ข้อความ — ยกไฟล์มาจากแบบตรง ๆ */}
-              <img src={heroLife} alt="LIFE" className="h-[clamp(44px,9.2svh,94px)] w-auto" />
+              <LifeArt />
             </div>
-          </div>
+          </Headline3DField>
 
-          <p className="text-[16px] leading-normal">
+          <p className="v3-in text-[16px] leading-normal [--v3-in-delay:640ms]">
             I love crafting valuable things with passionate people
             <br />
             to bringing design to a real-world impact solution.

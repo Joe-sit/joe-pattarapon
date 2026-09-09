@@ -178,6 +178,22 @@ const GROUPS = [
     ],
   },
   {
+    name: 'ลายเสื้อ',
+    rows: [
+      ['shpSeed', 1, 9999, 1, 'เมล็ดลาย'],
+    ],
+  },
+  {
+    name: 'ลมพัดเสื้อ',
+    rows: [
+      ['wndAmp', 0, 1, 0.01, 'แรงลม'],
+      ['wndFreq', 0.5, 10, 0.1, 'ความถี่คลื่น'],
+      ['wndSpd', 0, 8, 0.05, 'ความเร็วคลื่น'],
+      ['wndDir', 0, 6.28, 0.02, 'ทิศลม'],
+      ['wndCloth', 0, 0.3, 0.005, 'ความหนาผ้า (ลอยเหนือขา)'],
+    ],
+  },
+  {
     name: 'กระจกพอร์ทัล',
     rows: [
       ['pwInt', 0, 3, 0.01, 'ความเข้มของขอบมน'],
@@ -651,6 +667,8 @@ const GROUP_TOGGLES = {
   'ตัวละคร': [['skater', 'ตัวละคร']],
   'หัวตามเมาส์': [['hf', 'ตามเมาส์']],
   'แสง': [['sh', 'เงาตกกระทบ'], ['flat', 'แบน (cel)'], ['flatTone', 'ACES'], ['rimFx', 'rim ขอบภาพ'], ['gloss', 'พลาสติกเงา'], ['clay', 'clay']],
+  'ลายเสื้อ': [['shp', 'เปิด']],
+  'ลมพัดเสื้อ': [['wnd', 'เปิด']],
   'ไหวเบา ๆ': [['idle', 'ไหวเบา ๆ'], ['breathe', 'ไหวข้อต่อ']],
   'ริบบิ้นกระจก': [['gr', 'เปิด']],
 }
@@ -679,6 +697,7 @@ const GROUP_ICONS = {
   'ตัวละคร': IconUser,
   'แสง': IconBulb,
   'ไหวเบา ๆ': IconWaveSine,
+  'ลมพัดเสื้อ': IconWaveSine,
   'หน้า / ตา': IconMoodSmile,
   'หัวตามเมาส์': IconEye,
   'ลำตัว': IconShirt,
@@ -890,6 +909,7 @@ function Group({ g, open, onToggle, rows }) {
       </div>
       {open && g.name.startsWith('ทางเข้า') && <EntranceBar />}
       {open && g.name.startsWith('อินโทร') && <IntroBar />}
+      {open && g.name.startsWith('ลายเสื้อ') && <PrintBar />}
       {open && rows.map(([k, min, max, step, unit]) => <Row key={k} k={k} min={min} max={max} step={step} unit={unit} />)}
     </div>
   )
@@ -917,6 +937,37 @@ function IntroBar() {
         }}
       >
         <Ic icon={IconPlayerPlay} />เล่นอินโทร
+      </button>
+    </div>
+  )
+}
+
+/**
+ * ปุ่มสุ่มลายเสื้อ — เปลี่ยนแค่เมล็ด ผืนลายถูกวาดใหม่ทั้งผืนจากเลขนั้น
+ * เลขเดิมได้ลายเดิมเสมอ เจอลายที่ชอบแล้วจดเลขจากแถบ เมล็ดลาย ไว้ได้เลย
+ */
+function PrintBar() {
+  const t = useTuner()
+  return (
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center', width: '100%', padding: '2px 0 4px' }}>
+      {['เล็ก', 'กลาง', 'ใหญ่'].map((label, i) => (
+        <button
+          key={label}
+          type="button"
+          style={Math.round(t.shpSize) === i ? btnOn : btn}
+          title={`ขนาดลาย: ${label}`}
+          onClick={() => setTuner({ shpSize: i })}
+        >
+          {label}
+        </button>
+      ))}
+      <button
+        type="button"
+        style={btn}
+        title="สุ่มลายใหม่ (เมล็ดเปลี่ยน)"
+        onClick={() => setTuner({ shpSeed: 1 + Math.floor(Math.random() * 9999) })}
+      >
+        <Ic icon={IconRestore} />สุ่มลาย
       </button>
     </div>
   )

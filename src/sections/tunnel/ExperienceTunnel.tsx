@@ -545,6 +545,16 @@ export function ExperienceTunnel({ id = "experiences" }: { id?: string }) {
   const [stop, setStop] = useState(0);
   /** ภาพนิ่งของอุโมงค์ที่ถ่ายไว้ตอนกระจกเริ่มแตก — เนื้อของเศษกระจกทุกชิ้น */
   const [shot, setShot] = useState<string | null>(null);
+  /** อุโมงค์อยู่บนจอหรือยัง — คุม frameloop ของแคนวาส (ดูใน measure) */
+  const [live, setLive] = useState(false);
+  /**
+   * ประกอบฉากสามมิติเมื่อใกล้ถึงคิว ไม่ใช่ตั้งแต่เปิดหน้า
+   *
+   * section นี้ยัง render ตั้งแต่แรกเพราะมันคือที่ที่กันไว้ให้ scroll (ถอดออกแล้วความสูงของ
+   * หน้าเปลี่ยน จอถัดไปกระโดด และลิงก์ในราวจุดก็เลื่อนไปผิดที่) — ที่เลื่อนไปคือ "แคนวาส"
+   * ใบที่สองซึ่งกินทั้งเวลาคอมไพล์และหน่วยความจำ GPU แย่งกับฉากแรกที่คนดูกำลังดูอยู่
+   */
+  const [armed, setArmed] = useState(false);
   /** เลเยอร์ fixed ทั้งชั้น — เลื่อนขึ้นตอนจบเพื่อเลียนแบบ sticky ที่ปล่อยหมุด */
   const layer = useRef<HTMLDivElement>(null);
   /** ชั้นอุโมงค์ที่ถูกครอบด้วยกรอบ — กรอบขยายจากกระเบื้องตัวละครจนเต็มจอ */
@@ -686,6 +696,18 @@ export function ExperienceTunnel({ id = "experiences" }: { id?: string }) {
       // ภาพจริงของอุโมงค์ถูกแทนที่ด้วยเศษกระจกตอนแตก — ปล่อยไว้ทั้งคู่จะเห็นเป็นภาพซ้อน
       if (clip.current) clip.current.style.opacity = String(brk > 0.34 ? 0 : 1);
 
+      /**
+       * แคนวาสของอุโมงค์วาดต่อเมื่อมันอยู่บนจอจริง ๆ
+       *
+       * เลเยอร์นี้เป็น fixed อยู่ทั้งหน้า ค่า opacity เป็นศูนย์ตลอดจนกว่าจะถึงคิว แต่ r3f
+       * ยังวาดทุกเฟรมอยู่ดี — บนจอแรกจึงมีสองฉากสามมิติแย่ง GPU กันทั้งที่เห็นแค่ฉากเดียว
+       * หยุดวาดตอนมองไม่เห็นคืนเฟรมให้ฉาก hero เต็ม ๆ (เกณฑ์เดียวกับที่ใช้คุม opacity)
+       */
+      const lit = e > 0.001 && brk < 0.995;
+      setLive((cur) => (cur === lit ? cur : lit));
+      // เตรียมฉากล่วงหน้าสองวิวพอร์ตครึ่ง — มีเวลาคอมไพล์ shader ก่อนถึงคิวจริง
+      if (box.top < vh * 2.5) setArmed((cur) => cur || true);
+
       // หมุดที่ i อยู่ลึก (i+1)/(n+1) ของอุโมงค์ — เล่าถึงมันตั้งแต่ก่อนกล้องจะถึงเล็กน้อย
       let next = 0;
       for (let i = 0; i < STOPS.length; i++) {
@@ -735,12 +757,14 @@ export function ExperienceTunnel({ id = "experiences" }: { id?: string }) {
             className="absolute inset-0"
             style={{ clipPath: "inset(0px)" }}
           >
+            {armed && (
             <Canvas
               aria-hidden
               className="absolute inset-0"
               /* ชั้นนี้เป็นภาพประกอบล้วน ห้ามกินเมาส์ — r3f ใส่ pointerEvents ที่ style ของ
                  ตัวห่อเอง คลาสจึงแพ้ ต้องสั่งที่ style ตรง ๆ (ฉาก hero ข้างล่างต้องได้ hover) */
               style={{ pointerEvents: 'none' }}
+              frameloop={live ? 'always' : 'never'}
               dpr={[1, 1.5]}
               camera={{ position: [0, 0, 0], fov: FOV_IN, near: 0.1, far: 90 }}
               /* preserveDrawingBuffer: ต้องอ่านพิกเซลกลับหนึ่งเฟรมตอนกระจกแตก (ดู CaptureOnBreak)
@@ -756,6 +780,7 @@ export function ExperienceTunnel({ id = "experiences" }: { id?: string }) {
               <FloatingMascot />
               <CaptureOnBreak onShot={setShot} />
             </Canvas>
+            )}
           </div>
 
           {/*

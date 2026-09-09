@@ -31,6 +31,9 @@ export function Rider({
   mascotScale = 0.5,
   /** ปรับรองเท้า (dev) — ดู Shoe ใน Mascot.jsx */
   shoe = null,
+  print = null,
+  /** ลมที่พัดเสื้อ — ส่งต่อให้ Mascot ตรง ๆ */
+  wind = null,
   /** แขนจากโมเดล lumberjack — ดู lumberArms.js */
   lumberArms = null,
   mascotLift = 0,
@@ -195,6 +198,8 @@ export function Rider({
             <Mascot
               scale={mascotScale}
               shoe={shoe}
+              print={print}
+              wind={wind}
               lumberArms={lumberArms}
               isolated
               noIdle

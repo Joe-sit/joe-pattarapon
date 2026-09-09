@@ -5,7 +5,7 @@ import { useControls, useCreateStore } from 'leva'
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { addRim, clamp, damp, lerp } from './utils'
+import { addPrint, addRim, addWind, bakePrintCoords, clamp, damp, lerp, makePrintUniforms, makeWindUniforms, shirtPrintTexture, subdivideCloth } from './utils'
 import { extractLumberArms, LUMBER_MODEL } from './lumberArms'
 import { scrollState } from '../scroll'
 import { introState } from '../intro'
@@ -42,8 +42,35 @@ const HEX = {
   neck: 'd2947a',
   /** สีเสื้อ — ตัวเสื้อกับแขนเสื้อใช้สีเดียวกัน แยกกันด้วยขนาด/ตำแหน่งเท่านั้น */
   shirt: 'ede2cf',
+  /**
+   * เฉดที่สองของเสื้อ (ปก/เงาผ้า) — ไม่มีลาย ไม่เปลี่ยนสี มีไว้เพื่อ "โดนลมพร้อมกัน"
+   * อย่างเดียว ชิ้นที่นิ่งค้างอยู่กลางก้อนที่กำลังพลิ้วจะเห็นเป็นรอยแยกทันที
+   */
+  shirtTrim: 'e4d8c7',
 }
 
+
+/**
+ * ลายเสื้อ — ยูนิฟอร์มชุดเดียวของทั้งโมดูล (โปรแกรม shader ถูกแชร์ จะแยกต่อ instance ไม่ได้)
+ * มีตัวละครสองตัวในฉากเดียวพร้อมกันเมื่อไหร่ ตัวที่วาดทีหลังจะเป็นคนเขียนเมทริกซ์
+ */
+const PRINT_U = makePrintUniforms(shirtPrintTexture())
+/** ลมของเสื้อ — uniform ชุดเดียวใช้ร่วมทุกวัสดุของเสื้อ เขียนครั้งเดียวต่อเฟรม */
+const WIND_U = makeWindUniforms()
+/** ขนาดลายสามขั้น — ค่าคือความถี่ (สูง = ลายเล็ก) */
+const PRINT_SIZES = [0.85, 0.5, 0.3]
+
+/** เมล็ดของลายที่กำลังใช้อยู่ — เปลี่ยนเมื่อไหร่ค่อยวาดผืนใหม่ (วาดใหม่ทุกเฟรมคือเผาซีพียู) */
+let printSeed = 7
+
+/** สลับผืนลาย แล้วทิ้งผืนเดิม (texture กิน VRAM จนกว่าจะ dispose) */
+function setPrintSeed(seed) {
+  if (seed === printSeed) return
+  printSeed = seed
+  const old = PRINT_U.uPrintMap.value
+  PRINT_U.uPrintMap.value = shirtPrintTexture({ seed })
+  old?.dispose()
+}
 
 function hexOf(mat) {
   return mat?.color ? mat.color.getHexString() : ''
@@ -349,6 +376,19 @@ function addCatchlights(eye, worldNormal) {
 
 /** สัดส่วนแบ่งท่อนขา — ต้นขา 52% ที่เหลือเป็นหน้าแข้ง (จุดหมุนเข่าอยู่รอยต่อ) */
 const THIGH_LEN = LEG_LEN * 0.52
+/** กล่องต้นขา — ตัวเลขชุดเดียวกับที่ boxGeometry ใช้ แคปซูลกันเสื้อทะลุจึงอ้างของจริง */
+const THIGH_W = 0.5
+const THIGH_D = 0.56
+/** ขอบบนของต้นขาเทียบจุดหมุนสะโพก */
+const THIGH_TOP = 0.07
+/** รัศมีแคปซูล = ครึ่งด้านที่กว้างที่สุดของกล่อง — ผ้าจึงไม่จมมุมกล่องด้านลึก */
+const THIGH_R = Math.max(THIGH_W, THIGH_D) / 2
+/** กล่องสะโพก — ชายเสื้อพาดอยู่ตรงนี้พอดี จึงต้องมีตัวกันทะลุด้วย ไม่ใช่แค่ต้นขา */
+const HIP_W = 1.24
+const HIP_H = 0.34
+const HIP_D = 0.6
+const HIP_Y = -2.36
+const HIP_R = Math.max(HIP_H, HIP_D) / 2
 const SHIN_LEN = LEG_LEN - THIGH_LEN
 
 /**
@@ -427,13 +467,13 @@ function Legs({ rig, shoe }) {
       }}
     >
       {/* ต้นขา — ขอบบนคาไว้ที่ +0.07 ใต้ชายเสื้อ ยืดลงล่างอย่างเดียว */}
-      <mesh position={[0, 0.07 - THIGH_LEN / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.5, THIGH_LEN, 0.56]} />
+      <mesh position={[0, THIGH_TOP - THIGH_LEN / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[THIGH_W, THIGH_LEN, THIGH_D]} />
         <meshStandardMaterial color={JEANS} roughness={1} metalness={0} />
       </mesh>
 
       <group
-        position={[0, 0.07 - THIGH_LEN, 0]}
+        position={[0, THIGH_TOP - THIGH_LEN, 0]}
         ref={(g) => {
           if (rig && g) rig.current[`knee${key}`] = g
         }}
@@ -465,8 +505,15 @@ function Legs({ rig, shoe }) {
   return (
     <group>
       {/* สะโพก — เชื่อมรอยต่อเอวกับขา */}
-      <mesh position={[0, -2.36, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.24, 0.34, 0.6]} />
+      <mesh
+        position={[0, HIP_Y, 0]}
+        castShadow
+        receiveShadow
+        ref={(m) => {
+          if (rig && m) rig.current.pelvis = m
+        }}
+      >
+        <boxGeometry args={[HIP_W, HIP_H, HIP_D]} />
         <meshStandardMaterial color={JEANS} roughness={1} metalness={0} />
       </mesh>
       {leg(-1, 'L')}
@@ -487,6 +534,10 @@ export function Mascot({
    * เปลี่ยนแค่ "เนื้อที่เห็น" ริกยังเป็นตัวเดิมทุกข้อ ท่าทาง/สไลเดอร์จึงทำงานเหมือนเดิมหมด
    */
   lumberArms = null,
+  /** ลายเสื้อ — { on, size, seed } (null = ค่าตั้งต้นในไฟล์นี้) */
+  print = null,
+  /** ลมที่พัดเสื้อ — { on, amp, freq, speed, dir } (dir = เรเดียนบนระนาบพื้นโลก) */
+  wind = null,
   scale = 1,
   rotation = [0, 0, 0],
   /** true = หันหลังให้กล้อง (หัวยังหันตามเมาส์) */
@@ -578,6 +629,15 @@ export function Mascot({
 }) {
   const { scene } = useGLTF(MODEL)
   const root = useRef()
+  /** ผกผันของรากตอนอบพิกัดลายเสื้อ — ใช้ซ้ำ ไม่สร้างเมทริกซ์ใหม่ทุกเฟรม */
+  const printInv = useRef(new THREE.Matrix4())
+  // ตัวช่วยของลม — สร้างครั้งเดียว ไม่ใช่ทุกเฟรม (useFrame วิ่ง 60 ครั้งต่อวินาที)
+  const windM = useMemo(() => new THREE.Matrix4(), [])
+  const windM4 = useMemo(() => new THREE.Matrix4(), [])
+  const windN = useMemo(() => new THREE.Matrix3(), [])
+  const windV = useMemo(() => new THREE.Vector3(), [])
+  /** ยกธงเมื่อมีชิ้นใหม่เข้าฉาก (โมเดลโหลดเสร็จ/แขนเสื้อถูกแขวน) แล้วอบในเฟรมถัดไป */
+  const bakePrint = useRef(true)
   const headGroup = useRef()
   const eyes = useRef([])
   const rig = useRef({})
@@ -821,6 +881,14 @@ export function Mascot({
         if (m.isMeshStandardMaterial) {
           addRim(m, { color: '#FFF3DC', intensity: 0.5, power: 4.2 })
           rimMats.push(m)
+          // ลายผ้าเฉพาะเสื้อ — ผิว/ผมเป็นสีล้วนตามเดิม
+          if (hex === HEX.shirt || hex === HEX.shirtTrim) {
+            // ลมก่อนลาย: ตัวแรกเป็นคนประกาศ attribute aPrint ตัวหลังเห็นแล้วข้าม
+            addWind(m, WIND_U)
+            // ลายลงเฉพาะเนื้อเสื้อ ไม่ลงปก/เงาผ้า — หน้าตาเดิมทุกพิกเซล
+            if (hex === HEX.shirt) addPrint(m, PRINT_U)
+            bakePrint.current = true
+          }
         }
         matCache.set(key, m)
       }
@@ -833,6 +901,14 @@ export function Mascot({
       o.receiveShadow = true
       // GLB โหลด async หลัง RimLight traverse ฉากไปแล้ว — rim ถูกฉีดใน shared() ตอนปั้น material
       o.material = shared(o.material)
+      /**
+       * ซอยเฉพาะผ้า — เสื้อในโมเดลเป็นกล่อง (ตัวเสื้อ 20 สามเหลี่ยม) คลื่นลมเกาะไม่ติด
+       * ทำครั้งเดียวต่อชิ้น รูปทรงไม่เปลี่ยน (จุดใหม่อยู่บนหน้าเดิมทั้งหมด)
+       */
+      if (o.material?.userData?.windApplied && !o.geometry.userData.cloth) {
+        o.geometry = subdivideCloth(o.geometry, 3)
+        o.geometry.userData.cloth = true
+      }
 
       // วัดใน local space ของโมเดล — world bbox โดน scale/position ของ root ปน ทำให้เกณฑ์ขนาดเพี้ยน
       o.geometry.computeBoundingBox()
@@ -2192,6 +2268,8 @@ export function Mascot({
       for (const seg of segs) {
         if (!seg.geo) continue
         const mat = new THREE.MeshStandardMaterial({ color: `#${seg.col}`, roughness: 1, metalness: 0 })
+        // แขนเสื้อต้องมีลายต่อจากตัวเสื้อ (มือเป็นผิว ไม่ใส่)
+        if (seg.col === HEX.shirt) addPrint(mat, PRINT_U)
         const m = new THREE.Mesh(seg.geo, mat)
         m.scale.setScalar(seg.len * k)
         m.castShadow = true
@@ -2201,6 +2279,7 @@ export function Mascot({
         added.push(m)
       }
     }
+    bakePrint.current = true
     return () => {
       for (const m of added) {
         m.removeFromParent()
@@ -2297,6 +2376,89 @@ export function Mascot({
 
   useFrame((state, delta) => {
     const dt = Math.min(delta, 0.05)
+    /**
+     * อบพิกัดลายให้ชิ้นที่เพิ่งโผล่ (โมเดลโหลด async, แขนเสื้อถูกแขวนทีหลัง)
+     * ทำครั้งเดียวต่อ geometry — bakePrintCoords ข้ามชิ้นที่มีแอตทริบิวต์แล้วเอง
+     */
+    if (bakePrint.current && root.current) {
+      bakePrint.current = false
+      printInv.current.copy(root.current.matrixWorld).invert()
+      root.current.traverse((o) => {
+        // ลมก็ใช้ aPrint เป็นพิกัดของคลื่น — ผมไม่มีลายแต่ต้องมีพิกัดชุดนี้เหมือนกัน
+        if (o.isMesh && (o.material?.userData?.printApplied || o.material?.userData?.windApplied)) {
+          bakePrintCoords(o, printInv.current)
+        }
+      })
+      /**
+       * ช่วงความสูงของผ้าในพิกัดโมเดล — วัดจาก aPrint ของจริง ไม่ใช่ตัวเลขที่พิมพ์ไว้
+       * ยอด = จุดตรึง (คอ/ไหล่) ปลายล่าง = ชายเสื้อที่พลิ้วเต็มที่
+       */
+      const span = { shirt: [-Infinity, Infinity] }
+      root.current.traverse((o) => {
+        if (!o.isMesh || !o.material?.userData?.windApplied) return
+        const a = o.geometry.getAttribute('aPrint')
+        if (!a) return
+        for (let i = 0; i < a.count; i++) {
+          const y = a.getY(i)
+          if (y > span.shirt[0]) span.shirt[0] = y
+          if (y < span.shirt[1]) span.shirt[1] = y
+        }
+      })
+      if (span.shirt[0] > span.shirt[1]) WIND_U.uWindSpan.value.set(span.shirt[1], span.shirt[0])
+    }
+    // นาฬิกาของลมเดินตาม delta จริง ความเร็วคลื่นจึงเท่ากันทุกอัตราเฟรม
+    WIND_U.uWindTime.value += dt
+    if (wind) {
+      if (wind.amp !== undefined) WIND_U.uWind.value.x = wind.on === false ? 0 : wind.amp
+      if (wind.freq !== undefined) WIND_U.uWind.value.y = wind.freq
+      if (wind.speed !== undefined) WIND_U.uWind.value.z = wind.speed
+      if (wind.cloth !== undefined) WIND_U.uCloth.value = wind.cloth
+    }
+    /**
+     * ลมกับการชนคิดในพิกัดราก แต่ทิศลมเป็นของโลก (ไม่หมุนตามตัวละคร) และผลลัพธ์ต้องไป
+     * โผล่ในพิกัดกล้อง — สามเมทริกซ์นี้อัปเดตเฟรมละครั้งที่นี่ ไม่ใช่ต่อ vertex ใน shader
+     */
+    if (root.current) {
+      windM.copy(root.current.matrixWorld).invert()
+      windN.setFromMatrix4(windM)
+      const ang = wind?.dir ?? 0
+      WIND_U.uWindDirL.value.set(Math.cos(ang), 0, Math.sin(ang)).applyMatrix3(windN).normalize()
+      WIND_U.uWindUpL.value.set(0, 1, 0).applyMatrix3(windN).normalize()
+      windM4.multiplyMatrices(state.camera.matrixWorldInverse, root.current.matrixWorld)
+      WIND_U.uRootToView.value.setFromMatrix4(windM4)
+      WIND_U.uWorldToRoot.value.copy(windM)
+      // แคปซูลต้นขาสองข้าง: ปลายบน/ล่างของกล่องต้นขา แปลงจากสเปซสะโพกเข้าพิกัดราก
+      const sides = ['L', 'R']
+      for (let i = 0; i < 2; i++) {
+        const hip = rig.current[`hip${sides[i]}`]
+        if (!hip) continue
+        hip.updateWorldMatrix(true, false)
+        windM4.multiplyMatrices(windM, hip.matrixWorld)
+        windV.set(0, THIGH_TOP, 0).applyMatrix4(windM4)
+        const r = THIGH_R * windM4.getMaxScaleOnAxis()
+        WIND_U.uLegA.value[i].set(windV.x, windV.y, windV.z, r)
+        windV.set(0, THIGH_TOP - THIGH_LEN, 0).applyMatrix4(windM4)
+        WIND_U.uLegB.value[i].set(windV.x, windV.y, windV.z, r)
+      }
+      // สะโพก: แคปซูลแกนนอน ปลายทั้งสองหดเข้าด้านละหนึ่งรัศมี กล่องจึงถูกห่อพอดี ไม่บานเกิน
+      const pelvis = rig.current.pelvis
+      if (pelvis) {
+        pelvis.updateWorldMatrix(true, false)
+        windM4.multiplyMatrices(windM, pelvis.matrixWorld)
+        const hr = HIP_R * windM4.getMaxScaleOnAxis()
+        const half = Math.max(0, HIP_W / 2 - HIP_R)
+        windV.set(-half, 0, 0).applyMatrix4(windM4)
+        WIND_U.uLegA.value[2].set(windV.x, windV.y, windV.z, hr)
+        windV.set(half, 0, 0).applyMatrix4(windM4)
+        WIND_U.uLegB.value[2].set(windV.x, windV.y, windV.z, hr)
+      }
+    }
+    if (print) {
+      PRINT_U.uPrintOn.value = print.on === false ? 0 : 1
+      // ขนาดมีสามขั้นเท่านั้น (เล็ก/กลาง/ใหญ่) — ตัวเลขระหว่างขั้นไม่มีความหมายในแบบ
+      if (print.size !== undefined) PRINT_U.uPrintScale.value = PRINT_SIZES[Math.round(print.size)] ?? PRINT_SIZES[1]
+      if (print.seed !== undefined) setPrintSeed(Math.round(print.seed))
+    }
     /**
      * เมาส์ที่ตัวนี้มองตาม = ตำแหน่งบน canvas ของตัวเอง ไม่ใช่ตำแหน่งบนหน้าต่างทั้งบาน
      * (state.pointer เป็น NDC ของ canvas ใบนั้น แกน y ชี้ขึ้น จึงกลับเครื่องหมาย)

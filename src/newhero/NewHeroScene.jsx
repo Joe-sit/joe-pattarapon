@@ -2692,6 +2692,15 @@ function Scene() {
           >
           <Rider
             lumberArms={{ on: t.la > 0.5, scale: t.laScale }}
+            print={{ on: t.shp > 0.5, size: t.shpSize, seed: t.shpSeed }}
+            wind={{
+              on: t.wnd > 0.5,
+              amp: t.wndAmp,
+              freq: t.wndFreq,
+              speed: t.wndSpd,
+              dir: t.wndDir,
+              cloth: t.wndCloth,
+            }}
             shoe={{
               scale: t.snScale,
               pos: [t.snX, t.snY, t.snZ],
