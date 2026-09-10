@@ -42,15 +42,118 @@ function arrowOutline() {
 }
 
 const PX = arrowOutline()
-/** ขนาดบิตแมป — ใช้ย่อให้สูง 1 หน่วยฉาก */
+/** ขนาดบิตแมปของลูกศร — ใช้ย่อให้สูง 1 หน่วยฉาก */
 const W = 12
 const H = 17
 
-function arrowGeometry(depth) {
+/**
+ * ── มือชี้ ──
+ *
+ * รูปนี้ไล่ขั้นบันไดมือไม่ไหว (นิ้วสี่นิ้วยอดไม่เท่ากัน ง่ามนิ้วกว้างพิกเซลเดียว หัวแม่มือ
+ * ยื่นออกข้าง) เขียนเป็น "ตารางพิกเซล" ตรง ๆ แล้วให้โค้ดไล่เส้นรอบรูปเอง — แก้รูปมือ
+ * ทีหลังคือแก้ตัวอักษรในตาราง ไม่ต้องคิดพิกัดใหม่
+ *
+ * ง่ามระหว่างนิ้วเป็นช่องพิกเซลเดียวที่เปิดออกด้านนอก จึงไม่มีรูปิดในรูป (ExtrudeGeometry
+ * ต้องรู้ว่าอะไรคือรู ถ้ามีรูต้องส่ง holes แยก) — ดำที่เห็นในง่ามคือ "สันข้าง" ของก้อนเอง
+ */
+const HAND_BITS = [
+  '....##..........',
+  '....##..........',
+  '....##..........',
+  '....##..........',
+  '....##..........',
+  '....##.##.......',
+  '....##.##.##....',
+  '....##.##.##.##.',
+  '....########.##.',
+  '....############',
+  '.###############',
+  '.###############',
+  '..##############',
+  '...#############',
+  '...#############',
+  '...#############',
+  '...#############',
+  '....###########.',
+  '.....#########..',
+  '......#######...',
+]
+
+/**
+ * ไล่เส้นรอบรูปของบิตแมป: เก็บ "ขอบพิกเซลที่ไม่มีเพื่อนบ้าน" เป็นส่วนเส้นมีทิศ แล้วต่อกันเป็นวง
+ *
+ * ทิศของทุกส่วนเส้นวางให้เนื้อรูปอยู่ข้างเดียวกันตลอด (บน→ขวา→ล่าง→ซ้ายรอบพิกเซล) วงจึงต่อ
+ * ได้ด้วยการหยิบส่วนเส้นที่ออกจากจุดปลายเดิมไปเรื่อย ๆ รูปเป็นก้อนเดียวไม่มีรู ทุกส่วนเส้น
+ * จึงอยู่ในวงเดียวกันหมด
+ */
+function traceMask(rows) {
+  const h = rows.length
+  const w = rows[0].length
+  const on = (x, y) => x >= 0 && y >= 0 && x < w && y < h && rows[y][x] === '#'
+  const out = new Map()
+  const key = (x, y) => `${x},${y}`
+  const add = (ax, ay, bx, by) => {
+    const k = key(ax, ay)
+    const list = out.get(k)
+    if (list) list.push([bx, by])
+    else out.set(k, [[bx, by]])
+  }
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      if (!on(x, y)) continue
+      if (!on(x, y - 1)) add(x, y, x + 1, y)
+      if (!on(x + 1, y)) add(x + 1, y, x + 1, y + 1)
+      if (!on(x, y + 1)) add(x + 1, y + 1, x, y + 1)
+      if (!on(x - 1, y)) add(x, y + 1, x, y)
+    }
+  }
+  // เริ่มที่พิกเซลเนื้อตัวแรกในลำดับอ่าน — มุมซ้ายบนของมันเป็นจุดบนวงรอบนอกแน่นอน
+  let start = null
+  for (let y = 0; y < h && !start; y += 1) {
+    for (let x = 0; x < w && !start; x += 1) if (on(x, y)) start = [x, y]
+  }
+  if (!start) return []
+  const pts = []
+  let [cx, cy] = start
+  const first = key(cx, cy)
+  for (let guard = 0; guard < w * h * 4; guard += 1) {
+    const list = out.get(key(cx, cy))
+    if (!list || list.length === 0) break
+    const [nx, ny] = list.shift()
+    pts.push([cx, cy])
+    cx = nx
+    cy = ny
+    if (key(cx, cy) === first) break
+  }
+  // ทิ้งจุดที่อยู่กลางเส้นตรง — ExtrudeGeometry ไม่ต้องรู้ ยิ่งน้อยยิ่งเบา
+  const slim = []
+  for (let i = 0; i < pts.length; i += 1) {
+    const a = pts[(i - 1 + pts.length) % pts.length]
+    const b = pts[i]
+    const c = pts[(i + 1) % pts.length]
+    const cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+    if (cross !== 0) slim.push(b)
+  }
+  return slim
+}
+
+const HAND = traceMask(HAND_BITS)
+const HAND_W = HAND_BITS[0].length
+const HAND_H = HAND_BITS.length
+
+/** รูปทรงที่ปั้นได้ — ทั้งสองอันเป็นพหุเหลี่ยมพิกเซล (y ชี้ลง) ปั้นด้วยตัวสร้างเดียวกัน */
+const SHAPES = {
+  arrow: { pts: PX, w: W, h: H },
+  hand: { pts: HAND, w: HAND_W, h: HAND_H },
+}
+
+/** พหุเหลี่ยมพิกเซล → ก้อนสามมิติ สูง 1 หน่วยฉาก ไม่ใส่ bevel (ขอบต้องคมเป็นเหลี่ยม) */
+function pixelGeometry(kind, depth) {
+  const { pts, w, h } = SHAPES[kind] ?? SHAPES.arrow
   const sh = new THREE.Shape()
-  PX.forEach(([x, y], i) => {
-    const X = (x - W / 2) / H
-    const Y = (H / 2 - y) / H
+  pts.forEach(([x, y], i) => {
+    const X = (x - w / 2) / h
+    const Y = (h / 2 - y) / h
     if (i === 0) sh.moveTo(X, Y)
     else sh.lineTo(X, Y)
   })
@@ -64,6 +167,8 @@ const FACE = '#f7f1e6'
 const SIDE = '#101019'
 
 export function Cursor({
+  /** รูปทรง: 'arrow' = ลูกศร, 'hand' = มือชี้ */
+  kind = 'arrow',
   /** ความหนา (เทียบความสูง 1) */
   depth = 0.3,
   /** ความหนาเส้นขอบดำรอบเงา — 0 = ไม่มี */
@@ -78,10 +183,14 @@ export function Cursor({
   aimEase = 0.08,
   ...props
 }) {
-  const geo = useMemo(() => arrowGeometry(depth), [depth])
+  const geo = useMemo(() => pixelGeometry(kind, depth), [kind, depth])
   useDisposable(geo)
-  /** เปลือกขอบขยายเป็นระยะคงที่ต่อแกน (ทรงสูง 1 กว้าง W/H หนา depth) */
-  const hull = outline > 0 ? [1 + outline / (W / H), 1 + outline, 1 + outline / Math.max(depth, 1e-3)] : null
+  const box = SHAPES[kind] ?? SHAPES.arrow
+  /** เปลือกขอบขยายเป็นระยะคงที่ต่อแกน (ทรงสูง 1 กว้าง w/h หนา depth) */
+  const hull =
+    outline > 0
+      ? [1 + outline / (box.w / box.h), 1 + outline, 1 + outline / Math.max(depth, 1e-3)]
+      : null
   const inner = useRef()
   const spin = useRef()
   const ang = useRef(0)

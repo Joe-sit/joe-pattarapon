@@ -8,7 +8,7 @@ import { Logo } from '@/joespresso/Logo'
 import { CloudWipe } from '@/components/CloudWipe'
 import { AnchorNav } from '@/components/AnchorNav'
 import { SITE } from '@/config/site'
-import { OpenToWorkRibbon } from '@/sections/ribbonstory/OpenToWorkRibbon'
+import { PlaneBannerScene } from '@/sections/ribbonstory/PlaneBannerScene'
 import { setCruise, setSceneOn } from '@/newhero/scrolly'
 import { useIntroDone } from '@/stores/intro'
 /** ฉาก 3D ของจอแรก — แยก chunk ไม่ให้ถ่วงจอที่เหลือ */
@@ -152,10 +152,11 @@ function HeroBubble({
   onToggle: () => void
 }) {
   const [bubbleEl, setBubbleEl] = useState<HTMLImageElement | null>(null)
-  const bubbleLive = useHeadlineArt(bubbleEl, heroBubble)
+  // ฟองเป็นกระจกใส — เห็นฉากข้างหลังทะลุ (ดู box.glass ใน sections/hero/Headline3D)
+  const bubbleLive = useHeadlineArt(bubbleEl, heroBubble, true)
   return (
     <div
-      className={`relative h-[clamp(46px,9.7svh,99px)] w-[clamp(98px,20.7svh,211px)] ${className}`}
+      className={`v3-hero-bubble relative ${className}`}
     >
       <button
         type="button"
@@ -172,19 +173,6 @@ function HeroBubble({
           className="absolute inset-0 h-full w-full"
           style={fadeToArt(bubbleLive)}
         />
-        {/* ในลูกโป่งมีแค่ไอคอน ไม่มีข้อความ — ตัวลูกโป่งบอกอยู่แล้วว่ามันคือคอมเมนต์ */}
-        <span className="absolute inset-0 flex items-center justify-center pr-[8%]">
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden
-            className="h-[clamp(18px,3.6svh,30px)] w-auto text-[#fd5000]"
-          >
-            <path
-              d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"
-              fill="currentColor"
-            />
-          </svg>
-        </span>
       </button>
 
     </div>
@@ -246,7 +234,7 @@ function LifeArt() {
       ref={setEl}
       src={heroLife}
       alt="LIFE"
-      className="h-[clamp(44px,9.2svh,94px)] w-auto"
+      className="v3-hero-life"
       style={fadeToArt(live)}
     />
   )
@@ -256,6 +244,16 @@ function LifeArt() {
 function Iso({ left, top }: { left: string; top: string }) {
   return <span className="v3-iso" style={{ left, top }} aria-hidden />
 }
+
+/**
+ * แผงจูนของฉาก newhero — หน้านี้ใช้ฉากเดียวกับ /new-hero จึงใช้แผงตัวเดียวกันได้เลย
+ *
+ * lazy: แผงลาก leva กับไอคอนมาทั้งชุด ไม่ควรอยู่ในบันเดิลของหน้าจริง
+ * (นอกโหมด dev tuner อ่านแต่ค่าตั้งต้น แผงจึงไม่มีผลกับของที่คนอื่นเห็นอยู่แล้ว)
+ */
+const CameraTuner = lazy(() =>
+  import('@/newhero/CameraTuner').then((m) => ({ default: m.CameraTuner })),
+)
 
 export function Portfolio2026FinalPage() {
   const [onHero, setOnHero] = useState(true)
@@ -394,6 +392,13 @@ export function Portfolio2026FinalPage() {
         {/* ม่านเมฆที่ลอยขึ้นมาถมตอนเลื่อนพ้นจอแรก — อยู่ในการ์ด มุมมนจึงตัดให้เอง */}
         <CloudWipe />
       </div>
+      {/* แผงจูนของฉาก — dev เท่านั้น เหมือน /new-hero (ดู newhero/CameraTuner) */}
+      {import.meta.env.DEV && (
+        <Suspense fallback={null}>
+          <CameraTuner />
+        </Suspense>
+      )}
+
       <TopBar />
       {/* ราวจุดนำสายตา — ตัวเดียวกับที่ใช้ในเวอร์ชัน Vue (branch `2026`)
           ในแบบมีทุกจอยกเว้นจอแรก จึงจางหายตอนอยู่ที่ hero */}
@@ -444,7 +449,7 @@ export function Portfolio2026FinalPage() {
               จึงต้องถูกแบ่งรอบหัวเรื่องเอง ไม่งั้นมันจะถูกดันไปชนแถบเมนูด้านบน */}
           <Headline3DField
             active={onHero}
-            className="v3-hero-skew my-auto flex flex-col items-end gap-[clamp(12px,3.5svh,36px)] text-right"
+            className="v3-hero-skew my-auto flex flex-col items-start gap-[clamp(12px,3.5svh,36px)]"
           >
             <Headline3D text="Bring your" className="v3-h1" />
             {/* ฟองคำพูดอยู่ข้าง Ideas ตามแบบ และอยู่ในโฟลว์จริง — ขอบขวาของบรรทัดนี้จึงเป็น
@@ -493,9 +498,10 @@ export function Portfolio2026FinalPage() {
         </div>
       </section>
 
-      {/* Open to work — เล่าด้วยการเลื่อน: ริบบิ้นเวกเตอร์สามบีต OPEN · TO · WORK ซ้อนชั้นและพลิ้ว
-          จบเป็นแถบคั่นเต็มความกว้างชิดขอบล่างของจอ ต่อเข้าจอ What I Do (ดู sections/ribbonstory) */}
-      <OpenToWorkRibbon />
+      {/* Hello and Welcome — เครื่องบินการ์ตูนลากป้ายผ้าสามผืน HELLO · AND · WELCOME บินออกขวาจอ
+          จบเป็นแถบคั่นเต็มความกว้างชิดขอบล่างของจอ ต่อเข้าจอ What I Do (ดู sections/ribbonstory)
+          เวอร์ชันริบบิ้น SVG เดิมยังอยู่ที่ OpenToWorkRibbon.tsx */}
+      <PlaneBannerScene />
 
       {/* ── จอ 2: สิ่งที่ทำ ───────────────────────────────────────────────
           ใช้ section ตัวเดียวกับหน้า /2026 (กระเบื้องสกิลที่กางทีละใบตามระยะ scroll

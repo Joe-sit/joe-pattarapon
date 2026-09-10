@@ -169,8 +169,37 @@ export const DEFAULTS = {
   bcRotX: -16.5,
   bcRotY: -71,
   bcRotZ: -13.5,
+  /**
+   * ฟองคำพูดของหัวเรื่อง /2026-final — ฟองแก้วที่มีของอยู่ข้างใน (ดู sections/hero/Headline3D)
+   * bbThick/bbRoom* เป็นหน่วย viewBox ของไฟล์ SVG และสัดส่วนของฟอง ไม่ใช่พิกเซลบนจอ
+   */
+  bbThick: 20,
+  bbBlur: 0,
+  bbChroma: 0.45,
+  bbSamples: 14,
+  bbIrid: 0.65,
+  bbRound: 1,
+  bbIor: 2,
+  bbOpacity: 0.65,
+  bbAtten: 60,
+  bbCount: 4,
+  bbSand: 0.26,
+  bbRepose: 0.7,
+  bbDig: 1,
+  bbSize: 0.51,
+  bbG: 1200,
+  bbBounce: 0.28,
+  bbDrag: 0.6,
+  bbStir: 1,
+  bbRoomX: 0.86,
+  bbRoomY: 0.66,
+  bbRoomZ: 1,
+  /** ความแรงของไฟเวทีรอบฟอง 0 = ปิด */
+  bbGlow: 1,
   /** เคอร์เซอร์พิกเซล (นอกพอร์ทัล) — สูง 1 หน่วยก่อนสเกล */
   cu: 1,
+  /** รูปทรงเคอร์เซอร์: 0 = ลูกศร, 1 = มือชี้ */
+  cuHand: 0,
   cuDepth: 0.11,
   cuOutline: 0.03,
   cuScale: 3.65,
@@ -215,6 +244,36 @@ export const DEFAULTS = {
   wndSpd: 2.6,
   wndDir: 0.6,
   wndCloth: 0.06,
+
+  /**
+   * หัวเรื่อง 3D ของจอแรก (ดู sections/hero/Headline3D)
+   * hl = เปิด/ปิด (ปิด = เห็นตัวหนังสือ HTML แบน ๆ ตัวเดียวกับที่ใช้ยืนแทนตอนรอ)
+   */
+  hl: 1,
+  hlRad: 4,
+  hlPush: 0.4,
+  hlLift: 0.5,
+  hlEase: 0.16,
+  hlDepth: 0.42,
+  hlBevT: 0.035,
+  hlBevS: 0.05,
+  hlSeg: 12,
+  hlRough: 0.32,
+  hlAlb: 0.64,
+  hlEmis: 0,
+  hlEnter: 0.9,
+  hlRise: 0.34,
+  hlStag: 0.055,
+  hlAfter: 0.15,
+  hlPad: 46,
+  /** ตัวคูณขนาดหัวเรื่องทั้งบล็อก (ตัวอักษร + LIFE + ฟอง) 1 = ขนาดที่ CSS คิดไว้ */
+  hlSize: 1,
+  /** เอียงตัวอักษรทั้งชุด — หน่วยองศา (ในโค้ดแปลงเป็นเรเดียนเอง) */
+  hlRotX: -17,
+  hlRotY: -11,
+  hlRotZ: 0,
+  /** ระยะห่างตัวอักษร (em) — ตัวเลขเดียวคุมทั้งตัวหนังสือ HTML และตัวอักษร 3D */
+  hlTrack: 0.062,
   snScale: 0.34,
   snX: 0,
   snY: -0.057,
@@ -449,6 +508,29 @@ export const DEFAULTS = {
   enShowPath: 0,
   enReplay: 3,
   /** ช่วงท้ายของทางเข้าพุ่งออกมาเร็ว ๆ: เริ่มพุ่งที่สัดส่วนเวลา / ใช้ระยะทางกี่ส่วน (0 = ไม่พุ่ง) */
+  /**
+   * เอฟเฟกต์ตอนตัวละครทะลุปากพอร์ทัลออกมา (ดู newhero/PortalFx)
+   * ทุกค่าเป็นสัดส่วน/วินาที จังหวะผูกกับระยะของตัวละครจากปากช่อง ไม่ใช่นาฬิกาแยก
+   */
+  /**
+   * รอยลมท้ายตัวละคร (ดู newhero/WindTrail) — wtStep เป็นหน่วยฉาก ไม่ใช่วินาที
+   * ความยาวรอยจึงเป็นระยะทางคงที่ ไม่ขึ้นกับว่าเครื่องวาดได้กี่เฟรม
+   */
+  wtAmt: 1.5,
+  wtY: 0.2,
+  wtWide: 1.6,
+  wtFan: 1.5,
+  wtStep: 0.35,
+  wtTaper: 1,
+  wtWarm: 0,
+  wtDbg: 0,
+  pfxAmt: 0,
+  pfxSize: 2.6,
+  pfxLife: 3,
+  pfxRingTo: 1.6,
+  pfxRingLife: 0.6,
+  pfxSpark: 1.5,
+  pfxSparkLife: 0.55,
   enBurstAt: 0.9,
   enBurstAmt: 0,
   /**
@@ -685,7 +767,7 @@ export const DEFAULTS = {
 }
 
 // ขึ้นเวอร์ชันเมื่อชุดคีย์/ค่าเริ่มต้นเปลี่ยนแนว — ค่าที่ค้างในเบราว์เซอร์จะได้ไม่ทับของใหม่
-const KEY = 'newhero.tuner.v212'
+const KEY = 'newhero.tuner.v258'
 
 function load() {
   /**

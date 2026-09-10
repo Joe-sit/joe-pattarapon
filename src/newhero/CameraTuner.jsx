@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   IconAdjustments,
@@ -40,6 +40,8 @@ import {
   IconToggleRight,
   IconUser,
   IconVideo,
+  IconArrowsMove,
+  IconTypography,
   IconWaveSine,
   IconWorld,
 } from '@tabler/icons-react'
@@ -184,6 +186,32 @@ const GROUPS = [
     ],
   },
   {
+    name: 'หัวเรื่อง 3D',
+    rows: [
+      ['hlRad', 0.2, 4, 0.05, 'รัศมีสนามแม่เหล็ก (em)'],
+      ['hlPush', 0, 1.5, 0.01, 'แรงผลัก'],
+      ['hlLift', 0, 2, 0.02, 'ยกเข้าหาจอ'],
+      ['hlEase', 0.02, 0.6, 0.01, 'ความหนืดตอนกลับที่'],
+      ['hlSize', 0.5, 1.8, 0.01, 'ขนาดหัวเรื่องทั้งบล็อก (×)'],
+      ['hlDepth', 0.05, 1.2, 0.01, 'ความหนาตัวอักษร'],
+      ['hlBevS', 0, 0.2, 0.005, 'ขอบยืด (ตัวหนา)'],
+      ['hlBevT', 0, 0.2, 0.005, 'ขอบลึก'],
+      ['hlSeg', 1, 12, 1, 'ความละเอียดโค้ง'],
+      ['hlRough', 0, 1, 0.02, 'ความด้าน'],
+      ['hlAlb', 0.2, 1, 0.02, 'ความสว่างเนื้อวัสดุ (ต่ำ = เห็นเงาชัด)'],
+      ['hlEmis', 0, 1, 0.02, 'เรืองในตัว'],
+      ['hlEnter', 0.2, 2.5, 0.05, 'เวลาไถลเข้าที่ (วิ)'],
+      ['hlRise', 0, 1.5, 0.02, 'ระยะไถล (em)'],
+      ['hlStag', 0, 0.3, 0.005, 'ระยะเหลื่อมต่อตัว (วิ)'],
+      ['hlAfter', -1.5, 3, 0.05, 'ขึ้นช้ากว่าอินโทรจบกี่วิ (ติดลบ = ซ้อนท้ายอินโทร)'],
+      ['hlPad', 0, 140, 2, 'ขอบเผื่อรอบบล็อก (px)'],
+      ['hlRotX', -90, 90, 1, 'เอียงตัวอักษร X° (ก้ม/เงย)'],
+      ['hlRotY', -90, 90, 1, 'เอียงตัวอักษร Y° (หันซ้าย/ขวา)'],
+      ['hlRotZ', -90, 90, 1, 'เอียงตัวอักษร Z° (บิดในระนาบ)'],
+      ['hlTrack', -0.08, 0.15, 0.002, 'ระยะห่างตัวอักษร (em)'],
+    ],
+  },
+  {
     name: 'ลมพัดเสื้อ',
     rows: [
       ['wndAmp', 0, 1, 0.01, 'แรงลม'],
@@ -320,8 +348,36 @@ const GROUPS = [
     ],
   },
   {
+    name: 'ฟองแก้วหัวเรื่อง (2026-final)',
+    rows: [
+      ['bbThick', 20, 220, 1, 'ความหนาฟอง (หน่วย SVG)'],
+      ['bbBlur', 0, 4, 0.05, 'ความฝ้า (เบลอของข้างใน)'],
+      ['bbChroma', 0, 1, 0.01, 'แยกสีแบบปริซึม'],
+      ['bbSamples', 2, 24, 1, 'รอบสุ่มภาพหลังกระจก (สูง = สเปกตรัมเนียน)'],
+      ['bbIrid', 0, 1, 0.05, 'ฟิล์มบาง: รุ้งบนผิวแก้ว'],
+      ['bbRound', 0, 1, 0.05, 'ความมนของขอบ (1 = โค้งเต็มความหนา)'],
+      ['bbIor', 1, 2, 0.01, 'ดัชนีหักเห'],
+      ['bbOpacity', 0.2, 1, 0.01, 'ความทึบของแก้ว'],
+      ['bbAtten', 1, 80, 1, 'ระยะดูดกลืนแสง (×ความหนา)'],
+      ['bbCount', 0, 8, 1, 'จำนวนก้อนในฟอง'],
+      ['bbSand', 0, 0.6, 0.01, 'ระดับทราย (สัดส่วนความสูงห้อง)'],
+      ['bbRepose', 0.2, 1.5, 0.05, 'มุมกองทราย (สูง = กองชันได้)'],
+      ['bbDig', 0, 2, 0.05, 'ความลึกที่ของกดทรายลงไป'],
+      ['bbSize', 0.2, 1.2, 0.02, 'ขนาดก้อน (เทียบความสูงห้อง)'],
+      ['bbG', 0, 3000, 10, 'แรงโน้มถ่วงในฟอง'],
+      ['bbBounce', 0, 0.9, 0.02, 'ความเด้ง'],
+      ['bbDrag', 0, 3, 0.05, 'ความหนืด'],
+      ['bbStir', 0, 3, 0.05, 'แรงกวนของเมาส์'],
+      ['bbRoomX', 0.3, 1, 0.02, 'ความกว้างห้อง'],
+      ['bbRoomY', 0.3, 1, 0.02, 'ความสูงห้อง'],
+      ['bbRoomZ', 0.2, 1, 0.02, 'ความลึกห้อง'],
+      ['bbGlow', 0, 4, 0.05, 'แสงจากตัวอักษร/LIFE รอบฟอง'],
+    ],
+  },
+  {
     name: 'เคอร์เซอร์ (หน้าหน้าต่าง)',
     rows: [
+      ['cuHand', 0, 1, 1, 'รูปทรง: 0 = ลูกศร, 1 = มือชี้'],
       ['cuDepth', 0.02, 1.5, 0.01, 'ความหนา'],
       ['cuOutline', 0, 0.15, 0.002, 'ความหนาเส้นขอบ'],
       ['cuScale', 0.1, 12, 0.05, 'สเกล'],
@@ -364,6 +420,21 @@ const GROUPS = [
   {
     name: 'ทางเข้า (ไหลออกจากหน้าต่าง)',
     rows: [
+      ['wtAmt', 0, 2, 0.05, 'รอยลม: ความสว่าง (0 = ปิด)'],
+      ['wtY', -1, 2, 0.05, 'รอยลม: ยกขึ้น/กดลงกี่หน่วย'],
+      ['wtFan', 0, 4, 0.05, 'รอยลม: กระจายออกข้างลำตัว'],
+      ['wtWide', 0.1, 4, 0.05, 'รอยลม: ความกว้างที่หัว'],
+      ['wtStep', 0.05, 1.5, 0.05, 'รอยลม: ระยะต่อจุด (สูง = รอยยาว)'],
+      ['wtTaper', 0.4, 4, 0.1, 'รอยลม: ความเรียวไปทางหาง'],
+      ['wtWarm', 0, 1, 1, 'รอยลม: 0 = ฟ้าขาว, 1 = ครีมอุ่น'],
+      ['wtDbg', 0, 1, 1, 'รอยลม: โหมดตรวจ (จุดตัวอย่าง + โครงลวด ทับทุกอย่าง)'],
+      ['pfxAmt', 0, 2, 0.05, 'พอร์ทัล: ความแรงเอฟเฟกต์ (0 = ปิด)'],
+      ['pfxSize', 0.5, 6, 0.1, 'พอร์ทัล: ขนาดออร่ารอบตัว'],
+      ['pfxLife', 0.2, 4, 0.05, 'พอร์ทัล: แสงติดตัวนานกี่วิหลังพ้นช่อง'],
+      ['pfxRingTo', 0.5, 4, 0.1, 'พอร์ทัล: ปลอกขยายไปกี่เท่า'],
+      ['pfxRingLife', 0.15, 2, 0.05, 'พอร์ทัล: ปลอกหลุดออกทุกกี่วิ'],
+      ['pfxSpark', 0, 4, 0.1, 'พอร์ทัล: เม็ดสะบัดไปไกลกี่เท่า'],
+      ['pfxSparkLife', 0.2, 2, 0.05, 'พอร์ทัล: อายุเม็ด (วิ)'],
       ['enBurstAt', 0.05, 0.95, 0.01, 'พุ่ง: เริ่มที่สัดส่วนเวลา'],
       ['enBurstAmt', 0, 0.95, 0.01, 'พุ่ง: ใช้ระยะทางกี่ส่วน (0 = ไม่พุ่ง)'],
       ['enTurn', 0, 1, 0.01, 'หมุนตัวตามเส้น (0 = หันทิศเดียวกับท่าจบ)'],
@@ -669,6 +740,7 @@ const GROUP_TOGGLES = {
   'แสง': [['sh', 'เงาตกกระทบ'], ['flat', 'แบน (cel)'], ['flatTone', 'ACES'], ['rimFx', 'rim ขอบภาพ'], ['gloss', 'พลาสติกเงา'], ['clay', 'clay']],
   'ลายเสื้อ': [['shp', 'เปิด']],
   'ลมพัดเสื้อ': [['wnd', 'เปิด']],
+  'หัวเรื่อง 3D': [['hl', 'เปิด']],
   'ไหวเบา ๆ': [['idle', 'ไหวเบา ๆ'], ['breathe', 'ไหวข้อต่อ']],
   'ริบบิ้นกระจก': [['gr', 'เปิด']],
 }
@@ -698,6 +770,7 @@ const GROUP_ICONS = {
   'แสง': IconBulb,
   'ไหวเบา ๆ': IconWaveSine,
   'ลมพัดเสื้อ': IconWaveSine,
+  'หัวเรื่อง 3D': IconTypography,
   'หน้า / ตา': IconMoodSmile,
   'หัวตามเมาส์': IconEye,
   'ลำตัว': IconShirt,
@@ -1094,6 +1167,8 @@ function Snapshot({ slot }) {
 
 export function CameraTuner() {
   const [panel, setPanelState] = useState(loadPanel)
+  /** ตัวกล่องจริง — ตอนลากเขียน style ใส่มันตรง ๆ ไม่ผ่าน state */
+  const boxRef = useRef(null)
   const setPanel = (patch) => setPanelState((p) => {
     const next = { ...p, ...patch }
     savePanel(next)
@@ -1149,7 +1224,52 @@ export function CameraTuner() {
     navigator.clipboard?.writeText(onlyChanged ? body + '\n' : `export const DEFAULTS = {\n${body}\n}\n`)
   }
 
-  const side = panel.side === 'left' ? { left: 12 } : { right: 12 }
+  /**
+   * ตำแหน่งแผง: ชิดข้างตามค่า side หรือพิกัดอิสระถ้าเคยลากไว้
+   *
+   * ลากที่หัวแผง — ระหว่างลากเขียน left/top ใส่ DOM ตรง ๆ ไม่ผ่าน state เพราะแผงมีสไลเดอร์
+   * เป็นร้อยแถว re-render ทุก pointermove คือกระตุก แล้วค่อยบันทึกทีเดียวตอนปล่อย
+   */
+  const side = panel.pos
+    ? { left: panel.pos.x, top: panel.pos.y, right: 'auto' }
+    : panel.side === 'left'
+      ? { left: 12 }
+      : { right: 12 }
+
+  const startDrag = (e) => {
+    // ปุ่ม/ช่องกรอกในหัวแผงต้องกดได้ตามปกติ ไม่ใช่กลายเป็นจุดจับลาก
+    if (e.target.closest('button, input, select, textarea')) return
+    const el = boxRef.current
+    if (!el) return
+    // เก็บโหนดไว้ก่อน: React ล้าง e.currentTarget เป็น null ทันทีที่แฮนด์เลอร์คืนค่า
+    // ตัวฟังที่ผูกทีหลังจะจับ null แล้วลากไม่ติด (เจอมาแล้ว: กดแล้วไม่มีอะไรเกิดขึ้น)
+    const handle = e.currentTarget
+    const r = el.getBoundingClientRect()
+    const dx = e.clientX - r.left
+    const dy = e.clientY - r.top
+    let x = r.left
+    let y = r.top
+    // ตั้ง left ให้ตรงที่มันอยู่ก่อนปลด right — ปล่อยให้ left เป็น auto แผงจะเด้งไปชิดซ้ายทันที
+    el.style.left = `${x}px`
+    el.style.top = `${y}px`
+    el.style.right = 'auto'
+    handle.setPointerCapture(e.pointerId)
+    const move = (ev) => {
+      // กันแผงหลุดจอ: เหลือให้เห็นอย่างน้อยหัวแผงเสมอ
+      x = Math.min(Math.max(ev.clientX - dx, 8 - r.width + 60), window.innerWidth - 60)
+      y = Math.min(Math.max(ev.clientY - dy, 8), window.innerHeight - 32)
+      el.style.left = `${x}px`
+      el.style.top = `${y}px`
+    }
+    const up = (ev) => {
+      handle.releasePointerCapture?.(ev.pointerId)
+      handle.removeEventListener('pointermove', move)
+      handle.removeEventListener('pointerup', up)
+      setPanel({ pos: { x: Math.round(x), y: Math.round(y) } })
+    }
+    handle.addEventListener('pointermove', move)
+    handle.addEventListener('pointerup', up)
+  }
 
   return (
     <>
@@ -1179,9 +1299,20 @@ export function CameraTuner() {
        * แล้วขยับหน้าเอง แผงที่เลื่อนในตัวเองจึงไม่ได้รับล้อเลย — แอตทริบิวต์นี้คือทางออก
        * มาตรฐานของ Lenis สำหรับกล่องที่ต้องเลื่อนเองได้
        */}
-      <div style={{ ...box, ...side, width: panel.collapsed ? 'auto' : box.width }} data-lenis-prevent>
-        {/* หัวแผง: ยุบ/ขยาย, ย้ายข้าง — ไม่เลื่อนไปกับเนื้อหา */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', borderBottom: panel.collapsed ? 0 : '1px solid rgba(255,255,255,0.1)' }}>
+      <div ref={boxRef} style={{ ...box, ...side, width: panel.collapsed ? 'auto' : box.width }} data-lenis-prevent>
+        {/* หัวแผง: จุดจับลาก + ยุบ/ขยาย + ย้ายข้าง — ไม่เลื่อนไปกับเนื้อหา */}
+        <div
+          onPointerDown={startDrag}
+          style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', cursor: 'grab', touchAction: 'none', borderBottom: panel.collapsed ? 0 : '1px solid rgba(255,255,255,0.1)' }}
+        >
+          {/* จุดจับลาก — ปุ่มยุบ/ขยายกินความกว้างหัวแผงเกือบทั้งแถบ (flex: 1) จึงต้องมีที่จับ
+              ของตัวเองชัด ๆ ไม่ใช่หวังพื้นที่ว่างข้าง ๆ ปุ่ม */}
+          <span
+            title="ลากที่หัวแผงเพื่อย้าย"
+            style={{ cursor: 'grab', touchAction: 'none', display: 'inline-flex', padding: 2, opacity: 0.75 }}
+          >
+            <Ic icon={IconArrowsMove} size={12} />
+          </span>
           <button
             type="button"
             onClick={() => setPanel({ collapsed: !panel.collapsed })}
@@ -1193,7 +1324,12 @@ export function CameraTuner() {
             {changedCount > 0 && <span style={{ color: GREEN, marginLeft: 6 }}>●{changedCount}</span>}
           </button>
           {!panel.collapsed && (
-            <button type="button" style={btn} title="ย้ายแผงไปอีกข้าง" onClick={() => setPanel({ side: panel.side === 'left' ? 'right' : 'left' })}>
+            <button
+              type="button"
+              style={btn}
+              title="ย้ายแผงไปชิดอีกข้าง (ล้างตำแหน่งที่ลากไว้)"
+              onClick={() => setPanel({ side: panel.side === 'left' ? 'right' : 'left', pos: null })}
+            >
               <Ic icon={panel.side === 'left' ? IconArrowRight : IconArrowLeft} />
             </button>
           )}

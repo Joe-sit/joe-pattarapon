@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { getTuner } from './tuner'
-import { introTime, outBack } from './intro'
+import { introSkip, introTime, outBack } from './intro'
 
 /**
  * ห่อของหนึ่งชิ้นให้ "ปรากฏ" ตามนาฬิกาอินโทร — ขยายจากศูนย์ (เลยเป้านิดแล้วดีดกลับ)
@@ -12,14 +12,16 @@ import { introTime, outBack } from './intro'
  * dur  = ความยาว
  * over = ความแรงของการเลยเป้า
  * ปิดอินโทร (tuner intro = 0) = โผล่ทันทีที่ตำแหน่งจริง
+ * hold = ชื่อธงใน introSkip ถ้าธงขึ้น ชิ้นนี้ข้ามท่าโผล่ (มีอย่างอื่นพามันขึ้นเวทีแล้ว)
  */
-export function Appear({ at = 0, dur = 0.5, from = null, rise = 0, tilt = 0, over = 1.4, children, ...props }) {
+export function Appear({ at = 0, dur = 0.5, from = null, rise = 0, tilt = 0, over = 1.4, hold = null, children, ...props }) {
   const g = useRef()
   useFrame(() => {
     const o = g.current
     if (!o) return
     const t = getTuner()
-    if (t.intro < 0.5) {
+    // มีอย่างอื่นพาขึ้นเวทีแล้ว (เช่นสปแลชมอร์ฟมาลง) = อยู่ที่ตำแหน่งจริงเลย ไม่เล่นท่าโผล่ซ้ำ
+    if (t.intro < 0.5 || (hold && introSkip[hold])) {
       o.visible = true
       o.scale.setScalar(1)
       o.position.set(0, 0, 0)

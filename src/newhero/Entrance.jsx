@@ -48,7 +48,8 @@ const SEAM_SEGS = 12
 /** ความนุ่มของเพดาน "ปลายที่วาดถึงแล้ว" — หน่วยเดียวกับพารามิเตอร์ของเส้น */
 const DRAW_SOFT = 0.06
 /** สถานะของการสุ่มครั้งล่าสุด — ผู้เรียกอ่านต่อว่าตอนนี้ยังอยู่หลังกรอบหน้าต่างไหม */
-export const seamState = { inside: false }
+/** tt = พารามิเตอร์บนริบบิ้นหน้าของการสุ่มครั้งล่าสุด (ปากช่องอยู่ที่ ride.mouthT) */
+export const seamState = { inside: false, tt: -1 }
 
 /** ที่พักตำแหน่งโลกของตัวละคร — ตัวเดียวใช้ซ้ำทุกเฟรม ไม่สร้าง Vector3 ใหม่ในลูป */
 const RIDE_WORLD = new THREE.Vector3()
@@ -71,6 +72,10 @@ const Q_TMP = new THREE.Quaternion()
 const E_TMP = new THREE.Euler()
 const Q_ID = new THREE.Quaternion()
 const RIDE_TAN = new THREE.Vector3()
+/** ปากพอร์ทัล: เฟรมของเส้นตรงจุดปากช่อง + ตำแหน่ง/ทิศในพิกัดโลก */
+const MOUTH_F = { P: new THREE.Vector3(), T: new THREE.Vector3(), S: new THREE.Vector3(), N: new THREE.Vector3() }
+const MOUTH_P = new THREE.Vector3()
+const MOUTH_T = new THREE.Vector3()
 /** เฟรมผิวริบบิ้น (ใช้ซ้ำ) */
 const RIDE_F = { P: new THREE.Vector3(), T: new THREE.Vector3(), S: new THREE.Vector3(), N: new THREE.Vector3() }
 
@@ -245,6 +250,7 @@ export function entranceSample(ride, t, u, out, tan, f, parent, nrm, lift = 0) {
   if (mix < 1) {
     // ท่อนใน = อยู่หลังกรอบเสมอ
     seamState.inside = true
+    seamState.tt = ride.mouthT - 1e-3
     // ไม่ล้ำหน้าปลายที่ริบบิ้นยังวาดไม่ถึง — ตอนอินโทรจะได้ไถลอยู่บนปลายเส้น ไม่ใช่บนที่ว่าง
     const tp = softMin(t.enPT0 + (handoff - t.enPT0) * (u / split), ribbonDrawn(t, 'portal'), DRAW_SOFT)
     portalPoint(ride, t, tp, SEAM_P, f, parent, SEAM_T, SEAM_N)
@@ -266,6 +272,7 @@ export function entranceSample(ride, t, u, out, tan, f, parent, nrm, lift = 0) {
     const back = Math.min(0, tt - from)
     // ยังไม่พ้นปากช่อง = ยังอยู่หลังกรอบ (เผื่อความหนากรอบด้วย enMouthPad)
     seamState.inside = tt < ride.mouthT + t.enMouthPad
+    seamState.tt = tt
     ribbonPoint(ride, t, Math.max(tt, from), out, f, SURF_N)
     tan.copy(f.T).transformDirection(ride.matrix).normalize()
     if (back < 0 && t.enT1 > from) out.addScaledVector(tan, (back * lenOut) / (t.enT1 - from))
@@ -461,6 +468,7 @@ function buildPace(ride, t, parent) {
   if (pace.key === key) return
   pace.key = key
   const wasInside = seamState.inside
+  const wasTT = seamState.tt
   let total = 0
   for (let i = 0; i <= PACE_N; i += 1) {
     entranceSample(ride, t, i / PACE_N, PACE_P, PACE_T, PACE_F, parent, PACE_N0)
@@ -482,6 +490,7 @@ function buildPace(ride, t, parent) {
   PACE_K[0] = PACE_K[1]
   PACE_KV[0] = PACE_KV[1]
   seamState.inside = wasInside
+  seamState.tt = wasTT
 
   /**
    * เส้นยาวเป็นศูนย์ = ยังไม่มีเส้นให้วิ่ง อย่าเผยแพร่ตาราง
@@ -980,6 +989,30 @@ export function Entrance({ replay = 0, ride = null, rideMode = false, pathMode =
           g.quaternion.slerp(Q_TMP.copy(Q_REST).invert().multiply(Q_SURF), w)
         }
       }
+
+      /**
+       * บอกฉากว่า "ปากพอร์ทัลอยู่ไหน และตัวละครห่างจากมันเท่าไร"
+       *
+       * เอฟเฟกต์ตอนทะลุออกมาต้องเกิดที่ปากช่องจริง ซึ่งขยับตามริบบิ้น/มุมกลุ่มที่จูนอยู่
+       * ไม่ใช่พิกัดบานที่จดไว้ตายตัว — อ่านจากเส้นชุดเดียวกับที่ตัวละครวิ่งอยู่ ทุกเฟรม
+       *
+       * ต้องประกาศในลูปนี้ ไม่ใช่ใน entranceSample: entranceSample ถูกเรียกซ้ำเพื่อวัด
+       * ความยาว/จังหวะ (entrancePace) ค่าที่ประกาศจากในนั้นจะเป็นของการสุ่มเพื่อวัด ไม่ใช่
+       * ตำแหน่งจริงของเฟรมนี้
+       */
+      ribbonPoint(ride, t, ride.mouthT, MOUTH_P, MOUTH_F)
+      MOUTH_T.copy(MOUTH_F.T).transformDirection(ride.matrix).normalize()
+      o.parent.localToWorld(MOUTH_P)
+      MOUTH_T.transformDirection(o.parent.matrixWorld).normalize()
+      ridePose.mx = MOUTH_P.x
+      ridePose.my = MOUTH_P.y
+      ridePose.mz = MOUTH_P.z
+      ridePose.tx = MOUTH_T.x
+      ridePose.ty = MOUTH_T.y
+      ridePose.tz = MOUTH_T.z
+      ridePose.gap = seamState.tt - ride.mouthT
+      ridePose.span = Math.max(1e-3, t.enT1 - ride.mouthT)
+      ridePose.live = true
 
       // อยู่หลังกรอบถึงเมื่อไร — entranceSample เป็นคนตอบ เพราะมันรู้ว่าตอนนี้อยู่ท่อนไหน
       const wantInside = seamState.inside

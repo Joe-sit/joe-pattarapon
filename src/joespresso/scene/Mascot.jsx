@@ -54,14 +54,30 @@ const HEX = {
  * ลายเสื้อ — ยูนิฟอร์มชุดเดียวของทั้งโมดูล (โปรแกรม shader ถูกแชร์ จะแยกต่อ instance ไม่ได้)
  * มีตัวละครสองตัวในฉากเดียวพร้อมกันเมื่อไหร่ ตัวที่วาดทีหลังจะเป็นคนเขียนเมทริกซ์
  */
-const PRINT_U = makePrintUniforms(shirtPrintTexture())
+/**
+ * เริ่มด้วยผืนเปล่า 1×1 แล้วค่อยวาดลายจริงตอนเธรดหลักว่าง
+ *
+ * การวาดลาย (ริบบิ้นบนแคนวาส 2D + วาดซ้ำแบบพันขอบ 3×3) กินเวลา 77ms วัดแล้ว ถ้าทำตอน
+ * โมดูลถูกอิมพอร์ต มันไปตกอยู่กลางแอนิเมชันของสปแลชพอดี เห็นเป็นการกระตุกก้อนใหญ่
+ * ตอนนั้นตัวละครยังไม่โผล่ (อินโทรเริ่มวินาทีที่ ~6) ลายจึงมาถึงก่อนใครจะเห็นเสื้อแน่นอน
+ */
+function blankTexture() {
+  const t = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1)
+  t.needsUpdate = true
+  return t
+}
+
+const PRINT_U = makePrintUniforms(blankTexture())
 /** ลมของเสื้อ — uniform ชุดเดียวใช้ร่วมทุกวัสดุของเสื้อ เขียนครั้งเดียวต่อเฟรม */
 const WIND_U = makeWindUniforms()
 /** ขนาดลายสามขั้น — ค่าคือความถี่ (สูง = ลายเล็ก) */
 const PRINT_SIZES = [0.85, 0.5, 0.3]
 
-/** เมล็ดของลายที่กำลังใช้อยู่ — เปลี่ยนเมื่อไหร่ค่อยวาดผืนใหม่ (วาดใหม่ทุกเฟรมคือเผาซีพียู) */
-let printSeed = 7
+/**
+ * เมล็ดของลายที่กำลังใช้อยู่ — เปลี่ยนเมื่อไหร่ค่อยวาดผืนใหม่ (วาดใหม่ทุกเฟรมคือเผาซีพียู)
+ * ค่า null = ยังไม่เคยวาดลายจริงเลย ผืนที่ติดอยู่คือผืนเปล่า
+ */
+let printSeed = null
 
 /** สลับผืนลาย แล้วทิ้งผืนเดิม (texture กิน VRAM จนกว่าจะ dispose) */
 function setPrintSeed(seed) {
@@ -631,6 +647,8 @@ export function Mascot({
   const root = useRef()
   /** ผกผันของรากตอนอบพิกัดลายเสื้อ — ใช้ซ้ำ ไม่สร้างเมทริกซ์ใหม่ทุกเฟรม */
   const printInv = useRef(new THREE.Matrix4())
+  /** เมล็ดที่ขอมาล่าสุด — ตัววาดลายรอบแรกอ่านค่านี้ตอนเธรดหลักว่าง */
+  const wantSeed = useRef(7)
   // ตัวช่วยของลม — สร้างครั้งเดียว ไม่ใช่ทุกเฟรม (useFrame วิ่ง 60 ครั้งต่อวินาที)
   const windM = useMemo(() => new THREE.Matrix4(), [])
   const windM4 = useMemo(() => new THREE.Matrix4(), [])
@@ -638,6 +656,23 @@ export function Mascot({
   const windV = useMemo(() => new THREE.Vector3(), [])
   /** ยกธงเมื่อมีชิ้นใหม่เข้าฉาก (โมเดลโหลดเสร็จ/แขนเสื้อถูกแขวน) แล้วอบในเฟรมถัดไป */
   const bakePrint = useRef(true)
+
+  /**
+   * วาดลายผืนแรกตอนเธรดหลักว่าง ไม่ใช่ตอนอิมพอร์ตโมดูลหรือกลางเฟรม
+   *
+   * requestIdleCallback มี timeout กันเหนียว: เครื่องที่ยุ่งตลอดจะไม่มีช่วงว่างให้เลย
+   * แต่ก็ต้องได้ลายก่อนที่ตัวละครจะโผล่ (อินโทรเริ่มวินาทีที่ ~6)
+   */
+  useEffect(() => {
+    if (printSeed !== null) return undefined
+    const run = () => setPrintSeed(wantSeed.current)
+    if ('requestIdleCallback' in window) {
+      const id = window.requestIdleCallback(run, { timeout: 2500 })
+      return () => window.cancelIdleCallback(id)
+    }
+    const id = window.setTimeout(run, 300)
+    return () => window.clearTimeout(id)
+  }, [])
   const headGroup = useRef()
   const eyes = useRef([])
   const rig = useRef({})
@@ -2457,7 +2492,11 @@ export function Mascot({
       PRINT_U.uPrintOn.value = print.on === false ? 0 : 1
       // ขนาดมีสามขั้นเท่านั้น (เล็ก/กลาง/ใหญ่) — ตัวเลขระหว่างขั้นไม่มีความหมายในแบบ
       if (print.size !== undefined) PRINT_U.uPrintScale.value = PRINT_SIZES[Math.round(print.size)] ?? PRINT_SIZES[1]
-      if (print.seed !== undefined) setPrintSeed(Math.round(print.seed))
+      if (print.seed !== undefined) {
+        wantSeed.current = Math.round(print.seed)
+        // รอบแรกปล่อยให้ตัววาดตอนว่างทำ — เรียกที่นี่คือวาด 77ms คาอยู่กลางเฟรม
+        if (printSeed !== null) setPrintSeed(wantSeed.current)
+      }
     }
     /**
      * เมาส์ที่ตัวนี้มองตาม = ตำแหน่งบน canvas ของตัวเอง ไม่ใช่ตำแหน่งบนหน้าต่างทั้งบาน

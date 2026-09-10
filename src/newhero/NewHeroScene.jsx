@@ -17,7 +17,10 @@ import { CameraFX } from './CameraFX'
 import { Switch } from './Switch'
 import { Cursor } from './Cursor'
 import { Appear } from './Appear'
-import { IntroClock, introTime, introWants, outBack as introBack } from './intro'
+import { panelScreen } from './panelScreen'
+import { PortalFx } from './PortalFx'
+import { WindTrail } from './WindTrail'
+import { IntroClock, introSkip, introTime, introWants, outBack as introBack } from './intro'
 import { setNewHeroReady } from './ready'
 import { Entrance, entranceBlend, entranceSample, entranceU } from './Entrance'
 import { portalRide } from './portalRide'
@@ -954,6 +957,60 @@ function PortalGlass({ w, h, r, z, bevel, intensity, sheen }) {
       <planeGeometry args={[w, h]} />
     </mesh>
   )
+}
+
+/**
+ * ฉายกรอบของบานหน้าต่างลงพิกัดจอ ให้สปแลชใช้เป็นเป้าของการมอร์ฟ
+ *
+ * อยู่ในกลุ่มเดียวกับบาน จึงได้เมทริกซ์โลกชุดเดียวกันฟรี — ไม่ต้องไล่คูณมุมกลุ่ม/สเกลเอง
+ * และคิดจาก *ตำแหน่งปลายทาง* ของบานตรง ๆ ไม่ใช่จากกลุ่ม Appear ที่กำลังย่อ-ขยายอยู่
+ * (ตอนสปแลชยังบัง บานยังเล่นท่าโผล่ค้างอยู่ที่สเกลเกือบศูนย์ ฉายจากของจริงจะได้จุดเดียว)
+ *
+ * ทำงานเฉพาะเมื่อมีคนรอ (panelScreen.want) — สปแลชปิดไปแล้วก็ไม่ต้องเสียเวลาฉายทุกเฟรม
+ */
+const PROBE_P = new THREE.Vector3()
+
+function PanelProbe({ count, w, h, y, xAt }) {
+  const g = useRef()
+  const { camera, size } = useThree()
+  useFrame(() => {
+    const o = g.current
+    if (import.meta.env.DEV) panelScreen.ticks = (panelScreen.ticks || 0) + 1
+    if (!o || !panelScreen.want) return
+    const rects = []
+    for (let i = 0; i < count; i += 1) {
+      const x = xAt(i)
+      let left = Infinity
+      let right = -Infinity
+      let top = Infinity
+      let bottom = -Infinity
+      // สี่มุมของหน้าบาน (z = 0 ระนาบเดียวกับที่บานวางอยู่) → จอ
+      for (const [dx, dy] of [
+        [-0.5, -0.5],
+        [0.5, -0.5],
+        [-0.5, 0.5],
+        [0.5, 0.5],
+      ]) {
+        PROBE_P.set(x + dx * w, y + dy * h, 0)
+        o.localToWorld(PROBE_P)
+        PROBE_P.project(camera)
+        const sx = (PROBE_P.x * 0.5 + 0.5) * size.width
+        const sy = (1 - (PROBE_P.y * 0.5 + 0.5)) * size.height
+        if (sx < left) left = sx
+        if (sx > right) right = sx
+        if (sy < top) top = sy
+        if (sy > bottom) bottom = sy
+      }
+      rects.push({ x: left, y: top, w: right - left, h: bottom - top })
+    }
+    panelScreen.rects = rects
+    // รัศมีมุมของบานเป็นสัดส่วนของด้านที่สั้นกว่า (ดู Panel) แปลงเป็นพิกเซลด้วยอัตราส่วนเดียวกัน
+    panelScreen.radius = rects.length
+      ? Math.min(rects[0].w, rects[0].h) * 0.17
+      : 0
+    panelScreen.ready = rects.length > 0 && rects[0].w > 1
+  })
+  return <group ref={g} />
 }
 
 function Panel({ w = 5.2, h = 6.5, d = 1.7, band = 0, cells = 0, stripe = false, portal = false, glass = 0, glassBevel = 0.7, glassSheen = 0.12, tint = INNER_BG, ...props }) {
@@ -2164,7 +2221,15 @@ function CameraRig() {
      * ยิ่งย่นเวลาลงยิ่งอ่านเป็นกระตุกหนึ่งครั้ง — smootherstep ความเร็วเป็นศูนย์ทั้งหัวและท้าย
      */
     const cx = it < 0 ? 0 : Math.min(1, it / Math.max(0.05, t.inCamDur))
-    const k = 1 - cx * cx * cx * (cx * (cx * 6 - 15) + 10)
+    /**
+     * ข้ามอินโทรของกล้องเมื่อสปแลชมอร์ฟมาลงบนบาน
+     *
+     * ท่าเริ่มของกล้องคือ dolly เข้ามาใกล้ บานที่หนึ่งจึงกว้าง 968px และอยู่ที่ x -1263
+     * (วัดแล้ว) แผ่นของสปแลชที่ต้องไปลงบนบานเลยต้องวิ่งไปหาเป้าที่ยังเลื่อนอยู่อีกสามวินาที
+     * กล้องนิ่งตั้งแต่เฟรมแรกแทน = ปลายทางของการมอร์ฟนิ่ง รอยต่อจึงทับกันพอดี
+     * ส่วนที่เหลือของอินโทร (ริบบิ้น ตัวละคร prop) ยังเล่นตามคิวเดิมทั้งหมด
+     */
+    const k = introSkip.camera ? 0 : 1 - cx * cx * cx * (cx * (cx * 6 - 15) + 10)
     const dollyZ = t.inCamDolly * k
     const dollyX = t.inCamX * k
     const dollyY = t.inCamY * k
@@ -2495,6 +2560,16 @@ function Scene() {
         <Backdrop clay={clay} />
       )}
       <ShadowFlags on={t.sh > 0.5 && !clay} />
+      {/**
+       * ริกกล้องต้องขยับกล้อง "ก่อน" ของที่เกาะกรอบภาพจะคำนวณตำแหน่งตัวเอง
+       *
+       * ชิ้นที่เกาะกรอบ (เมฆขอบจอ, ดาวเคราะห์) วางตัวเองจาก camera.quaternion/position ใน
+       * useFrame ของมันเอง r3f เรียก useFrame ตามลำดับที่คอมโพเนนต์ถูกเมานต์ ถ้าริกอยู่ท้าย
+       * ต้นไม้ ของพวกนี้จะอ่านท่ากล้องของ "เฟรมก่อน" แล้วกล้องค่อยขยับทีหลัง — ระหว่างอินโทร
+       * ที่กล้องเคลื่อนเร็ว มันจึงไถลสวนฉากอยู่หนึ่งเฟรมตลอด เห็นเป็นการกระตุกที่ขอบจอ
+       */}
+      <CameraRig />
+
       {/* ดาวเคราะห์หน้าสุด — เกาะขอบจอเป็นกรอบ ไม่ได้อยู่ในโลกของฉาก (ดู Space) */}
       {t.pl > 0.5 && t.sp > 0.5 && !clay && (
         <Planets dist={t.plDist} scale={t.plScale} drift={t.plDrift} spin={t.plSpin} />
@@ -2572,6 +2647,7 @@ function Scene() {
               over={t.inOver}
               rise={t.inWinRise}
               tilt={t.inWinTilt * RAD}
+              hold="windows"
               position={[x, t.panelBase + t.panelH / 2, 0]}
             >
               <Panel
@@ -2586,6 +2662,14 @@ function Scene() {
             </Appear>
           )
         })}
+        {/* ฉายกรอบบานลงพิกัดจอให้สปแลชเอาไปเป็นเป้ามอร์ฟ (ดู newhero/panelScreen) */}
+        <PanelProbe
+          count={Math.round(t.panelCount)}
+          w={t.panelW}
+          h={t.panelH}
+          y={t.panelBase + t.panelH / 2}
+          xAt={(i) => t.panelX + (i - (Math.round(t.panelCount) - 1) / 2) * t.panelGap}
+        />
         {ribbon}
         {/* ช่วงต่อของถนน — งอกตามการเลื่อนจอ ไปจบที่ขอบขวา (ดู CruiseRibbon) */}
         <CruiseRibbon
@@ -2661,8 +2745,10 @@ function Scene() {
             from={[3 * t.inPropDist, 2 * t.inPropDist, -5 * t.inPropDist]}
           >
           <Cursor
+            kind={t.cuHand > 0.5 ? 'hand' : 'arrow'}
             pressAt={cuPress}
-            aim={t.cuAim}
+            /* มือชี้ไม่ต้องเล็งเมาส์ — ปลายนิ้วไม่ใช่ปลายลูกศร หมุนตามเมาส์แล้วอ่านเป็นมือหมุนเล่น */
+            aim={t.cuHand > 0.5 ? 0 : t.cuAim}
             aimMax={t.cuAimMax * RAD}
             aimEase={t.cuAimEase}
             depth={t.cuDepth}
@@ -2680,6 +2766,16 @@ function Scene() {
          * ตัวละครห่อด้วย Entrance: กลุ่มนอกถือปลายทาง (ค่าจากแผง) กลุ่มในวิ่งเข้ามาจาก
          * ในหน้าต่าง — ค่า skaterX/Y/Z จึงยังหมายถึง "ที่หยุด" เหมือนเดิม
          */}
+        {/**
+         * เอฟเฟกต์ปากพอร์ทัล — อยู่นอก Entrance เพราะมันเกิดที่ *ปากช่อง* ไม่ใช่ที่ตัวละคร
+         * (ตัวละครวิ่งผ่านไป แสงยังค้างอยู่ที่ช่องแล้วค่อยจบของตัวเอง)
+         */}
+        {skater && t.pfxAmt > 0 && <PortalFx />}
+        {/**
+         * รอยลมท้ายตัวละคร — อยู่นอก Entrance เพราะรอยไม่ได้เกาะตัว มันค้างอยู่กับ *ทาง*
+         * ที่เพิ่งวิ่งผ่าน (เกาะตัวเมื่อไรก็กลายเป็นแผ่นติดท้ายที่เลี้ยวตามตัว ไม่ใช่รอย)
+         */}
+        {skater && t.wtAmt > 0 && <WindTrail />}
         {skater && (
           <Entrance
             replay={t.enReplay}
@@ -3004,8 +3100,6 @@ function Scene() {
         </group>
       )}
       </Clay>
-
-      <CameraRig />
     </Gloss>
   )
 }
