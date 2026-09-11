@@ -100,6 +100,16 @@ export function introWants() {
   return intro.wants
 }
 
+/**
+ * ฉากเข้าที่แล้วหรือยัง — "กั้นอยู่แต่ของครบ" หรือ "อินโทรเดินแล้ว"
+ *
+ * ต่างจาก introWants ที่เป็นจริงเฉพาะตอนถูกกั้น (มีสปแลชคั่น) ถ้าไม่มีสปแลช อินโทรจะติด
+ * อาวุธทันทีและ wants ไม่เคยถูกยก — ตัวที่รอสัญญาณนี้จึงต้องยอมรับทั้งสองกรณี
+ */
+export function introSet() {
+  return intro.wants || intro.armed
+}
+
 export function resetIntro() {
   // เล่นใหม่โดยไม่มีสปแลชมามอร์ฟให้ = บานกับกล้องต้องกลับไปเล่นท่าของตัวเอง
   introSkip.windows = false

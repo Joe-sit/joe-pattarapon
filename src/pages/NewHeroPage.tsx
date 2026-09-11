@@ -33,7 +33,8 @@ export function NewHeroPage() {
    * ในโหมด dev ถอด effect ทิ้งแล้วใส่กลับทันทีหลัง mount ระหว่างนั้น cleanup ข้างล่างเรียก
    * releaseIntro ไปแล้ว ถ้าไม่กั้นซ้ำ นาฬิกาจะวิ่งอยู่หลังสปแลชจนอินโทรจบก่อนสปแลชเปิด
    */
-  const [splash, setSplash] = useState(true)
+  /** ปิดสปแลชไว้ชั่วคราว — เปลี่ยนกลับเป็น true แล้วได้ของเดิมทั้งชุด (morph J O E → พอร์ทัล) */
+  const [splash, setSplash] = useState(false)
   useEffect(() => {
     if (splash) holdIntro()
   }, [splash])

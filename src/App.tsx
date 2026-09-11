@@ -58,8 +58,24 @@ const MOVE_EVENTS = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const
 
 const SPLASH_ON = true
 
+/**
+ * route ที่ปิดสปแลชไว้ชั่วคราว — /2026-final ระหว่างไล่จูน hero สปแลชกินเวลารอทุกครั้งที่รีเฟรช
+ *
+ * ปิดเป็นราย route ไม่ใช่ปิด SPLASH_ON ทั้งเว็บ เพราะหน้าอื่น (/joespresso, /2026) ยังต้องมี
+ */
+const SPLASH_OFF_ROUTES = ['/2026-final']
+
 export function App() {
-  const [showSplash, setShowSplash] = useState(SPLASH_ON)
+  /**
+   * ตัดสินครั้งเดียวตอนโหลด ไม่อ่าน location สด — เดินเข้าหน้านี้ทีหลังไม่ควรเด้งสปแลชขึ้นมา
+   * และของเดิมก็ตัดสินสปแลชจากที่ "ลงจอด" ไม่ใช่ที่อยู่ปัจจุบัน (ดู landedOn)
+   */
+  const [splashOff] = useState(
+    () =>
+      !SPLASH_ON ||
+      (typeof window !== 'undefined' && SPLASH_OFF_ROUTES.includes(window.location.pathname)),
+  )
+  const [showSplash, setShowSplash] = useState(!splashOff)
   // ฉาก 3D ของ joespresso รายงานตัวเองว่าโหลด+compile เสร็จ — สปแลชรออันนี้
   const sceneReady = useSceneReady()
   /**
@@ -138,10 +154,10 @@ export function App() {
    */
 
   useEffect(() => {
-    if (SPLASH_ON) return
+    if (!splashOff) return
     startIntro()
     setIntroDone()
-  }, [])
+  }, [splashOff])
 
   /**
    * ปิดสปแลชอยู่ = reload แล้วต้องอยู่ที่เดิม
@@ -151,7 +167,7 @@ export function App() {
    * แล้วโดน clamp ลงมาที่ก้นหน้าเก่า — คืนเองทีหลังแล้วย้ำอีกรอบตอนความสูงนิ่งจึงตรงกว่า
    */
   useEffect(() => {
-    if (SPLASH_ON) return
+    if (!splashOff) return
     const KEY = 'v2:scroll'
     const save = () => sessionStorage.setItem(KEY, String(window.scrollY))
     const want = Number(sessionStorage.getItem(KEY) ?? 0)
@@ -223,7 +239,7 @@ export function App() {
      * เปิดมากลางเรื่องคือเปิดมาเจอฉากที่ยังไม่ได้เล่า
      */
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
-    if (SPLASH_ON) window.scrollTo(0, 0)
+    if (!splashOff) window.scrollTo(0, 0)
 
     // `smooth` / `resetNativeScroll` from the Vue version are not Lenis 1.x options.
     const lenis = new Lenis({ duration: 1, smoothWheel: true })

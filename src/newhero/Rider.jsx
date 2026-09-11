@@ -55,6 +55,18 @@ export function Rider({
   /** หัวหันตามเมาส์ — ทับค่าจาก leva ของ Mascot (null = ใช้ค่าเดิม) */
   followOverride = null,
   boardSpec = null,
+  /**
+   * true = ไม่ต้องมีบอร์ด (จอ Experiences ใช้ตัวละครลอยเข้าพอร์ทัล ไม่ได้เล่นสเก็ต)
+   *
+   * ตัวจัดเท้าให้แนบแผ่นข้ามไปเองเมื่อไม่มีบอร์ด (เงื่อนไข board.current ใน useFrame)
+   * ตัวละครจึงอยู่ที่ตำแหน่งของตัวเองตรง ๆ ไม่ได้ถูกดึงลงไปหาแผ่นที่ไม่มีอยู่
+   */
+  noBoard = false,
+  /** ล้อหมุนเร็วแค่ไหน (rad/s) — ส่งต่อให้ Skateboard */
+  wheelSpin = 0,
+  /** ลายล้อ + โหมดตรวจ — ส่งต่อให้ Skateboard */
+  wheelSkin = null,
+  wheelDbg = 0,
   boardRot = [0, 0.26, 0],
   boardOffset = [0, 0, 0],
   ...props
@@ -185,15 +197,30 @@ export function Rider({
   })
 
   return (
-    <group {...props}>
+    /* userData.rider: ให้เอฟเฟกต์ที่ต้องถ่ายภาพตัวละคร (ดู EchoTrail) หากิ่งนี้เจอ
+       โดยไม่ต้องผูกกับชื่อคอมโพเนนต์หรือส่ง ref ข้ามฉากไปมา */
+    <group {...props} userData={{ rider: true }}>
       <group ref={sway}>
         {/* บอร์ดจริง: แผ่น + กริป + ทรัค + ล้อ (ดู Skateboard.jsx) */}
-        <group ref={board} rotation={boardRot}>
-          <Skateboard spec={boardSpec ?? undefined} />
-        </group>
+        {!noBoard && (
+          <group ref={board} rotation={boardRot}>
+            <Skateboard
+              spec={boardSpec ?? undefined}
+              spin={wheelSpin}
+              skin={wheelSkin ?? undefined}
+              dbg={wheelDbg}
+            />
+          </group>
+        )}
 
         {/* เอียงตัวไปทางที่บอร์ดวิ่ง + บิดลำตัวเข้าหากล้อง = ท่าเลี้ยงตัว */}
-        <group ref={body} position={[0, mascotLift, 0]} rotation={[0.06, -0.35, -0.12]}>
+        {/* userData.echoBody: กรอบที่ EchoTrail ใช้ถ่ายซิลูเอตต์ = เฉพาะตัวคน ไม่รวมบอร์ด */}
+        <group
+          ref={body}
+          position={[0, mascotLift, 0]}
+          rotation={[0.06, -0.35, -0.12]}
+          userData={{ echoBody: true }}
+        >
           <Suspense fallback={null}>
             <Mascot
               scale={mascotScale}

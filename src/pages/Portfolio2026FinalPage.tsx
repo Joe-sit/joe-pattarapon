@@ -8,12 +8,12 @@ import { Logo } from '@/joespresso/Logo'
 import { CloudWipe } from '@/components/CloudWipe'
 import { AnchorNav } from '@/components/AnchorNav'
 import { SITE } from '@/config/site'
-import { PlaneBannerScene } from '@/sections/ribbonstory/PlaneBannerScene'
+import { OpenToWorkRibbon } from '@/sections/ribbonstory/OpenToWorkRibbon'
 import { setCruise, setSceneOn } from '@/newhero/scrolly'
 import { useIntroDone } from '@/stores/intro'
 /** ฉาก 3D ของจอแรก — แยก chunk ไม่ให้ถ่วงจอที่เหลือ */
 const NewHeroScene = lazy(() => import('@/newhero/NewHeroScene'))
-import { ExperienceTunnel } from '@/sections/tunnel/ExperienceTunnel'
+import { ExperiencePortals } from '@/sections/portals/ExperiencePortals'
 import { fadeToArt, Headline3D, Headline3DField, useHeadlineArt } from '@/sections/hero/Headline3D'
 
 import heroLife from '@/assets/v2final/hero-life.svg'
@@ -498,10 +498,13 @@ export function Portfolio2026FinalPage() {
         </div>
       </section>
 
-      {/* Hello and Welcome — เครื่องบินการ์ตูนลากป้ายผ้าสามผืน HELLO · AND · WELCOME บินออกขวาจอ
-          จบเป็นแถบคั่นเต็มความกว้างชิดขอบล่างของจอ ต่อเข้าจอ What I Do (ดู sections/ribbonstory)
-          เวอร์ชันริบบิ้น SVG เดิมยังอยู่ที่ OpenToWorkRibbon.tsx */}
-      <PlaneBannerScene />
+      {/* Hello and Welcome — ริบบิ้นเวกเตอร์สามแผ่น HELLO · AND · WELCOME แผ่นใหม่เข้าจากล่าง
+          ทับแผ่นเก่าที่ถูกดันขึ้นไปซ้อนเป็นชั้น ช่วงท้ายย่อมาต่อกันเป็นแถบคั่นเต็มความกว้าง
+          ชิดขอบล่าง ต่อเข้าจอ What I Do (ดู sections/ribbonstory/OpenToWorkRibbon)
+
+          เวอร์ชันเครื่องบินลากป้าย 3D ยังอยู่ที่ PlaneBannerScene.tsx — สลับกลับได้ที่ import
+          บรรทัดเดียว ทั้งสองรับ prop id ตัวเดียวกันและกินหมุด scroll ของตัวเอง */}
+      <OpenToWorkRibbon />
 
       {/* ── จอ 2: สิ่งที่ทำ ───────────────────────────────────────────────
           ใช้ section ตัวเดียวกับหน้า /2026 (กระเบื้องสกิลที่กางทีละใบตามระยะ scroll
@@ -527,9 +530,10 @@ export function Portfolio2026FinalPage() {
       </section>
 
       {/* ── จอ 3: ประสบการณ์ ───────────────────────────────────────────
-          จบ What I Do แล้วการ์ด mascot ขยายเต็มจอ ก่อนจางออกเผยอุโมงค์กระเบื้องสามมิติ
-          ที่เล่าเส้นทางการทำงานตามไทม์ไลน์จริง (ดู sections/tunnel) */}
-      <ExperienceTunnel id="experiences" />
+          พอร์ทัลเศษกระจกกระจายบนทุ่งฟ้า ตัวละครลอยออกมาทีละช่วงของไทม์ไลน์จริง
+          (ดู sections/portals) — อุโมงค์กระเบื้องตัวเดิมยังอยู่ที่ sections/tunnel
+          เปลี่ยน import กลับได้ถ้าจะสลับไปใช้ของเดิม */}
+      <ExperiencePortals id="experiences" />
 
       {/* ── จอ 4: ผลงาน ──────────────────────────────────────────────────
           เป็น section ที่ไหลจริง ไม่ใช่การ์ดสามใบที่ปักพิกัดสัมบูรณ์ไว้: ในแบบการ์ดใบที่สาม

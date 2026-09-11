@@ -6,7 +6,6 @@ import { Mascot } from '@/joespresso/scene/Mascot'
 import { useDisposable, makeRandom, gradientTexture, LOW_END, damp, clamp, addCel, makeCelUniforms } from '@/joespresso/scene/utils'
 import { DEFAULTS, getTuner, useTuner } from './tuner'
 import { roundedBoxGeo } from './geo'
-import { Rider } from './Rider'
 import { Globe } from './Globe'
 import { EdgeClouds } from './EdgeClouds'
 import { SpaceBackdrop, Planets } from './Space'
@@ -19,8 +18,10 @@ import { Cursor } from './Cursor'
 import { Appear } from './Appear'
 import { panelScreen } from './panelScreen'
 import { PortalFx } from './PortalFx'
+import { EchoTrail } from './EchoTrail'
+import { HeroRider } from './HeroRider'
 import { WindTrail } from './WindTrail'
-import { IntroClock, introSkip, introTime, introWants, outBack as introBack } from './intro'
+import { IntroClock, introSet, introSkip, introTime, outBack as introBack } from './intro'
 import { setNewHeroReady } from './ready'
 import { Entrance, entranceBlend, entranceSample, entranceU } from './Entrance'
 import { portalRide } from './portalRide'
@@ -2776,6 +2777,11 @@ function Scene() {
          * ที่เพิ่งวิ่งผ่าน (เกาะตัวเมื่อไรก็กลายเป็นแผ่นติดท้ายที่เลี้ยวตามตัว ไม่ใช่รอย)
          */}
         {skater && t.wtAmt > 0 && <WindTrail />}
+        {/**
+         * รอยเงาซิลูเอตต์ (แบบ githubuniverse) — อยู่นอก Entrance เหมือนรอยลม เพราะเงา
+         * ค้างอยู่กับทางที่วิ่งผ่าน ไม่ได้เกาะตัว
+         */}
+        {skater && t.etAmt > 0 && <EchoTrail />}
         {skater && (
           <Entrance
             replay={t.enReplay}
@@ -2786,137 +2792,7 @@ function Scene() {
             rotation={[t.skaterRotX * RAD, t.skaterRotY * RAD, t.skaterRotZ * RAD]}
             scale={t.skaterScale}
           >
-          <Rider
-            lumberArms={{ on: t.la > 0.5, scale: t.laScale }}
-            print={{ on: t.shp > 0.5, size: t.shpSize, seed: t.shpSeed }}
-            wind={{
-              on: t.wnd > 0.5,
-              amp: t.wndAmp,
-              freq: t.wndFreq,
-              speed: t.wndSpd,
-              dir: t.wndDir,
-              cloth: t.wndCloth,
-            }}
-            shoe={{
-              scale: t.snScale,
-              pos: [t.snX, t.snY, t.snZ],
-              rot: [t.snRotX * RAD, t.snRotY * RAD, t.snRotZ * RAD],
-            }}
-            bob={t.idle > 0.5}
-            breathe={t.breathe > 0.5}
-            idleAmp={t.idleAmp}
-            idleSpeed={t.idleSpeed}
-            rimPower={t.rimPower}
-            rimBoost={t.rimBoost}
-            rimEdge={t.rimEdge}
-            rimSoft={t.rimSoft}
-            rimDirMix={t.rimDirMix}
-            rimYaw={t.rimYaw}
-            rimPitch={t.rimPitch}
-            flatBands={t.flatBands}
-            mascotScale={t.mascotScale}
-            mascotLift={t.mascotLift}
-            boardScale={t.boardScale}
-            armScale={t.armScale}
-            foreScale={t.foreScale}
-            boardRot={[t.boardRotX * RAD, t.boardRotY * RAD, t.boardRotZ * RAD]}
-            boardOffset={[t.boardX, t.boardY, t.boardZ]}
-            boardSpec={{
-              deckLen: t.bdLen,
-              deckWide: t.bdWide,
-              deckThick: t.bdThick,
-              kickStart: t.bdKickAt,
-              kickH: t.bdKick,
-              concave: t.bdConcave,
-              truckX: t.bdTruckX,
-              wheelR: t.bdWheelR,
-              wheelW: t.bdWheelW,
-              deckY: t.bdRideY,
-            }}
-            followOverride={{
-              headYaw: t.hf > 0.5 ? t.hfYaw : 0,
-              headPitch: t.hf > 0.5 ? t.hfPitch : 0,
-              headRoll: t.hf > 0.5 ? t.hfRoll : 0,
-              headEase: t.hfEase,
-              headBaseYaw: t.hfBaseYaw,
-              headBaseRoll: t.hfBaseRoll,
-              headBasePitch: t.hfBasePitch,
-              headFollow: t.hfFollow,
-              headCurve: t.hfCurve,
-              headDead: t.hfDead,
-              headBounce: t.hfBounce,
-              headIdleBack: t.hfIdleBack,
-            }}
-            facePose={{
-              eye: t.fcEye,
-              gap: t.fcGap,
-              eyeY: t.fcEyeY,
-              pupil: t.fcPupil,
-              pupilX: t.fcPupilX,
-              pupilY: t.fcPupilY,
-              look: t.fcLook,
-              brow: t.fcBrow,
-              browY: t.fcBrowY,
-              browArc: t.fcBrowArc,
-              browTilt: t.fcBrowTilt * RAD,
-              mouth: t.fcMouth,
-              mouthH: t.fcMouthH,
-              mouthX: t.fcMouthX,
-              mouthY: t.fcMouthY,
-              x: t.fcX,
-              y: t.fcY,
-              z: t.fcZ,
-              rotX: t.fcRotX * RAD,
-              rotY: t.fcRotY * RAD,
-              rotZ: t.fcRotZ * RAD,
-              scale: t.fcScale,
-              lookEvery: t.fcLookEvery,
-              blinkEvery: t.fcBlinkEvery,
-            }}
-            torsoPose={torsoPose}
-            legPose={legPose}
-            armPose={{
-              /* เลื่อนโคนแขน — ไม่ใช่องศา จึงไม่คูณ RAD */
-              aimOut: t.aimOut,
-              aimUp: t.aimUp,
-              aimFwd: t.aimFwd,
-              mugOut: t.mugOut,
-              mugUp: t.mugUp,
-              mugFwd: t.mugFwd,
-              aimRotX: t.aimRotX * RAD,
-              aimRotY: t.aimRotY * RAD,
-              aimRotZ: t.aimRotZ * RAD,
-              mugRotX: t.mugRotX * RAD,
-              mugRotY: t.mugRotY * RAD,
-              mugRotZ: t.mugRotZ * RAD,
-              aimX: t.aimX,
-              aimY: t.aimY,
-              aimZ: t.aimZ,
-              elbowX: t.elbowX * RAD,
-              elbowY: t.elbowY * RAD,
-              elbowZ: t.elbowZ * RAD,
-              handScale: t.handScale,
-              handX: t.handX,
-              handY: t.handY,
-              handZ: t.handZ,
-              wristX: t.wristX * RAD,
-              wristY: t.wristY * RAD,
-              wristZ: t.wristZ * RAD,
-              mugShX: t.mugShX * RAD,
-              mugShY: t.mugShY * RAD,
-              mugShZ: t.mugShZ * RAD,
-              mugHandScale: t.mugHandScale,
-              mugHandX: t.mugHandX,
-              mugHandY: t.mugHandY,
-              mugHandZ: t.mugHandZ,
-              mugWristX: t.mugWristX * RAD,
-              mugWristY: t.mugWristY * RAD,
-              mugWristZ: t.mugWristZ * RAD,
-              mugElX: t.mugElX * RAD,
-              mugElY: t.mugElY * RAD,
-              mugElZ: t.mugElZ * RAD,
-            }}
-          />
+          <HeroRider legPose={legPose} torsoPose={torsoPose} />
           </Entrance>
         )}
       </group>
@@ -3116,7 +2992,7 @@ const heartGlyph = glyphTexture((ctx, s) => {
 /**
  * บอกสปแลชว่า "ฉากวาดได้จริงแล้ว" — สามด่าน ไม่ใช่ด่านเดียว
  *
- * 1. ตัวละครขึ้นครบ: Entrance เป็นคนบอก (introWants) เพราะมันเป็นชิ้นที่มาช้าสุดในฉาก
+ * 1. ตัวละครขึ้นครบ: Entrance เป็นคนบอก (introSet) เพราะมันเป็นชิ้นที่มาช้าสุดในฉาก
  *    GLB ถูกแตกเสร็จและเฟรมเดินแล้วมันถึงจะยกธง
  * 2. คอมไพล์ให้จบตรงนี้เลย: gl.compile ไล่คอมไพล์ shader ของทุกวัสดุในฉากทีเดียว
  *    ถ้าไม่สั่ง มันจะไปคอมไพล์ทีละวัสดุตอนวัตถุนั้นโผล่เข้าเฟรมจริง — ซึ่งคือ "ระหว่างอินโทร"
@@ -3134,7 +3010,11 @@ function SceneReady() {
   const step = useRef({ compiled: false, good: 0, done: false })
   useFrame((_, dt) => {
     const st = step.current
-    if (st.done || !introWants()) return
+    /**
+     * introSet ไม่ใช่ introWants — wants เป็นจริงเฉพาะตอนมีสปแลชกั้นอยู่
+     * ปิดสปแลชแล้วใช้ wants จะไม่มีใครรายงานว่าฉากพร้อม (หัวเรื่อง 3D จึงไม่ขึ้นเลย)
+     */
+    if (st.done || !introSet()) return
     if (!st.compiled) {
       gl.compile(scene, camera)
       st.compiled = true

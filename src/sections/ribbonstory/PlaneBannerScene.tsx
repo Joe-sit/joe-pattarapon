@@ -44,8 +44,7 @@ const BAN_GAP = 0.4
 const ROPE = 1.2
 /** ระยะจากหัวเครื่องถึงปลายป้ายผืนสุดท้าย — ใช้คิดว่าต้องบินไกลเท่าไรของจึงพ้นจอ */
 const TRAIL = ROPE + BANNERS.length * BAN_LEN + (BANNERS.length - 1) * BAN_GAP
-/** ต้นทาง/ปลายทางของหัวเครื่องบนแกน x: เริ่มพ้นซ้ายจอ จบเมื่อป้ายผืนท้ายพ้นขวาจอ */
-const HEAD_FROM = -9.5
+/** ปลายทางของหัวเครื่องบนแกน x — จบเมื่อป้ายผืนท้ายพ้นขวาจอ (ต้นทางคือที่จอด PARK) */
 const HEAD_TO = 9.5 + TRAIL
 /** จำนวนช่วงต่อป้าย — ป้ายยาว 4.2 หน่วย 44 ช่วงพอให้โค้งเนียนโดยไม่เปลืองอะไร */
 const SEG = 44
@@ -69,9 +68,96 @@ const flight = { p: 0 }
  */
 const EXIT_AT = 0.82
 
+/**
+ * สามช่วงของจอนี้ ผูกกับ scroll เส้นเดียว (เลื่อนกลับขึ้นก็ถอยกลับตามจริง ไม่ใช่ไทม์ไลน์ที่เล่นเอง)
+ *
+ *   0     → SOLO  : ซูมดูป้ายทีละผืน คำละหนึ่งช่วงเท่ากัน
+ *   SOLO  → ROW   : กล้องถอยออก ป้ายสามผืนไถลมาต่อกันเป็นแถวท้ายเครื่อง
+ *   ROW   → EXIT  : เครื่องลากทั้งขบวนออกขวาจอ
+ */
+const SOLO_END = 0.45
+const ROW_END = 0.62
+/**
+ * ค้างทั้งขบวนไว้หนึ่งจังหวะก่อนออกบิน
+ *
+ * ถ้าให้บินต่อจากเข้าแถวทันที เครื่องบินไม่มีเฟรมไหนที่คนดูเห็นทั้งลำเลย: มันจอดชิดขอบขวา
+ * แล้วก้าวแรกของการบินก็พาออกนอกจอไปแล้ว (วัดที่ p 0.66 หัวเครื่องไปถึง 8.8 จาก 7.0)
+ */
+const FLY_START = 0.7
+
+/**
+ * ที่จอดของหัวเครื่องช่วงก่อนบิน
+ *
+ * ขบวนยาว TRAIL ≈ 14.6 พอดีกับความกว้างที่กล้องเห็น (±7.3) จอดที่ 7.0 จึงเห็นทั้งขบวนพอดี:
+ * หัวเครื่องชิดขอบขวา ป้ายผืนซ้ายสุดชิดขอบซ้าย เคยจอดที่ 9.2 แล้วเครื่องบินอยู่นอกเฟรม
+ * ตั้งแต่ต้น ช่วงบินก็พาออกขวาต่อ คนดูจึงไม่เคยเห็นเครื่องเลย
+ */
+const PARK = 6.2
+
+/** จุดที่ป้ายแต่ละผืนไปยืนเดี่ยวช่วงซูม — เยื้องกันเล็กน้อย กล้องจึงมี "ระยะทาง" ให้กวาด */
+const SOLO_X = [-1.15, 0.15, 1.45]
+
+/** ระยะกล้องช่วงซูม — ที่ z นี้ความกว้างที่เห็นราว 5.6 ป้ายยาว 4.2 จึงเต็มเฟรมพอดี */
+const CLOSE_Z = 6.5
+/**
+ * ระยะกล้องช่วงเห็นทั้งขบวน — ไกลกว่าค่าเริ่มต้นเล็กน้อย
+ *
+ * ขบวนยาว 14.6 เท่ากับความกว้างที่เห็นที่ z 17 พอดี (±7.3) จอดให้เห็นเครื่องทั้งลำแล้วป้าย
+ * ผืนซ้ายสุดจะถูกขอบจอกินไปนิด ถอยกล้องอีกหน่อยจึงได้ทั้งขบวนพร้อมขอบเหลือ
+ */
+const WIDE_Z = 18.8
+
+function phases() {
+  const p = flight.p
+  return {
+    solo: clamp01(p / SOLO_END),
+    row: clamp01((p - SOLO_END) / (ROW_END - SOLO_END)),
+    fly: clamp01((p - FLY_START) / (EXIT_AT - FLY_START)),
+  }
+}
+
 /** ตำแหน่งหัวเครื่องบนแกน x ตามความคืบหน้า — ทุกชิ้นในขบวนต้องอ่านค่าจากที่นี่ที่เดียว */
 function headAt() {
-  return THREE.MathUtils.lerp(HEAD_FROM, HEAD_TO, smooth(clamp01(flight.p / EXIT_AT)))
+  return THREE.MathUtils.lerp(PARK, HEAD_TO, smooth(phases().fly))
+}
+
+/**
+ * ระยะของป้ายผืนที่ i จากหัวเครื่อง — ช่วงซูมทุกผืนมายืนที่กลางจอ (คนละเวลากัน)
+ * แล้วค่อยไถลไปเข้าแถวจริงท้ายเครื่อง ตัวสร้างผ้าไม่ต้องรู้เรื่องนี้เลย มันอ่านแค่ระยะ
+ */
+function frontAt(i: number) {
+  const solo = PARK - SOLO_X[i] - BAN_LEN / 2
+  const row = ROPE + (BANNERS.length - 1 - i) * (BAN_LEN + BAN_GAP)
+  /**
+   * ไล่กันทีละผืน ไม่ใช่ขยับพร้อมกันสามผืน
+   *
+   * ทุกผืนออกตัวจากจุดเดียวกัน (ที่ที่มันไปยืนเดี่ยว) ถ้าเลื่อนพร้อมกันมันจะเสียดผ่านกันกลางทาง
+   * เห็นเป็นลายริ้วตรงที่ผ้าสองผืนทับกันพอดี (ผิวร่วมระนาบ) ผืนที่อยู่ใกล้เครื่องเข้าที่ก่อน
+   */
+  const stagger = 0.16
+  const k = clamp01((phases().row - (BANNERS.length - 1 - i) * stagger) / (1 - stagger * 2))
+  return THREE.MathUtils.lerp(solo, row, smooth(k))
+}
+
+/**
+ * เยื้องความลึกทีละผืนระหว่างทาง — กันผิวร่วมระนาบตอนผ้าซ้อนกัน แล้วคืนเป็นศูนย์เมื่อเข้าแถว
+ * (ถ้าเยื้องค้างไว้ แถบที่ต่อกันจะเห็นรอยต่อเป็นขั้น)
+ */
+function depthNudgeAt(i: number) {
+  return (i - (BANNERS.length - 1) / 2) * 0.06 * (1 - smooth(phases().row))
+}
+
+/**
+ * ความทึบของป้ายผืนที่ i — ช่วงซูมเห็นทีละผืน (ที่เหลือหลบไป เพราะทุกผืนยืนที่เดียวกัน)
+ * พอเข้าช่วงเรียงแถวก็โผล่พร้อมกันหมด
+ */
+function alphaAt(i: number) {
+  const { solo, row } = phases()
+  if (row > 0) return 1
+  const w = 1 / BANNERS.length
+  const u = (solo - i * w) / w
+  // เข้า/ออกเร็วกว่าช่วงที่ค้างอยู่ — ตาจึงอ่านเป็น "เปลี่ยนผืน" ไม่ใช่คำจางซ้อนกันสามคำ
+  return clamp01(Math.min(u / 0.22, (1 - u) / 0.22))
 }
 
 /**
@@ -109,15 +195,16 @@ function Banner({
   word,
   bg,
   ink,
-  front,
+  index,
 }: {
   word: string
   bg: string
   ink: string
-  /** ระยะจากหัวเครื่องถึงขอบหน้าของป้ายผืนนี้ */
-  front: number
+  /** ลำดับผืน — ระยะจากหัวเครื่องกับความทึบคิดจากช่วงของ scroll (frontAt/alphaAt) */
+  index: number
 }) {
   const mesh = useRef<THREE.Mesh>(null)
+  const mat = useRef<THREE.MeshBasicMaterial>(null)
   const art = useMemo(() => bannerTexture(word, bg, ink), [word, bg, ink])
   const geo = useMemo(() => new THREE.PlaneGeometry(BAN_LEN, BAN_H, SEG, 1), [])
 
@@ -158,10 +245,17 @@ function Banner({
     const m = mesh.current
     if (!m) return
     const head = headAt()
+    const front = frontAt(index)
     const time = state.clock.elapsedTime
     const pos = geo.attributes.position as THREE.BufferAttribute
     const arr = pos.array as Float32Array
     const row = SEG + 1
+    /** ช่วงซูมเห็นทีละผืน — ผืนที่ไม่ถึงคิวไม่ต้องวาดเลย (ทุกผืนยืนจุดเดียวกัน) */
+    const alpha = alphaAt(index)
+    const nudge = depthNudgeAt(index)
+    m.visible = alpha > 0.002
+    if (mat.current) mat.current.opacity = alpha
+    if (!m.visible) return
 
     for (let i = 0; i <= SEG; i += 1) {
       const u = i / SEG
@@ -169,6 +263,7 @@ function Banner({
       const d = front + (1 - u) * BAN_LEN
       const x = head - d
       pathAt(x, tmp.c)
+      tmp.c.z += nudge
       pathAt(x - 0.12, tmp.a)
       pathAt(x + 0.12, tmp.b)
       tmp.t.subVectors(tmp.b, tmp.a).normalize()
@@ -205,7 +300,14 @@ function Banner({
   return (
     <mesh ref={mesh} geometry={geo} frustumCulled={false}>
       {/* แบนไม่รับแสง — ภาษาเดียวกับริบบิ้นแบนของหน้านี้ และ toneMapped=false ให้ได้สีตรงชุด */}
-      <meshBasicMaterial map={art.tex} side={THREE.DoubleSide} toneMapped={false} />
+      <meshBasicMaterial
+        ref={mat}
+        map={art.tex}
+        side={THREE.DoubleSide}
+        toneMapped={false}
+        transparent
+        opacity={0}
+      />
     </mesh>
   )
 }
@@ -293,6 +395,36 @@ function Plane() {
 
 useGLTF.preload(MODEL)
 
+/**
+ * กล้อง — ซูมไปที่ป้ายทีละผืน แล้วถอยออกมาเห็นทั้งขบวน
+ *
+ * เคลื่อนกล้องจริง ไม่ได้ย่อ/ขยายของในฉาก: ป้ายยังอยู่ที่เดิมในโลก ผ้าจึงยังสะบัดด้วยสเกลเดิม
+ * และการส่งต่อเข้าช่วงบินไม่มีรอยตัด (ไม่มีการสลับสื่อ/สลับชิ้น)
+ *
+ * ค้างที่ผืนหนึ่งแล้วค่อยกวาดไปผืนถัดไป — ช่วงต้นของแต่ละคิวคือช่วงค้าง ท้ายคิวคือช่วงเดินทาง
+ * ถ้าเลื่อนเป็นเชิงเส้นตลอด กล้องจะไหลผ่านทุกคำเท่ากันหมด ไม่มีจังหวะให้อ่านคำ
+ */
+function CameraRig() {
+  const tmp = useMemo(() => new THREE.Vector3(), [])
+  useFrame(({ camera }) => {
+    const { solo, row } = phases()
+    const last = BANNERS.length - 1
+    const f = solo * BANNERS.length
+    const i = Math.min(last, Math.floor(f))
+    const travel = smooth(clamp01((f - i - 0.58) / 0.42))
+    const x = THREE.MathUtils.lerp(SOLO_X[i], SOLO_X[Math.min(last, i + 1)], travel)
+    // กล้องเล็งกลางผืน ความสูงของผืนมาจากเส้นทางบินจริง ไม่ใช่ 0
+    const y = pathAt(x, tmp).y
+    const k = smooth(row)
+    camera.position.set(
+      THREE.MathUtils.lerp(x, 0, k),
+      THREE.MathUtils.lerp(y, 0, k),
+      THREE.MathUtils.lerp(CLOSE_Z, WIDE_Z, k),
+    )
+  })
+  return null
+}
+
 /** ทั้งขบวน: เครื่อง + เชือก + ป้ายสามผืนต่อกันไปทางท้าย */
 function Convoy() {
   return (
@@ -300,22 +432,17 @@ function Convoy() {
       <ambientLight intensity={1.15} />
       <directionalLight position={[3, 6, 8]} intensity={1.9} />
       <directionalLight position={[-5, -2, 4]} intensity={0.5} />
+      <CameraRig />
       <Suspense fallback={null}>
         <Plane />
       </Suspense>
       <Rope />
       {BANNERS.map((b, i) => (
-        <Banner
-          key={b.word}
-          word={b.word}
-          bg={b.bg}
-          ink={b.ink}
-          /**
-           * ผืนที่ "ไกลท้ายเครื่องที่สุด" คือผืนซ้ายสุดบนจอ (เครื่องบินไปทางขวา)
-           * เรียงกลับด้านจึงได้อ่านซ้าย→ขวาเป็น HELLO · AND · WELCOME
-           */
-          front={ROPE + (BANNERS.length - 1 - i) * (BAN_LEN + BAN_GAP)}
-        />
+        /**
+         * ผืนที่ "ไกลท้ายเครื่องที่สุด" คือผืนซ้ายสุดบนจอ (เครื่องบินไปทางขวา)
+         * frontAt เรียงกลับด้านให้ จึงอ่านซ้าย→ขวาเป็น HELLO · AND · WELCOME
+         */
+        <Banner key={b.word} word={b.word} bg={b.bg} ink={b.ink} index={i} />
       ))}
     </>
   )
