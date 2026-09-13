@@ -148,7 +148,7 @@ function SkillTile({
  * สีหัวเรื่องใช้สีของกระเบื้องเอง คนอ่านจึงรู้ทันทีว่ากำลังอ่านใบไหนอยู่โดยไม่ต้องมีเส้นโยง
  * ค่าตั้งต้นคือ Coding (ตรงกับคอมพ์ 12574:1076 ที่หัวเรื่องเป็นสีม่วงใบเดียวกัน)
  */
-type Skill = {
+export type Skill = {
   title: string
   desc: string
   color: string
@@ -164,7 +164,7 @@ type Skill = {
   chip?: boolean
 }
 
-const SKILLS: Skill[] = [
+export const SKILLS: Skill[] = [
   {
     title: 'Research',
     // TODO: ยังไม่มีข้อความจริงของหัวข้อนี้ — ใส่ Lorem ไว้ก่อนตามที่สั่ง
@@ -217,7 +217,7 @@ const SKILL_ART = [
   <span key="design" className={`${ART_BASE} w-[43%]`} aria-hidden dangerouslySetInnerHTML={{ __html: skillsPencilRaw }} />,
 ]
 
-const STORY_ORDER = [0, 2, 1]
+export const STORY_ORDER = [0, 2, 1]
 
 const SKILL_DEFAULT: Skill = {
   title: 'Lorem ipsum',

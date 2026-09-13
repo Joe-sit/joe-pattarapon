@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 
 /**
- * ม่านเมฆ — จอแรกจบด้วยกลุ่มเมฆที่ลอยขึ้นมาถมจนขาวทั้งจอ
+ * ม่านเมฆ — จอแรกจบด้วยกลุ่มเมฆที่ลอยขึ้นมาถมจนขาวทั้งจอ และแตกเป็นพิกเซลไปพร้อมกัน
  *
  * ขอบตรงที่กวาดผ่านฉาก 3D อ่านเป็น "แผ่นทึบเลื่อนมาทับ" (เห็นเป็นเส้นคาดขวางจอ) กลุ่ม
  * ก้อนที่ยอดสูงต่ำไม่เท่ากันอ่านเป็นเมฆที่ลอยขึ้นมากลบ — เป็นการเปลี่ยนฉากในตัวมันเอง
@@ -18,8 +18,16 @@ import { useEffect, useMemo, useRef } from 'react'
  * ก้อนเมฆคือวงรีสีเดียวกันที่ซ้อนทับกัน ไม่ใช่ path ที่คำนวณเส้นรอบรูปของยูเนียน — ทับกัน
  * ด้วยสีทึบสีเดียวก็ได้เส้นรอบรูปเดียวกัน แต่ไม่ต้องคำนวณอะไรต่อเฟรมเลย
  *
- * viewBox เป็นพิกเซลจริง (ไม่ใช่ 0..100 + preserveAspectRatio="none") ไม่งั้นวงกลมจะถูก
- * ยืดตามอัตราส่วนจอจนกลายเป็นวงรีแบน ๆ
+ * ### ทำไมเป็น canvas ไม่ใช่ SVG
+ *
+ * ช่วงท้ายเมฆต้องแตกเป็นบล็อกพิกเซลใหญ่ขึ้นเรื่อย ๆ ก่อนกลืนเป็นพื้นขาว ซึ่งไม่ใช่เอฟเฟกต์ที่
+ * ทำกับรูปทรงเวกเตอร์ได้ — `image-rendering: pixelated` ไม่มีผลกับ shape ของ SVG และฟิลเตอร์
+ * ของ SVG ก็ไม่มีตัวลดความละเอียด ที่นี่จึงวาดของทั้งหมดลงบัฟเฟอร์ที่ "เล็กกว่าจอจริงกี่เท่า
+ * ก็เท่าขนาดบล็อก" แล้วขยายกลับขึ้นเต็มจอโดยปิดการกรอง — พิกเซลที่เห็นคือพิกเซลของบัฟเฟอร์
+ * จริง ๆ ไม่ใช่ลายตารางที่วาดทับ ตอนต้นทางบล็อกเท่ากับหนึ่งพิกเซลจอ = เมฆปกติคมทุกขอบ
+ *
+ * วาดรอบเดียวต่อเฟรม (ลงบัฟเฟอร์เล็กตรง ๆ ไม่ได้วาดเต็มจอแล้วค่อยย่อ) ยิ่ง pixelate หนัก
+ * ยิ่งวาดน้อยลง เพราะบัฟเฟอร์เล็กลงตามขนาดบล็อก
  *
  * ทุกอย่างผูกกับระยะ scroll อย่างเดียว ไม่มีนาฬิกาเดินเอง — หยุดเลื่อนคือหยุดวาด ไม่กิน
  * เฟรมของฉาก 3D ที่อยู่ข้างหลัง
@@ -90,108 +98,186 @@ const WISPS = [
   [0.75, 0.028, 2.4, 0.42],
 ]
 
+/** เงาในร่องระหว่างก้อนของชั้นหน้า */
+const SHADE = '#d9e4f5'
+
+/**
+ * ม่านเมฆเริ่มถมหลังจอแรกเลื่อนไปแล้วกี่เท่าของความสูงจอ และใช้ระยะเลื่อนอีกเท่าไร
+ *
+ * ไม่เริ่มที่ศูนย์: จอแรกมีจังหวะของเคอร์เซอร์นำสายตาเล่นอยู่ก่อน (ไปมุมขวาแล้วกวาด
+ * เฉียงลงผ่านหัวเรื่อง ดู cursorguide/) ถ้าเมฆเริ่มพร้อมกันมันจะถมทับจังหวะนั้นทั้งอัน
+ *
+ * ม่านนี้เป็นชั้นของตัวเองที่ตรึงเต็มจอและอยู่ "เหนือ" ทุก section (ดูที่ mount ในหน้า)
+ * เดิมมันอยู่ในชั้นที่ถูกตรึงของจอแรก ซึ่งจอถัดไปวาดทับได้ — พอจอขาวของ what-i-do
+ * เลื่อนขึ้นมา ม่านเมฆถูกแซงหน้า เห็นเมฆค้างอยู่แค่ครึ่งจอ (วัดมาแล้ว)
+ *
+ * ถมเต็มแล้วต้องจางทิ้ง ไม่ใช่ค้างขาวไว้ — มันอยู่เหนือทุก section ถ้าไม่จางก็บังจอถัดไป
+ */
+const WIPE_AT = 0.46
+const WIPE_SPAN = 0.44
+/**
+ * ระยะเลื่อนที่ม่านขาวทึบพอดี — วินาทีที่ฉากถูกสลับใต้ม่าน แล้วม่านหายไปทันที
+ *
+ * ไม่มีการจางออก: ตอนนั้นม่านเป็นขาวเต็มจอ และของที่อยู่ใต้ม่านคือจอถัดไปที่พื้นขาว
+ * เหมือนกัน ขาวทับขาวจะตัดทิ้งเฟรมเดียวก็ไม่มีใครเห็นรอย — การจางต่างหากที่ทำให้เห็นรอย
+ * เพราะระหว่างจางมันเผยของที่อยู่ข้างล่างทีละนิดในจังหวะที่ของนั้นยังไถลอยู่
+ *
+ * หน้าที่ใช้ม่านนี้ต้องตั้งความสูงของจอแรกให้ขอบบนของจอถัดไปมาถึงขอบบนจอตรงค่านี้ และ
+ * ปิดแผ่นจอแรกทิ้งตรงนี้ด้วย (ดู Portfolio2026FinalPage) ส่วนจอถัดไปเป็นคนเล่นท่าเข้าฉาก
+ * ของตัวเองต่อจากพื้นขาวนี้ (ดู WhatIDoCard — ของลอยขึ้นมาแบบพารัลแลกซ์)
+ */
+export const WIPE_FULL = WIPE_AT + WIPE_SPAN
+
+/** ช่วง q ที่เริ่มแตกพิกเซล และช่วงที่บล็อกโตเต็มที่ */
+const PIX_IN = 0.08
+const PIX_FULL = 0.54
+/** ขนาดบล็อกใหญ่สุด หน่วย CSS px — ใหญ่กว่านี้อ่านเป็นแถบสี่เหลี่ยม ไม่ใช่เมฆที่แตกตัว */
+const PIX_MAX = 20
+
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v)
 const smooth = (v: number) => v * v * (3 - 2 * v)
 
 export function CloudWipe() {
-  const svg = useRef<SVGSVGElement>(null)
-  const groups = useRef<(SVGGElement | null)[]>([])
-  const slabs = useRef<(SVGRectElement | null)[]>([])
-  const shade = useRef<SVGGElement>(null)
-  const shadeSlab = useRef<SVGRectElement>(null)
-  const wisps = useRef<SVGGElement>(null)
-  const veil = useRef<SVGRectElement>(null)
+  const cvs = useRef<HTMLCanvasElement>(null)
 
   const banks = useMemo(() => LAYERS.map((l) => bank(l.seed, l.scale)), [])
 
   useEffect(() => {
+    const el = cvs.current
+    if (!el) return
+    const view = el.getContext('2d')
+    // บัฟเฟอร์ที่วาดจริง เล็กกว่าจอเท่าขนาดบล็อก — พิกเซลที่เห็นคือพิกเซลของมัน
+    const buf = document.createElement('canvas')
+    const ctx = buf.getContext('2d')
+    if (!view || !ctx) return
+
     let raf = 0
     let w = 0
     let h = 0
+    let dpr = 1
 
-    /** วางก้อนของชั้นหนึ่ง — dy เลื่อนลงจากตำแหน่งจริง ใช้ตอนวาดเงา */
-    const place = (
-      g: SVGGElement | null,
-      slab: SVGRectElement | null,
-      puffs: Puff[],
-      lift: number,
-      q: number,
-      dy = 0,
-    ) => {
-      if (!g) return
-      const kids = g.children
+    /** วาดก้อนของชั้นหนึ่ง — dy เลื่อนลงจากตำแหน่งจริง ใช้ตอนวาดเงา */
+    const drawBank = (puffs: Puff[], lift: number, q: number, fill: string, dy = 0) => {
       // เส้นฐานวิ่งจากใต้จอขึ้นไปพ้นขอบบน — เผื่อรัศมีก้อนใหญ่สุดไว้ ไม่งั้นยอดค้างกลางจอ
       const base = h * 1.52 - lift * (h * 1.53)
       // ก้อนพองขึ้นระหว่างลอย — เมฆที่ลอยขึ้นแล้วขนาดเท่าเดิมอ่านเป็นแผ่นสติกเกอร์
       const swell = 1 + q * 0.16
+      ctx.fillStyle = fill
+      ctx.beginPath()
       for (let i = 0; i < puffs.length; i++) {
         const p = puffs[i]
-        const el = kids[i] as SVGEllipseElement
         const dx = Math.sin(q * Math.PI * p.sp) * w * 0.03
-        el.setAttribute('cx', (p.x * w + dx).toFixed(1))
-        el.setAttribute('cy', (base - p.y * h * swell + dy).toFixed(1))
-        el.setAttribute('rx', (p.r * h * 1.22 * swell).toFixed(1))
-        el.setAttribute('ry', (p.r * h * swell).toFixed(1))
+        ctx.moveTo(p.x * w + dx, base - p.y * h * swell + dy)
+        ctx.ellipse(
+          p.x * w + dx,
+          base - p.y * h * swell + dy,
+          p.r * h * 1.22 * swell,
+          p.r * h * swell,
+          0,
+          0,
+          Math.PI * 2,
+        )
       }
       // แผ่นใต้แนวก้อน — ไม่งั้นเห็นทะลุระหว่างก้อนลงไปถึงฉาก
-      // อยู่นอกกลุ่มที่ใส่ฟิลเตอร์: ถ้าอยู่ใน กรอบฟิลเตอร์จะกินสูงสองเท่าจอ แล้วเบลอผืนนั้น
-      // ใหม่ทุกเฟรมที่เลื่อน ทั้งที่ขอบบนของมันถูกก้อนเมฆบังอยู่แล้ว
-      if (slab) {
-        slab.setAttribute('y', (base + dy).toFixed(1))
-        slab.setAttribute('height', (h * 2).toFixed(1))
-      }
+      // อยู่ใน path เดียวกับก้อน เพราะสีเดียวกันและ fill รอบเดียวถูกกว่าสองรอบ
+      ctx.rect(0, base + dy, w, h * 2)
+      ctx.fill()
     }
 
     const draw = () => {
       raf = 0
-      const el = svg.current
-      if (!el) return
       const box = el.getBoundingClientRect()
-      if (box.width !== w || box.height !== h) {
-        w = box.width
-        h = box.height
-        el.setAttribute('viewBox', `0 0 ${w.toFixed(0)} ${h.toFixed(0)}`)
-        const r = veil.current
-        if (r) {
-          r.setAttribute('width', w.toFixed(0))
-          r.setAttribute('height', h.toFixed(0))
-        }
-        for (const slab of [...slabs.current, shadeSlab.current]) {
-          if (!slab) continue
-          slab.setAttribute('x', '0')
-          slab.setAttribute('width', w.toFixed(0))
-        }
-      }
       const vh = window.innerHeight || 1
       // ท่วมจบพอดีตอนเลื่อนครบเกือบหนึ่งจอ — จอถัดไปเริ่มโผล่ตรงนั้น
-      const q = clamp01(window.scrollY / (vh * 0.92))
-      el.style.opacity = q > 0.001 ? '1' : '0'
-      if (q <= 0.001) return
+      /** ระยะเลื่อนเป็นเท่าของความสูงจอ (ชื่อไม่ใช่ s — ข้างล่างมี s ที่เป็นอัตราย่อบัฟเฟอร์) */
+      const sv = window.scrollY / vh
+      const q = clamp01((sv - WIPE_AT) / WIPE_SPAN)
+      /* ส่งมอบให้จอถัดไป: ถมเต็มแล้วหายทันที ไม่จาง (ขาวทับขาว ตัดทิ้งไม่มีรอย) */
+      const done = sv >= WIPE_FULL
+      el.style.opacity = q > 0.001 && !done ? '1' : '0'
+      if (q <= 0.001 || done) return
+
+      w = box.width
+      h = box.height
+      dpr = Math.min(2, window.devicePixelRatio || 1)
+
+      // ขนาดบล็อกโตแบบทวีคูณ ไม่ใช่เชิงเส้น — ช่วงเล็กต่างกันทีละพิกเซลตาก็เห็นแล้ว
+      // ช่วงใหญ่ต้องเพิ่มเป็นเท่าตัวจึงจะรู้สึกว่ายังแตกต่อ
+      const pq = smooth(clamp01((q - PIX_IN) / (PIX_FULL - PIX_IN)))
+      // ปัดเป็นจำนวนเต็มพิกเซลจอ ไม่งั้นขอบบล็อกขยับครึ่ง ๆ ระหว่างเลื่อน = ขอบสั่น
+      const step = Math.max(1, Math.round(Math.exp(pq * Math.log(PIX_MAX * dpr))))
+      const bw = Math.max(1, Math.ceil((w * dpr) / step))
+      const bh = Math.max(1, Math.ceil((h * dpr) / step))
+
+      if (el.width !== Math.round(w * dpr) || el.height !== Math.round(h * dpr)) {
+        el.width = Math.round(w * dpr)
+        el.height = Math.round(h * dpr)
+      }
+      if (buf.width !== bw || buf.height !== bh) {
+        buf.width = bw
+        buf.height = bh
+      }
+
+      // วาดด้วยพิกัด CSS px เสมอ รูปทรงจึงไม่ต้องรู้ว่าบล็อกใหญ่แค่ไหน
+      const s = bw / w
+      ctx.setTransform(s, 0, 0, bh / h, 0, 0)
+      ctx.clearRect(0, 0, w, h)
+
       // ออกตัวนุ่มแล้วนิ่งตอนจบ — ของที่โผล่พรวดหรือหยุดกึก อ่านเป็นแผ่นเลื่อน ไม่ใช่ของลอย
       const e = smooth(q)
       const near = banks[banks.length - 1]
-      // เงาอยู่ต่ำกว่าก้อนจริง จึงโผล่แค่ในร่องระหว่างก้อน ไม่เป็นขอบเทารอบยอด
-      place(shade.current, shadeSlab.current, near, Math.min(1, e * LAYERS[2].lead), q, h * 0.028)
+
       for (let i = 0; i < banks.length; i++) {
-        place(groups.current[i], slabs.current[i], banks[i], Math.min(1, e * LAYERS[i].lead), q)
+        if (i === banks.length - 1) {
+          // เงาอยู่ต่ำกว่าก้อนจริง จึงโผล่แค่ในร่องระหว่างก้อน ไม่เป็นขอบเทารอบยอด
+          // วาดก่อนชั้นหน้า จึงถูกก้อนขาวบังไว้หมด เหลือโผล่แค่ในร่อง
+          ctx.globalAlpha = 1
+          ctx.filter = 'none'
+          drawBank(near, Math.min(1, e * LAYERS[2].lead), q, SHADE, h * 0.028)
+
+          // ปุยที่ลอยนำกลุ่ม — จางหายตอนกลุ่มใหญ่ตามมาทัน ไม่งั้นเห็นเป็นก้อนลอยค้างบนพื้นขาว
+          const fade = 1 - clamp01((q - 0.5) / 0.3)
+          if (fade > 0.003) {
+            ctx.filter = blurOf(10, s)
+            ctx.fillStyle = '#ffffff'
+            for (let j = 0; j < WISPS.length; j++) {
+              const [x, r, sp, start] = WISPS[j]
+              const t = clamp01((q - start) / (1 - start))
+              ctx.globalAlpha = clamp01(t * 5) * fade * 0.8
+              ctx.beginPath()
+              ctx.ellipse(
+                x * w + Math.sin(t * Math.PI * sp) * w * 0.05,
+                h + r * h - smooth(t) * sp * h * 1.5,
+                r * h * 1.5,
+                r * h,
+                0,
+                0,
+                Math.PI * 2,
+              )
+              ctx.fill()
+            }
+          }
+        }
+        const l = LAYERS[i]
+        ctx.globalAlpha = l.opacity
+        ctx.filter = l.blur > 0 ? blurOf(l.blur, s) : 'none'
+        drawBank(banks[i], Math.min(1, e * l.lead), q, l.fill)
       }
 
-      const sg = wisps.current
-      if (sg) {
-        for (let i = 0; i < WISPS.length; i++) {
-          const [x, r, sp, start] = WISPS[i]
-          const el2 = sg.children[i] as SVGEllipseElement
-          const t = clamp01((q - start) / (1 - start))
-          el2.setAttribute('cx', (x * w + Math.sin(t * Math.PI * sp) * w * 0.05).toFixed(1))
-          el2.setAttribute('cy', (h + r * h - smooth(t) * sp * h * 1.5).toFixed(1))
-          el2.setAttribute('rx', (r * h * 1.5).toFixed(1))
-          el2.setAttribute('ry', (r * h).toFixed(1))
-          // จางหายตอนกลุ่มใหญ่ตามมาทัน ไม่งั้นเห็นเป็นก้อนลอยค้างบนพื้นขาว
-          el2.style.opacity = (clamp01(t * 5) * (1 - clamp01((q - 0.5) / 0.3)) * 0.8).toFixed(3)
-        }
-      }
       // ปิดท้ายด้วยขาวเต็มจอ — ช่องว่างระหว่างก้อนต้องไม่เหลือให้เห็นตอนท่วมเต็ม
-      if (veil.current) veil.current.style.opacity = smooth(clamp01((q - 0.72) / 0.28)).toFixed(3)
+      ctx.filter = 'none'
+      ctx.globalAlpha = smooth(clamp01((q - 0.72) / 0.28))
+      if (ctx.globalAlpha > 0.003) {
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, w, h)
+      }
+      ctx.globalAlpha = 1
+
+      // ขยายบัฟเฟอร์ขึ้นเต็มจอโดยไม่กรอง = บล็อกพิกเซลขอบคม
+      view.setTransform(1, 0, 0, 1, 0, 0)
+      view.imageSmoothingEnabled = false
+      view.clearRect(0, 0, el.width, el.height)
+      view.drawImage(buf, 0, 0, bw, bh, 0, 0, el.width, el.height)
     }
 
     const schedule = () => {
@@ -204,71 +290,29 @@ export function CloudWipe() {
       if (raf) cancelAnimationFrame(raf)
       window.removeEventListener('scroll', schedule)
       window.removeEventListener('resize', schedule)
+      // ปล่อยหน่วยความจำของบัฟเฟอร์ — canvas ที่ไม่ได้อยู่ใน DOM ก็ยังถือ backing store ไว้
+      buf.width = 0
+      buf.height = 0
     }
   }, [banks])
 
-  const ellipses = (puffs: Puff[], fill: string) =>
-    puffs.map((_, i) => <ellipse key={i} cx={0} cy={0} rx={0} ry={0} fill={fill} />)
-
   return (
-    <svg
-      ref={svg}
+    <canvas
+      ref={cvs}
       className="pointer-events-none absolute inset-0 h-full w-full"
-      viewBox="0 0 100 100"
       aria-hidden
-      style={{ opacity: 0 }}
-    >
-      <defs>
-        {LAYERS.map((l, i) =>
-          l.blur > 0 ? (
-            <filter key={i} id={`cw-b${i}`} x="-10%" y="-25%" width="120%" height="150%">
-              <feGaussianBlur stdDeviation={l.blur} />
-            </filter>
-          ) : null,
-        )}
-        <filter id="cw-wisp" x="-30%" y="-60%" width="160%" height="220%">
-          <feGaussianBlur stdDeviation="10" />
-        </filter>
-      </defs>
-      {banks.map((puffs, i) => (
-        <g key={i}>
-          {/* เงาของชั้นหน้าวาดก่อนตัวชั้น จึงถูกก้อนขาวบังไว้หมด เหลือโผล่แค่ในร่อง */}
-          {i === LAYERS.length - 1 && (
-            <>
-              <rect ref={shadeSlab} x={0} y={0} width={0} height={0} fill="#d9e4f5" />
-              <g ref={shade}>{ellipses(puffs, '#d9e4f5')}</g>
-            </>
-          )}
-          {i === LAYERS.length - 1 && (
-            <g ref={wisps} filter="url(#cw-wisp)">
-              {WISPS.map((_, j) => (
-                <ellipse key={j} cx={0} cy={0} rx={0} ry={0} fill="#ffffff" />
-              ))}
-            </g>
-          )}
-          <g opacity={LAYERS[i].opacity}>
-            <rect
-              ref={(n) => {
-                slabs.current[i] = n
-              }}
-              x={0}
-              y={0}
-              width={0}
-              height={0}
-              fill={LAYERS[i].fill}
-            />
-            <g
-              ref={(n) => {
-                groups.current[i] = n
-              }}
-              filter={LAYERS[i].blur > 0 ? `url(#cw-b${i})` : undefined}
-            >
-              {ellipses(puffs, LAYERS[i].fill)}
-            </g>
-          </g>
-        </g>
-      ))}
-      <rect ref={veil} x={0} y={0} width={0} height={0} fill="#ffffff" style={{ opacity: 0 }} />
-    </svg>
+      style={{ opacity: 0, imageRendering: 'pixelated' }}
+    />
   )
+}
+
+/**
+ * เบลอที่ต้องหารด้วยอัตราย่อของบัฟเฟอร์
+ *
+ * `ctx.filter` คิดรัศมีเป็นพิกเซลของบัฟเฟอร์ ไม่ใช่หน่วยของ transform ที่ตั้งไว้ ถ้าใส่ค่าดิบ
+ * ตอนบัฟเฟอร์เล็ก ชั้นไกลจะเบลอจนละลายหมดทั้งชั้น
+ */
+function blurOf(px: number, scale: number) {
+  const r = px * scale
+  return r < 0.4 ? 'none' : `blur(${r.toFixed(2)}px)`
 }

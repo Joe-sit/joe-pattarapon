@@ -2,13 +2,15 @@ import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import './portfolio2026final.css'
 import './portfolio2026.css'
-import { useSkillStory, WhatIDo } from '@/sections/whatido/WhatIDo'
+import { WhatIDoCard } from '@/sections/whatidocard/WhatIDoCard'
 import { Logo } from '@/joespresso/Logo'
 
-import { CloudWipe } from '@/components/CloudWipe'
+import { CloudWipe, WIPE_FULL } from '@/components/CloudWipe'
+import { ScrollTell } from '@/sections/hero/ScrollTell'
 import { AnchorNav } from '@/components/AnchorNav'
+import { CursorGuideLayer } from '@/cursorguide/CursorGuideLayer'
+import { useCursorStop } from '@/cursorguide/useCursorStop'
 import { SITE } from '@/config/site'
-import { OpenToWorkRibbon } from '@/sections/ribbonstory/OpenToWorkRibbon'
 import { setCruise, setSceneOn } from '@/newhero/scrolly'
 import { useIntroDone } from '@/stores/intro'
 /** ฉาก 3D ของจอแรก — แยก chunk ไม่ให้ถ่วงจอที่เหลือ */
@@ -77,10 +79,22 @@ function TopBar() {
   }, [])
 
   return (
+    /**
+     * แถบเมนูอยู่ในกรอบฉาก — ขยับเข้ามาจากขอบจอเท่าระยะเว้นขอบของกรอบ (--v3-frame-gap)
+     * บวกระยะหายใจของตัวเอง ไม่ใช่ยึดขอบจอตรง ๆ ไม่งั้นโลโก้จะไปนั่งคาบขอบกรอบ
+     *
+     * ระยะเว้นขอบอ่านจากตัวแปรชุดเดียวกับกรอบ ไม่ได้พิมพ์ตัวเลขซ้ำ — แก้ที่เดียวแล้วทั้งคู่ตาม
+     */
     <header
-      className={`pointer-events-none fixed inset-x-0 top-0 z-30 flex h-[var(--v3-nav-h)] items-center justify-between px-[clamp(18px,3vw,44px)] transition-[transform,opacity] duration-300 ease-out ${
+      className={`pointer-events-none fixed inset-x-0 top-0 z-30 flex h-[var(--v3-nav-h)] items-center justify-between transition-[transform,opacity] duration-300 ease-out ${
         hidden ? '-translate-y-full opacity-0' : 'translate-y-0 opacity-100'
       }`}
+      style={{
+        /* ระยะในต้องมากกว่ารัศมีมุมของกรอบ ไม่งั้นโลโก้ถูกเส้นโค้งที่มุมกินหาย (เจอมาแล้ว) */
+        paddingLeft: 'calc(var(--v3-frame-gap) + clamp(24px, 3.2vw, 52px))',
+        paddingRight: 'calc(var(--v3-frame-gap) + clamp(24px, 3.2vw, 52px))',
+        paddingTop: 'calc(var(--v3-frame-gap) + clamp(4px, 0.6vw, 10px))',
+      }}
     >
       <Logo
         width={93}
@@ -262,17 +276,37 @@ export function Portfolio2026FinalPage() {
   /** ฉากสามมิติพังอยู่หรือเปล่า — คุมจากช่องแชทในหัวเรื่อง */
   /** โหมดคอมเมนต์ (เคอร์เซอร์เป็นหมุดทั้งจอแรก) + ตำแหน่งที่ปักช่องพิมพ์ไว้ */
   const [commenting, setCommenting] = useState(false)
+  /**
+   * จุดเริ่มของการเดินทางไม่ต้องลงทะเบียนที่นี่ — มันคือเคอร์เซอร์ตัวจริงในฉากจอแรก
+   * (ฉากวางหมุดไว้เอง ดู CursorAnchor ใน NewHeroScene) หมุดในหน้าจะเป็นการวางซ้ำ
+   * ที่ดึงลูกศรออกจากที่ของมัน
+   */
+  /**
+   * จังหวะของจอแรก: ไปมุมขวาสุดของจอ แล้วกวาดเฉียงลงซ้ายผ่านหัวเรื่อง
+   *
+   * สองจุดนี้อิงขอบจอ ไม่ได้อิงของในหน้า (ไม่มี element ไหนอยู่มุมขวาสุดให้เกาะ) และ
+   * กำหนดจังหวะเอง (keyVh) เพราะทั้งคู่ต้องเกิดในระยะเลื่อนของจอแรกจอเดียว
+   * จุดที่สองเปิดธง drive = ระหว่างวิ่งมาหามัน เคอร์เซอร์จะขับแม่เหล็กของหัวเรื่องด้วย
+   */
+  useCursorStop(null, { id: 'hero-corner', at: { x: 0.97, y: 0.12 }, keyVh: 0.68, size: 58, tilt: 14, lift: 90 })
+  useCursorStop(null, {
+    id: 'hero-sweep',
+    at: { x: 0.26, y: 0.62 },
+    keyVh: 0.92,
+    size: 62,
+    tilt: -16,
+    lift: 40,
+    drive: true,
+  })
   const [pin, setPin] = useState<{ x: number; y: number } | null>(null)
   /** โหมดของจอแล็ปท็อปในฉาก — สลับจาก toolbar (design = ซิมมือถือ, dev = โค้ด) */
   const rootRef = useRef<HTMLDivElement>(null)
-  // จอ What I Do ยกมาทั้งก้อนจาก /2026 — สองอันนี้คือของที่ section นั้นต้องการ
+  /** แผ่นจอแรกที่ตรึงไว้ — ซ่อนทีเดียวตอนม่านเมฆขาวทึบ ไม่งั้นมันค้างอยู่ใต้จอถัดไปตลอดหน้า */
+  const pinRef = useRef<HTMLDivElement>(null)
   /** กรอบการ์ดที่ครอบฉาก 3D — กางออกเต็มจอตอนเลื่อนพ้นจอแรก */
   const frameRef = useRef<HTMLDivElement>(null)
-  const scrollyRef = useRef<HTMLDivElement>(null)
-  const skillsRef = useRef<HTMLElement | null>(null)
   /** บล็อกตัวหนังสือของจอแรก — จางออกตอนฉากเริ่มไหล (เขียน style ตรง ๆ ไม่ผ่าน state) */
   const copyRef = useRef<HTMLDivElement>(null)
-  const skill = useSkillStory(scrollyRef, skillsRef)
 
 
   /**
@@ -293,17 +327,6 @@ export function Portfolio2026FinalPage() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [commenting])
-
-  useEffect(() => {
-    // เฝ้าแผ่นที่ถูกตรึง ไม่ใช่ตัว section — section สูงสามวิวพอร์ต จึงไม่มีทางเห็นถึงครึ่งตัวเอง
-    const hero = document.getElementById('hero-pin')
-    if (!hero) return
-    const io = new IntersectionObserver((entries) => setOnHero(entries[0].isIntersecting), {
-      threshold: 0.5,
-    })
-    io.observe(hero)
-    return () => io.disconnect()
-  }, [])
 
   /**
    * จอแรกเลื่อนออกแบบพารัลแลกซ์ — แต่ทำ "ในฉาก" ไม่ใช่เลื่อนตัวแคนวาส
@@ -329,12 +352,22 @@ export function Portfolio2026FinalPage() {
       const r = sec.getBoundingClientRect()
       const vh = Math.max(1, window.innerHeight)
       const y = Math.max(0, -r.top)
-      const p = Math.min(1, y / vh)
+      const sv = y / vh
+      const p = Math.min(1, sv)
       setCruise(p)
-      // พ้นสองวิวพอร์ตแล้วจอถัดไปทึบเต็มที่ ฉากข้างหลังไม่มีใครเห็น — สั่งหยุดวาด
-      setSceneOn(y < vh * 2)
+      setOnHero(sv < WIPE_FULL)
+      /**
+       * ม่านขาวทึบแล้วก็ปิดจอแรกทิ้งทั้งแผ่น — มันถูกตรึงแบบ fixed จะค้างอยู่ใต้จอถัด ๆ ไป
+       * ตลอดหน้าถ้าไม่ปิด และการสลับเกิดใต้ม่าน ผู้ชมจึงไม่เห็นจังหวะที่มันหาย
+       */
+      const gone = sv >= WIPE_FULL ? 'hidden' : ''
+      const pinEl = pinRef.current
+      if (pinEl) pinEl.style.visibility = gone
+      // ถูกบังมิดแล้ว ไม่มีใครเห็นฉากข้างหลัง — สั่งหยุดวาด
+      setSceneOn(sv < WIPE_FULL + 0.05)
       const frame = frameRef.current
       if (frame) {
+        frame.style.visibility = gone
         // กางเสร็จก่อนเมฆถมเต็ม ฉากจึงเต็มจอตอนที่ยังเห็นมันอยู่ ไม่ใช่กางตอนถูกบังไปแล้ว
         const o = Math.min(1, y / (vh * 0.55))
         frame.style.setProperty('--v3-frame-open', (o * o * (3 - 2 * o)).toFixed(4))
@@ -342,8 +375,14 @@ export function Portfolio2026FinalPage() {
       const copy = copyRef.current
       if (copy) {
         copy.style.transform = `translate3d(0, ${(-y * 0.16).toFixed(1)}px, 0)`
-        // จางออกตอนจอแรกกำลังพ้นไป ไม่ใช่ค้างทับเรื่องถัดไป
-        const f = Math.min(1, Math.max(0, (p - 0.25) / 0.45))
+        /**
+         * จางออกหลังจังหวะเคอร์เซอร์จบ ไม่ใช่ตอนเริ่มเลื่อน
+         *
+         * เคอร์เซอร์นำสายตากวาดผ่านหัวเรื่องแล้วดูดตัวอักษรให้ไหวตาม (ดู cursorguide/) —
+         * ถ้าหัวเรื่องจางไปก่อน มันก็กวาดผ่านที่ว่าง เลยต้องค้างไว้จนพ้นจังหวะนั้น
+         * แล้วจึงจางให้ทันก่อนม่านเมฆเริ่มถมที่ 0.46 (CloudWipe: WIPE_AT)
+         */
+        const f = Math.min(1, Math.max(0, (p - 0.42) / 0.16))
         copy.style.opacity = String(1 - f * f * (3 - 2 * f))
       }
     }
@@ -376,8 +415,8 @@ export function Portfolio2026FinalPage() {
        * ครอบด้วยการ์ดมุมมนแบบเดียวกับ .jp-hero-card ของ /joespresso: เว้นขอบแล้วตัดมุม
        * ฉากจึงอ่านเป็น "จอในหน้า" ไม่ใช่พื้นหลังเต็มจอ
        *
-       * ขอบบนของการ์ดเริ่มใต้แถบเมนูพอดี (--v3-nav-h) แถบจึงอยู่ "นอกฉาก" บนพื้นเทาของหน้า
-       * ไม่ใช่ลอยทับฉากเหมือนเดิม — โลโก้จึงต้องเป็นหมึกเข้ม ไม่ใช่ขาว
+       * แถบเมนูอยู่ *ใน* การ์ด (ตาม ref chuvakam.ru): การ์ดเว้นขอบเท่ากันสี่ด้านแล้วแถบ
+       * ลอยทับอยู่ข้างในที่ขอบบน — ของเดิมขอบบนการ์ดเริ่มใต้แถบ แถบจึงนั่งบนพื้นเทาของหน้า
        *
        * ตัวห่อไม่รับเมาส์ แต่แคนวาสรับ ([&_canvas]) — ช่องคอมมิตบนถนนสว่างตามเมาส์
        * ซึ่งต้องได้ pointermove จริง ๆ ถึงจะรู้ว่าโดนช่องไหน ส่วนที่ว่างรอบการ์ดยังคลิกทะลุได้
@@ -389,8 +428,6 @@ export function Portfolio2026FinalPage() {
         <Suspense fallback={null}>
           <NewHeroScene />
         </Suspense>
-        {/* ม่านเมฆที่ลอยขึ้นมาถมตอนเลื่อนพ้นจอแรก — อยู่ในการ์ด มุมมนจึงตัดให้เอง */}
-        <CloudWipe />
       </div>
       {/* แผงจูนของฉาก — dev เท่านั้น เหมือน /new-hero (ดู newhero/CameraTuner) */}
       {import.meta.env.DEV && (
@@ -398,6 +435,16 @@ export function Portfolio2026FinalPage() {
           <CameraTuner />
         </Suspense>
       )}
+
+      {/* ม่านเมฆ — ชั้นของตัวเองที่ตรึงเต็มจอและอยู่เหนือทุก section
+          เดิมอยู่ในชั้นฉากของจอแรก ซึ่งจอถัดไปเลื่อนขึ้นมาวาดทับ ม่านจึงถูกแซงหน้า
+          ตัวมันจางทิ้งเองเมื่อถมเต็ม (ดู WIPE_OUT ใน CloudWipe) จึงไม่บังจอถัดไป */}
+      <div className="pointer-events-none fixed inset-0" style={{ zIndex: 50 }} aria-hidden>
+        <CloudWipe />
+      </div>
+
+      {/* เคอร์เซอร์นำสายตา — ชั้นเดียวทั้งหน้า ต้องอยู่นอก section ทุกอัน ไม่งั้นข้ามจอไม่ได้ */}
+      <CursorGuideLayer />
 
       <TopBar />
       {/* ราวจุดนำสายตา — ตัวเดียวกับที่ใช้ในเวอร์ชัน Vue (branch `2026`)
@@ -413,8 +460,29 @@ export function Portfolio2026FinalPage() {
       {/* จอแรกไม่กินเมาส์ทั้งจอ — ฉาก 3D อยู่ในชั้นตรึงที่อยู่ "หลัง" จอนี้ ถ้าจอนี้รับเมาส์
           ทั้งกล่อง ถนนในฉากจะไม่มีวันรู้ว่าเมาส์ผ่าน (ช่องคอมมิตสว่างตามเมาส์)
           ชิ้นที่ต้องกดได้ในจอนี้เปิด pointer-events ของตัวเองไว้แล้ว (ฟองคำพูด/ชั้นคอมเมนต์) */}
-      <section id="hero" data-screen="hero" className="pointer-events-none relative h-[100svh] w-full">
-        <div id="hero-pin" className="absolute inset-0">
+      {/**
+       * จอแรกเป็น "ที่ว่างสำหรับเลื่อน" ล้วน ๆ ของจริงถูกตรึงแบบ fixed อยู่ข้างบน
+       *
+       *   0 → 0.18    เคอร์เซอร์ไถลไปมุมขวาสุด
+       *   0.18 → 0.42 กวาดเฉียงลงซ้ายผ่านหัวเรื่อง (ดูดตัวอักษรไปด้วย)
+       *   0.46 → 0.90 ม่านเมฆถมจนขาวทึบ แล้วจางส่งมอบที่ 0.90 → 0.98 (ดู CloudWipe)
+       *
+       * ความสูง = 90svh เท่ากับจังหวะพอดี ไม่ใช่ 100svh ขึ้นไป เพราะจอนี้ไม่ต้อง "ไถลออก"
+       * ขอบบนของจอถัดไปจึงมาถึงขอบบนจอที่ 0.90 = วินาทีที่ม่านขาวทึบพอดี การสลับฉาก
+       * เกิดใต้ม่าน ไม่มีใครเห็น
+       *
+       * เคยตรึงด้วย sticky ในกล่องที่สูงกว่าหนึ่งจอ: จอแรกต้องไถลขึ้นไปเต็มหนึ่งจอก่อนจอ
+       * ถัดไปจะเต็มจอ ระหว่างนั้นขอบขาวของจอถัดไปโผล่ขึ้นมาจากล่างตั้งแต่ยังไม่มีเมฆ และ
+       * ตอนม่านจาง จอแรกที่ยังไถลไม่พ้นก็โผล่กลับมาให้เห็นแถบหนึ่งด้านบน — เนียนไม่ได้
+       * ด้วยการขยับจังหวะ เพราะระยะไถลออกเท่ากับหนึ่งจอเสมอ
+       */}
+      <section id="hero" data-screen="hero" className="pointer-events-none relative h-[90svh] w-full">
+        {/* หมุดของเคอร์เซอร์นำสายตาในจอแรก — กล่องเปล่าไม่มีขนาดของตัวเอง มีไว้บอกตำแหน่ง
+            เท่านั้น (ดู cursorguide/) วางไว้แถวที่เคอร์เซอร์ในฉากเคยลอยอยู่ ข้างหัวเรื่อง */}
+        {/* แผ่นที่ถูกตรึง — fixed เต็มจอ และ z สูงกว่าจอถัด ๆ ไป (ซึ่งอยู่ระดับ auto)
+            จอถัดไปจึงเลื่อนเข้ามาอยู่ "ใต้" จอแรกโดยไม่โผล่ที่ขอบล่าง แล้วจอแรกถูกซ่อน
+            ทีเดียวตอนม่านเมฆขาวทึบ (ดู read() ด้านบน) — ต่ำกว่าแถบเมนู (z 30) ม่าน (z 50) และเคอร์เซอร์ (55) */}
+        <div ref={pinRef} id="hero-pin" className="fixed inset-x-0 top-0 z-20 h-[100svh]">
         <div className="relative mx-auto h-full w-full max-w-[1440px]">
         {/* ชั้นรับคลิกของโหมดคอมเมนต์ — คลุมทั้งจอแรก ปักหมุดตรงที่คลิก
             อยู่ต่ำกว่าเนื้อหา (z-0 ของ Screen) แต่สูงกว่าแคนวาส 3D ซึ่งไม่รับคลิกอยู่แล้ว */}
@@ -477,11 +545,8 @@ export function Portfolio2026FinalPage() {
             </div>
           </Headline3DField>
 
-          <p className="v3-in text-[16px] leading-normal [--v3-in-delay:640ms]">
-            I love crafting valuable things with passionate people
-            <br />
-            to bringing design to a real-world impact solution.
-          </p>
+          {/* ประโยคปิดย้ายออกไปเป็นชั้นเล่าเรื่องตามการเลื่อน (ดู sections/hero/ScrollTell)
+              มันต้องค้างอยู่บนจอข้ามช่วงที่ม่านเมฆถม ซึ่งอยู่ในโฟลว์ของจอแรกไม่ได้ */}
         </div>
 
         {/* โหมดคอมเมนต์เปิด/ปิดด้วยฟองคำพูดในฉาก ซึ่ง screen reader อ่านไม่ได้ —
@@ -498,36 +563,23 @@ export function Portfolio2026FinalPage() {
         </div>
       </section>
 
-      {/* Hello and Welcome — ริบบิ้นเวกเตอร์สามแผ่น HELLO · AND · WELCOME แผ่นใหม่เข้าจากล่าง
-          ทับแผ่นเก่าที่ถูกดันขึ้นไปซ้อนเป็นชั้น ช่วงท้ายย่อมาต่อกันเป็นแถบคั่นเต็มความกว้าง
-          ชิดขอบล่าง ต่อเข้าจอ What I Do (ดู sections/ribbonstory/OpenToWorkRibbon)
-
-          เวอร์ชันเครื่องบินลากป้าย 3D ยังอยู่ที่ PlaneBannerScene.tsx — สลับกลับได้ที่ import
-          บรรทัดเดียว ทั้งสองรับ prop id ตัวเดียวกันและกินหมุด scroll ของตัวเอง */}
-      <OpenToWorkRibbon />
+      {/* ริบบิ้น HELLO · AND · WELCOME ถอดออกชั่วคราวตามที่สั่ง — ตัวคอมโพเนนต์ยังอยู่ที่
+          sections/ribbonstory/OpenToWorkRibbon (และเวอร์ชันเครื่องบินลากป้ายที่
+          PlaneBannerScene.tsx) เอากลับมาโดย import แล้วใส่ <OpenToWorkRibbon /> ตรงนี้ */}
 
       {/* ── จอ 2: สิ่งที่ทำ ───────────────────────────────────────────────
-          ใช้ section ตัวเดียวกับหน้า /2026 (กระเบื้องสกิลที่กางทีละใบตามระยะ scroll
-          + กระเบื้องตัวละคร 3D) ไม่ใช่ผังนิ่งของ Figma — โค้ดอยู่ที่ sections/whatido
+          ตัวละครเป็นก้อนพิกเซลฟ้ากลางเฟรม (เงาจริงของริกที่ถูกหั่นเป็นตาราง) สกิลเป็นของ 3D
+          รอบขอบ ชี้อันไหนของชิ้นนั้นโตขึ้นและขึ้นคำอธิบาย — ดู sections/whatidopixel
 
-          ห่อด้วย .v2-theme เพราะ section นั้นแต่งตัวด้วยตัวแปร --v2-* ซึ่งประกาศไว้ที่คลาสนี้
-          (ไม่ใช่ :root) และเป็นจอเดียวในหน้าที่สูงกว่าหนึ่งวิวพอร์ต — ระยะ scroll ในกรอบ
-          คือไทม์ไลน์ของการเล่า จึงอยู่นอก <Screen> ที่ล็อกความสูงไว้จอเดียว */}
-      <section id="what-i-do" data-screen="what-i-do" className="v2-theme v3-whatido relative w-full bg-[var(--v2-bg)]">
-        {/* data-whatido-scrolly: จอ Experiences อ่านความคืบหน้าของกรอบนี้เพื่อเริ่มซูมเข้า
-            อุโมงค์ตั้งแต่ยังอยู่ในจอนี้ (ช่วง 8% ท้าย) — ดู sections/tunnel */}
-        <div ref={scrollyRef} data-whatido-scrolly className="relative lg:h-[520vh]">
-          <div className="flex flex-col lg:sticky lg:top-0 lg:h-screen lg:justify-center">
-            {/* กรอบเดียวกับจออื่นของหน้านี้ — ของเดิมกินเต็มความกว้างจอเพราะหน้า /2026
-                มีขอบของตัวเองอยู่แล้ว ที่นี่ไม่มี ต้องใส่ให้ */}
-            {/* ระยะขอบซ้าย/ขวาเท่ากับหัวเรื่องในจอแรก — สองจออยู่ในกรอบเดียวกัน
-                ถ้าไม่เท่ากันจะเห็นเป็นบล็อกที่เยื้องกันตอนเลื่อนผ่าน */}
-            <div className="mx-auto w-full max-w-[1440px] px-[clamp(24px,9.5vw,137px)]">
-              <WhatIDo skillsRef={skillsRef} active={skill} />
-            </div>
-          </div>
-        </div>
-      </section>
+          เวอร์ชันก่อน ๆ ยังอยู่ทั้งหมด สลับกลับได้ที่ import บรรทัดเดียว (ทุกอันรับ prop id
+          ตัวเดียวกัน): sections/whatido ผังกระเบื้อง Figma (หน้า /2026 ยังใช้อยู่) ·
+          sections/whatidofog จอเล่าด้วยการเลื่อนผ่าหมอก · sections/whatidowedge ลิ่มสามลิ่ม */}
+      {/* ── ช่วงคั่นบนพื้นขาว: ประโยคปิดของจอแรก เล่าทีละท่อน ─────────────────
+          ต่อจากม่านเมฆที่ถมขาวแล้วตัดตัวเองทิ้ง (WIPE_FULL) พื้นขาวของจอนี้คือของที่อยู่
+          ใต้ม่านตรงนั้นพอดี ผู้ชมจึงเห็นฟ้าถูกกลบจนขาวแล้วมีตัวหนังสือขึ้นมาบนความขาวนั้น */}
+      <ScrollTell />
+
+      <WhatIDoCard id="what-i-do" />
 
       {/* ── จอ 3: ประสบการณ์ ───────────────────────────────────────────
           พอร์ทัลเศษกระจกกระจายบนทุ่งฟ้า ตัวละครลอยออกมาทีละช่วงของไทม์ไลน์จริง
