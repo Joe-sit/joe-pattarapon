@@ -30,7 +30,65 @@ const ROWS: { key: 'pos' | 'rot'; at: number; label: string; min: number; max: n
 
 /** ตำแหน่งแผงจำไว้ข้ามรีเฟรช — ของ dev เท่านั้น ไม่มีผลกับหน้าจริง */
 const POS_KEY = 'portals.tuner.pos'
+/** สถานะพับของแผงและของแต่ละหัวข้อ — คนละที่กับค่าที่จูน (เหมือน newhero.panel) */
+const UI_KEY = 'portals.tuner.panel'
 const PANEL_W = 300
+
+type Ui = { collapsed: boolean; open: Record<string, boolean> }
+
+/**
+ * ค่าเริ่มต้น: ยุบทั้งแผง เปิดเฉพาะหัวข้อ "บาน"
+ *
+ * แผงนี้ยาวกว่าความสูงจอเมื่อกางทุกหัวข้อ (สไลเดอร์ราว 25 แถว) และมันวางทับจอที่กำลังจูนอยู่
+ * — เปิดหน้ามาเจอแถบเดียวแล้วค่อยกางเฉพาะที่จะแก้ ดีกว่าเจอกำแพงสไลเดอร์ทับฉากทั้งจอ
+ */
+function loadUi(): Ui {
+  const base: Ui = { collapsed: true, open: { บาน: true } }
+  if (typeof localStorage === 'undefined') return base
+  try {
+    return { ...base, ...JSON.parse(localStorage.getItem(UI_KEY) || '{}') }
+  } catch {
+    return base
+  }
+}
+
+/** หัวข้อพับได้ — หน้าตาเดียวกับแถบจับลาก ต่างที่มีลูกศรบอกสถานะ */
+function Section({
+  name,
+  open,
+  onToggle,
+  children,
+}: {
+  name: string
+  open: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          cursor: 'pointer',
+          display: 'block',
+          width: '100%',
+          textAlign: 'left',
+          margin: '6px 0 4px',
+          padding: '2px 6px',
+          borderRadius: 6,
+          border: 0,
+          background: '#ffffff10',
+          color: '#9fd4e8',
+          font: 'inherit',
+        }}
+      >
+        {open ? '▾' : '▸'} {name}
+      </button>
+      {open && children}
+    </>
+  )
+}
 
 function loadPos() {
   if (typeof localStorage === 'undefined') return null
@@ -56,7 +114,20 @@ export function PortalTuner() {
    * เก็บเป็นพิกัดซ้าย/บน (ไม่ใช่ขวา/ล่าง) เพื่อให้การหนีบขอบจอคิดจากกรอบเดียวกันทั้งสองแกน
    */
   const [pos, setPos] = useState(() => loadPos())
+  const [ui, setUiState] = useState(loadUi)
   const drag = useRef<{ dx: number; dy: number } | null>(null)
+
+  const setUi = (patch: Partial<Ui>) =>
+    setUiState((u) => {
+      const next = { ...u, ...patch }
+      try {
+        localStorage.setItem(UI_KEY, JSON.stringify(next))
+      } catch {
+        /* โหมดส่วนตัว — จำข้ามรีเฟรชไม่ได้ก็ยังใช้ได้ */
+      }
+      return next
+    })
+  const toggle = (name: string) => setUi({ open: { ...ui.open, [name]: !ui.open[name] } })
 
   useEffect(() => {
     if (!pos) return
@@ -101,8 +172,8 @@ export function PortalTuner() {
         top: pos ? pos.y : undefined,
         bottom: pos ? undefined : 12,
         zIndex: 70,
-        width: PANEL_W,
-        padding: 10,
+        width: ui.collapsed ? 'auto' : PANEL_W,
+        padding: ui.collapsed ? 6 : 10,
         borderRadius: 10,
         background: '#0b1418ee',
         color: '#d8f4ff',
@@ -113,6 +184,8 @@ export function PortalTuner() {
       {/* แถบจับลาก — ทั้งแถบเป็นที่จับ ไม่ใช่จุดเล็ก ๆ ที่ต้องเล็ง */}
       <div
         onPointerDown={(e) => {
+          /* กดปุ่มยุบต้องเป็นการกดปุ่ม ไม่ใช่เริ่มลากแผง */
+          if ((e.target as HTMLElement).closest('button')) return
           const box = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect()
           drag.current = { dx: e.clientX - box.left, dy: e.clientY - box.top }
           // ตรึงตำแหน่งเป็นซ้าย/บนทันทีที่เริ่มลาก ไม่งั้นแผงที่ยังยึดขอบล่างจะกระโดด
@@ -120,7 +193,10 @@ export function PortalTuner() {
         }}
         style={{
           cursor: 'grab',
-          marginBottom: 6,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          marginBottom: ui.collapsed ? 0 : 6,
           padding: '2px 6px',
           borderRadius: 6,
           background: '#ffffff14',
@@ -129,9 +205,28 @@ export function PortalTuner() {
           touchAction: 'none',
         }}
       >
-        ⠿ ผังพอร์ทัล — ลากย้ายได้
+        {/* ปุ่มยุบอยู่ในแถบจับลาก — ตัวจับลากข้ามปุ่มให้เอง (ดู onPointerDown) */}
+        <button
+          type="button"
+          onClick={() => setUi({ collapsed: !ui.collapsed })}
+          title={ui.collapsed ? 'กางแผง' : 'ยุบเหลือแถบเดียว'}
+          style={{
+            cursor: 'pointer',
+            padding: 0,
+            border: 0,
+            background: 'transparent',
+            color: 'inherit',
+            font: 'inherit',
+          }}
+        >
+          {ui.collapsed ? '▸' : '▾'}
+        </button>
+        <span>⠿ ผังพอร์ทัล{ui.collapsed ? '' : ' — ลากย้ายได้'}</span>
       </div>
 
+      {!ui.collapsed && (
+        <>
+      <Section name={`บาน (เลือกอยู่: บาน ${sel + 1})`} open={!!ui.open['บาน']} onToggle={() => toggle('บาน')}>
       <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
         {layout.wins.map((_, i) => (
           <button
@@ -188,10 +283,14 @@ export function PortalTuner() {
         </label>
       ))}
 
-      <div style={{ margin: '6px 0', height: 1, background: '#ffffff1f' }} />
+      </Section>
 
       {/* ตัวละคร — พิกัดเทียบกลางบานที่มันเกาะอยู่ ไม่ใช่พิกัดโลก */}
-      <div>ตัวละคร (บาน {layout.guy.at + 1})</div>
+      <Section
+        name={`ตัวละคร (อยู่บาน ${layout.guy.at + 1})`}
+        open={!!ui.open['ตัวละคร']}
+        onToggle={() => toggle('ตัวละคร')}
+      >
       {([
         ['pos', 0, 'ตัว x', -8, 8, 0.05],
         ['pos', 1, 'ตัว y', -8, 8, 0.05],
@@ -260,8 +359,9 @@ export function PortalTuner() {
         <span style={{ textAlign: 'right' }}>{layout.guy.at + 1}</span>
       </label>
 
-      <div style={{ margin: '6px 0', height: 1, background: '#ffffff1f' }} />
+      </Section>
 
+      <Section name="ฉาก" open={!!ui.open['ฉาก']} onToggle={() => toggle('ฉาก')}>
       {([
         ['depth', 'หนาบาน', 0.1, 4, 0.05, true],
         ['camZ', 'ระยะกล้อง', 10, 60, 0.5, false],
@@ -282,6 +382,8 @@ export function PortalTuner() {
           <span style={{ textAlign: 'right' }}>{layout[k].toFixed(2)}</span>
         </label>
       ))}
+
+      </Section>
 
       <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
         <button
@@ -321,6 +423,8 @@ export function PortalTuner() {
           คืนค่า
         </button>
       </div>
+        </>
+      )}
     </div>
   )
 }
