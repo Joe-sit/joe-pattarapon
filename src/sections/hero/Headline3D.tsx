@@ -49,6 +49,28 @@ const REST = 0.0015
 const mouse = { x: -1e5, y: -1e5 }
 const fieldRect = { left: 0, top: 0 }
 
+/**
+ * ตัวสั่งวาดของแคนวาสหัวเรื่อง — แคนวาสนี้วาดแบบตามสั่ง (frameloop demand)
+ *
+ * เก็บไว้ระดับโมดูลเพราะคนที่ยิงตำแหน่งเข้ามาอยู่นอกฉาก (ดู driveHeroPointer)
+ * ถ้าไม่สั่งวาด ตัวอักษรจะไม่ขยับจนกว่าจะมีเหตุอื่นทำให้วาด
+ */
+let kickHeadline: (() => void) | null = null
+
+/**
+ * ยิงตำแหน่ง "เมาส์" เข้ามาจากข้างนอก — พิกเซลบนจอ
+ *
+ * เคอร์เซอร์นำสายตาของหน้า (cursorguide/) ใช้ช่องนี้ขับแม่เหล็กของหัวเรื่องตอนมันกวาด
+ * ผ่านตัวอักษร ฟิสิกส์ที่ดูดตัวอักษรอ่านตำแหน่งเมาส์อยู่แล้ว จึงเป็นทางเดียวกันเป๊ะ
+ * ไม่ใช่เอฟเฟกต์แยกที่ทำให้คล้าย
+ */
+export function driveHeroPointer(x: number, y: number) {
+  if (Math.abs(x - mouse.x) < 0.5 && Math.abs(y - mouse.y) < 0.5) return
+  mouse.x = x
+  mouse.y = y
+  kickHeadline?.()
+}
+
 type LineBox = {
   id: number
   /** ข้อความของบรรทัด — ว่างถ้าเป็นงานเวกเตอร์ */
@@ -1721,11 +1743,13 @@ function PointerWake() {
       mouse.y = e.clientY
       invalidate()
     }
+    kickHeadline = invalidate
     read()
     window.addEventListener('pointermove', move, { passive: true })
     window.addEventListener('scroll', read, { passive: true })
     window.addEventListener('resize', read)
     return () => {
+      kickHeadline = null
       window.removeEventListener('pointermove', move)
       window.removeEventListener('scroll', read)
       window.removeEventListener('resize', read)

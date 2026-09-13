@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { Environment, Grid, Lightformer, MeshTransmissionMaterial } from '@react-three/drei'
+import { Grid, MeshTransmissionMaterial } from '@react-three/drei'
 import * as THREE from 'three'
 import { Mascot } from '@/joespresso/scene/Mascot'
 import { useDisposable, makeRandom, gradientTexture, LOW_END, damp, clamp, addCel, makeCelUniforms } from '@/joespresso/scene/utils'
@@ -8,13 +8,15 @@ import { DEFAULTS, getTuner, useTuner } from './tuner'
 import { roundedBoxGeo } from './geo'
 import { Globe } from './Globe'
 import { EdgeClouds } from './EdgeClouds'
+import { Palette } from './palette'
+import { heroCursor } from '@/cursorguide/heroCursor'
+import { HeroLights } from './heroLights'
 import { SpaceBackdrop, Planets } from './Space'
 import { Landscape, SKY_STOPS } from './Landscape'
 import { StackedWindows } from './StackedWindows'
 import { Tetris } from './Tetris'
 import { CameraFX } from './CameraFX'
 import { Switch } from './Switch'
-import { Cursor } from './Cursor'
 import { Appear } from './Appear'
 import { panelScreen } from './panelScreen'
 import { PortalFx } from './PortalFx'
@@ -53,9 +55,7 @@ import { cruiseGrow, cruisePull, useSceneOn } from './scrolly'
  * ซึ่งคือสิ่งที่ดันสายตาเข้ากลางเฟรมและทำให้ของกลางจอดูลอยออกมาจากพื้นหลัง
  * ไล่เป็นแถบให้ค่าเดียวทั้งแถวนอน ของที่ขอบซ้าย-ขวาจึงจมกับพื้นหลังเท่ากับของกลางจอ
  */
-const BG_CORE = '#cbe9fa'
 const BG_MID = '#5cb8ee'
-const BG_EDGE = '#2b96e4'
 const CREAM = '#3c6bde'
 /** เลขที่ใช้ทำเครื่องหมายพื้นที่ "ในหน้าต่าง" บน stencil buffer */
 const STENCIL_REF = 1
@@ -785,32 +785,61 @@ function ShadowFlags({ on }) {
 }
 
 /** พื้นหลังไล่สีเกาะกล้อง — โหมด clay ใช้เทาเรียบแบบวิวพอร์ต ไม่มีตาราง */
+/**
+ * ท้องฟ้าของฉาก — ไล่สีที่คำนวณต่อพิกเซลในเชดเดอร์ ไม่ใช่ภาพไล่สีที่วาดใส่ canvas
+ *
+ * ของเดิมเป็น canvas 512px ไล่สีสามจุดแล้วแปะเป็น texture ซึ่งมีสองปัญหาที่แก้ไม่ได้ด้วย
+ * การเพิ่มจุดสี: (1) ไล่สีในพื้นที่ sRGB ทำให้ช่วงกลางหม่น — ฟ้าสองสีผสมกันในพื้นที่ที่ไม่
+ * เป็นเชิงเส้นได้สีเทาอมเขียวคาดอยู่กลางทาง (2) 512px ยืดเต็มจอ 2560px = แถบคาด (banding)
+ * ที่ตาเห็นชัดบนพื้นเรียบใหญ่ ๆ อย่างท้องฟ้า
+ *
+ * เชดเดอร์นี้จึงผสมสีใน **พื้นที่เชิงเส้น** แล้วแปลงเป็น sRGB ตอนท้ายด้วยเส้นโค้งจริง และ
+ * เติม dither ละเอียด ±1/255 ก่อนแปลง — แถบคาดหายสนิทโดยไม่ต้องเพิ่มความละเอียดอะไรเลย
+ *
+ * องค์ประกอบของฟ้า (ทั้งหมดผสมกันด้วย mix/smoothstep ไม่มีเงื่อนไข ตาม shader-mobile):
+ *   1. ไล่ตั้งสี่ช่วง: สีเข้มสุดที่ยอดฟ้า → ฟ้ากลาง → ฟ้าสว่าง → ขอบฟ้าซีดอมอุ่น
+ *   2. ดวงอาทิตย์: แกนสว่างแคบ + แสงฟุ้งกว้าง (สองชั้น) วางตำแหน่งได้จากแผงจูน
+ *   3. ไอแดดที่ขอบฟ้า: แถบอุ่นบาง ๆ ล่างเฟรม = อากาศที่หนากว่าตรงขอบฟ้า
+ *   4. ขอบเฟรมหรี่ลงเบา ๆ (vignette) ดึงตาเข้ากลางภาพ
+ *
+ * โหมด clay ผสมทับด้วยไล่สีเทา — โหมดนั้นคือการตรวจรูปทรง สีทุกอย่างต้องถูกถอดทิ้ง
+ */
+/**
+ * สีของฟ้า — เข้มขึ้นจากชุดแรกที่วัดบนจอจริงแล้วซีดเกิน
+ *
+ * หัวเรื่องในจอนี้เป็นตัวอักษรขาว (--v3-hero-ink) ฟ้าจึงต้องอิ่มสีพอที่ตัวขาวจะอ่านออก
+ * ชุดแรก (#1f7fd4 → #e8f4fb) รวมกับแสงแดดแล้วครึ่งบนของเฟรมขาวจนตัวหนังสือจม
+ */
+const SKY_ZENITH = new THREE.Color('#1466b5')
+const SKY_HIGH = new THREE.Color('#2f92dd')
+const SKY_LOW = new THREE.Color('#74c6f1')
+const SKY_HAZE = new THREE.Color('#cfe9f9')
+const SKY_SUN = new THREE.Color('#fff6e2')
+const SKY_CLAY_TOP = new THREE.Color(CLAY_BG_TOP)
+const SKY_CLAY_BOT = new THREE.Color(CLAY_BG_BOT)
+
 function Backdrop({ clay }) {
-  const tex = useMemo(() => {
-    const CLAY = clay
-    const S = 512
-    const c = document.createElement('canvas')
-    c.width = c.height = S
-    const ctx = c.getContext('2d')
-    if (CLAY) {
-      const g = ctx.createLinearGradient(0, 0, 0, S)
-      g.addColorStop(0, CLAY_BG_TOP)
-      g.addColorStop(1, CLAY_BG_BOT)
-      ctx.fillStyle = g
-    } else {
-      // ศูนย์กลางเยื้องขวาบนเล็กน้อย = ตำแหน่งที่ตัวละครกับหัวเรื่องอยู่ ของจึงมีฟ้าจางรองหลัง
-      const g = ctx.createRadialGradient(S * 0.6, S * 0.44, S * 0.03, S * 0.5, S * 0.5, S * 0.82)
-      g.addColorStop(0, BG_CORE)
-      g.addColorStop(0.5, BG_MID)
-      g.addColorStop(1, BG_EDGE)
-      ctx.fillStyle = g
-    }
-    ctx.fillRect(0, 0, S, S)
-    const t = new THREE.CanvasTexture(c)
-    t.colorSpace = THREE.SRGBColorSpace
-    return t
-  }, [clay])
-  useDisposable(tex)
+  const t = useTuner()
+  const uniforms = useMemo(
+    () => ({
+      uZenith: { value: SKY_ZENITH.clone() },
+      uHigh: { value: SKY_HIGH.clone() },
+      uLow: { value: SKY_LOW.clone() },
+      uHaze: { value: SKY_HAZE.clone() },
+      uSunCol: { value: SKY_SUN.clone() },
+      uClayTop: { value: SKY_CLAY_TOP.clone() },
+      uClayBot: { value: SKY_CLAY_BOT.clone() },
+      uSun: { value: new THREE.Vector2(0.62, 0.72) },
+      uSunR: { value: 0.1 },
+      uGlow: { value: 0.55 },
+      uWarm: { value: 0.35 },
+      uVig: { value: 0.18 },
+      uAspect: { value: 1 },
+      uClay: { value: 0 },
+    }),
+    [],
+  )
+
   /**
    * แผ่นพื้นหลังเกาะกล้อง ไม่ใช่แผ่นนิ่งกลางฉาก
    *
@@ -827,11 +856,102 @@ function Backdrop({ clay }) {
     m.position.set(0, 0, -DIST).applyQuaternion(camera.quaternion).add(camera.position)
     const h = 2 * DIST * Math.tan((camera.fov * Math.PI) / 360) * 1.04
     m.scale.set(h * camera.aspect, h, 1)
+    /* อ่านค่าจากแผงจูนในลูปเฟรม ไม่ผ่าน prop — ลากสไลเดอร์แล้วเห็นผลทันทีโดยไม่ reconcile */
+    const u = m.material.uniforms
+    u.uAspect.value = camera.aspect
+    u.uSun.value.set(t.skySunX, t.skySunY)
+    u.uSunR.value = t.skySunR
+    u.uGlow.value = t.skyGlow
+    u.uWarm.value = t.skyWarm
+    u.uVig.value = t.skyVig
+    u.uClay.value = clay ? 1 : 0
   })
+
   return (
     <mesh ref={ref} renderOrder={-1}>
       <planeGeometry args={[1, 1]} />
-      <meshBasicMaterial map={tex} depthWrite={false} />
+      <shaderMaterial
+        uniforms={uniforms}
+        depthWrite={false}
+        /* เขียนสีเองทั้งหมด (รวมการแปลงพื้นที่สี) จึงต้องกัน three ไม่ให้ tone map ทับ */
+        toneMapped={false}
+        vertexShader={`
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `}
+        fragmentShader={`
+          precision mediump float;
+          uniform vec3 uZenith;
+          uniform vec3 uHigh;
+          uniform vec3 uLow;
+          uniform vec3 uHaze;
+          uniform vec3 uSunCol;
+          uniform vec3 uClayTop;
+          uniform vec3 uClayBot;
+          uniform vec2 uSun;
+          uniform float uSunR;
+          uniform float uGlow;
+          uniform float uWarm;
+          uniform float uVig;
+          uniform float uAspect;
+          uniform float uClay;
+          varying vec2 vUv;
+
+          /* hash คงที่ต่อพิกเซล — dither ต้องนิ่ง ไม่ใช่สัญญาณรบกวนที่วิ่งทุกเฟรม */
+          float hash(vec2 p) {
+            return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+          }
+
+          void main() {
+            float y = vUv.y;
+
+            /* ไล่ตั้งสี่ช่วง — smoothstep ทุกช่วงไม่ให้เห็นรอยต่อของจุดสี */
+            vec3 sky = mix(uHaze, uLow, smoothstep(0.0, 0.42, y));
+            sky = mix(sky, uHigh, smoothstep(0.3, 0.72, y));
+            sky = mix(sky, uZenith, smoothstep(0.62, 1.0, y));
+
+            /* ไอแดดที่ขอบฟ้า: อุ่นและซีดขึ้นเมื่อลงไปใกล้ขอบล่าง */
+            sky = mix(sky, uHaze, smoothstep(0.34, 0.0, y) * uWarm);
+
+            /**
+             * ดวงอาทิตย์สองชั้น: แกนแคบ (คมกว่า) + แสงฟุ้งกว้าง
+             *
+             * คิดระยะโดยแก้อัตราส่วนจอก่อน ไม่งั้นวงแสงถูกยืดเป็นวงรีตามความกว้างจอ
+             */
+            vec2 d = (vUv - uSun) * vec2(uAspect, 1.0);
+            float r = length(d);
+            float core = exp(-pow(r / max(0.02, uSunR), 2.0));
+            float bloom = exp(-r / max(0.05, uSunR * 3.4));
+            sky += uSunCol * (core * 0.7 + bloom * 0.28) * uGlow;
+
+            /* ขอบเฟรมหรี่ — ดึงตาเข้ากลาง ใช้ระยะจากกลางเฟรมที่แก้อัตราส่วนแล้ว */
+            vec2 q = (vUv - 0.5) * vec2(uAspect, 1.0);
+            sky *= 1.0 - smoothstep(0.35, 1.05, length(q)) * uVig;
+
+            /* โหมด clay: ไล่เทาแทนทั้งผืน (ผสมด้วย mix ไม่ใช่ if ตาม shader-mobile) */
+            sky = mix(sky, mix(uClayBot, uClayTop, y), uClay);
+
+            /**
+             * dither ละเอียดกันแถบคาด — ฟ้าคือพื้นเรียบใหญ่ที่ค่าต่างกันไม่ถึงหนึ่งขั้น 8 บิต
+             * ตาจึงเห็นเป็นแถบ เติมความคลาดเล็กกว่าหนึ่งขั้นเข้าไป ขอบแถบแตกเป็นเม็ดละเอียด
+             */
+            sky += (hash(gl_FragCoord.xy) - 0.5) * (1.0 / 512.0);
+
+            /**
+             * ส่งออกเป็นค่า **เชิงเส้น** ไม่แปลงเป็น sRGB เอง
+             *
+             * ฉากนี้มีพาสหลังประมวลผลเปิดอยู่เป็นค่าเริ่มต้น (rimFx — ดู CameraFX) ฉากถูก
+             * วาดลง FBO แล้วพาสนั้นเป็นคนแปลงพื้นที่สีตอนเขียนลงจอ ถ้าที่นี่แปลงเองด้วยจะถูก
+             * แปลงสองรอบ = ฟ้าซีดขึ้นทั้งผืน (วัดจากจอจริง: ยอดฟ้าที่ตั้งไว้ #1466b5 ออกมา
+             * เป็น #6ca8d5) ปล่อยเป็นเชิงเส้นแล้วให้ปลายทางแปลงรอบเดียวจึงตรงกับสีที่ตั้ง
+             */
+            gl_FragColor = vec4(max(sky, vec3(0.0)), 1.0);
+          }
+        `}
+      />
     </mesh>
   )
 }
@@ -1209,78 +1329,76 @@ function TargetRing(props) {
   )
 }
 
-/**
- * จานสีของจิตรกร — แผ่นรูปไข่เบี้ยว เว้าเข้าตรงที่มือจับ มีรูสอดนิ้วโป้ง และก้อนสีหกก้อน
- *
- * วงรีธรรมดาไม่ใช่ถาดสี: ถาดสีอ่านออกจาก "ความไม่สมมาตร" — ด้านที่กว้างกลม (ที่วางสี)
- * กับด้านที่สอบเข้าและเว้ารับอุ้งมือ ทั้งคู่หายไปทันทีถ้าใช้วงรี เหลือแค่แผ่นกลมมีจุด
- * เส้นรอบรูปจึงเขียนเป็นเบซิเยร์ทีละช่วง ไม่ใช่ absellipse ช่วงเดียวจบ
- *
- * รูเป็น hole ของ Shape ไม่ใช่ทรงกระบอกที่เอามาลบ: ExtrudeGeometry ลบมุมให้เองพร้อมกับ
- * ขอบนอกในครั้งเดียว ขอบรูจึงมนเท่ากับขอบจานโดยไม่ต้องทำ CSG ซึ่งฉากนี้ไม่มี
- *
- * ก้อนสีเป็นทรงกลมกดแบน วางจมลงไปครึ่งก้อน — สีที่บีบลงบนจานมันนูนไม่เท่ากันและไม่มีขอบคม
- * และเรียงตามส่วนโค้งด้านกว้าง ไม่ใช่กระจายทั่วแผ่น (ที่ว่างกลางถาดคือที่ผสมสี)
- */
-const PALETTE_BLOBS = [
-  { x: 0.04, y: 0.6, r: 0.15, c: '#3ec9a7' },
-  { x: 0.5, y: 0.46, r: 0.14, c: '#8f6ef0' },
-  { x: 0.78, y: 0.08, r: 0.15, c: '#f5c53d' },
-  { x: 0.7, y: -0.36, r: 0.14, c: '#4f7df9' },
-  { x: -0.42, y: 0.5, r: 0.14, c: '#ef5aa7' },
-  { x: 0.24, y: -0.5, r: 0.15, c: '#4fbe6e' },
-]
-
-function paletteShape() {
-  const s = new THREE.Shape()
-  // ด้านกว้าง: ขวา -> อ้อมยอด -> ซ้ายบน
-  s.moveTo(1.04, 0.02)
-  s.bezierCurveTo(1.04, 0.62, 0.66, 0.95, 0.16, 0.95)
-  s.bezierCurveTo(-0.3, 0.95, -0.62, 0.87, -0.82, 0.6)
-  // ด้านสอบ: ซ้ายบน -> ซ้ายล่าง
-  s.bezierCurveTo(-1.0, 0.36, -1.02, 0.02, -0.9, -0.2)
-  // เว้ารับอุ้งมือ — จุดควบคุมอยู่ "ในเนื้อ" เส้นจึงแอ่นเข้า ไม่ใช่ป่องออกเหมือนช่วงอื่น
-  s.bezierCurveTo(-0.72, -0.4, -0.66, -0.28, -0.42, -0.42)
-  // ก้นถาด: กลับออกไปทางขวาแล้วปิดวง
-  s.bezierCurveTo(-0.12, -0.6, 0.24, -0.78, 0.56, -0.74)
-  s.bezierCurveTo(0.88, -0.7, 1.04, -0.44, 1.04, 0.02)
-  // รูนิ้วโป้ง: อยู่ในช่วงที่ถาดสอบเข้า ใกล้รอยเว้า ไม่ใช่กลางแผ่น
-  const hole = new THREE.Path()
-  hole.absellipse(-0.5, 0.06, 0.21, 0.17, 0, Math.PI * 2, true, 0)
-  s.holes.push(hole)
-  return s
-}
-
-function Palette({ tint = '#f7f5ef', ...props }) {
-  const body = useMemo(() => {
-    const g = new THREE.ExtrudeGeometry(paletteShape(), {
-      depth: 0.15,
-      bevelEnabled: true,
-      bevelThickness: 0.075,
-      bevelSize: 0.075,
-      bevelSegments: 4,
-      curveSegments: 48,
-    })
-    g.center()
-    return g
-  }, [])
-  useDisposable(body)
-  return (
-    <group {...props}>
-      <mesh geometry={body}>
-        <meshStandardMaterial color={tint} roughness={0.72} />
-      </mesh>
-      {PALETTE_BLOBS.map((b) => (
-        <mesh key={b.c} position={[b.x, b.y, 0.14]} scale={[1, 1, 0.42]}>
-          <sphereGeometry args={[b.r, 20, 14]} />
-          <meshStandardMaterial color={b.c} roughness={0.45} />
-        </mesh>
-      ))}
-    </group>
-  )
-}
-
 /** เพชรม่วง — ทรง 12 หน้า flat shading + สันขอบสีอ่อน */
+/**
+ * หมุดของเคอร์เซอร์นำสายตา — group เปล่าที่ฉายตำแหน่งตัวเองลงเป็นพิกเซลบนจอทุกเฟรม
+ *
+ * ฉากนี้ **ไม่วาดลูกศร** ลูกศรตัวจริงมีชิ้นเดียวทั้งหน้า วาดที่ cursorguide/CursorGuideLayer
+ * เพราะของในแคนวาสของจอนี้ออกไปโผล่ในจออื่นไม่ได้ ถ้าวาดทั้งสองที่ก็เป็นลูกศรสองชิ้นที่
+ * หน้าตาเหมือนกันสลับกันเข้าออก ไม่ใช่ตัวเดิมที่เดินทางข้ามจอ
+ *
+ * สิ่งที่ฉากนี้ยังเป็นเจ้าของคือ "ที่อยู่": ตำแหน่งที่จูนไว้ ท่าเข้าฉาก และพาราแลกซ์ของกลุ่ม
+ * ที่มันเกาะ — หมุดอยู่ในลำดับชั้นเดิมทั้งหมด จึงขยับเหมือนที่ลูกศรเคยขยับเป๊ะ ๆ
+ *
+ * ส่งออกสามอย่าง: พิกเซลบนจอ, ความสูงที่เห็นบนจอ (ฉากเป็นเพอร์สเปกทีฟ สเกลในฉากไม่ใช่
+ * พิกเซล), และทิศหันในสเปซกล้อง — ชั้นของหน้าใช้กล้องออร์โธที่หันตรง เอาทิศนี้ไปใส่ตรง ๆ
+ * แล้วลูกศรหันเหมือนอยู่ในฉากนี้
+ */
+function CursorAnchor(props) {
+  const g = useRef()
+  const P = useMemo(
+    () => ({
+      a: new THREE.Vector3(),
+      b: new THREE.Vector3(),
+      up: new THREE.Vector3(),
+      s: new THREE.Vector3(),
+      q: new THREE.Quaternion(),
+      q2: new THREE.Quaternion(),
+    }),
+    [],
+  )
+  useEffect(
+    () => () => {
+      heroCursor.ok = false
+    },
+    [],
+  )
+  useFrame(({ camera, gl }) => {
+    const root = g.current
+    if (!root) return
+    /**
+     * วัดกรอบของแคนวาสจริง ไม่ใช่ `size` ของ r3f
+     *
+     * แคนวาสของฉากนี้เป็นการ์ดที่เว้นขอบจากวิวพอร์ต พิกเซลในแคนวาสจึงไม่ใช่พิกเซลบนจอ
+     * ชั้นนำสายตาตรึงเต็มจอ ถ้าส่งพิกัดแคนวาสไปตรง ๆ ลูกศรจะเพี้ยนไปเท่าขอบที่เว้นไว้
+     */
+    const r = gl.domElement.getBoundingClientRect()
+    root.updateWorldMatrix(true, false)
+    P.a.setFromMatrixPosition(root.matrixWorld)
+    /**
+     * ความสูงต่อหนึ่งหน่วยฉากวัดตามแกน "ขึ้น" ของกล้อง ไม่ใช่แกน y ของหมุดเอง
+     *
+     * หมุดหันเอียงในสามมิติ แกนของมันฉายลงจอแล้วสั้นลงตามมุม ถ้าวัดจากแกนนั้นจะได้
+     * ความสูงที่หักมุมไปแล้ว แล้วชั้นของหน้าซึ่งหมุนลูกศรด้วยทิศเดียวกันจะหักมุมซ้ำอีกรอบ
+     */
+    /* แกนขึ้นและทิศของกล้องต้องเอาจาก matrixWorld — กล้องอยู่ในกลุ่มที่หมุน/ขยับได้ */
+    P.up.setFromMatrixColumn(camera.matrixWorld, 1).normalize().add(P.a)
+    P.a.project(camera)
+    P.b.copy(P.up).project(camera)
+    heroCursor.x = r.left + ((P.a.x + 1) / 2) * r.width
+    heroCursor.y = r.top + ((1 - P.a.y) / 2) * r.height
+    const unit = Math.abs(P.b.y - P.a.y) * 0.5 * r.height
+    /* สเกลเอาจาก matrixWorld ไม่ใช่ prop — กลุ่มแม่ที่ห่ออยู่ก็ย่อขยายหมุดได้ */
+    root.matrixWorld.decompose(P.b, P.q, P.s)
+    heroCursor.size = unit * P.s.y
+    /* ทิศในสเปซกล้อง = ผกผันของทิศกล้อง คูณทิศโลกของหมุด */
+    camera.getWorldQuaternion(heroCursor.camQ)
+    heroCursor.q.copy(P.q).premultiply(P.q2.copy(heroCursor.camQ).invert())
+    heroCursor.ok = heroCursor.size > 1
+  })
+  return <group ref={g} {...props} />
+}
+
 function Gem(props) {
   const edges = useMemo(() => {
     const g = new THREE.DodecahedronGeometry(1)
@@ -2295,15 +2413,6 @@ function Scene() {
     },
     [clickAt],
   )
-  const cuPress = useMemo(
-    () => () => {
-      const tt = getTuner()
-      if (tt.intro < 0.5) return 0
-      const u = (introTime() - clickAt + 0.14) / 0.28
-      return u <= 0 || u >= 1 ? 0 : Math.sin(u * Math.PI)
-    },
-    [clickAt],
-  )
   const gbSpin = useMemo(
     () => () => {
       const tt = getTuner()
@@ -2443,83 +2552,7 @@ function Scene() {
         </>
       ) : (
         <>
-          {/**
-           * ชุดไฟสามดวง + ฟ้า/พื้น แทนการดัน ambient ให้สว่าง
-           *
-           * ambient สูง ๆ สว่างจริงแต่ทุกหน้าได้แสงเท่ากันหมด ทรงเลยแบนเป็นกระดาษตัด
-           * ความ "กระจ่างและมีชีวิต" มาจากการที่แต่ละหน้าได้แสงคนละค่า ไม่ใช่ค่าเฉลี่ยที่สูงขึ้น
-           * จึงลด ambient ลงแล้วไปเพิ่มที่ key/fill/rim แทน
-           *
-           * hemisphereLight คือตัวที่ให้ "ชีวิต" ถูกที่สุด — ด้านบนรับสีฟ้าของหน้า
-           * ด้านล่างรับสีอุ่นสะท้อนขึ้นมา เงาจึงมีสีแทนที่จะเป็นเทาตาย
-           */}
-          <ambientLight intensity={t.ambIntensity} color="#ffffff" />
-          <hemisphereLight
-            intensity={t.hemiIntensity}
-            color={BG_MID}
-            groundColor="#ffd9a8"
-          />
-          {/* key: เฉียงบนซ้ายหน้า อุ่น — ตัวกำหนดทิศของเงาทั้งฉาก */}
-          {/**
-           * key ยิงเงาจริง — ระยะไกลกว่าเดิมแต่ทิศเดิมเป๊ะ (คูณเวกเตอร์เดิมด้วย 3)
-           * แสงทิศทางไม่สนระยะ ย้ายออกไปได้ฟรี และกล้องเงาต้องครอบฉากทั้งแถบ
-           */}
-          <directionalLight
-            position={[-15, 24, 21]}
-            intensity={t.keyIntensity}
-            color="#fff4e2"
-            castShadow={t.sh > 0.5}
-            shadow-mapSize={[2048, 2048]}
-            shadow-bias={-0.0012}
-            shadow-normalBias={0.03}
-            shadow-camera-near={1}
-            shadow-camera-far={90}
-            shadow-camera-left={-34}
-            shadow-camera-right={34}
-            shadow-camera-top={26}
-            shadow-camera-bottom={-26}
-          />
-          {/* fill: ฝั่งตรงข้าม เย็น รับสีพื้นน้ำเงินของหน้า ไม่ให้ด้านมืดเป็นดำตัน */}
-          <directionalLight position={[7, 1, 5]} intensity={t.fillIntensity} color="#cfe0ff" />
-          {/* rim: จากหลัง ตัดขอบตัวละครออกจากแผงขาวข้างหลัง */}
-          <directionalLight position={[2, 6, -9]} intensity={t.rimIntensity} color="#ffffff" />
-          {/**
-           * แผงไฟนุ่ม (Environment + Lightformer) — หัวใจของหน้าตาแบบ claymorphism
-           *
-           * ไฟจุด/ไฟทิศทางให้ "ขอบเงาคม" เสมอ ต่อให้ลด intensity ลงก็ยังเป็นเงาที่มีขอบ
-           * ดินน้ำมันไม่ใช่แบบนั้น: มันรับแสงจากแผงกว้าง ๆ รอบตัว ไล่จากสว่างไปมืดยาว ๆ
-           * ไม่มีจุดไฮไลต์แข็ง ๆ Lightformer คือแผงแบบนั้น — วางเป็นวัตถุเรืองแสงในฉาก
-           * แล้วอบเป็น environment map ให้ทุกผิวเอาไปใช้
-           *
-           * frames={1} อบครั้งเดียวตอนขึ้นฉาก ไม่ได้เรนเดอร์ซ้ำทุกเฟรม
-           * (ไม่มีอะไรในแผงไฟขยับ อบใหม่ทุกเฟรมคือจ่ายค่า cube render ฟรี ๆ)
-           */}
-          <Environment resolution={128} frames={1}>
-            {/* แผงหลักเฉียงบนซ้าย อุ่น — ตรงทิศเดียวกับ key ให้เงาไปทางเดียวกัน */}
-            <Lightformer
-              form="rect"
-              intensity={t.envIntensity * 2.2}
-              position={[-6, 8, 8]}
-              scale={[14, 14, 1]}
-              color="#fff1dc"
-            />
-            {/* แผงรองฝั่งตรงข้าม เย็น รับสีพื้นน้ำเงินของหน้า */}
-            <Lightformer
-              form="rect"
-              intensity={t.envIntensity}
-              position={[8, 2, 5]}
-              scale={[10, 10, 1]}
-              color="#d5e6ff"
-            />
-            {/* แผงล่าง อุ่น — แสงสะท้อนขึ้นมาจากพื้น ทำให้ใต้คางกับใต้แขนไม่ทึบ */}
-            <Lightformer
-              form="ring"
-              intensity={t.envIntensity * 0.7}
-              position={[0, -8, 4]}
-              scale={16}
-              color="#ffdcae"
-            />
-          </Environment>
+        <HeroLights skyTint={BG_MID} />
         </>
       )}
 
@@ -2745,15 +2778,8 @@ function Scene() {
             over={t.inOver}
             from={[3 * t.inPropDist, 2 * t.inPropDist, -5 * t.inPropDist]}
           >
-          <Cursor
-            kind={t.cuHand > 0.5 ? 'hand' : 'arrow'}
-            pressAt={cuPress}
-            /* มือชี้ไม่ต้องเล็งเมาส์ — ปลายนิ้วไม่ใช่ปลายลูกศร หมุนตามเมาส์แล้วอ่านเป็นมือหมุนเล่น */
-            aim={t.cuHand > 0.5 ? 0 : t.cuAim}
-            aimMax={t.cuAimMax * RAD}
-            aimEase={t.cuAimEase}
-            depth={t.cuDepth}
-            outline={t.cuOutline}
+          {/* หมุดเปล่า — ลูกศรตัวจริงวาดที่ชั้นนำสายตาของหน้า (ดู CursorAnchor) */}
+          <CursorAnchor
             position={[t.cuX, t.cuY, t.cuZ]}
             rotation={[t.cuRotX * RAD, t.cuRotY * RAD, t.cuRotZ * RAD]}
             scale={t.cuScale}

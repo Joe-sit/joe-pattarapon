@@ -176,7 +176,7 @@ export function Cursor({
   faceColor = FACE,
   sideColor = SIDE,
   /** แรงกด 0..1 อ่านทุกเฟรม (clock) — ท่า "คลิก": ย่อลงแล้วดีดกลับ */
-  pressAt = null,
+  pressAt = /** @type {null | ((clock: unknown) => number)} */ (null),
   /** เล็งเมาส์: หมุนตัวลูกศรในระนาบของมันให้ปลายชี้ไปทางเมาส์ (0 = ปิด, 1 = เต็ม) มุมสูงสุด (เรเดียน) และหน่วง */
   aim = 0,
   aimMax = 1,
