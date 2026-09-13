@@ -62,6 +62,22 @@ export function Rider({
    * ตัวละครจึงอยู่ที่ตำแหน่งของตัวเองตรง ๆ ไม่ได้ถูกดึงลงไปหาแผ่นที่ไม่มีอยู่
    */
   noBoard = false,
+  /**
+   * โหมดยืนปกติ — ไม่มีบอร์ด ไม่ใช่ท่าสเก็ต
+   *
+   * `noBoard` เอาบอร์ดออกแต่ริกยังย่อเข่าบิดสะโพกค้างท่าไถลอยู่ ซึ่งอ่านเป็นคนยืนเก้ ๆ กัง ๆ
+   * กลางอากาศ จอที่ต้องการ "ตัวเดียวกับ hero แต่ยืนเฉย ๆ" (ดู sections/whatidopixel) จึงต้อง
+   * ปิดท่าสเก็ตของ rig ด้วยและใช้ท่าแขนปล่อยข้างลำตัวแทน
+   */
+  stand = false,
+  /**
+   * ไม่เอียงลำตัวตามบอร์ด แต่ยังเป็นท่าสเก็ตของริก (ต่างจาก `stand` ที่ปิดท่าทั้งชุด)
+   *
+   * มีไว้ให้โต๊ะส่งออกริก (หน้า /rig-export) ซึ่งต้องเห็นตัวละครตั้งตรงเหมือนในไฟล์ที่อบออกไป
+   * — ตัวส่งออกอบพิกัดเทียบรากของ mascot การเอียงที่กลุ่มนี้จึงไม่ติดไปกับไฟล์อยู่แล้ว
+   * ถ้าจอยังเอียงอยู่ ท่าที่เห็นกับท่าที่ได้จะไม่ใช่ท่าเดียวกัน
+   */
+  noLean = false,
   /** ล้อหมุนเร็วแค่ไหน (rad/s) — ส่งต่อให้ Skateboard */
   wheelSpin = 0,
   /** ลายล้อ + โหมดตรวจ — ส่งต่อให้ Skateboard */
@@ -202,7 +218,7 @@ export function Rider({
     <group {...props} userData={{ rider: true }}>
       <group ref={sway}>
         {/* บอร์ดจริง: แผ่น + กริป + ทรัค + ล้อ (ดู Skateboard.jsx) */}
-        {!noBoard && (
+        {!noBoard && !stand && (
           <group ref={board} rotation={boardRot}>
             <Skateboard
               spec={boardSpec ?? undefined}
@@ -218,7 +234,8 @@ export function Rider({
         <group
           ref={body}
           position={[0, mascotLift, 0]}
-          rotation={[0.06, -0.35, -0.12]}
+          /* ท่าสเก็ตเอียงตัวตามบอร์ด — ท่ายืนต้องตั้งตรง ไม่ใช่ยืนเอียงค้างท่าไถล */
+          rotation={stand || noLean ? [0, 0, 0] : [0.06, -0.35, -0.12]}
           userData={{ echoBody: true }}
         >
           <Suspense fallback={null}>
@@ -231,7 +248,11 @@ export function Rider({
               isolated
               noIdle
               noMug
-              skate
+              skate={!stand}
+              armsDown={stand}
+              /* หน้าการ์ตูนชุดเดียวกับท่าสเก็ต — ของมันผูกกับ prop skate อยู่เดิม โหมดยืน
+                 จึงเหลือแต่ตาดำสองแท่งที่มากับ GLB (ดู cartoonFace ใน Mascot) */
+              cartoonFace={stand ? true : undefined}
               rimPower={rimPower}
               rimBoost={rimBoost}
               rimEdge={rimEdge}

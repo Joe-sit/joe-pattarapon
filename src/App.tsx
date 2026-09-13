@@ -26,6 +26,7 @@ const JoespressoPage = lazy(() => import('@/joespresso/Page'))
 // workspace ปั้นทรง toolbar ของฉาก joespresso — ใช้ three เหมือนกัน แยก chunk เช่นกัน
 const ToolbarWorkspace = lazy(() => import('@/joespresso/ToolbarWorkspace'))
 const CheckerScene = lazy(() => import('@/joespresso/CheckerScene'))
+const RigExportPage = lazy(() => import('@/pages/RigExportPage'))
 import { SITE } from '@/config/site'
 import { setEyeOpen, setIntroDone } from '@/stores/intro'
 import { useSceneReady } from '@/stores/ready'
@@ -101,6 +102,8 @@ export function App() {
    * และต้องกันสปแลชของเว็บไม่ให้ขึ้นทับด้วย ไม่งั้นมีอินโทรสองตัวซ้อนกัน
    */
   const isIntroLab = import.meta.env.DEV && location.pathname === '/sandbox/intro'
+  /** โต๊ะส่งตัวละครไป Mixamo — เต็มจอ ไม่มี shell ของเว็บ และไม่มีใน build production */
+  const isRigExport = import.meta.env.DEV && location.pathname === '/rig-export'
 
   // Which splash plays is decided by where the visitor landed, not by where
   // they are now — it runs once, on load, and reading `location` live would
@@ -279,7 +282,7 @@ export function App() {
           opens onto the hero's own scene, and the mascot page has no such scene
           to open onto. */}
       {/* /new-hero เป็นหน้าเปล่าไว้ทดลอง — สปแลชของเว็บบังของที่กำลังจูนอยู่เปล่า ๆ */}
-      {showSplash && !isIntroLab && !isNewHero &&
+      {showSplash && !isIntroLab && !isNewHero && !isRigExport &&
         (landedOn === '/2026' ? (
           /* /2026 มีอินโทรของตัวเอง (เศษโค้ด -> สนาม ASCII -> เวิร์ดมาร์ก)
              หน้าอื่นยังใช้สปแลชเดิม — คนละภาษาภาพกัน ไม่ควรบังคับให้เหมือน */
@@ -301,6 +304,10 @@ export function App() {
 
       {isIntroLab ? (
         <IntroSandbox />
+      ) : isRigExport ? (
+        <Suspense fallback={null}>
+          <RigExportPage />
+        </Suspense>
       ) : isV3 ? (
         <Portfolio2026FinalPage />
       ) : isNewHero ? (

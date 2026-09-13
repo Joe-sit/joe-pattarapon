@@ -7,6 +7,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { addPrint, addRim, addWind, bakePrintCoords, clamp, damp, lerp, makePrintUniforms, makeWindUniforms, shirtPrintTexture, subdivideCloth } from './utils'
 import { extractLumberArms, LUMBER_MODEL } from './lumberArms'
+import { registerRig } from './rigHandle'
 import { scrollState } from '../scroll'
 import { introState } from '../intro'
 
@@ -599,6 +600,14 @@ export function Mascot({
   skydive = false,
   /** ท่ายืนเล่นสเก็ต — ย่อเข่าลึก บิดลำตัว กางแขนเป็น T (ดูภาพ ref 12739:335) */
   skate = false,
+  /**
+   * ปั้นหน้าการ์ตูน (ตาขาว คิ้ว ปาก) หรือไม่ — ค่าเริ่มต้นตามโหมด skate
+   *
+   * เดิมผูกกับ skate ตรง ๆ เพราะที่เดียวที่ใช้หน้าแบบนี้คือริกสเก็ตของ hero จอ what-i-do
+   * เรียกริกตัวเดียวกันในโหมดยืน (Rider `stand`) แล้วหน้าหายไปทั้งชุด เหลือแต่ตาดำสองแท่ง
+   * ที่มากับ GLB — คนละหน้ากับตัวใน /2026-final แยกเป็นปุ่มของตัวเองจึงเลือกได้ทั้งสองแบบ
+   */
+  cartoonFace = null,
   /** ความคมของ rim (ค่าสูง = ขอบบางเฉียบ) — ใช้กับท่า skate */
   rimPower = 4.2,
   /** ความสว่างของ rim */
@@ -673,6 +682,17 @@ export function Mascot({
     const id = window.setTimeout(run, 300)
     return () => window.clearTimeout(id)
   }, [])
+  /**
+   * ขึ้นทะเบียนกลุ่มรากไว้ให้ตัวส่งออกหยิบ — dev เท่านั้น (ดู rigHandle)
+   *
+   * ตัวส่งออกอยู่นอก Canvas จึงเข้าถึง ref ของคอมโพเนนต์ไม่ได้ และริกนี้ไม่มีไฟล์ต้นฉบับที่
+   * มีท่าอยู่ในตัว (mascot.glb ไม่มีกระดูกเลย) ท่าที่จะส่งออกได้จึงมีแต่ท่าที่อยู่บนจอ
+   */
+  useEffect(() => {
+    if (!import.meta.env.DEV) return undefined
+    return registerRig(root.current)
+  }, [])
+
   const headGroup = useRef()
   const eyes = useRef([])
   const rig = useRef({})
@@ -1005,7 +1025,8 @@ export function Mascot({
      * ทุกขนาดเป็นสัดส่วนของความกว้าง (W) / ความสูง (H) ของกล่องหัว — ไม่มีตัวเลขหน่วยโลก
      * geometry ทุกชิ้นขนาดหน่วย 1 แล้วไปตั้ง scale ตอน useFrame ให้ปุ่มปรับสดได้โดยไม่ต้องปั้นใหม่
      */
-    if (skate && parts.head && parts.eye.length) {
+    const wantFace = cartoonFace === null ? skate : cartoonFace
+    if (wantFace && parts.head && parts.eye.length) {
       const head = parts.head
       const parent = parts.eye[0].parent
       /**
@@ -2249,7 +2270,7 @@ export function Mascot({
     model.userData.headGroup = g
     model.userData.eyes = parts.eye
 
-  }, [model, skate])
+  }, [model, skate, cartoonFace])
 
   /**
    * สลับ "เนื้อแขน" เป็นของ lumberjack — ริกไม่ถูกแตะเลย
@@ -3476,9 +3497,26 @@ export function Mascot({
 
     // กระพริบตา: ย่อแกน Y ของ mesh ตา
     const b = blink.current
-    const fp = skate ? facePose : null
+    /**
+     * ใช้ facePose ทุกครั้งที่ผู้เรียกส่งมา ไม่ใช่เฉพาะตอน skate
+     *
+     * เดิมผูกไว้กับโหมด skate เพราะที่เดียวที่ส่ง facePose คือริกสเก็ตของ hero — แต่จอ
+     * what-i-do เรียกริกตัวเดียวกันในโหมดยืน (Rider `stand`) แล้วหน้าหลุดกลับไปเป็นค่า
+     * เริ่มต้นของ rig: ไม่กระพริบตามจังหวะที่จูนไว้ ไม่กวาดตา คนละหน้ากับตัวใน /2026-final
+     * ผู้เรียกที่ไม่ต้องการก็ส่ง null มาอยู่แล้ว (MascotCard, WedgeMascot)
+     */
+    const fp = facePose
+    /**
+     * blinkEvery / lookEvery <= 0 = ปิดถาวร ไม่ใช่ "ถี่สุด"
+     *
+     * ต้องดักที่นี่เพราะสูตรข้างล่างคูณค่าที่ส่งมาด้วยตัวสุ่ม — ส่ง 0 เข้าไปตรง ๆ จะได้
+     * รอบถัดไปเป็น 0 ทุกครั้ง = กระพริบทุกเฟรม (ตาปิดค้าง) ซึ่งตรงข้ามกับที่ผู้เรียกขอ
+     * ผู้ใช้: จอ what-i-do ที่ต้องการตัวนิ่งสนิทในพอร์ทัล (HeroRider `noIdle`)
+     */
+    const blinkOff = fp ? (fp.blinkEvery ?? 4.2) <= 0 : false
+    const lookOff = fp ? (fp.lookEvery ?? 3) <= 0 : false
     b.next -= delta
-    if (b.next <= 0) {
+    if (b.next <= 0 && !blinkOff) {
       b.closing = 0.13
       b.next = fp ? (fp.blinkEvery ?? 4.2) * (0.6 + Math.random() * 0.85) : 2.4 + Math.random() * 3.6
       // นาน ๆ ทีกระพริบสองครั้งติด — คนจริงทำ ทำให้ไม่อ่านเป็นนาฬิกา
@@ -3489,7 +3527,7 @@ export function Mascot({
      * บางครั้งกลับมามองตรง — ถ้าสุ่มไปเรื่อยจะดูเหมือนหาอะไรตลอดเวลา
      */
     const gz = gaze.current
-    if (fp) {
+    if (fp && !lookOff) {
       gz.next -= delta
       if (gz.next <= 0) {
         gz.next = (fp.lookEvery ?? 3) * (0.5 + Math.random())
