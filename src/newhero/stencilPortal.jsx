@@ -22,14 +22,23 @@ import { useFrame } from '@react-three/fiber'
 
 export const STENCIL_REF = 1
 
-/** วัสดุของตัวช่อง — ไม่เขียนสีและไม่เขียนความลึก เขียนแต่ stencil */
-export function PortalMask() {
+/**
+ * วัสดุของตัวช่อง — ไม่เขียนสีและไม่เขียนความลึก เขียนแต่ stencil
+ *
+ * `mark` = ค่าที่จะเขียนลง stencil เผื่อให้ฉากที่มีช่องหลายชนิดในจอเดียวแยกกลุ่มกันได้
+ * (จอ what-i-do เขียน 2 ที่หน้าจอทุกบานเพื่อปล่อยตัวละครเข้าไป, 1 ที่ช่องพอร์ทัลของบานกลาง
+ * และ 0 เพื่อล้างรอยของบานที่อยู่หลังกว่า) ค่าเริ่มต้นเท่าเดิม จอแรกไม่ต้องแก้อะไร
+ *
+ * ชื่อ prop ห้ามเป็น `ref`: React สงวนคำนั้นไว้ ค่าที่ส่งไปไม่ถึงคอมโพเนนต์ หน้ากากทุกใบจึง
+ * เขียนค่าเริ่มต้นเหมือนกันหมด แล้วตัวละครทะลุออกไปนอกจอ (วัดมาแล้ว)
+ */
+export function PortalMask({ mark = STENCIL_REF }) {
   return (
     <meshBasicMaterial
       colorWrite={false}
       depthWrite={false}
       stencilWrite
-      stencilRef={STENCIL_REF}
+      stencilRef={mark}
       stencilFunc={THREE.AlwaysStencilFunc}
       stencilZPass={THREE.ReplaceStencilOp}
     />

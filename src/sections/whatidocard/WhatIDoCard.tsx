@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { SKILLS } from '@/sections/whatido/WhatIDo'
 import { useCursorStop } from '@/cursorguide/useCursorStop'
+import { screenRects, useStageTuner } from './stageTuner'
 
 /**
  * จอ "สิ่งที่ทำ" — การ์ดโพสต์ใบเดียว ตัวละครอยู่ข้างใน ของสกิลลอยรอบ
@@ -26,6 +27,25 @@ import { useCursorStop } from '@/cursorguide/useCursorStop'
  */
 
 const CardStage = lazy(() => import('./CardStage').then((m) => ({ default: m.CardStage })))
+
+/**
+ * แผงจูนของจอนี้ — โหลดเฉพาะตอน dev
+ *
+ * แยกไฟล์เพราะมันลาก leva มาด้วย ค่าที่มันเขียนอยู่ในสโตร์เปล่า ๆ (./stageTuner) ซึ่งฉาก
+ * อ่านโดยไม่ต้องรู้จักแผง
+ */
+const StagePanel = lazy(() => import('./StagePanel').then((m) => ({ default: m.StagePanel })))
+
+/**
+ * ชั้นรอยสาดของเคอร์เซอร์ที่เปิดเผยรูปจริง — โหลดแบบ lazy
+ *
+ * มันเป็นการจำลองของไหลบน WebGL (แคนวาสของตัวเอง) หนักและไม่จำเป็นต่อการอ่านเนื้อหา
+ * จอที่ยังไม่ถูกเลื่อนมาถึงจึงไม่ต้องโหลดมันไปก่อน
+ */
+const SplashReveal = lazy(() => import('./SplashReveal').then((m) => ({ default: m.SplashReveal })))
+
+/** รูปจริงที่รอยสาดเปิดเผย */
+const REVEAL_PHOTO = '/photos/joe-portrait.jpg'
 
 /**
  * ที่วางป้ายของแต่ละสกิล — ข้อความมาจาก SKILLS ของ section เดิม ไม่เขียนใหม่
@@ -120,6 +140,18 @@ export function WhatIDoCard({ id = 'what-i-do' }: { id?: string }) {
   useCursorStop(atDesign, { id: 'whatido-design', dx: 0.66, dy: -0.1, size: 54, tilt: 6, lift: 60 })
   useCursorStop(atCoding, { id: 'whatido-coding', dx: -0.58, dy: -0.12, size: 54, tilt: -4, lift: 40 })
 
+  /** การวางรูปจริงให้ทับตัวละคร 3D — ลากได้จากแผงจูนของจอนี้ */
+  const t = useStageTuner() as Record<string, number>
+  const place = { zoom: t.phZoom, x: t.phX, y: t.phY }
+  /**
+   * กรอบหน้าจอของหน้าต่างทุกบาน — รูปจริงโผล่ได้แค่ในนั้น
+   *
+   * อัตราส่วนจออ่านจาก window ตรง ๆ ตอน render: ชั้นรอยสาดกินเต็มจอเท่ากับฉาก 3D
+   * (ทั้งคู่อยู่ในกล่องที่ถูกตรึงใบเดียวกัน)
+   */
+  const aspect = typeof window === 'undefined' ? 16 / 9 : window.innerWidth / Math.max(1, window.innerHeight)
+  const rects = screenRects(t, aspect)
+
   /** ยกขึ้นจากใต้จอตามค่า --in ของกลุ่ม (1 - in = ยังเหลือระยะอีกเท่าไร) */
   const rise = (k: number): React.CSSProperties => ({
     transform: `translate3d(0, calc((1 - var(--in, 0)) * ${k * 100}svh), 0)`,
@@ -144,6 +176,25 @@ export function WhatIDoCard({ id = 'what-i-do' }: { id?: string }) {
             </Suspense>
           )}
         </div>
+
+        {/* แผงจูนฉาก — dev เท่านั้น อยู่นอกชั้นที่เลื่อน (rise) เพราะมันไม่ใช่ของในฉาก */}
+        {import.meta.env.DEV && live && (
+          <Suspense fallback={null}>
+            <StagePanel />
+          </Suspense>
+        )}
+
+        {/**
+         * รอยสาดของเคอร์เซอร์ — อยู่เหนือแคนวาสของฉาก
+         *
+         * ต้องอยู่เหนือ: ถ้าอยู่ใต้ฉาก รูปจะโผล่ได้เฉพาะที่ว่างนอกกองหน้าต่าง ซึ่งเป็นบริเวณที่
+         * ไม่มีใครเอาเมาส์ไปไถ (วัดมาแล้วตอนทำด้วย CSS mask — วงหายไปใต้หน้าต่างทั้งวง)
+         */}
+        {live && (
+          <Suspense fallback={null}>
+            <SplashReveal photo={REVEAL_PHOTO} live={live} place={place} rects={rects} />
+          </Suspense>
+        )}
 
         {/* หัวจอ — เฉพาะชื่อจอ ไม่มีหัวเรื่อง เพราะยังไม่มีข้อความจริงของจอนี้ */}
         <div className="pointer-events-none absolute left-[6%] top-[9%]" style={rise(LIFT.head)}>
