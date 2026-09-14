@@ -49,11 +49,17 @@ function SplashReveal({
   RAINBOW_MODE = false,
   /** สีย้อมเป็นขาว เพราะมันถูกใช้เป็นหน้ากาก ไม่ใช่สีที่ตาเห็น */
   COLOR = '#ffffff',
-  /** คูณความเข้มของหน้ากาก — hexToRGB ของต้นฉบับหารสีไว้ 0.15 เท่า */
-  GAIN = 7.5,
+  /**
+   * คูณความเข้มของหน้ากาก — hexToRGB ของต้นฉบับหารสีไว้ 0.15 เท่า
+   *
+   * ต้องสูงกว่าที่คิดไว้ตอนแรก: ปาดเมาส์ยาว ๆ ข้ามหลายบานทำให้สีย้อมบางลงทั้งรอย ตัดที่
+   * ระดับเดิมแล้วเหลือก้อนแค่ตรงที่เมาส์วนช้า ๆ (วัดมาแล้ว — ปาดจากบานกลางไปบานขวา
+   * แล้วรูปโผล่แค่แถบเดียว) ก้อนต้องรอดจากการปาดเร็วด้วย
+   */
+  GAIN = 13,
   /** ขอบก้อน: กลางช่วงตัด กับความกว้างของขอบที่ไล่จาง (0 = ขอบคมกริบ) */
-  EDGE = 0.5,
-  EDGE_SOFT = 0.12,
+  EDGE = 0.42,
+  EDGE_SOFT = 0.1,
   /** กรอบหน้าจอที่ยอมให้รูปโผล่ (สัดส่วนของจอ) — ดู screenRects ใน ./stageTuner */
   rects = /** @type {{ x: number, y: number, hw: number, hh: number }[]} */ ([])
 }) {
@@ -644,6 +650,8 @@ function SplashReveal({
      * ตั้งเป็น 1x1 ขาวแทนที่จะรอ: ถ้าไม่ผูกอะไรไว้ที่ช่องเท็กซ์เจอร์ เชดเดอร์จะอ่านค่าไม่แน่นอน
      * (ดำหรือขยะ) ในเฟรมแรก ๆ
      */
+    /** บัฟเฟอร์ของกรอบหน้าจอ — ใบเดียวใช้ซ้ำทุกเฟรม ไม่สร้างอาร์เรย์ใหม่ 60 ครั้งต่อวินาที */
+    const rectBuf = new Float32Array(16)
     const photoAspect = { value: 1 }
     const photoTex = gl.createTexture()
     gl.bindTexture(gl.TEXTURE_2D, photoTex)
@@ -926,13 +934,25 @@ function SplashReveal({
       gl.uniform2f(displayMaterial.uniforms.uOffset, pl.x, pl.y);
       gl.uniform1f(displayMaterial.uniforms.uGain, config.GAIN);
       gl.uniform2f(displayMaterial.uniforms.uEdge, config.EDGE, config.EDGE_SOFT);
-      /* กรอบหน้าจออ่านทุกเฟรม — ผังของหน้าต่างลากได้จากแผงจูน */
+      /**
+       * กรอบหน้าจออ่านทุกเฟรม — ผังของหน้าต่างลากได้จากแผงจูน
+       *
+       * ส่งเป็นก้อนเดียวด้วย uniform4fv ไม่ใช่ทีละช่อง: WebGL รายงานชื่อ uniform ที่เป็น
+       * อาร์เรย์ไว้แค่ตัวแรก ('uRects[0]') ตารางชื่อของ Program จึงไม่มี 'uRects[1]' ขึ้นไป
+       * ส่งทีละช่องแล้วกรอบของบานอื่นไม่เคยถึงเชดเดอร์ — รูปโผล่ได้แค่ในบานกลางบานเดียว
+       * (วัดมาแล้ว: ปาดข้ามบานขวาแล้วไม่มีอะไรขึ้น ทั้งที่กรอบคำนวณถูก)
+       */
       const rs = rectsRef.current;
       const n = Math.min(4, rs.length);
       gl.uniform1i(displayMaterial.uniforms.uRectCount, n);
-      for (let i = 0; i < n; i++) {
-        gl.uniform4f(displayMaterial.uniforms['uRects[' + i + ']'], rs[i].x, rs[i].y, rs[i].hw, rs[i].hh);
+      for (let i = 0; i < 4; i++) {
+        const r = rs[i];
+        rectBuf[i * 4] = r ? r.x : 0;
+        rectBuf[i * 4 + 1] = r ? r.y : 0;
+        rectBuf[i * 4 + 2] = r ? r.hw : 0;
+        rectBuf[i * 4 + 3] = r ? r.hh : 0;
       }
+      gl.uniform4fv(displayMaterial.uniforms['uRects[0]'], rectBuf);
       blit(target);
     }
 
