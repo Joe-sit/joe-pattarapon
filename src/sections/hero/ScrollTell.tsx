@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useRef } from 'react'
 import { WIPE_FULL } from '@/components/CloudWipe'
 import { cursorPress } from '@/cursorguide/press'
-import { portalBox } from '@/sections/whatidocard/stageTuner'
+import { PORTAL_SKIN, SKIN, portalBox } from '@/sections/whatidocard/stageTuner'
 import { useCursorStop } from '@/cursorguide/useCursorStop'
 
 const TellProps = lazy(() => import('./TellProps').then((m) => ({ default: m.TellProps })))
@@ -71,10 +71,35 @@ const SKY_TO = 0.05
  * ขึ้นแล้วหายในเฟรมถัดไป — ช่วงพวกนี้จึงเว้นห่างกันเป็นก้อน ไม่ได้ต่อกันติด
  */
 const GEN_AT = 0.73
-const FILE_AT = 0.81
-const PRESS_AT = 0.89
+const FILE_AT = 0.79
+const PRESS_AT = 0.86
 /** ช่วงที่ไฟล์ถูกดึงออกเป็นหน้าต่าง (genie) */
-const MORPH_AT = 0.91
+const MORPH_AT = 0.875
+/**
+ * หน้าต่างเข้าที่ *ก่อน* จบจอ — ช่วงที่เหลือคือช่วงนิ่ง
+ *
+ * ถ้าท่าดึงยังเคลื่อนอยู่ในเฟรมที่จอสลับไปเป็นใบจริง (3D) ตาจะเห็นของกระตุกครั้งหนึ่งเสมอ
+ * แม้กรอบจะตรงกันทุกพิกเซล — สิ่งที่ต่างคือ *ความเร็ว* ไม่ใช่ตำแหน่ง จบท่าก่อนแล้วปล่อยให้
+ * หน้าต่างนิ่งอยู่กับที่สักช่วง การรับช่วงจึงเกิดขึ้นตอนไม่มีอะไรขยับ
+ */
+const LAND_AT = 0.965
+
+/**
+ * ท่า genie เดินด้วยนาฬิกา ไม่ได้ผูกกับระยะเลื่อน — MORPH_AT เป็นแค่ตัวจุดชนวน
+ *
+ * ผูกกับระยะเลื่อนแล้วความเร็วของการยืดเป็นของล้อเมาส์ของแต่ละคน: ปาดทีเดียวแผ่นกระโดดจาก
+ * ไฟล์ไปเป็นหน้าต่างในเฟรมเดียว เลื่อนทีละคลิกก็ยืดทีละขั้นเป็นบันได ซึ่งเป็นสิ่งที่ทำให้มัน
+ * "ไม่เนียน" ไม่ใช่เพราะเส้นความเร็วผิด (ท่าเดียวกันกับท่าปิดจอถัดไป — ดู
+ * sections/whatidocard/WhiteWrap)
+ *
+ * แต่ *ปลายทาง* ยังคิดจากระยะเลื่อนสด ๆ ทุกเฟรม (ดู glue) เพราะหน้าต่างใบจริงของจอถัดไป
+ * เลื่อนเข้ามาตามการเลื่อนจริง แผ่นจึงต้องเกาะไปกับมัน ไม่ใช่เล็งจุดที่มันจะไปอยู่
+ *
+ * รูปร่างเดินด้วยนาฬิกา / ที่หมายเดินด้วยระยะเลื่อน — แยกกันสองเรื่อง
+ */
+const GENIE_DUR = 0.85
+/** ขอบแต่ละด้านถึงที่ไม่พร้อมกัน = แผ่นถูก *ยืด* ไม่ใช่กล่องที่โตขึ้น (เท่าของ GENIE_DUR) */
+const GENIE_EDGE = { top: 0.78, side: 0.88, bottom: 1 }
 
 /**
  * กรอบปลายทางของ genie = กรอบของหน้าต่างใบพอร์ทัลในจอถัดไป
@@ -86,8 +111,17 @@ const MORPH_AT = 0.91
  * ทุกค่าเป็นสัดส่วนของ *ความสูง* วิวพอร์ต เพราะจอนั้นใช้กล้องออร์โธที่ผูก zoom ไว้กับความสูง
  * ของกรอบ ความกว้างบนจอของหน้าต่างจึงมาจากความสูง ไม่ได้มาจากความกว้างของวิวพอร์ต
  */
-/** ความสูงแถบหัว เทียบความสูงที่เห็นจริงของหน้าต่าง (BAR_T 0.95 / PORTAL_H 6.74) */
-const CARD_BAR = 0.141
+/**
+ * ผิวตอนต้นทางของแผ่น = หน้าตาของ "ไฟล์" ที่ถูกส่งกลับมา (เทาอ่อน/ส้ม)
+ *
+ * ปลายทางไม่ได้เขียนไว้ที่นี่: มันคือผิวของหน้าต่างจริงในจอถัดไป (ดู SKIN/PORTAL_SKIN ใน
+ * sections/whatidocard/stageTuner) แผ่นนี้ไล่สีไปหาค่าชุดนั้นจนเท่ากันพอดีตอนเข้าที่ —
+ * เฟรมที่ใบจริงรับช่วงจึงไม่มีสีอะไรเปลี่ยน
+ */
+const FILE_SKIN = { shell: [244, 244, 245], bar: [236, 238, 242] }
+/** จุดสามจุดบนแถบหัว — สีเดียวกับของหน้าต่างจริง */
+const DOTS = ['#ff5f57', '#febc2e', '#28c840']
+const DARK = { shell: hexRgb(SKIN.frame), bar: hexRgb(SKIN.bar) }
 
 /**
  * ช่วงที่ของแต่ละชั้นเข้าฉาก (สัดส่วนของช่วงนี้) — ไล่กันเป็นชั้น ไม่ใช่มาพร้อมกันทั้งจอ
@@ -121,6 +155,13 @@ const MODES = [
   { icon: 'globe', label: 'Web' },
   { icon: 'think', label: 'Think' },
 ] as const
+
+function hexRgb(h: string): number[] {
+  const n = parseInt(h.slice(1), 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+const mix = (a: number[], b: number[], u: number) =>
+  `rgb(${(a[0] + (b[0] - a[0]) * u).toFixed(0)},${(a[1] + (b[1] - a[1]) * u).toFixed(0)},${(a[2] + (b[2] - a[2]) * u).toFixed(0)})`
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v)
 const smooth = (v: number) => v * v * (3 - 2 * v)
@@ -218,6 +259,12 @@ export function ScrollTell() {
   /** ปุ่มส่ง — จุดจอดของเคอร์เซอร์ และจุดเริ่มของ genie */
   const send = useRef<HTMLButtonElement>(null)
   const card = useRef<HTMLDivElement>(null)
+  /** ชิ้นส่วนของแผ่น — แถบหัว / หน้าจอ / หน้าไฟล์ที่ทับอยู่บนหน้าจอตอนต้นทาง */
+  const cardBar = useRef<HTMLDivElement>(null)
+  const cardScreen = useRef<HTMLDivElement>(null)
+  const cardFile = useRef<HTMLDivElement>(null)
+  /** จุดที่แผ่นถูกดึงออกมา — อ่านจากกรอบของไฟล์ครั้งเดียวตอนท่าเริ่ม */
+  const src = useRef<{ x: number; y: number } | null>(null)
 
   /**
    * จุดจอดของเคอร์เซอร์นำสายตาที่ปุ่มส่ง — จังหวะตั้งเองเพราะของอยู่ในชั้นที่ตรึงไว้
@@ -254,6 +301,8 @@ export function ScrollTell() {
     /** ของข้างในช่องพิมพ์ + แถวปุ่มกลม — โผล่ไล่กันตามลำดับใน DOM */
     const parts = [...el.querySelectorAll<HTMLElement>('[data-part]')]
     let raf = 0
+    /** นาฬิกาของท่า genie (-1 = ยังไม่จุดชนวน) */
+    let gT0 = -1
     const read = () => {
       raf = 0
       const vh = Math.max(1, window.innerHeight)
@@ -262,7 +311,13 @@ export function ScrollTell() {
       const p = clamp01(-top / Math.max(1, vh * TELL_VH))
       /* พ้นช่วงแล้วปิดทิ้ง — ของที่ตรึงแบบ fixed ไม่หายไปเองเหมือนของในโฟลว์ */
       el.style.visibility = p >= 1 || top > vh ? 'hidden' : ''
-      const skyU = outCubic(clamp01(p / SKY_TO))
+      /**
+       * ฟ้าจางกลับเป็นขาวก่อนจบจอ — จอถัดไปพื้นขาว
+       *
+       * ชั้นนี้ปิดตัวเองทันทีที่ p ถึง 1 ถ้าฟ้ายังเข้มอยู่ตอนนั้น ตาเห็นพื้นฟ้าทั้งจอถูกสลับเป็น
+       * ขาวในเฟรมเดียว (วัดมาแล้ว) — ของที่สว่างขึ้นจนขาวแล้วค่อยสลับ ไม่มีอะไรให้เห็น
+       */
+      const skyU = outCubic(clamp01(p / SKY_TO)) * (1 - smooth(clamp01((p - LAND_AT + 0.12) / 0.12)))
       if (sky.current) sky.current.style.opacity = skyU.toFixed(3)
       if (glow.current) glow.current.style.opacity = skyU.toFixed(3)
 
@@ -354,21 +409,69 @@ export function ScrollTell() {
        * ทำที่กรอบจริง (left/top/width/height) ไม่ใช่ scale เพราะสเกลไม่เท่ากันสองแกนจะ
        * บิดมุมโค้งกับเงาให้เห็นว่าเป็นของที่ถูกยืด ส่วน clip-path ไม่บิดอะไร มันแค่ตัด
        */
-      const m = smooth(clamp01((p - MORPH_AT) / Math.max(0.01, 1 - MORPH_AT)))
+      /**
+       * จุดชนวน/รีเซ็ตของท่า genie — ระยะเลื่อนมีหน้าที่แค่นี้
+       *
+       * ถอยขึ้นไปพ้นจุดชนวนแล้วเล่นใหม่ได้ (เผื่อผู้ชมเลื่อนกลับขึ้นไปดูอีกรอบ)
+       */
+      if (gT0 < 0 && p >= MORPH_AT) gT0 = performance.now()
+      else if (gT0 >= 0 && p < MORPH_AT - 0.02) gT0 = -1
+      const gt = gT0 < 0 ? 0 : (performance.now() - gT0) / 1000
+      /**
+       * ความคืบหน้าของท่า = นาฬิกา *หรือ* ระยะเลื่อน อันไหนไปไกลกว่า
+       *
+       * นาฬิกาเป็นตัวหลัก (หยุดเลื่อนท่าก็เดินต่อจนจบ = ไม่กระตุกตามก้อน scroll) ส่วนระยะ
+       * เลื่อนเป็น *พื้น* ไม่ใช่ตัวขับ: ใครปาดทีเดียวข้ามทั้งจอ แผ่นต้องเข้าที่ทันเฟรมที่ใบจริง
+       * รับช่วงพอดี ไม่ใช่ยังยืดค้างอยู่กลางทางแล้วถูกตัดทิ้ง
+       */
+      const mScroll = clamp01((p - MORPH_AT) / Math.max(0.01, LAND_AT - MORPH_AT))
+      const m = gT0 < 0 ? 0 : Math.max(clamp01(gt / GENIE_DUR), mScroll)
       const cardEl = card.current
       const fromEl = file.current
       if (cardEl && fromEl) {
-        const r = fromEl.getBoundingClientRect()
-        const sx = r.left + r.width / 2
-        const sy = r.top + r.height / 2
+        /* กรอบของไฟล์อ่านครั้งเดียวตอนท่าเริ่ม ไม่ใช่ทุกเฟรม — อ่านกรอบสลับกับการเขียนสไตล์
+           คือการบังคับให้เบราว์เซอร์คิดผังใหม่กลางเฟรม และไฟล์ก็ไม่ได้ขยับไปไหนอยู่แล้ว */
+        if (!src.current || m <= 0) {
+          const r = fromEl.getBoundingClientRect()
+          src.current = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+        }
+        const sx = src.current.x
+        const sy = src.current.y
+        /**
+         * ไฟล์ถูกดูดเข้าไปในแผ่นตอนแผ่นเกิด — ไม่ได้ยืนอยู่ข้าง ๆ แล้วค่อยจางทีหลัง
+         *
+         * ของสองชิ้นที่อยู่ด้วยกันครึ่งท่าอ่านเป็น "มีหน้าต่างโผล่มาใหม่" ไม่ใช่ "ไฟล์กลายเป็น
+         * หน้าต่าง" ซึ่งเป็นทั้งเรื่องของท่านี้ (ค่าที่ FILE_AT เขียนไว้ถูกทับตอนนี้ ตอนนั้น
+         * มันเข้าที่ครบแล้ว)
+         */
+        const suck = clamp01(m / 0.26)
+        if (suck > 0) {
+          fromEl.style.opacity = (1 - suck).toFixed(3)
+          fromEl.style.transform = `translate3d(0, ${(suck * 12).toFixed(1)}px, 0) scale(${(1 - 0.24 * suck).toFixed(4)})`
+        }
         const card = portalBox()
         const th = vh * card.vh
         const tw = th * card.ar
         const tl = (window.innerWidth - tw) / 2 + vh * card.dx
-        const tt = (vh - th) / 2 + vh * card.dy
-        const eTop = 1 - (1 - m) ** 3
-        const eSide = 1 - (1 - m) ** 2
-        const eBot = m ** 1.6
+        /**
+         * ปลายทางไม่ใช่จุดนิ่ง — มันคือที่ที่หน้าต่างใบจริง *อยู่ตอนนี้*
+         *
+         * จอถัดไปเลื่อนเข้ามาจากล่างตลอดช่วงนี้ ขอบบนของมันถึงขอบบนจอพอดีตอน p = 1 ถ้าเล็ง
+         * ไปที่กรอบตอน p = 1 ไว้เฉย ๆ แผ่นจะเข้าที่ก่อนเวลาแล้วนิ่งอยู่สูงกว่าใบจริงเท่ากับ
+         * ระยะที่จอยังเหลือ (0.035 ของช่วง = 107px ที่จอสูง 900 — วัดมาแล้ว) แล้วกระโดดลง
+         * ไปหาใบจริงในเฟรมที่สลับ เกาะไปกับจอถัดไปแทน มันจึงเลื่อนขึ้นไปพร้อมกัน
+         */
+        const glue = vh * TELL_VH * (1 - p)
+        const tt = (vh - th) / 2 + vh * card.dy + glue
+        /**
+         * ขอบสี่ด้าน ease คนละจังหวะ: บนถึงก่อน ข้างตามมา ล่างช้าสุด
+         *
+         * ด้านที่ถึงก่อนใช้ outQuint (ออกตัวแรงแล้วหน่วงยาว) ส่วนก้นแผ่นออกช้าแล้วค่อยไล่ตาม
+         * — ผลรวมคือแผ่นที่ถูกดึงยืดจากจุดเดียว ไม่ใช่สี่เหลี่ยมที่ขยายขึ้นพร้อมกันทุกด้าน
+         */
+        const eTop = outQuint(clamp01(m / GENIE_EDGE.top))
+        const eSide = outQuint(clamp01(m / GENIE_EDGE.side)) ** 1.15
+        const eBot = clamp01(m / GENIE_EDGE.bottom) ** 1.9
         const cTop = sy + (tt - sy) * eTop
         const cBot = sy + (tt + th - sy) * eBot
         const cLeft = sx + (tl - sx) * eSide
@@ -378,8 +481,25 @@ export function ScrollTell() {
         cardEl.style.top = `${cTop.toFixed(1)}px`
         cardEl.style.width = `${Math.max(1, cRight - cLeft).toFixed(1)}px`
         cardEl.style.height = `${Math.max(1, cBot - cTop).toFixed(1)}px`
-        cardEl.style.borderRadius = `${(10 + 34 * m).toFixed(1)}px`
-        cardEl.style.transform = `skewX(${(-7 * (1 - m) * m * 4).toFixed(2)}deg)`
+        /* มุมมนไปจบที่มุมของหน้าต่างจริงพอดี ไม่ใช่ค่าที่พิมพ์ไว้เอง (ดู PORTAL_SKIN) */
+        cardEl.style.borderRadius = `${(10 + (th * PORTAL_SKIN.radius - 10) * m).toFixed(1)}px`
+        /* เอียงแล้วคลายเป็นศูนย์ — ยอดของมันอยู่กลางท่า ไม่ใช่ตอนจบ (ค้างเอียงตอนรับช่วง
+           = ใบจริงที่ไม่เอียงจะกระตุกเข้าที่) ลดจาก 7° เหลือ 4.5°: ตอนความเร็วมาจากนาฬิกา
+           แล้ว การเอียงแรงกลายเป็นของที่เด่นกว่าการยืดเอง */
+        cardEl.style.transform = `skewX(${(-4.5 * Math.sin(Math.PI * clamp01(m / 0.9)) ** 1.4).toFixed(2)}deg)`
+        /**
+         * ผิวของแผ่นไล่จากไฟล์ (เทาอ่อน/ส้ม) ไปเป็นหน้าต่างจริง (ดำ/เขียว) กลางทาง
+         *
+         * ไม่ได้เปลี่ยนสีตอนจบ: ของที่สลับสีตอนถึงที่อ่านเป็น "ภาพถูกเปลี่ยน" ไล่ให้เสร็จ
+         * ตอนแผ่นยังเคลื่อนอยู่ ตาจะอ่านว่าไฟล์ *กลายเป็น* หน้าต่างระหว่างถูกดึงออกมา
+         */
+        const g = smooth(clamp01((m - 0.18) / 0.5))
+        cardEl.style.background = mix(FILE_SKIN.shell, DARK.shell, g)
+        if (cardBar.current) cardBar.current.style.background = mix(FILE_SKIN.bar, DARK.bar, g)
+        if (cardFile.current) cardFile.current.style.opacity = (1 - g).toFixed(3)
+        if (cardScreen.current) {
+          cardScreen.current.style.borderRadius = `${(th * PORTAL_SKIN.screenRadius * m).toFixed(1)}px`
+        }
 
         /**
          * จุดคอดไม่ถูกหนีบให้อยู่ในกรอบ — ตอนต้นทางจุดที่ถูกกดอยู่นอกกรอบของแผ่นก็ได้
@@ -387,14 +507,27 @@ export function ScrollTell() {
          */
         const w2 = Math.max(1, cRight - cLeft)
         const cx = ((sx - cLeft) / w2) * 100
-        const l2 = cx - 1.5 + (0 - (cx - 1.5)) * m
-        const r2 = cx + 1.5 + (100 - (cx + 1.5)) * m
-        const N = 8
+        /* จุดคอดคลายช้ากว่ากรอบ (m²·²) — แผ่นจึงยังเรียวอยู่ที่ต้นทางเกือบทั้งทาง แล้วค่อย
+           คลี่เป็นสี่เหลี่ยมตอนท้าย ถ้าคลายเป็นเส้นตรงพร้อมกรอบ มันเปิดเป็นสี่เหลี่ยมตั้งแต่
+           กลางทาง = อ่านเป็นกล่องที่โต ไม่ใช่ของที่ถูกรีดออกมา */
+        const mp = m ** 2.2
+        const l2 = cx - 1.5 + (0 - (cx - 1.5)) * mp
+        const r2 = cx + 1.5 + (100 - (cx + 1.5)) * mp
+        /**
+         * คอดที่ *ขอบด้านที่ติดต้นทาง* ไม่ใช่ขอบตรงข้าม
+         *
+         * ไฟล์อยู่เหนือหน้าต่าง แผ่นจึงถูกดึงลงมา — ด้านที่ยังคอดอยู่ต้องเป็นด้านบน (ด้านที่
+         * ติดไฟล์) ก่อนหน้านี้ถ่วงน้ำหนักด้วย t² ซึ่งคอดที่ *ก้น* แผ่น ภาพที่ออกมาคือสี่เหลี่ยม
+         * ด้านขนานที่ก้นถูกลากไปทางขวา ไม่ใช่ของที่ถูกรีดออกมาจากไฟล์ (วัดจากภาพที่ 0.91)
+         *
+         * เส้นโค้งกำลังสอง ไม่ใช่เส้นตรง: ขอบจึงโป่งออกเร็วแล้วค่อยเรียวเข้าหาจุดคอด
+         */
+        const N = 10
         const lhs: string[] = []
         const rhs: string[] = []
         for (let k = 0; k <= N; k++) {
           const t = k / N
-          const c = t * t
+          const c = (1 - t) ** 2
           const y = (t * 100).toFixed(2)
           lhs.push(`${(0 + (l2 - 0) * c).toFixed(2)}% ${y}%`)
           rhs.push(`${(100 + (r2 - 100) * c).toFixed(2)}% ${y}%`)
@@ -467,6 +600,7 @@ export function ScrollTell() {
       }
       /* ของประดับออกตามช่องพิมพ์ ไม่งั้นจอถัดไป (ซึ่งไม่มีของพวกนี้) จะตัดเข้ามาแบบของหาย
          ทั้งกองในเฟรมเดียว */
+      keep()
       if (props.current) {
         props.current.style.opacity = (pu2 * (1 - smooth(clamp01(m * 1.5)))).toFixed(3)
         /* ออกด้วยการขยายเล็กน้อยตอนถูกดึงทิ้ง — ตอนเข้าไม่สเกลชั้นนี้ ของแต่ละชิ้นเข้าฉาก
@@ -476,6 +610,15 @@ export function ScrollTell() {
     }
     const on = () => {
       if (!raf) raf = requestAnimationFrame(read)
+    }
+    /**
+     * ระหว่างที่ท่า genie ยังเดิน ต้องวาดทุกเฟรมแม้ไม่มีการเลื่อน
+     *
+     * ลูปของจอนี้ถูกปลุกด้วย scroll เท่านั้น (ของที่เหลือผูกกับระยะเลื่อนล้วน) ถ้าไม่ปลุกเอง
+     * ท่าที่เดินด้วยนาฬิกาจะค้างเป็นภาพนิ่งทันทีที่ผู้ชมหยุดมือ
+     */
+    const keep = () => {
+      if (gT0 >= 0 && (performance.now() - gT0) / 1000 < GENIE_DUR + 0.1) on()
     }
     window.addEventListener('scroll', on, { passive: true })
     window.addEventListener('resize', on)
@@ -730,21 +873,45 @@ export function ScrollTell() {
           className="pointer-events-none fixed"
           style={{ opacity: 0, background: '#f4f4f5', boxShadow: '0 30px 80px rgba(22,24,31,0.12)' }}
         >
+          {/* แถบหัว จุดสามจุด ขอบรอบหน้าจอ — สัดส่วนเดียวกับหน้าต่างจริงทุกตัว ไม่ได้กะเอา */}
           <div
-            className="absolute inset-x-0 top-0 flex items-center gap-[0.9%] pl-[2.4%]"
-            style={{ height: `${CARD_BAR * 100}%`, background: '#eceef2' }}
+            ref={cardBar}
+            className="absolute inset-x-0"
+            /* เยื้องลงเท่าขอบลบมุมของแผ่นจริง — ขอบนั้นเป็นเนื้อกรอบ ไม่ใช่แถบหัว */
+            style={{ top: `${PORTAL_SKIN.padY * 100}%`, height: `${PORTAL_SKIN.bar * 100}%`, background: '#eceef2' }}
           >
-            <i className="aspect-square w-[1.7%] rounded-full bg-[#ff5f57]" />
-            <i className="aspect-square w-[1.7%] rounded-full bg-[#febc2e]" />
-            <i className="aspect-square w-[1.7%] rounded-full bg-[#28c840]" />
+            {DOTS.map((c, i) => (
+              <i
+                key={c}
+                className="absolute aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full"
+                style={{
+                  left: `${(PORTAL_SKIN.dotX + i * PORTAL_SKIN.dotGap) * 100}%`,
+                  top: '50%',
+                  /* กว้างเทียบความกว้างของแผ่น ไม่ใช่ของแถบ — แถบเตี้ยกว่าแผ่นราวเจ็ดเท่า */
+                  width: `${PORTAL_SKIN.dotR * 200}%`,
+                  background: c,
+                }}
+              />
+            ))}
           </div>
           <div
-            className="absolute inset-x-[1.6%] bottom-[2.2%] rounded-[2%]"
+            ref={cardScreen}
+            className="absolute overflow-clip"
             style={{
-              top: `${CARD_BAR * 100 + 1.6}%`,
-              background: 'linear-gradient(180deg,#ffe9d2 0%,#ff7a3c 100%)',
+              left: `${PORTAL_SKIN.screenX * 100}%`,
+              right: `${PORTAL_SKIN.screenX * 100}%`,
+              top: `${PORTAL_SKIN.screenTop * 100}%`,
+              bottom: `${PORTAL_SKIN.screenBottom * 100}%`,
+              background: SKIN.screen,
             }}
-          />
+          >
+            {/* หน้าตาของไฟล์ที่ถูกส่งกลับมา — จางออกกลางทางเหลือหน้าจอเขียวของหน้าต่าง */}
+            <div
+              ref={cardFile}
+              className="absolute inset-0"
+              style={{ background: 'linear-gradient(180deg,#ffe9d2 0%,#ff7a3c 100%)' }}
+            />
+          </div>
         </div>
       </div>
     </section>

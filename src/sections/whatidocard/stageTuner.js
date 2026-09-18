@@ -37,6 +37,8 @@ export const VIEW_H = 10.32
 export const DEFAULTS = {
   /** ตัวละคร */
   char: 1,
+  /** ฉากหลังในจอ: ทุ่งหญ้าที่ปั้นตามรูปจริง (1) หรือเขียวเรียบอย่างเดิม (0) — ดู ./Replica */
+  replica: 1,
   /**
    * การวางตัวละคร — ครึ่งตัวหันเฉียง ไม่ใช่เต็มตัวยืนตรง
    *
@@ -228,10 +230,10 @@ export function stackCenter(t) {
 export function portalBox(t = state) {
   const c = stackCenter(t)
   const s = t.w1s
-  const vh = (PORTAL_H * s) / VIEW_H
+  const vh = (OH * s) / VIEW_H
   return {
     vh,
-    ar: CARD_W / PORTAL_H,
+    ar: OW / OH,
     dx: (t.w1x - c.x) / VIEW_H,
     dy: -(t.w1y + PORTAL_DY * s - c.y) / VIEW_H,
   }
@@ -247,6 +249,20 @@ const HOLE_Y = -BAR_T / 2
 const HOLE_W = CARD_W - BAR * 2 + 0.04
 const HOLE_H = BODY_H + CARD_R - BAR * 2 + 0.04
 const HOLE_CY = HOLE_Y - CARD_R / 2
+/** จุดสามจุดบนแถบหัว — รัศมีกับระยะห่าง (ค่าเดียวกับ CardStage) */
+const DOT_R = 0.15
+const DOT_GAP = 0.46
+/**
+ * ขอบลบมุมของแผ่น (bevelSize ที่ CardStage ส่งให้ ExtrudeGeometry) — ยื่นออกนอกกรอบ
+ *
+ * กรอบที่เห็นจริงบนจอจึงใหญ่กว่า CARD_W × PORTAL_H อยู่ด้านละเท่านี้ (วัดมาแล้ว: ใบจริง
+ * กว้าง 497px ที่จอสูง 900 ส่วนเงาที่คิดจากกรอบเปล่ากว้าง 484px) ปลายทางของท่า genie
+ * ต้องเป็นกรอบ *ที่เห็น* ไม่ใช่กรอบเปล่า
+ */
+const BEVEL = 0.06
+/** กรอบนอกที่เห็นจริง — กรอบเปล่าบวกขอบลบมุมสองด้าน */
+const OW = CARD_W + BEVEL * 2
+const OH = PORTAL_H + BEVEL * 2
 
 /**
  * กรอบ "พื้นที่หน้าจอ" ของทุกบาน เป็นสัดส่วนของจอ (0..1 จากมุมซ้ายล่าง)
@@ -257,6 +273,46 @@ const HOLE_CY = HOLE_Y - CARD_R / 2
  * ใช้ได้เพราะทุกบานหันหน้าตรงเข้ากล้องและกล้องเป็นออร์โธ: กรอบบนจอจึงเป็นสี่เหลี่ยมตรง ๆ
  * ไม่ใช่รูปสี่เหลี่ยมที่ถูกเพอร์สเปกทีฟบิด (ถ้าวันหนึ่งเอียงบานกลับมา วิธีนี้ใช้ไม่ได้)
  */
+/* ── ผิวของหน้าต่าง กับผังของใบพอร์ทัลเป็นสัดส่วน ────────────────────────── */
+/**
+ * สีของหน้าต่างจริง — จอก่อนหน้าต้องไล่สีของเงาหน้าต่างมาลงที่ค่าชุดนี้พอดี
+ *
+ * อยู่ที่นี่ไม่ได้อยู่ใน CardStage เพราะสองจอใช้ร่วมกัน: ท่า genie ของจอก่อนหน้า (DOM) จบลง
+ * ตรงเฟรมที่ใบจริง (3D) รับช่วง ถ้าสองฝั่งถือสีคนละชุด ตอนสลับจะเห็นภาพกระพริบเปลี่ยนสี
+ */
+export const SKIN = { screen: '#a6dd2b', bar: '#15171c', frame: '#0b0c0f' }
+
+/**
+ * ผังของใบพอร์ทัลเป็น *สัดส่วน* ของกรอบที่เห็น — แถบหัว/มุมมน/ขอบ/จุดสามจุด
+ *
+ * แนวนอนเทียบความกว้าง แนวตั้งเทียบความสูง (ยกเว้นมุมมนซึ่งเป็นความยาวจริงจึงเทียบความสูง
+ * ตัวเดียวทั้งสองแกน) — คิดจากเรขาคณิตชุดเดียวกับที่ CardStage ปั้น ไม่ใช่วัดจากภาพ
+ */
+export const PORTAL_SKIN = {
+  padY: BEVEL / OH,
+  bar: BAR_T / OH,
+  radius: (CARD_R + BEVEL) / OH,
+  screenX: (BAR - 0.02 + BEVEL) / OW,
+  screenTop: (CARD_H / 2 - (HOLE_CY + HOLE_H / 2) + BEVEL) / OH,
+  screenBottom: (HOLE_CY - HOLE_H / 2 - (CARD_H / 2 - PORTAL_H) + BEVEL) / OH,
+  screenRadius: (CARD_R * 0.5) / OH,
+  dotR: DOT_R / OW,
+  dotX: (0.62 + BEVEL) / OW,
+  dotY: (BEVEL + BAR_T / 2) / OH,
+  dotGap: DOT_GAP / OW,
+}
+
+/**
+ * ระยะที่กองหน้าต่างกางออก (0 = ทุกใบยังซ้อนอยู่ที่ใบพอร์ทัล, 1 = เข้าที่)
+ *
+ * ค่าเปลี่ยนทุกเฟรมที่เลื่อนจอ จึงเป็นกล่องที่ถูกเขียนทับ ไม่ใช่ state ของ React — จอเขียน
+ * (ดู WhatIDoCard) ฉากอ่านใน useFrame (ดู CardStage/FanGroup) ไม่มีการเรนเดอร์ใหม่ตรงกลาง
+ *
+ * ท่านี้มีเพื่อให้ท่า genie ของจอก่อนหน้าส่งของมาที่ "หน้าต่างใบเดียว" จริง ๆ ไม่ใช่โผล่มา
+ * พร้อมกันทั้งกองสี่ใบในเฟรมที่สลับจอ
+ */
+export const stageIn = { v: 0 }
+
 export function screenRects(t = state, aspect = 16 / 9) {
   const c = stackCenter(t)
   const w = VIEW_H * aspect

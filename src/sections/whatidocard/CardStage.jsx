@@ -8,7 +8,8 @@ import { Switch } from '@/newhero/Switch'
 import { InsidePortal, PortalMask, roundedFrameGeo, roundedPlane, roundedRectShape } from '@/newhero/stencilPortal'
 import { useDisposable } from '@/joespresso/scene/utils'
 import { Magnifier } from './Magnifier'
-import { CARD_H, CARD_W, VIEW_H, stackCenter, useStageTuner } from './stageTuner'
+import { REPLICA_ORDER, Replica } from './Replica'
+import { CARD_H, CARD_W, SKIN, VIEW_H, stackCenter, stageIn, useStageTuner } from './stageTuner'
 
 /**
  * จอ "สิ่งที่ทำ" — หน้าต่างโปรแกรมเป็นของสามมิติ เนื้อหน้าต่างเป็นพอร์ทัลทะลุไปอีกฉาก
@@ -93,7 +94,7 @@ const DOT_GAP = 0.46
  * ไปตั้งที่แผ่นรองในพอร์ทัล (ดู Card) ไม่ใช่ที่นี่ — แต่ค่าต้องเป็นตัวเดียวกัน ไม่งั้นสองจอ
  * เขียวไม่เท่ากัน
  */
-const SCREEN = '#a6dd2b'
+const SCREEN = SKIN.screen
 
 /**
  * ค่า stencil — ใช้เป็น *บิต* ไม่ใช่เลขเรียง
@@ -120,9 +121,29 @@ const SKINS = [
 
 const RAD = Math.PI / 180
 
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v)
+const outCubic = (v) => 1 - (1 - v) ** 3
+
+/**
+ * จุดตั้งต้นของท่ากางกอง — บานหลังออกมาจาก *หลังใบพอร์ทัล* บานหน้าเลื่อนเข้ามาจากใต้กรอบ
+ *
+ * บานหลังซ้อนอยู่ที่ใบพอร์ทัลพอดีตอนระยะเป็นศูนย์ จึงถูกใบพอร์ทัลบังหมดทั้งใบ = ไม่ต้องหรี่
+ * ความทึบของมันเลย (ความทึบของวัสดุที่แชร์กันทั้งกองคือของที่แก้ยากในฉากที่มี stencil)
+ * บานหน้าทำอย่างนั้นไม่ได้เพราะมันถูกวาดทับใบพอร์ทัล — มันจึงมาจากนอกกรอบแทน
+ */
+const fanFrom = (key, t) =>
+  key === 'w4'
+    ? { pos: [t.w4x + 1.6, t.w4y - 9.5, t.w4z], scale: t.w4s }
+    : { pos: [t.w1x, t.w1y, t[`${key}z`]], scale: t.w1s }
+
+/** ลำดับการกางของแต่ละใบ — ไล่กันทีละใบ ไม่ใช่กางพร้อมกันทั้งกอง */
+const FAN_ORDER = { w1: 0, w2: 1, w3: 2, w4: 3 }
+
 /** ผังของหน้าต่างใบหนึ่ง = หน้าตาคงที่ + ค่าที่ลากได้จากแผง */
 const laidOut = (skin, t) => ({
   ...skin,
+  from: fanFrom(skin.key, t),
+  delay: FAN_ORDER[skin.key],
   /**
    * อยู่หน้าหรือหลังใบพอร์ทัล ตัดสินจาก z ที่ลากมา ไม่ใช่ค่าที่เขียนตายไว้ในสกิน
    *
@@ -215,6 +236,60 @@ function Fit() {
  *
  * ค่าที่เขียนเป็นบิต (ดู SCREEN_BIT / PORTAL_BIT) — ช่องพอร์ทัลเขียนทั้งสองบิต
  */
+/**
+ * กลุ่มที่พาหน้าต่างใบหนึ่งเข้าที่ตามระยะเลื่อน — ท่ากางกองหลังจากท่า genie ส่งของมาถึง
+ *
+ * จอก่อนหน้าดึงไฟล์ออกมาเป็นหน้าต่าง *ใบเดียว* (ดู sections/hero/ScrollTell) ถ้าเฟรมถัดมา
+ * มีสี่ใบพร้อมกันหมด การแปลงร่างทั้งอันถูกกินทิ้งด้วยการตัดภาพ — ใบที่เหลือจึงกางออกมาทีหลัง
+ * โดยเริ่มจากที่ซ่อนอยู่หลังใบพอร์ทัล (ดู fanFrom)
+ *
+ * เขียนลงวัตถุใน useFrame ตรง ๆ ไม่ผ่าน state: ค่าเปลี่ยนทุกเฟรมที่เลื่อนจอ และค่าต้นทาง
+ * (stageIn) ก็เป็นกล่องที่จอเขียนทับ ไม่ใช่สโตร์ที่เรนเดอร์ใหม่
+ */
+const FAN_STEP = 0.13
+const FAN_SPAN = 0.52
+
+function FanGroup({ from, to, scale, rotation, delay = 0, children }) {
+  const g = useRef()
+  useFrame(() => {
+    const o = g.current
+    if (!o) return
+    const e = outCubic(clamp01((stageIn.v - delay * FAN_STEP) / FAN_SPAN))
+    o.position.set(
+      from.pos[0] + (to[0] - from.pos[0]) * e,
+      from.pos[1] + (to[1] - from.pos[1]) * e,
+      /* ความลึกไม่ถูกไล่: ลำดับหน้า/หลังของกองต้องนิ่งตลอดท่า ไม่งั้นบานจะสลับกันบัง */
+      to[2],
+    )
+    o.scale.setScalar(from.scale + (scale - from.scale) * e)
+  })
+  return (
+    <group ref={g} rotation={rotation}>
+      {children}
+    </group>
+  )
+}
+
+/**
+ * ตัวละครโผล่ขึ้นมาในช่องหลังหน้าต่างเข้าที่ — ไม่ใช่ยืนรออยู่แล้วตั้งแต่เฟรมแรก
+ *
+ * ท่า genie ของจอก่อนหน้าส่งมาเป็น "หน้าต่างเปล่า" (เงาของมันเป็น DOM ไม่มีตัวละคร) ถ้าเฟรม
+ * ถัดมามีคนยืนอยู่เต็มช่องแล้ว ตาจะเห็นของโผล่มาหนึ่งชิ้นทั้งที่หน้าต่างไม่ได้เปลี่ยนอะไร —
+ * ให้เขาขึ้นมาจากใต้ขอบช่อง (ซึ่งถูก mask อยู่แล้ว) จึงอ่านเป็น "เดินเข้ามาในจอ"
+ */
+const CHAR_LIFT = 7.2
+
+function Rising({ y, lift, children }) {
+  const g = useRef()
+  useFrame(() => {
+    const o = g.current
+    if (!o) return
+    const e = outCubic(clamp01(stageIn.v / FAN_SPAN))
+    o.position.y = y - (1 - e) * lift
+  })
+  return <group ref={g}>{children}</group>
+}
+
 function Masks({ list }) {
   const slab = useMemo(() => new THREE.PlaneGeometry(CARD_W, CARD_H), [])
   useDisposable(slab)
@@ -226,7 +301,7 @@ function Masks({ list }) {
   return (
     <group>
       {list.map((w, i) => (
-        <group key={w.key} position={[w.x, w.y, w.z]} scale={w.s}>
+        <FanGroup key={w.key} from={w.from} to={[w.x, w.y, w.z]} scale={w.s} delay={w.delay}>
           {/* ล้างรอยของบานที่อยู่หลังกว่าในพื้นที่ที่แผ่นนี้บังไว้ */}
           <mesh geometry={slab} renderOrder={-40 + i * 2}>
             <PortalMask mark={0} />
@@ -240,7 +315,7 @@ function Masks({ list }) {
               <PortalMask mark={SCREEN_BIT} />
             </mesh>
           )}
-        </group>
+        </FanGroup>
       ))}
     </group>
   )
@@ -270,6 +345,9 @@ function Scene() {
           y: t[`${key}y`],
           z: t[`${key}z`],
           s: t[`${key}s`],
+          /* หน้ากากต้องเดินทางเหมือนบานของมันเป๊ะ ๆ ไม่งั้นช่องจะไม่อยู่ตรงกับหน้าจอ */
+          from: fanFrom(key, t),
+          delay: FAN_ORDER[key],
         }))
         .sort((a, b) => a.z - b.z),
     [t],
@@ -306,6 +384,35 @@ function Scene() {
             y -4.86 ยอดหัว +0.72 (วัดจากไฟล์ที่หน้า /rig-export อบออกมา) และ Rider
             ยกตัวขึ้นอีก mascotLift ก่อนถึงกลุ่มนี้
           */}
+
+          {/* หน้าต่างใบที่คร่อมหน้าของในฉาก — อยู่ในกิ่งเดียวกับของหน้าการ์ด ลำดับวาดจึงเป็น 10 */}
+          <StackWindows list={front} order={10} />
+
+          {/* ของสกิล */}
+          {t.skills > 0.5 && (
+            <>
+              <group position={PROPS.glass.pos} rotation={PROPS.glass.rot} scale={PROPS.glass.scale}>
+                <Magnifier />
+              </group>
+              <group position={PROPS.palette.pos} rotation={PROPS.palette.rot} scale={PROPS.palette.scale}>
+                <Palette />
+              </group>
+              <group position={PROPS.toggle.pos} rotation={PROPS.toggle.rot} scale={PROPS.toggle.scale}>
+                {/* glass = 0: สวิตช์ของ hero เป็นแก้วหักเห ซึ่งบังคับให้วาดฉากซ้ำอีกรอบ
+                    ของชิ้นเท่านี้บนพื้นเรียบ มองไม่เห็นการหักเหอยู่แล้ว */}
+                <Switch glass={0} pos={1} />
+              </group>
+            </>
+          )}
+        </Order>
+
+        {/**
+         * ตัวละคร + ฉากหลังในจอ — อยู่ *นอก* กิ่ง Order 10
+         *
+         * สองชั้นนี้สั่งลำดับวาดของตัวเองทุกเฟรม (ดู InsideScreen / REPLICA_ORDER) การถูก
+         * Order กวาดทับให้เป็น 10 ในช่วงเฟรมแรก ๆ ทำให้ฉากหลัง (11) ขึ้นมาทับตัวละครอยู่
+         * สองวินาทีแรกของจอ
+         */}
           {/**
            * ตัวละคร — ครึ่งตัวหันเฉียง อยู่ *ใน* จอของหน้าต่าง
            *
@@ -315,12 +422,14 @@ function Scene() {
            * ค่าทั้งชุดลากได้จากแผง (ดู ./stageTuner)
            */}
           {t.char > 0.5 && (
+            <Rising y={t.chY} lift={CHAR_LIFT}>
             <group
-              position={[t.chX, t.chY, t.chZ]}
+              position={[t.chX, 0, t.chZ]}
               rotation={[t.chRotX * RAD, t.chRotY * RAD, t.chRotZ * RAD]}
               scale={t.chScale}
             >
-              <InsideScreen>
+              {/* วาดหลังฉากหลังในจอ (REPLICA_ORDER) — ตัวละครยืนอยู่หน้าทุ่ง ไม่ใช่ในทุ่ง */}
+              <InsideScreen order={REPLICA_ORDER + 3}>
                 {/**
                  * `stand` = โหมดยืนของริก · `noBoard` เอาสเก็ตบอร์ดออก · `noLumber` ใช้แขน
                  * ของริกเอง
@@ -337,6 +446,17 @@ function Scene() {
                   stand
                   noBoard
                   noLumber
+                  /**
+                   * ไม่มีลม — เสื้อไม่ปริว
+                   *
+                   * ฉากนี้เป็นภาพนิ่ง (หัวไม่ตามเมาส์ ตัวไม่ไถล) ผ้าที่สะบัดอยู่ตัวเดียวจึงอ่าน
+                   * เป็นของที่หลุดออกมาจากฉากอื่น ไม่ใช่ลมของฉากนี้
+                   *
+                   * วัดมาแล้วว่าตัวสวิตช์ทำงานจริง: ปิดลม+ปิดไหวตัว = ไม่มีพิกเซลไหนขยับเลย
+                   * ส่วนปิดแค่ไหวตัวยังเหลือผ้าสะบัด 6–12 พันพิกเซลต่อเฟรม ความไหวของ *ตัว*
+                   * (หายใจ/โยก) ยังอยู่ ไม่ได้ปิดไปด้วย — ที่สั่งคือเสื้อ ไม่ใช่ทั้งตัว
+                   */
+                  noWind
                   /**
                    * ท่าหัวคงที่ ไม่ตามเมาส์ — จอนี้เป็นภาพนิ่งตามรูปอ้างอิง
                    *
@@ -359,29 +479,17 @@ function Scene() {
                 />
               </InsideScreen>
             </group>
+            </Rising>
           )}
-
-          {/* หน้าต่างใบที่คร่อมหน้าของในฉาก — อยู่ในกิ่งเดียวกับของหน้าการ์ด ลำดับวาดจึงเป็น 10 */}
-          <StackWindows list={front} order={10} />
-
-          {/* ของสกิล */}
-          {t.skills > 0.5 && (
-            <>
-              <group position={PROPS.glass.pos} rotation={PROPS.glass.rot} scale={PROPS.glass.scale}>
-                <Magnifier />
-              </group>
-              <group position={PROPS.palette.pos} rotation={PROPS.palette.rot} scale={PROPS.palette.scale}>
-                <Palette />
-              </group>
-              <group position={PROPS.toggle.pos} rotation={PROPS.toggle.rot} scale={PROPS.toggle.scale}>
-                {/* glass = 0: สวิตช์ของ hero เป็นแก้วหักเห ซึ่งบังคับให้วาดฉากซ้ำอีกรอบ
-                    ของชิ้นเท่านี้บนพื้นเรียบ มองไม่เห็นการหักเหอยู่แล้ว */}
-                <Switch glass={0} pos={1} />
-              </group>
-            </>
-          )}
-        </Order>
       </group>
+
+      {/**
+       * ฉากหลังในจอ — อยู่นอกกลุ่มที่เลื่อนกองหน้าต่างให้อยู่กลางจอ
+       *
+       * มันวาดในพิกัดของ *จอ* (uv เดียวกับรูปจริงที่รอยสาดเปิดเผย — ดู ./Replica) ไม่ใช่
+       * พิกัดของกองหน้าต่าง ถ้าเอาไปไว้ในกลุ่มนั้น ฉากจะเลื่อนตามกองแล้วไม่ทับกับรูปจริง
+       */}
+      {t.replica > 0.5 && <Replica stencilRef={SCREEN_BIT} stencilFuncMask={SCREEN_BIT} />}
 
     </>
   )
@@ -434,7 +542,7 @@ function StackWindows({ list, order }) {
   return (
     <group>
       {list.map((b, i) => (
-        <group key={i} position={b.pos} rotation={b.rot} scale={b.scale}>
+        <FanGroup key={i} from={b.from} to={b.pos} scale={b.scale} rotation={b.rot} delay={b.delay}>
           {/* วาดก่อนทุกอย่าง — ฉากในพอร์ทัลของใบหน้าวาดโดยปิดการทดสอบความลึก ถ้าใบหลัง
               ไม่ได้ถูกสั่งให้ไปก่อน มันจะไปทาทับเนื้อในช่องของใบหน้า */}
           <mesh geometry={slab} renderOrder={order}>
@@ -471,7 +579,7 @@ function StackWindows({ list, order }) {
           >
             <meshBasicMaterial map={labels[i]} transparent toneMapped={false} />
           </mesh>
-        </group>
+        </FanGroup>
       ))}
     </group>
   )
@@ -625,14 +733,14 @@ function Card() {
        * ซึ่งทึบตรงนั้นบังไว้หมด
        */}
       <mesh geometry={bar} position={[0, CARD_H / 2 - (BAR_T + CARD_R) / 2, 0]}>
-        <meshStandardMaterial color="#15171c" roughness={0.6} />
+        <meshStandardMaterial color={SKIN.bar} roughness={0.6} />
       </mesh>
 
       {/* กรอบเนื้อหน้าต่าง — ขอบบางเท่ากันสามด้าน ส่วนที่เกินขึ้นไปซ่อนอยู่ใต้แถบหัว */}
       <mesh geometry={frame} position={[0, HOLE_Y - CARD_R / 2, 0]}>
         {/* กรอบดำเข้มกว่าแถบหัว — สองระดับนี้คือสิ่งที่แยกแถบหัวออกจากตัวกรอบในหน้าต่างสีดำ
             ที่ไม่มีเงาตกกระทบมาช่วย */}
-        <meshStandardMaterial color="#0b0c0f" roughness={0.55} />
+        <meshStandardMaterial color={SKIN.frame} roughness={0.55} />
       </mesh>
 
       {/* จุดสามจุด — ลอยหน้าแถบหัวเล็กน้อย ไม่ใช่สีที่ทาอยู่บนระนาบเดียวกัน */}

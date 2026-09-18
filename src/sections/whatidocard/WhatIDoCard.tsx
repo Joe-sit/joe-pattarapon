@@ -1,7 +1,8 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { SKILLS } from '@/sections/whatido/WhatIDo'
 import { useCursorStop } from '@/cursorguide/useCursorStop'
-import { screenRects, useStageTuner } from './stageTuner'
+import { screenRects, stageIn, useStageTuner } from './stageTuner'
+import { WRAP_AT, WhiteWrap } from './WhiteWrap'
 
 /**
  * จอ "สิ่งที่ทำ" — การ์ดโพสต์ใบเดียว ตัวละครอยู่ข้างใน ของสกิลลอยรอบ
@@ -62,7 +63,14 @@ const LIFT = {
    * sections/hero/ScrollTell) ถ้าการ์ดยังไถลขึ้นมาจากใต้จออีกรอบ ผู้ชมจะเห็นของหายไป
    * หนึ่งจังหวะแล้วค่อยโผล่ใหม่ ซึ่งกินการแปลงร่างทิ้งทั้งอัน
    */
-  stage: 0.06,
+  /**
+   * ศูนย์: กรอบต้องอยู่ตรงที่ท่า genie วางไว้พอดีในเฟรมที่รับช่วง
+   *
+   * ยกขึ้นแม้แต่ 0.06 จอ (54px ที่จอสูง 900) ก็คือหน้าต่างที่กระโดดลงไป 54px ในเฟรมที่สลับ
+   * จอ (วัดมาแล้ว) ความเคลื่อนไหวของกองมาจากท่ากางของมันเอง (ดู stageIn) ไม่ใช่จากการยก
+   * ทั้งชั้นขึ้นมาอีกรอบ
+   */
+  stage: 0,
   head: 0.3,
   Research: 1.05,
   Design: 0.88,
@@ -91,6 +99,13 @@ export function WhatIDoCard({ id = 'what-i-do' }: { id?: string }) {
   const [live, setLive] = useState(false)
   /** ชั้นที่ต้องเลื่อนเข้าที่ — เขียน transform ลง DOM ตรง ๆ ไม่ผ่าน state (ค่าเปลี่ยนทุกเฟรม) */
   const pin = useRef<HTMLDivElement>(null)
+  /**
+   * หมุดของเคอร์เซอร์ในท่าปิดจอ — ของเปล่าที่วางไว้ตามระยะเลื่อน ไม่ใช่ของที่มองเห็น
+   *
+   * จังหวะของจุดจอดคิดจากตำแหน่งของ element ในหน้า (ดู cursorguide/stops) ท่าปิดจอไม่มี
+   * ของในจอให้เกาะ — มันคือช่วงที่ของทั้งจอกำลังถูกขาวห่อ จึงวางหมุดไว้ที่ระยะนั้นตรง ๆ
+   */
+  const wrapAim = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const el = section.current
@@ -115,7 +130,11 @@ export function WhatIDoCard({ id = 'what-i-do' }: { id?: string }) {
       raf = 0
       const vh = Math.max(1, window.innerHeight)
       const y = Math.max(0, -sec.getBoundingClientRect().top)
-      el.style.setProperty('--in', smooth(clamp01(y / (vh * IN_SPAN))).toFixed(4))
+      const e = clamp01(y / (vh * IN_SPAN))
+      el.style.setProperty('--in', smooth(e).toFixed(4))
+      /* ระยะเดียวกันไปคุมท่ากางกองหน้าต่างในฉาก 3D (ดู stageIn ใน ./stageTuner) — ส่งเป็น
+         ค่าดิบ ฉากมี ease ของตัวเองต่อใบ */
+      stageIn.v = e
     }
     const on = () => {
       if (!raf) raf = requestAnimationFrame(read)
@@ -139,6 +158,13 @@ export function WhatIDoCard({ id = 'what-i-do' }: { id?: string }) {
   useCursorStop(atResearch, { id: 'whatido-research', dx: 0.62, dy: -0.1, size: 58, tilt: -8, lift: 120 })
   useCursorStop(atDesign, { id: 'whatido-design', dx: 0.66, dy: -0.1, size: 54, tilt: 6, lift: 60 })
   useCursorStop(atCoding, { id: 'whatido-coding', dx: -0.58, dy: -0.12, size: 54, tilt: -4, lift: 40 })
+  /**
+   * จุดจอดสุดท้ายของจอ: มือ/เคอร์เซอร์ที่ยื่นเข้าไปในช่องที่ยังเหลือ (ตามภาพอ้างอิง)
+   *
+   * เอียงไปทางขวา = ชี้ไปที่มืออีกข้างซึ่ง *ยังไม่ใส่* ตามที่สั่งไว้ ที่ว่างทางขวาของเคอร์เซอร์
+   * จึงเป็นที่ของมันในภายหลัง ไม่ใช่ที่ว่างเพราะจัดวางไม่ลง
+   */
+  useCursorStop(wrapAim, { id: 'whatido-wrap', size: 132, tilt: -128, lift: 90 })
 
   /** การวางรูปจริงให้ทับตัวละคร 3D — ลากได้จากแผงจูนของจอนี้ */
   const t = useStageTuner() as Record<string, number>
@@ -163,7 +189,8 @@ export function WhatIDoCard({ id = 'what-i-do' }: { id?: string }) {
       data-screen={id}
       ref={section}
       /* สูงกว่าหนึ่งจอ — ระยะที่เกินคือระยะเลื่อนของท่าเข้าฉาก ของจริงถูกตรึงไว้ข้างใน */
-      className="relative h-[165svh] w-full text-[#0b0d12]"
+      /* ท่อนท้ายที่เพิ่มมาคือระยะของท่าปิดจอ (ดู ./WhiteWrap) ไม่ใช่ที่ว่างเปล่า ๆ */
+      className="relative h-[260svh] w-full text-[#0b0d12]"
       /* พื้นขาวล้วน — การ์ดกับตัวละครแยกออกจากพื้นด้วยเงาและแสงเงาของตัวเอง ไม่ใช่ด้วยสีพื้น */
       style={{ background: '#ffffff' }}
     >
@@ -196,6 +223,15 @@ export function WhatIDoCard({ id = 'what-i-do' }: { id?: string }) {
           </Suspense>
         )}
 
+        {/**
+         * ท่าปิดจอ — ขาวห่อฉากจนสนิทแล้วส่งต่อจอถัดไป
+         *
+         * อยู่ในกล่องที่ถูกตรึง (จึงห่อ *ฉาก* ไม่ใช่ห่อหน้าเว็บ) และอยู่เหนือทุกชั้นของจอนี้
+         * แต่ยังต่ำกว่าชั้นเคอร์เซอร์นำสายตาของหน้า (fixed z 55) — เคอร์เซอร์จึงยังอยู่บน
+         * ความขาวให้เห็น เหมือนมือในภาพอ้างอิงที่อยู่บนพื้น ไม่ได้ถูกพื้นทับ
+         */}
+        <WhiteWrap sectionRef={section} />
+
         {/* หัวจอ — เฉพาะชื่อจอ ไม่มีหัวเรื่อง เพราะยังไม่มีข้อความจริงของจอนี้ */}
         <div className="pointer-events-none absolute left-[6%] top-[9%]" style={rise(LIFT.head)}>
           <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#fd5000]">
@@ -218,6 +254,28 @@ export function WhatIDoCard({ id = 'what-i-do' }: { id?: string }) {
           </div>
         ))}
       </div>
+
+      {/**
+       * หมุดของเคอร์เซอร์ในท่าปิดจอ — อยู่นอกกล่องที่ถูกตรึง
+       *
+       * ต้องอยู่นอก: ของในกล่อง sticky ค้างอยู่ที่เดิมบนหน้าตลอดช่วงที่ตรึง จังหวะของจุดจอด
+       * (ซึ่งคิดจากตำแหน่งในหน้า) จึงจะไม่เดินตามระยะเลื่อน ตัวนี้เป็นของในโฟลว์ปกติที่ระยะ
+       * WRAP_AT + ครึ่งช่วง บวกครึ่งจอของหัวอ่าน
+       */}
+      <div
+        ref={wrapAim}
+        className="pointer-events-none absolute left-[34%] h-0 w-0"
+        /**
+         * ถึงที่ *ก่อน* ท่าจะถูกจุดชนวนเล็กน้อย
+         *
+         * ท่าปิดจอเดินด้วยนาฬิกาของตัวเองแล้ว (ดู BEATS ใน ./WhiteWrap) ลูกศรจึงต้องเข้าที่
+         * รออยู่ก่อนท่าเริ่ม ไม่ใช่ไถลเข้ามาระหว่างที่ท่ากำลังเล่น ส่วนปลายนิ้วของมืออีกข้าง
+         * เล็งจากตำแหน่งจริงของลูกศรทุกเฟรม (ดู ARROW_TIP) ค่าคู่นี้จึงไม่ต้องตรงกันเป๊ะ
+         * +0.5 คือครึ่งจอของหัวอ่าน (ดู cursorguide/stops)
+         */
+        style={{ top: `${(WRAP_AT - 0.06 + 0.5) * 100}svh` }}
+        aria-hidden
+      />
     </section>
   )
 }

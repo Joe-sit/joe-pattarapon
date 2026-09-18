@@ -147,6 +147,18 @@ const SHAPES = {
   hand: { pts: HAND, w: HAND_W, h: HAND_H },
 }
 
+/**
+ * ปลายที่ใช้ชี้ ในพิกัดท้องถิ่นของก้อน (หน่วยเดียวกับ geometry: ทรงสูง 1 หน่วย)
+ *
+ * ลูกศรปลายอยู่กลางบน มือชี้ปลายอยู่ที่นิ้วชี้ซึ่งไม่ได้อยู่กลางรูป — ใครอยากให้ของไป
+ * แตะปลายพอดีต้องรู้ค่านี้ ไม่ใช่กะจากจุดกลาง
+ */
+const tipOf = (kind, px) => {
+  const b = SHAPES[kind]
+  return [(px - b.w / 2) / b.h, 0.5]
+}
+export const CURSOR_TIP = { arrow: tipOf('arrow', 6), hand: tipOf('hand', 5) }
+
 /** พหุเหลี่ยมพิกเซล → ก้อนสามมิติ สูง 1 หน่วยฉาก ไม่ใส่ bevel (ขอบต้องคมเป็นเหลี่ยม) */
 function pixelGeometry(kind, depth) {
   const { pts, w, h } = SHAPES[kind] ?? SHAPES.arrow
