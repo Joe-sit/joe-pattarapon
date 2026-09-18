@@ -15,6 +15,7 @@ import * as THREE from 'three'
 import { useNewHeroReady } from '@/newhero/ready'
 import { getTuner } from '@/newhero/tuner'
 import { introSince } from '@/newhero/intro'
+import { headlineReady } from './headlineReady'
 import { useTuner } from '@/newhero/tuner'
 
 /**
@@ -118,8 +119,15 @@ type Field = {
   lines: Map<number, LineBox>
   /** บอกบล็อกว่ากรอบเปลี่ยน — ให้ React วาดรายการบรรทัดใหม่ */
   bump: () => void
-  /** แคนวาสขึ้นแล้วหรือยัง — ของ HTML ที่เป็นตัวสำรองจะได้จางตัวเองออกตอนของ 3D มาแทน */
+  /** ถึงคิวโชว์หรือยัง — แคนวาสขึ้นก่อนหน้านี้นานแล้ว (ดู Headline3DField) */
   live: boolean
+  /**
+   * เวลา (performance.now) ที่ถึงคิวโชว์ — Infinity = ยังไม่ถึง
+   *
+   * ท่าเปิดตัวของทุกตัวอักษรนับจากจุดนี้ ไม่ใช่จากตอนที่ mesh ของมันถูกสร้าง ซึ่งเป็นจังหวะ
+   * ที่ขึ้นกับว่าเธรดหลักว่างตอนไหน — ตาจับได้ทันทีว่าตัวอักษร "ทยอยโหลด" มาไม่เท่ากัน
+   */
+  revealAt: number
 }
 
 const FieldCtx = createContext<Field | null>(null)
@@ -169,11 +177,25 @@ function Glyph({
    */
   const from = useRef(Math.max(startAt, performance.now()))
   const { invalidate } = useThree()
-  useEffect(() => invalidate(), [invalidate])
+  /* คิวเปิดตัวมาทีหลังการสร้าง mesh — ตั้งเวลาเริ่มใหม่ตอนคิวมาถึง ไม่ใช่ตอน mount */
+  useEffect(() => {
+    from.current = Math.max(startAt, performance.now())
+    invalidate()
+  }, [startAt, invalidate])
 
   useFrame(() => {
     const g = ref.current
     if (!g) return
+    /**
+     * ยังไม่ถึงคิว = นอนนิ่ง ไม่ขอเฟรม
+     *
+     * ตัวอักษรถูกปั้นไว้ล่วงหน้าตั้งแต่ก่อนฉากเริ่มเล่น ถ้าปล่อยให้ยังเดินท่าอยู่ มันจะขอเฟรม
+     * ทุกเฟรมตลอดช่วงอินโทร (แคนวาสตัวนี้วาดตามคำขอ) = แย่งเวลากับฉากที่กำลังเล่นเปล่า ๆ
+     */
+    if (!Number.isFinite(from.current)) {
+      onMoving(false)
+      return
+    }
     const t = (performance.now() - from.current) / (cfg.enter * 1000)
     const rising = t < 1
     const e = t < 0 ? 0 : t > 1 ? 1 : t
@@ -269,12 +291,23 @@ function Glyph({
  * ปล่อยให้ Text3D วาดทั้งบรรทัดทีเดียวไม่ได้ เพราะต้องขยับ "รายตัว" — จึงต้องรู้ระยะก้าว
  * ของแต่ละตัว (advance width) ซึ่งอยู่ในไฟล์ฟอนต์อยู่แล้ว
  */
+/**
+ * ไฟล์ฟอนต์ใบเดียวที่ทุกบรรทัดใช้ร่วมกัน — ของเดิมแต่ละบรรทัด fetch เองคนละคำขอ
+ *
+ * ไฟล์เดียวกันสี่คำขอพร้อมกันตอน mount ซึ่งเป็นจังหวะที่คับคั่งอยู่แล้ว (เบราว์เซอร์อาจ
+ * ยุบให้เหลือหนึ่งหรือไม่ก็ได้ ขึ้นกับ cache header) แคชสัญญาไว้ที่นี่ชัดกว่า
+ */
+let fontData: Promise<{ glyphs: Record<string, { ha: number }>; resolution: number }> | null = null
+function loadFont() {
+  fontData ??= fetch(FONT).then((r) => r.json())
+  return fontData
+}
+
 function useLayout(text: string, track: number) {
   const [specs, setSpecs] = useState<GlyphSpec[] | null>(null)
   useEffect(() => {
     let alive = true
-    void fetch(FONT)
-      .then((r) => r.json())
+    void loadFont()
       .then((data: { glyphs: Record<string, { ha: number }>; resolution: number }) => {
         if (!alive) return
         const scale = 1 / data.resolution
@@ -304,8 +337,10 @@ function useLayout(text: string, track: number) {
  */
 function Line({ box, cfg }: { box: LineBox; cfg: Cfg }) {
   const specs = useLayout(box.text, cfg.track)
-  /** เวลาอ้างอิงของบรรทัด — ตารางเริ่มไถลของทุกตัวนับจากจุดนี้ */
-  const lineStart = useMemo(() => performance.now(), [])
+  const field = useContext(FieldCtx)
+  const live = field?.live ?? false
+  /** เวลาอ้างอิงของบรรทัด — ตารางเริ่มไถลนับจาก "คิวโชว์" ไม่ใช่จากตอน mount */
+  const lineStart = field?.revealAt ?? Infinity
   const { invalidate, size } = useThree()
   const moving = useRef(new Set<number>())
   /** เมาส์ในพิกัดของกลุ่มตัวอักษร — ออบเจกต์เดียวที่ทุกตัวในบรรทัดอ่านร่วมกัน */
@@ -335,6 +370,18 @@ function Line({ box, cfg }: { box: LineBox; cfg: Cfg }) {
   const [ready, setReady] = useState(0)
   useEffect(() => {
     if (!specs) return undefined
+    /**
+     * ยังไม่ถึงคิวโชว์ = ปั้นทั้งบรรทัดรวดเดียว
+     *
+     * นี่คือเหตุผลทั้งหมดที่ย้ายการ mount แคนวาสมาไว้ก่อนอินโทร: ช่วงนั้นเธรดหลักว่าง
+     * (ผ้าคลุมของด่านโหลดยังบังอยู่ อินโทรถูกกดไว้) งานก้อน 484ms จึงไม่ชนกับอะไร แล้วถึง
+     * คิวโชว์ทุกตัวก็พร้อมอยู่แล้ว — ไม่มีการทยอยปั้นให้เห็นเป็น "ตัวอักษรค่อย ๆ โหลด" อีก
+     */
+    if (!live) {
+      setReady(specs.length)
+      invalidate()
+      return undefined
+    }
     let id = 0
     let n = 0
     /**
@@ -360,13 +407,27 @@ function Line({ box, cfg }: { box: LineBox; cfg: Cfg }) {
         clearTimeout(id)
       }
     }
-  }, [specs, invalidate])
+  }, [specs, invalidate, live])
 
   /**
    * ขนาด: กล่อง HTML สูงเท่า font-size (line-height เป็น 1) สเกลจึงเท่าขนาดฟอนต์ตรง ๆ
    * แล้วบีบอีกชั้นถ้าบรรทัดยาวเกินกล่อง — ความกว้างจาก advance ของฟอนต์ไม่รวม kerning
    * ที่เบราว์เซอร์ใช้ บรรทัดจึงกว้างกว่าของ HTML ราวหนึ่งในห้า
    */
+  /**
+   * รายงานตัวเองว่า "ยังปั้นไม่ครบ" ให้ด่านโหลดรู้ (ดู ./headlineReady)
+   *
+   * นับเป็นรายบรรทัด ไม่ใช่รายตัวอักษร — ด่านแค่ต้องรู้ว่ายังมีงานค้างอยู่ไหม
+   */
+  const built = specs !== null && ready >= specs.length
+  useEffect(() => {
+    if (built) return undefined
+    headlineReady.pending += 1
+    return () => {
+      headlineReady.pending -= 1
+    }
+  }, [built])
+
   const wide = specs?.at(-1)?.w ?? 1
   const fit = box.width > 0 ? Math.min(1, box.width / (wide * box.height)) : 1
   const s = box.height * fit
@@ -387,7 +448,7 @@ function Line({ box, cfg }: { box: LineBox; cfg: Cfg }) {
 
   if (!specs) return null
   return (
-    <group position={[originX, originY, 0]} scale={s}>
+    <group position={[originX, originY, 0]} scale={s} visible={live}>
       {specs.slice(0, ready).map((spec, i) => (
         <Glyph
           key={`${spec.ch}-${i}`}
@@ -486,6 +547,8 @@ const IRID_RANGE: [number, number] = [180, 720]
  */
 function SvgArt({ box }: { box: LineBox }) {
   const data = useLoader(SVGLoader, box.src ?? '')
+  /* โหลดและปั้นไว้ล่วงหน้าเหมือนตัวอักษร แต่ไม่ให้เห็นจนถึงคิวโชว์ (ดู Headline3DField) */
+  const live = useContext(FieldCtx)?.live ?? false
   const { size, invalidate } = useThree()
   /**
    * แผงจูนอ่านได้จากในแคนวาสด้วย เพราะสโตร์เป็น useSyncExternalStore ไม่ใช่ React context
@@ -675,7 +738,7 @@ function SvgArt({ box }: { box: LineBox }) {
       />
     )}
     {/* แกน y ของ SVG ชี้ลง ของฉากชี้ขึ้น — พลิกด้วยสเกลติดลบ แล้วเลื่อนมุมซ้ายบนมาที่กรอบ */}
-    <group position={[originX, originY, 0]} scale={[s, -s, s]}>
+    <group position={[originX, originY, 0]} scale={[s, -s, s]} visible={live}>
       <group position={[-parts.bb.min.x, -parts.bb.min.y, 0]}>
         {parts.list.map((p, i) => (
           <mesh key={i} geometry={p.geo}>
@@ -1598,6 +1661,14 @@ export function Headline3DField({
   const heroReady = useNewHeroReady()
   const [settled, setSettled] = useState(false)
 
+  /* บอกด่านโหลดว่าบล็อกนี้มีตัวตนแล้ว — ไม่มีสัญญาณนี้ ด่านจะไม่รู้ว่าต้องรอใครอยู่หรือเปล่า */
+  useEffect(() => {
+    headlineReady.armed = true
+    return () => {
+      headlineReady.armed = false
+    }
+  }, [])
+
   /**
    * ขึ้นเมื่ออินโทรของฉากเล่นจบ ไม่ใช่เมื่อครบกี่วินาทีที่ตั้งไว้เอง
    *
@@ -1622,7 +1693,7 @@ export function Headline3DField({
      * (นี่คือเหตุที่จังหวะเคยหลุดแบบสุ่ม: ใครขยับเมาส์ตอนวินาทีที่หนึ่ง หัวเรื่องก็ขึ้นเลย)
      */
     const skip = () => {
-      if (introSince() >= 0) go()
+      if (introSince() >= getTuner().hlAfter) go()
     }
     const tick = () => {
       if (done) return
@@ -1644,9 +1715,25 @@ export function Headline3DField({
   }, [heroReady, settled])
 
   const lines = [...store.lines.values()]
-  // ปิดจากแผงจูน = ตัวหนังสือ HTML แบน ๆ ยืนแทน (ตัวเดียวกับที่ใช้ตอนรออินโทร)
-  const live = t.hl > 0.5 && active && settled && lines.length > 0
-  const field = useMemo<Field>(() => ({ ...store, live }), [store, live])
+  /**
+   * mount แคนวาสทันทีที่วัดกรอบได้ แล้วค่อย *โชว์* ตอนถึงคิว — สองเรื่องแยกกัน
+   *
+   * ของเดิม mount ตอนถึงคิวโชว์พอดี ซึ่งหมายถึงงานหนักทั้งกองเพิ่งเริ่มตอนนั้น: โหลดไฟล์
+   * ฟอนต์ที่ Text3D ใช้, ปั้น TextGeometry ทีละตัว (ตัวละ requestIdleCallback ซึ่งช่วงที่
+   * ฉากกำลังเล่นแทบไม่มีช่วงว่างให้แทรก) และโหลด SVG ของ LIFE/ฟองคำพูด — ผลคือหัวเรื่อง
+   * โผล่ทีละตัวช้า ๆ อ่านเป็น "เพิ่งโหลด" ไม่ใช่ท่าเปิดตัวที่ออกแบบไว้
+   *
+   * ตอนนี้ของทั้งหมดถูกเตรียมไว้ใต้ผ้าคลุมของด่านโหลด (ดู pages/Final2026Gate) แล้วคิวโชว์
+   * เป็นแค่การเปิดให้เห็น
+   */
+  const mounted = t.hl > 0.5 && active && lines.length > 0
+  // ปิดจากแผงจูน = หัวเรื่องว่างไว้ ไม่มีตัวสำรอง (ดู fadeToArt)
+  const live = mounted && settled
+  const [revealAt, setRevealAt] = useState(Infinity)
+  useEffect(() => {
+    setRevealAt(live ? performance.now() : Infinity)
+  }, [live])
+  const field = useMemo<Field>(() => ({ ...store, live, revealAt }), [store, live, revealAt])
   return (
     <FieldCtx.Provider value={field}>
       <div
@@ -1659,7 +1746,7 @@ export function Headline3DField({
         }}
       >
         {children}
-        {live && (
+        {mounted && (
           <div className="absolute" style={{ inset: `${-pad}px`, pointerEvents: 'none' }}>
             <Canvas
               aria-hidden
@@ -1708,16 +1795,19 @@ export function useHeadlineArt(el: HTMLElement | null, src: string, glass?: bool
 }
 
 /**
- * สไตล์ของ "ตัวสำรอง HTML": เห็นตั้งแต่เฟรมแรก แล้วจางออกตอนของ 3D ขึ้นมาแทน
+ * สไตล์ของของ HTML ในบล็อกหัวเรื่อง — **ซ่อนตลอด** ทั้งก่อนและหลังของ 3D ขึ้น
  *
- * แคนวาสรออินโทรของฉากจบก่อนถึงจะ mount (ราว 4 วินาทีหลังสปแลชหาย บนเครื่องที่วัด) ถ้าซ่อน
- * ของ HTML ไว้ตลอด ช่วงนั้นหัวเรื่องทั้งบล็อกจะว่างเปล่า — ให้ของแบนยืนแทนไปก่อนแล้วค่อยสลับ
- * ยังกันที่ในผังเหมือนเดิมทั้งสองสถานะ (จางด้วย opacity ไม่ใช่ถอดออก) กรอบที่วัดไว้จึงไม่ขยับ
+ * เดิมให้ตัวอักษรแบน ๆ ยืนแทนระหว่างรออินโทร แล้วจางออกตอน 3D มา ซึ่งอ่านเป็นของสองชิ้น
+ * สลับกันกลางจอ: ของแบนขึ้นมาก่อนฉากจะเข้าที่ (ไม่เกี่ยวกับจังหวะของฉากเลย) แล้วมีอีกชิ้น
+ * หน้าตาไม่เหมือนกันทับเข้ามาทีหลัง จอแรกจึงว่างไว้ก่อน แล้วหัวเรื่อง 3D ขึ้นทีเดียวตอน
+ * อินโทรของฉากใกล้จบ (ดู hlAfter ใน Headline3DField) — ปรากฏครั้งเดียว ไม่มีของสำรอง
+ *
+ * ยังกันที่ในผังเหมือนเดิม (จางด้วย opacity ไม่ใช่ถอดออก) เพราะกล่องพวกนี้เป็นตัววัดกรอบ
+ * ให้ของ 3D — ถอดออกจากผังแล้วบรรทัดหุบและไม่มีอะไรบอกขนาด
  */
-export function fadeToArt(live: boolean) {
+export function fadeToArt(_live: boolean) {
   return {
-    opacity: live ? 0 : 1,
-    transition: 'opacity 380ms ease',
+    opacity: 0,
     pointerEvents: 'none' as const,
   }
 }

@@ -7,7 +7,22 @@
  *
  * want = มีคนรออยู่ไหม (ไม่มีคนรอ ฉากไม่ต้องเสียเวลาฉายพิกัดทุกเฟรม)
  */
-/** @type {{ want: boolean, ready: boolean, rects: { x: number, y: number, w: number, h: number }[], radius: number, ticks?: number }} */
-export const panelScreen = { want: false, ready: false, rects: [], radius: 0 }
+/**
+ * `rects` = กรอบสี่เหลี่ยมตรงที่ครอบบาน (ใช้ตัดสินว่าบานใบไหนอยู่ในจอ)
+ * `quads` = **สี่มุมจริงของบานบนจอ** เรียง ซ้ายบน → ขวาบน → ขวาล่าง → ซ้ายล่าง
+ *
+ * ต้องมีทั้งสองอย่าง: บานวางเฉียงในเพอร์สเปกทีฟ รูปบนจอจึงเป็นสี่เหลี่ยมด้านไม่ขนาน ไม่ใช่
+ * สี่เหลี่ยมมุมฉาก ของที่จะมอร์ฟไปทับมันสนิทต้องเล็งสี่มุมนั้น — เล็งกรอบครอบแล้วเฟรมสุดท้าย
+ * จะเป็นสี่เหลี่ยมตรงวางอยู่บนบานที่เอียง เห็นเป็นขอบเหลื่อมกันทุกด้าน
+ */
+/**
+ * `radii` = รัศมีมุมของบานแต่ละใบ **เป็นพิกเซลบนจอ**
+ *
+ * คิดเองจากกรอบบนจอไม่ได้: รัศมีของบานเป็นสัดส่วนของด้านที่สั้นกว่าใน *หน่วยฉาก* (ดู Panel)
+ * แต่บานวางเอียง กรอบบนจอจึงถูกบีบตามแนวนอน — เอา 0.17 ไปคูณด้านสั้นของกรอบบนจอจะได้
+ * รัศมีที่ใหญ่กว่าของจริง (วัดได้ราว 9px) เห็นเป็นมุมที่ไม่ลงล็อกกับพอร์ทัลตอนส่งไม้ต่อ
+ */
+/** @type {{ want: boolean, ready: boolean, rects: { x: number, y: number, w: number, h: number }[], quads: { x: number, y: number }[][], radii: number[], radius: number, ticks?: number }} */
+export const panelScreen = { want: false, ready: false, rects: [], quads: [], radii: [], radius: 0 }
 
 if (import.meta.env.DEV) window.__panels = panelScreen

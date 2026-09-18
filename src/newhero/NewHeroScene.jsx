@@ -1091,40 +1091,69 @@ function PortalGlass({ w, h, r, z, bevel, intensity, sheen }) {
  */
 const PROBE_P = new THREE.Vector3()
 
-function PanelProbe({ count, w, h, y, xAt }) {
+function PanelProbe({ count, w, h, d, y, xAt }) {
   const g = useRef()
   const { camera, size } = useThree()
   useFrame(() => {
     const o = g.current
     if (import.meta.env.DEV) panelScreen.ticks = (panelScreen.ticks || 0) + 1
     if (!o || !panelScreen.want) return
+    /**
+     * อัปเดตเมทริกซ์เองก่อนฉาย — ของ three ถูกอัปเดตตอน `render()` ซึ่งคือ *ท้าย* เฟรม
+     *
+     * ฉายด้วยเมทริกซ์ที่ค้างอยู่ = รายงานท่าของเฟรมก่อน แต่ประทับเวลาเป็นเฟรมนี้ คนอ่านที่
+     * คิดความเร็วจาก (ผลต่าง ÷ ช่วงเวลา) จึงได้ค่าเพี้ยนตามอัตราส่วนของสองเฟรมติดกัน
+     * วัดได้ชัด: ระยะที่บานขยับต่อการเขียนหนึ่งครั้งสัมพันธ์กับ span ของเฟรม *ก่อนหน้า* เป๊ะ
+     * (span 46ms → 5.97px, span 20ms → 3.44px, span 44ms → 2.36px) ขณะที่กล้องเองเดินเรียบ
+     * สนิท (ความเร็วไล่จาก 0.0075 เป็น 0.0088 หน่วย/ms แบบทางเดียว) — ความกระตุกทั้งหมด
+     * เกิดที่ชั้นรายงาน ไม่ใช่ที่การเคลื่อนของฉาก
+     */
+    camera.updateMatrixWorld()
+    o.updateWorldMatrix(true, false)
     const rects = []
+    const quads = []
+    const radii = []
+    /* หน้าบานอยู่ที่ z = +d/2 ไม่ใช่ z = 0 — กล่องวางกลางที่ระนาบศูนย์ ฉายที่ศูนย์คือได้
+       ระนาบกลางความหนา ซึ่งเล็กกว่าหน้าที่คนดูเห็นจริง */
+    const zFront = d / 2
     for (let i = 0; i < count; i += 1) {
       const x = xAt(i)
       let left = Infinity
       let right = -Infinity
       let top = Infinity
       let bottom = -Infinity
-      // สี่มุมของหน้าบาน (z = 0 ระนาบเดียวกับที่บานวางอยู่) → จอ
+      /* สี่มุมของหน้าบาน (z = 0 ระนาบเดียวกับที่บานวางอยู่) → จอ
+         เรียงตามเข็มจากซ้ายบน: บานเอียงในเพอร์สเปกทีฟ คนที่จะมอร์ฟไปทับต้องได้รูปจริง
+         ไม่ใช่แค่กรอบครอบ (ดู panelScreen) */
+      const corner = []
       for (const [dx, dy] of [
-        [-0.5, -0.5],
-        [0.5, -0.5],
         [-0.5, 0.5],
         [0.5, 0.5],
+        [0.5, -0.5],
+        [-0.5, -0.5],
       ]) {
-        PROBE_P.set(x + dx * w, y + dy * h, 0)
+        PROBE_P.set(x + dx * w, y + dy * h, zFront)
         o.localToWorld(PROBE_P)
         PROBE_P.project(camera)
         const sx = (PROBE_P.x * 0.5 + 0.5) * size.width
         const sy = (1 - (PROBE_P.y * 0.5 + 0.5)) * size.height
+        corner.push({ x: sx, y: sy })
         if (sx < left) left = sx
         if (sx > right) right = sx
         if (sy < top) top = sy
         if (sy > bottom) bottom = sy
       }
       rects.push({ x: left, y: top, w: right - left, h: bottom - top })
+      quads.push(corner)
+      /* รัศมีเป็นพิกเซล = รัศมีในหน่วยฉาก × (ความยาวขอบด้าน h บนจอ ต่อ h หน่วยฉาก)
+         เฉลี่ยขอบซ้าย-ขวาเพื่อไม่ให้ค่าแกว่งตามด้านที่อยู่ใกล้กล้องกว่า */
+      const leftEdge = Math.hypot(corner[0].x - corner[3].x, corner[0].y - corner[3].y)
+      const rightEdge = Math.hypot(corner[1].x - corner[2].x, corner[1].y - corner[2].y)
+      radii.push(((Math.min(w, h) * 0.17) / h) * ((leftEdge + rightEdge) / 2))
     }
     panelScreen.rects = rects
+    panelScreen.quads = quads
+    panelScreen.radii = radii
     // รัศมีมุมของบานเป็นสัดส่วนของด้านที่สั้นกว่า (ดู Panel) แปลงเป็นพิกเซลด้วยอัตราส่วนเดียวกัน
     panelScreen.radius = rects.length
       ? Math.min(rects[0].w, rects[0].h) * 0.17
@@ -2701,6 +2730,7 @@ function Scene() {
           count={Math.round(t.panelCount)}
           w={t.panelW}
           h={t.panelH}
+          d={t.panelD}
           y={t.panelBase + t.panelH / 2}
           xAt={(i) => t.panelX + (i - (Math.round(t.panelCount) - 1) / 2) * t.panelGap}
         />

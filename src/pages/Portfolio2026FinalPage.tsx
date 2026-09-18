@@ -9,6 +9,7 @@ import { CloudWipe, WIPE_FULL } from '@/components/CloudWipe'
 import { ScrollTell } from '@/sections/hero/ScrollTell'
 import { AnchorNav } from '@/components/AnchorNav'
 import { CursorGuideLayer } from '@/cursorguide/CursorGuideLayer'
+import { Final2026Gate } from './Final2026Gate'
 import { useCursorStop } from '@/cursorguide/useCursorStop'
 import { SITE } from '@/config/site'
 import { setCruise, setSceneOn } from '@/newhero/scrolly'
@@ -402,6 +403,8 @@ export function Portfolio2026FinalPage() {
 
   return (
     <div ref={rootRef} className={`v3 relative w-full${entered ? ' v3-entered' : ''}`}>
+      {/* ด่านโหลด — บังไว้จนไฟล์ของหน้าครบและฉากวาดได้จริง (ดู ./Final2026Gate) */}
+      <Final2026Gate />
       {/**
        * ฉาก 3D เป็นชั้นตรึงเต็มวิวพอร์ต ไม่ได้อยู่ในกล่องของจอแรก
        *

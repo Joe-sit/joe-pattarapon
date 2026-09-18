@@ -396,3 +396,4 @@
   opacity: clamp(0, calc(1 - max(0, var(--brk, 0) - 0.62) * 3.4), 1);
   will-change: transform, opacity;
 }
+

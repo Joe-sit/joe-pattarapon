@@ -268,10 +268,10 @@ export const DEFAULTS = {
   hlRough: 0.32,
   hlAlb: 0.64,
   hlEmis: 0,
-  hlEnter: 0.9,
+  hlEnter: 0.62,
   hlRise: 0.34,
-  hlStag: 0.055,
-  hlAfter: 0.15,
+  hlStag: 0.038,
+  hlAfter: -1.2,
   hlPad: 46,
   /** ตัวคูณขนาดหัวเรื่องทั้งบล็อก (ตัวอักษร + LIFE + ฟอง) 1 = ขนาดที่ CSS คิดไว้ */
   hlSize: 1,
