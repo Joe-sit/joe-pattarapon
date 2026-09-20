@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { Suspense, useEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { CURSOR_TIP, Cursor } from '@/newhero/Cursor'
@@ -49,7 +49,10 @@ export function CursorGuideLayer() {
         dpr={[1, 2]}
         gl={{ alpha: true, antialias: true }}
       >
-        <Rig />
+        {/* รูปทรงของเคอร์เซอร์มาจากไฟล์โมเดล — โหลดอยู่ก็ยังไม่มีอะไรให้โชว์ ปล่อยว่างไว้ */}
+        <Suspense fallback={null}>
+          <Rig />
+        </Suspense>
       </Canvas>
     </div>
   )

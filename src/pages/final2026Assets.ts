@@ -26,6 +26,8 @@ export const FINAL_ASSETS: readonly string[] = [
   '/mascot.glb',
   '/models/stylized_cartoon_shoes.glb',
   '/models/cartoon-lumberjack-arms.glb',
+  /* ลูกศรกับมือชี้ของเคอร์เซอร์นำสายตา (ดู newhero/Cursor) */
+  '/models/cursor-3d.glb',
   /* ฟอนต์ที่หัวเรื่องสามมิติปั้นเป็นทรง — ไม่ใช่ฟอนต์ของหน้า (ดู sections/hero/Headline3D) */
   '/fonts/momo-trust-display.json',
   /* งานลายเส้นในจอแรก โหลดด้วย SVGLoader แล้วอัดเป็นทรง */
