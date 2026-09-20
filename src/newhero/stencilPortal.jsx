@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 
@@ -145,4 +145,59 @@ export function roundedFrameGeo(w, h, bar, depth, r, bevel = 0.1, barBottom = ba
    */
   g.translate(0, 0, -depth / 2)
   return g
+}
+
+/**
+ * ขังของในกิ่งให้โผล่เฉพาะที่ stencil ถือบิตที่กำหนด — เวอร์ชันที่บอกบิตได้
+ *
+ * ต่างจาก `InsidePortal` สองอย่าง: เลือกบิตได้ (ฉากที่มีช่องหลายชนิดในจอเดียวต้องแยกกลุ่ม
+ * — ดู SCREEN_BIT/PORTAL_BIT ของ whatidocard/CardStage) และทำงานบน **สำเนา** ของวัสดุ
+ *
+ * ที่ต้องเป็นสำเนา: วัสดุของริกถูกแคชไว้ระดับโมดูล เป็นใบเดียวกับที่ฉากจอแรกใช้อยู่ เขียนธง
+ * stencil ทับของที่แชร์กันคือไปพังอีกจอ (ดูคำเตือนใน joespresso/scene/utils) — สำเนาหนึ่งใบ
+ * ต่อวัสดุหนึ่งใบ ไม่ว่าจะถูกยัดกลับเข้ามากี่รอบ แล้วคืน GPU buffer ตอนออกจากจอ
+ *
+ * ทดสอบใน useFrame ไม่ใช่ตอน mount: ของข้างในบางชิ้นโหลดแบบ async (GLB) และบางชิ้น
+ * สร้างวัสดุตอนวิ่ง กวาดทุกเฟรมจึงครอบของที่มาทีหลังด้วย
+ *
+ * คงการทดสอบความลึกไว้ตามเดิม — ปิดแล้วชิ้นส่วนของตัวละครเองไม่บังกันตามความลึก
+ * (เห็นเสื้อทับคาง แขนทับหน้า — วัดมาแล้วในจอ what-i-do)
+ */
+export function InsideStencil({ bit = STENCIL_REF, order = 5, children }) {
+  const g = useRef()
+  const copies = useRef(new WeakMap())
+  const made = useRef([])
+
+  useFrame(() => {
+    const root = g.current
+    if (!root) return
+    root.traverse((o) => {
+      if (!o.material) return
+      o.renderOrder = order
+      const list = Array.isArray(o.material) ? o.material : [o.material]
+      let hit = false
+      const out = list.map((m) => {
+        if (m.userData.stencilClone === bit) return m
+        let c = copies.current.get(m)
+        if (!c) {
+          c = m.clone()
+          c.stencilWrite = true
+          c.stencilRef = bit
+          c.stencilFunc = THREE.EqualStencilFunc
+          c.stencilFuncMask = bit
+          c.depthTest = true
+          c.userData.stencilClone = bit
+          copies.current.set(m, c)
+          made.current.push(c)
+        }
+        hit = true
+        return c
+      })
+      if (hit) o.material = Array.isArray(o.material) ? out : out[0]
+    })
+  })
+
+  useEffect(() => () => made.current.forEach((m) => m.dispose()), [])
+
+  return <group ref={g}>{children}</group>
 }

@@ -23,6 +23,7 @@ import { PortalFx } from './PortalFx'
 import { EchoTrail } from './EchoTrail'
 import { HeroRider } from './HeroRider'
 import { WindTrail } from './WindTrail'
+import { heroPointer, holdHeroPointer } from './heroPointer'
 import { IntroClock, introSet, introSkip, introTime, outBack as introBack } from './intro'
 import { setNewHeroReady } from './ready'
 import { Entrance, entranceBlend, entranceSample, entranceU } from './Entrance'
@@ -836,6 +837,12 @@ function Backdrop({ clay }) {
       uVig: { value: 0.18 },
       uAspect: { value: 1 },
       uClay: { value: 0 },
+      /* เมฆจุดครึ่งโทน — ค่าทั้งชุดมาจากแผงจูน (กลุ่ม "ท้องฟ้า") */
+      uCloud: { value: 0.9 },
+      uCloudScale: { value: 2.6 },
+      uCloudCut: { value: 0.52 },
+      uCloudDot: { value: 9 },
+      uTime: { value: 0 },
     }),
     [],
   )
@@ -849,7 +856,7 @@ function Backdrop({ clay }) {
    */
   const ref = useRef()
   const DIST = 60
-  useFrame(({ camera }) => {
+  useFrame(({ camera, clock }) => {
     const m = ref.current
     if (!m) return
     m.quaternion.copy(camera.quaternion)
@@ -865,6 +872,12 @@ function Backdrop({ clay }) {
     u.uWarm.value = t.skyWarm
     u.uVig.value = t.skyVig
     u.uClay.value = clay ? 1 : 0
+    u.uCloud.value = t.skyCloud
+    u.uCloudScale.value = t.skyCloudScale
+    u.uCloudCut.value = t.skyCloudCut
+    u.uCloudDot.value = t.skyCloudDot
+    /* เมฆลอยด้วยนาฬิกาของฉาก ไม่ใช่ตามระยะเลื่อน — ฟ้าต้องมีชีวิตแม้คนดูไม่ขยับ */
+    u.uTime.value = clock.elapsedTime * t.skyCloudDrift
   })
 
   return (
@@ -898,11 +911,48 @@ function Backdrop({ clay }) {
           uniform float uVig;
           uniform float uAspect;
           uniform float uClay;
+          uniform float uCloud;
+          uniform float uCloudScale;
+          uniform float uCloudCut;
+          uniform float uCloudDot;
+          uniform float uTime;
           varying vec2 vUv;
 
           /* hash คงที่ต่อพิกเซล — dither ต้องนิ่ง ไม่ใช่สัญญาณรบกวนที่วิ่งทุกเฟรม */
           float hash(vec2 p) {
             return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+          }
+
+          /* value noise: สุ่มที่มุมช่องแล้วผสมด้วยเส้นโค้งนุ่ม (ไม่ใช่เส้นตรง ไม่งั้นเห็นขอบช่อง) */
+          float vnoise(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            vec2 w = f * f * (3.0 - 2.0 * f);
+            float a = hash(i);
+            float b = hash(i + vec2(1.0, 0.0));
+            float c = hash(i + vec2(0.0, 1.0));
+            float d = hash(i + vec2(1.0, 1.0));
+            return mix(mix(a, b, w.x), mix(c, d, w.x), w.y);
+          }
+
+          /**
+           * ก้อนเมฆ = value noise สี่ชั้น ชั้นละถี่ขึ้นเท่าตัวและเบาลงครึ่ง
+           *
+           * สี่ชั้นพอให้ได้ทั้งก้อนใหญ่และขอบหยักย่อย มากกว่านั้นตาไม่เห็นเพิ่มแต่จ่ายค่า
+           * ตัวอย่างทุกพิกเซลของฟ้าซึ่งกินเต็มเฟรม
+           */
+          float fbm(vec2 p) {
+            /* หมุนทุกชั้น: value noise สุ่มที่มุมช่องตามแกน ถ้าไม่หมุน ทุกชั้นวางทับแกน
+               เดียวกันจนก้อนเมฆออกมาเป็นปื้นสี่เหลี่ยม (เห็นมาแล้วบนจอ) */
+            mat2 rot = mat2(0.80, -0.60, 0.60, 0.80);
+            float v = 0.0;
+            float a = 0.5;
+            for (int i = 0; i < 5; i++) {
+              v += a * vnoise(p);
+              p = rot * p * 2.03 + 7.13;
+              a *= 0.5;
+            }
+            return v;
           }
 
           void main() {
@@ -930,6 +980,47 @@ function Backdrop({ clay }) {
             /* ขอบเฟรมหรี่ — ดึงตาเข้ากลาง ใช้ระยะจากกลางเฟรมที่แก้อัตราส่วนแล้ว */
             vec2 q = (vUv - 0.5) * vec2(uAspect, 1.0);
             sky *= 1.0 - smoothstep(0.35, 1.05, length(q)) * uVig;
+
+            /**
+             * ── เมฆจุดครึ่งโทน ──
+             *
+             * ปั้นเองทั้งหมด ไม่ได้แปะรูป: ความหนาแน่นของเมฆมาจาก fbm แล้วถูก *พิมพ์* ลง
+             * ตะแกรงจุดแบบงานพิมพ์ครึ่งโทน — จุดโตขึ้นตามความหนาแน่น ท้องเมฆจึงเป็นวงโต
+             * ชนกัน ขอบเมฆเป็นวงเล็กห่าง ๆ เหมือนแบบที่ส่งมา
+             *
+             * ตะแกรงคิดใน **พิกัดพิกเซลของจอ** (gl_FragCoord) ไม่ใช่พิกัด uv ของแผ่น:
+             * จุดต้องมีขนาดเท่ากันทั้งเฟรมและคงที่เมื่อกล้องขยับ/ซูม ถ้าผูกกับ uv จุดจะโต
+             * ตามระยะและเต้นตามกล้องทุกเฟรม
+             *
+             * ตัวเมฆเองเลื่อนช้า ๆ ตามแกน x (uTime) และมีแต่ครึ่งบนของฟ้า — ใต้เส้นขอบฟ้า
+             * ในฉากนี้เป็นพื้น เมฆลงไปถึงตรงนั้นจะอ่านเป็นฝ้าบนพื้น
+             */
+            /* เมฆอยู่ครึ่งบนของฟ้าเท่านั้น: ใต้ลงไปเป็นทุ่งกับหัวเรื่องสีขาว ถ้าเมฆลงไปถึง
+               ตรงนั้น ท้องเมฆขาวจะกินตัวหนังสือขาวจนอ่านไม่ออก */
+            float band = smoothstep(0.34, 0.6, y) * (1.0 - smoothstep(0.92, 1.12, y));
+            if (uCloud > 0.001 && band > 0.001) {
+              vec2 cuv = vec2(vUv.x * uAspect, vUv.y) * uCloudScale;
+              /* ยืดตามแกนนอน: ก้อนเมฆจริงแบนกว่าสูง */
+              cuv.y *= 2.1;
+              vec2 flow = cuv + vec2(uTime, 0.0);
+              /**
+               * สองชั้น: ก้อนใหญ่บอกว่า "แถวนี้มีเมฆไหม" ชั้นละเอียดบอกรูปขอบของก้อน
+               *
+               * ชั้นเดียวได้เมฆกระจายสม่ำเสมอทั้งฟ้าเท่ากันหมด ซึ่งอ่านเป็นลายพื้น ไม่ใช่เมฆ
+               * — ฟ้าจริงมีย่านที่โปร่งสนิทสลับกับย่านที่ก้อนเกาะกันเป็นแพ
+               */
+              float mass = fbm(flow * 0.3);
+              float n = fbm(flow) * 0.62 + mass * 0.52;
+              float dens = smoothstep(uCloudCut, uCloudCut + 0.2, n) * band;
+              /* รัศมีจุด: √ความหนาแน่น เพื่อให้ *พื้นที่* ของจุดโตเป็นเส้นตรงตามความหนาแน่น */
+              float rad = sqrt(dens) * 0.62;
+              vec2 cell = fract(gl_FragCoord.xy / max(2.0, uCloudDot)) - 0.5;
+              float dotv = 1.0 - smoothstep(rad - 0.05, rad + 0.02, length(cell));
+              /* ท้องเมฆขาวจัด ขอบเมฆอมสีฟ้าของฟ้าเอง — ไม่ใช่ขาวเท่ากันทั้งก้อน */
+              /* ท้องเมฆสว่างสุดที่ 0.94 ไม่ถึงขาวสนิท — ขาวสนิทแข่งกับหัวเรื่องซึ่งขาวจริง */
+              vec3 cloudCol = mix(mix(sky, vec3(0.94), 0.72), vec3(0.94), dens);
+              sky = mix(sky, cloudCol, dotv * uCloud);
+            }
 
             /* โหมด clay: ไล่เทาแทนทั้งผืน (ผสมด้วย mix ไม่ใช่ if ตาม shader-mobile) */
             sky = mix(sky, mix(uClayBot, uClayTop, y), uClay);
@@ -2344,6 +2435,13 @@ function LegDrive({ pose, torso }) {
 }
 
 function CameraRig() {
+  /**
+   * parallax อ่านเมาส์จาก *หน้าต่าง* ไม่ใช่จากแคนวาส — เหตุผลอยู่ที่ ./heroPointer
+   *
+   * ต้องติดตั้งจากที่นี่ ไม่ใช่จากหน้า: ใครก็ตามที่วางฉากนี้ก็ได้ parallax เท่ากันทันที
+   * ไม่ต้องมีสองฝ่ายตกลงกันว่าหน้าไหนต้องจำติดตั้งตัวฟังเอง
+   */
+  useEffect(() => holdHeroPointer(), [])
   useFrame((state, dt) => {
     const cam = state.camera
     /**
@@ -2390,12 +2488,16 @@ function CameraRig() {
      */
     const pull = cruisePull(t)
     cam.position.z = damp(cam.position.z, t.camZ * fit + dollyZ + t.cruZoom * pull, 0.06, dt)
-    cam.position.x = damp(cam.position.x, t.camX - (fit - 1) * 2.1 + state.pointer.x * 0.6 + dollyX, 0.06, dt)
-    cam.position.y = damp(cam.position.y, t.camY + state.pointer.y * 0.4 + dollyY + t.cruDrop * pull, 0.06, dt)
+    cam.position.x = damp(cam.position.x, t.camX - (fit - 1) * 2.1 + heroPointer.x * 0.6 + dollyX, 0.06, dt)
+    cam.position.y = damp(cam.position.y, t.camY + heroPointer.y * 0.4 + dollyY + t.cruDrop * pull, 0.06, dt)
     // fov มาจากแผงปรับ — เปลี่ยนแล้วต้อง updateProjectionMatrix เอง
     if (cam.fov !== t.fov) {
       cam.fov = t.fov
       cam.updateProjectionMatrix()
+    }
+    /* ประตูให้สคริปต์ตรวจงานอ่านท่ากล้องได้ — dev เท่านั้น (ท่าเดียวกับ window.__intro) */
+    if (import.meta.env.DEV) {
+      window.__cam = { x: cam.position.x, y: cam.position.y, fov: cam.fov, px: heroPointer.x, py: heroPointer.y }
     }
     /**
      * ตั้งมุมก้มตรง ๆ ไม่ใช้ lookAt
