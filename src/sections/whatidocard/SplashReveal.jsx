@@ -61,7 +61,17 @@ function SplashReveal({
   EDGE = 0.42,
   EDGE_SOFT = 0.1,
   /** กรอบหน้าจอที่ยอมให้รูปโผล่ (สัดส่วนของจอ) — ดู screenRects ใน ./stageTuner */
-  rects = /** @type {{ x: number, y: number, hw: number, hh: number }[]} */ ([])
+  rects = /** @type {{ x: number, y: number, hw: number, hh: number }[]} */ ([]),
+  /**
+   * รูปช่องแบบดาว — กล่องที่ *ฉากเขียนทุกเฟรม* ไม่ใช่ค่าที่ส่งมาตอนเรนเดอร์
+   *
+   * ขนาดดาวเปลี่ยนทุกเฟรมตอนท่าขยาย prop ธรรมดาอัปเดตตอนเรนเดอร์ซึ่งช้ากว่านั้น —
+   * ส่งกล่องมาแล้วอ่านตอนวาด (ดู starScreenBox ใน sections/aboutstar/starShape)
+   * ไม่ส่งมาก็ตกไปใช้กรอบสี่เหลี่ยมของ `rects` ตามเดิม จอ what-i-do จึงไม่ต้องแก้อะไร
+   */
+  star = /** @type {{ x: number, y: number, hw: number, hh: number, p: number, ready: boolean } | null} */ (
+    null
+  )
 }) {
   const canvasRef = useRef(null);
   const animationFrameId = useRef(null);
@@ -76,6 +86,8 @@ function SplashReveal({
   /** กรอบหน้าจอที่ยอมให้รูปโผล่ — อ่านทุกเฟรมเหมือนค่าวางรูป */
   const rectsRef = useRef(rects);
   rectsRef.current = rects;
+  const starRef = useRef(star);
+  starRef.current = star;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -350,6 +362,9 @@ function SplashReveal({
       uniform vec2 uEdge;
       uniform vec4 uRects[4];
       uniform int uRectCount;
+      /** ดาวสี่แฉก (จอ About): xy = ใจกลาง · zw = ครึ่งกว้าง/ครึ่งสูง · uStarP = เลขชี้กำลัง */
+      uniform vec4 uStar;
+      uniform float uStarP;
       uniform vec2 texelSize;
 
       vec3 linearToGamma (vec3 color) {
@@ -386,15 +401,29 @@ function SplashReveal({
           float dye = max(c.r, max(c.g, c.b)) * uGain;
           float a = smoothstep(uEdge.x - uEdge.y, uEdge.x + uEdge.y, dye);
 
-          /* คัดด้วยกรอบหน้าจอของหน้าต่าง: รูปจริงเป็นของที่อยู่ "ในจอ" เท่านั้น
-             ไม่ไปทาทับกรอบดำหรือแถบหัวของหน้าต่าง */
+          /* คัดด้วยรูปของพอร์ทัล: รูปจริงเป็นของที่อยู่ "ในช่อง" เท่านั้น ไม่ไปทาทับพื้น
+             รอบช่อง — จอ what-i-do เป็นกรอบสี่เหลี่ยมหลายบาน จอ About เป็นดาวหนึ่งดวง */
           float inScreen = 0.0;
-          for (int i = 0; i < 4; i++) {
-            if (i >= uRectCount) break;
-            vec4 r = uRects[i];
-            vec2 q = abs(vUv - r.xy) - r.zw;
-            /* ขอบกรอบไล่จางบางมาก (1 พิกเซลกว่า ๆ) กันขอบหยักแบบขั้นบันได */
-            inScreen = max(inScreen, 1.0 - smoothstep(-0.002, 0.002, max(q.x, q.y)));
+          if (uStarP > 0.0) {
+            /**
+             * ดาว = superellipse เลขชี้กำลัง < 1 — นิพจน์เดียวกับฝั่ง 3D เป๊ะ
+             * (ดู starInside ใน sections/aboutstar/starShape)
+             *
+             * ขอบไล่จางด้วย f ดิบ ไม่ได้แปลงเป็นระยะจริง: ความชันของ f ต่างกันมากระหว่าง
+             * กลางแฉกกับปลายแฉก ความนุ่มของขอบจึงไม่เท่ากันทั้งเส้น — ยอมได้เพราะนี่เป็น
+             * หน้ากากของรอยของไหลที่ขอบฟุ้งอยู่แล้ว ไม่ใช่ขอบกราฟิกที่ต้องคม
+             */
+            vec2 d = abs(vUv - uStar.xy) / max(uStar.zw, vec2(1e-4));
+            float f = pow(d.x, uStarP) + pow(d.y, uStarP);
+            inScreen = 1.0 - smoothstep(1.0 - 0.04, 1.0 + 0.04, f);
+          } else {
+            for (int i = 0; i < 4; i++) {
+              if (i >= uRectCount) break;
+              vec4 r = uRects[i];
+              vec2 q = abs(vUv - r.xy) - r.zw;
+              /* ขอบกรอบไล่จางบางมาก (1 พิกเซลกว่า ๆ) กันขอบหยักแบบขั้นบันได */
+              inScreen = max(inScreen, 1.0 - smoothstep(-0.002, 0.002, max(q.x, q.y)));
+            }
           }
           a *= inScreen;
           /* uZoom/uOffset: วางรูปให้ทับตัวละคร 3D ไม่ใช่แค่ cover เต็มเฟรม (ดู phZoom) */
@@ -942,6 +971,17 @@ function SplashReveal({
        * ส่งทีละช่องแล้วกรอบของบานอื่นไม่เคยถึงเชดเดอร์ — รูปโผล่ได้แค่ในบานกลางบานเดียว
        * (วัดมาแล้ว: ปาดข้ามบานขวาแล้วไม่มีอะไรขึ้น ทั้งที่กรอบคำนวณถูก)
        */
+      /* ดาวมาก่อน: มีกล่องดาวที่พร้อมแล้ว = จอนี้เป็นจอ About ไม่ต้องคิดกรอบสี่เหลี่ยม */
+      const st = starRef.current;
+      const useStar = !!st && st.ready && st.hw > 0;
+      gl.uniform4f(
+        displayMaterial.uniforms.uStar,
+        useStar ? st.x : 0,
+        useStar ? st.y : 0,
+        useStar ? st.hw : 0,
+        useStar ? st.hh : 0,
+      );
+      gl.uniform1f(displayMaterial.uniforms.uStarP, useStar ? st.p : 0);
       const rs = rectsRef.current;
       const n = Math.min(4, rs.length);
       gl.uniform1i(displayMaterial.uniforms.uRectCount, n);

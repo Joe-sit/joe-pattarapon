@@ -2,14 +2,21 @@ import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import './portfolio2026final.css'
 import './portfolio2026.css'
-import { WhatIDoCard } from '@/sections/whatidocard/WhatIDoCard'
+/**
+ * จอที่สองเป็นจอ About (พอร์ทัลรูปดาว) — จอ "สิ่งที่ทำ" ถูก *ซ่อน* ไม่ใช่ลบ
+ *
+ * ของเดิมยังครบทั้งชุดที่ sections/whatidocard (การ์ดโพสต์ ป้ายสกิล ของสกิลลอย) เปลี่ยน
+ * import บรรทัดนี้กลับเป็น WhatIDoCard ก็ได้จอเดิมคืนทั้งอัน — ท่าเดียวกับที่จอนั้นเองเคย
+ * แทน sections/whatidopixel ชิ้นที่ยังใช้ร่วมกันคือตัวละคร ท่าปิดจอ และชั้นรอยสาด
+ */
+import { WhatIDoScroll } from '@/sections/whatidoscroll/WhatIDoScroll'
 import { Logo } from '@/joespresso/Logo'
 
 import { CloudWipe, WIPE_FULL } from '@/components/CloudWipe'
-import { ScrollTell } from '@/sections/hero/ScrollTell'
 import { AnchorNav } from '@/components/AnchorNav'
 import { CursorGuideLayer } from '@/cursorguide/CursorGuideLayer'
 import { Final2026Gate } from './Final2026Gate'
+import { cursorShow, cursorWake } from '@/cursorguide/morph'
 import { useCursorStop } from '@/cursorguide/useCursorStop'
 import { SITE } from '@/config/site'
 import { setCruise, setSceneOn } from '@/newhero/scrolly'
@@ -290,13 +297,25 @@ export function Portfolio2026FinalPage() {
    * จุดที่สองเปิดธง drive = ระหว่างวิ่งมาหามัน เคอร์เซอร์จะขับแม่เหล็กของหัวเรื่องด้วย
    */
   useCursorStop(null, { id: 'hero-corner', at: { x: 0.97, y: 0.12 }, keyVh: 0.68, size: 58, tilt: 14, lift: 90 })
+  /**
+   * จุดสุดท้ายของจอแรก: **ออกนอกเฟรมเฉียงขึ้นขวา** ไม่ใช่ลอยค้างข้ามหน้าไปจอถัดไป
+   *
+   * เดิมจุดที่สองกวาดเฉียงลงซ้ายกลับมาที่หัวเรื่อง (0.26, 0.62) แล้วจุดจอดถัดไปอยู่ที่จอ
+   * About — ระหว่างสองจอนั้นไม่มีจุดจอด ลูกศรจึงลอยทับผ่านม่านเมฆทั้งช่วง
+   *
+   * ตอนนี้ปลายทางอยู่พ้นขอบจอ (x > 1) แล้วชั้นเคอร์เซอร์ถูกย่อหายไปพร้อมกัน (cursorShow
+   * ในลูปเลื่อนของหน้านี้) ลูกศรจึงหมดหน้าที่ตรงนั้นจริง ไม่ใช่แค่ถูกเลื่อนไปมุมจอ
+   *
+   * ธง drive ยังอยู่ — ระหว่างวิ่งออก มันยังขับแม่เหล็กของหัวเรื่อง ซึ่งเป็นเหตุผลที่บล็อก
+   * ตัวหนังสือของจอแรกยังไม่จางจนพ้นจังหวะนี้ (ดู copyRef ในลูปเลื่อน)
+   */
   useCursorStop(null, {
-    id: 'hero-sweep',
-    at: { x: 0.26, y: 0.62 },
-    keyVh: 0.92,
-    size: 62,
-    tilt: -16,
-    lift: 40,
+    id: 'hero-exit',
+    at: { x: 1.22, y: -0.18 },
+    keyVh: 1.0,
+    size: 46,
+    tilt: 24,
+    lift: 70,
     drive: true,
   })
   const [pin, setPin] = useState<{ x: number; y: number } | null>(null)
@@ -385,6 +404,19 @@ export function Portfolio2026FinalPage() {
          */
         const f = Math.min(1, Math.max(0, (p - 0.42) / 0.16))
         copy.style.opacity = String(1 - f * f * (3 - 2 * f))
+      }
+      /**
+       * ย่อเคอร์เซอร์หายไปตอนมันออกนอกเฟรม — **เฉพาะช่วงของจอแรก**
+       *
+       * จอ About เป็นคนเขียนค่านี้ในช่วงของมันเอง (เคอร์เซอร์โผล่จากพอร์ทัลดาว) ถ้าที่นี่
+       * เขียนต่อไปเรื่อย ๆ สองฝ่ายจะแย่งกันทุกเฟรมแล้วค่าที่เห็นขึ้นกับว่าใครรันหลัง
+       *
+       * ไล่จบก่อนม่านเมฆถมเต็ม (WIPE_FULL) ลูกศรจึงหายตอนที่ยังเห็นมันอยู่ ไม่ใช่หายใต้ม่าน
+       */
+      if (sv < WIPE_FULL) {
+        const g = Math.min(1, Math.max(0, (sv - 0.55) / 0.34))
+        cursorShow.v = 1 - g * g * (3 - 2 * g)
+        cursorWake.fn()
       }
     }
     const on = () => {
@@ -577,12 +609,16 @@ export function Portfolio2026FinalPage() {
           เวอร์ชันก่อน ๆ ยังอยู่ทั้งหมด สลับกลับได้ที่ import บรรทัดเดียว (ทุกอันรับ prop id
           ตัวเดียวกัน): sections/whatido ผังกระเบื้อง Figma (หน้า /2026 ยังใช้อยู่) ·
           sections/whatidofog จอเล่าด้วยการเลื่อนผ่าหมอก · sections/whatidowedge ลิ่มสามลิ่ม */}
-      {/* ── ช่วงคั่นบนพื้นขาว: ประโยคปิดของจอแรก เล่าทีละท่อน ─────────────────
-          ต่อจากม่านเมฆที่ถมขาวแล้วตัดตัวเองทิ้ง (WIPE_FULL) พื้นขาวของจอนี้คือของที่อยู่
-          ใต้ม่านตรงนั้นพอดี ผู้ชมจึงเห็นฟ้าถูกกลบจนขาวแล้วมีตัวหนังสือขึ้นมาบนความขาวนั้น */}
-      <ScrollTell />
+      {/* ── ช่วงคั่น "ถาม AI" ถอดออกชั่วคราวตามที่สั่ง ──────────────────────
+          ตัวคอมโพเนนต์ยังอยู่ครบที่ sections/hero/ScrollTell (ประโยคปิดของจอแรกที่เล่าทีละ
+          ท่อนบนพื้นขาว พร้อมช่องพิมพ์ถาม AI และท่า genie ที่ดึงคำตอบออกมาเป็นหน้าต่าง)
+          เอากลับมาโดย import แล้วใส่ <ScrollTell /> ตรงนี้
 
-      <WhatIDoCard id="what-i-do" />
+          ม่านเมฆไม่ได้หายไปด้วย: มันเป็นชั้นของตัวเองที่ระดับหน้าและเดินตามระยะเลื่อนเอง
+          (ดู WIPE_AT/WIPE_SPAN ใน components/CloudWipe) ช่วงคั่นนี้แค่ *เริ่ม* ที่ปลายของ
+          ม่านพอดี ไม่ได้เป็นคนสั่งมัน — จอ About จึงยังรับช่วงจากเมฆที่หุบเสร็จเหมือนเดิม */}
+
+      <WhatIDoScroll id="what-i-do" />
 
       {/* ── จอ 3: ประสบการณ์ ───────────────────────────────────────────
           พอร์ทัลเศษกระจกกระจายบนทุ่งฟ้า ตัวละครลอยออกมาทีละช่วงของไทม์ไลน์จริง

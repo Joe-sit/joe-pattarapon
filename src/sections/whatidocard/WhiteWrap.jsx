@@ -136,7 +136,14 @@ function makeIslands(seed) {
   return out
 }
 
-export function WhiteWrap({ sectionRef }) {
+/**
+ * `at` = ระยะที่จุดชนวน (เท่าความสูงจอ นับจากขอบบนของ section)
+ *
+ * จอที่มีเรื่องเล่ายาวกว่าต้องเลื่อนจุดชนวนออกไป ไม่ใช่ถูกปิดกลางเรื่อง — จอ About เล่าสกิล
+ * ทีละอันกินระยะราวหนึ่งจอครึ่ง (ดู TELL_SPAN ใน sections/aboutstar/AboutStar) ค่าปริยาย
+ * ยังเป็น WRAP_AT เดิม ของเก่าที่เรียกโดยไม่ส่ง prop จึงไม่เปลี่ยนพฤติกรรม
+ */
+export function WhiteWrap({ sectionRef, at = WRAP_AT }) {
   const cvs = useRef(null)
   const hand = useRef(null)
   const islands = useMemo(() => makeIslands(0x5eed), [])
@@ -381,12 +388,12 @@ export function WhiteWrap({ sectionRef }) {
     const gate = () => {
       const vh = window.innerHeight || 1
       const sv = Math.max(0, -sec.getBoundingClientRect().top) / vh
-      if (t0 < 0 && sv >= WRAP_AT) {
+      if (t0 < 0 && sv >= at) {
         /* คนที่ตั้งเครื่องว่าไม่เอาการเคลื่อนไหว ได้ผลลัพธ์ปลายทางทันที ไม่ได้ดูท่า */
         t0 = performance.now() - (still ? TOTAL * 1000 : 0)
         el.style.opacity = '1'
         kick()
-      } else if (t0 >= 0 && sv < WRAP_AT - 0.05) {
+      } else if (t0 >= 0 && sv < at - 0.05) {
         /* ถอยขึ้นไปพ้นจุดจุดชนวน = พร้อมเล่นใหม่ */
         t0 = -1
         tNow = 0
@@ -420,7 +427,7 @@ export function WhiteWrap({ sectionRef }) {
       buf.width = 0
       buf.height = 0
     }
-  }, [sectionRef, islands])
+  }, [sectionRef, islands, at])
 
   return (
     <>
