@@ -7,6 +7,7 @@ import skillsCursorRaw from '@/assets/v2/skills-cursor.svg?raw'
 import skillsPixelsRaw from '@/assets/v2/skills-pixels.svg?raw'
 import skillsPencilRaw from '@/assets/v2/skills-pencil.svg?raw'
 import { WhiteWrap } from '@/sections/whatidocard/WhiteWrap'
+import { HAND_PARTS, morphFill, morphParts } from './sayHi'
 import { getWhatIDoTuner, useWhatIDoTuner, type WhatIDoTuner } from './whatidoTuner'
 
 /**
@@ -52,7 +53,7 @@ const WhatIDoPanel = lazy(() =>
  */
 
 /** ระยะที่ท่าปิดจอจุดชนวน — คิดจากจังหวะปัจจุบัน (สกิลใบสุดท้ายเล่าจบแล้ว) */
-const wrapAt = (t: WhatIDoTuner) => t.hold + t.step * SKILLS.length + t.tail
+const wrapAt = (t: WhatIDoTuner) => t.hi + t.hold + t.step * SKILLS.length + t.tail
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v)
 const smooth = (v: number) => v * v * (3 - 2 * v)
@@ -83,6 +84,14 @@ const ART_PX = `min(100svw, calc(100svh * ${ART_W} / 700))`
  * แล้วเข้าสูตรเดียวกันทั้งหมด) ตัวเลขด้านล่างจึงเป็น **พิกัดที่เห็นจริง** = 1440 − left − w
  * ส่วนพิกัด y ไม่ถูกพลิก ใช้ตามที่ได้มา
  *
+ * **การพลิกกินถึงตัวพาธด้วย ไม่ใช่แค่ตำแหน่ง** พาธที่ฝังไว้เป็นพิกัดในระบบของโหนดเอง คือ
+ * *ก่อน* พลิก เอามาวาดตรง ๆ จึงได้ภาพกระจก — วงเล็บของแบบสันอยู่ซ้ายแขนยื่นขวา แต่พาธ
+ * คว้านร่องจากด้านซ้าย (สันอยู่ขวา) วัดจากภาพ render: ขอบซ้ายของวงเล็บนิ่งที่ x 876 ทุกแถว
+ * แขนล่างยื่นถึง 1030 ตัวพาธจึงต้องพลิกกลับตอนวาด (ดู `Bracket`)
+ *
+ * **และคลัสเตอร์ฝั่งขวาเยื้องไป 69** วัดสามชิ้นตรงกันหมด: ขอบซ้ายวงเล็บ 876 (สูตรให้ 807)
+ * ขอบขวาแผงรูป 1374 (สูตรให้ 1306) กรอบวงแหวนเขียว 1049–1374 (สูตรให้ 979–1306)
+ *
  * ### แบบนี้ต่างจากแบบก่อนคนละเรื่อง
  *
  * ของก่อนเป็นตารางโมเสกน้ำเงินหกแถว ตัวคนอยู่ครึ่งซ้าย ของใหม่เป็น **บล็อกเทาหลายขนาด
@@ -90,15 +99,27 @@ const ART_PX = `min(100svw, calc(100svh * ${ART_W} / 700))`
  * ผังกลับข้างกันทั้งหมด ไม่ใช่การปรับตัวเลข
  */
 
-/** บล็อกเทา — ขนาดกับที่วางตามไฟล์แบบ ไม่มีมุมมน (เป็น `d9d9d9` ล้วนในไฟล์) */
+/**
+ * บล็อกในคอลลาจ — ขนาด ที่วาง และสี **วัดจากภาพที่แบบ render ออกมา** ไม่ใช่จากพิกัดที่ MCP คืน
+ *
+ * พิกัดที่คืนมาถูกพลิกแกน และสูตร `1440 − left − w` ตรงกับของบางชิ้นเท่านั้น (ใบ 148²
+ * ที่ x 657 กับแถบส้มที่ x 86 ตรง ส่วนใบอื่นคลาดไป 14–51) เพราะในไฟล์มี transform ซ้อน
+ * หลายชั้น เลยเลิกเดาแล้วไปนับพิกเซลจากภาพ render แทน: ไล่หา component ของสีเดียวกัน
+ * แล้วอ่านกรอบของมันออกมา ทุกเลขข้างล่างมาจากตรงนั้น
+ *
+ * ใบใหญ่กับใบเล็กที่ x 57 **ขอบชนกันพอดี** ที่ x 156 (ในไฟล์ render ออกมาเป็นก้อนเดียว
+ * กรอบ 598×297 เต็มพื้นที่ 0.72) — จุดนั้นคือคอที่ตัวกรอง gooey จะเชื่อมให้เอง
+ */
+const BLOCK_R = 24
 const BLOCKS = [
-  { x: 86, y: 188, w: 271, h: 100 },
-  { x: 657, y: 138, w: 150, h: 150 },
-  { x: 357, y: 288, w: 300, h: 300 },
-  { x: 107, y: 488, w: 100, h: 100 },
-  { x: 207, y: 588, w: 150, h: 150 },
-  { x: 65, y: 738, w: 142, h: 50 },
-  { x: 357, y: 738, w: 271, h: 100 },
+  { x: 86, y: 188, w: 270, h: 99, fill: '#f16a1a' },
+  { x: 657, y: 139, w: 148, h: 148 },
+  { x: 156, y: 288, w: 499, h: 253 },
+  { x: 57, y: 488, w: 99, h: 93 },
+  { x: 156, y: 588, w: 200, h: 198 },
+  { x: 596, y: 588, w: 219, h: 80, fill: '#f16a1a' },
+  { x: 36, y: 811, w: 140, h: 48 },
+  { x: 371, y: 795, w: 270, h: 99 },
 ]
 const BLOCK_FILL = '#d9d9d9'
 
@@ -113,14 +134,14 @@ const BLOCK_FILL = '#d9d9d9'
  * เพราะทุกใบอยู่ในชั้นที่ถูกกรองแบบ gooey ใบที่กางออกจะดึงคอเชื่อมกับใบข้าง ๆ ยืดตามไปด้วย
  * แล้วค่อยขาดออกเมื่อยืดไกลพอ — เป็นผลพลอยได้ของตัวกรอง ไม่ได้เขียนท่าไว้
  */
-const SKILL_BLOBS = [0, 2, 6]
+const SKILL_BLOBS = [2, 4, 7]
 
 /** กรอบการ์ด (พิกัดกรอบแบบ) — อยู่ครึ่งซ้าย ไม่ชนกรอบรูปที่ x 807 */
 const CARD = { x: 120, y: 214, w: 648, h: 500 }
 
 
 /** แผงอ่อนหลังรูป — มุมมน 40 ทั้งสี่มุม */
-const PANEL = { x: 807, y: 260, w: 499, h: 511, r: 40, fill: '#ecedee' }
+const PANEL = { x: 876, y: 260, w: 499, h: 511, r: 40, fill: '#ecedee' }
 
 /**
  * กรอบรูปในแบบ = ที่ยืนของตัวละครสามมิติ (มุมล่างมน 40 มุมบนเหลี่ยม)
@@ -130,7 +151,7 @@ const PANEL = { x: 807, y: 260, w: 499, h: 511, r: 40, fill: '#ecedee' }
  * ของจอนี้แทน (วงเล็บสองสำเนา ใบหน้าถูกตัดใต้เส้น `brSplit`) เพราะตัวละครเป็นแคนวาส 3D
  * จะวาดซ้ำสองใบไม่ได้ถูก ๆ
  */
-const PHOTO = { x: 807, y: 41, w: 499, h: 794, r: 40 }
+const PHOTO = { x: 876, y: 41, w: 499, h: 794, r: 40 }
 
 /**
  * วงเล็บส้ม — **พาธจริงจากไฟล์แบบ** (asset `5e78c.svg` ขนาด 155×647 fill #F16A1A)
@@ -138,7 +159,7 @@ const PHOTO = { x: 807, y: 41, w: 499, h: 794, r: 40 }
  * ฝังพาธไว้ในโค้ดเพราะลิงก์ asset ของ Figma หมดอายุใน 7 วัน และของเดิมที่จอนี้ใช้
  * (`portalShape.portalClipPath`) เป็นพหุเหลี่ยมที่ไล่จุดจากโหนดเก่า มุมไม่มนเท่าของจริง
  */
-const BRACKET = { x: 807, y: 188, w: 155, h: 647, fill: '#f16a1a' }
+const BRACKET = { x: 876, y: 188, w: 155, h: 647, fill: '#f16a1a' }
 const BRACKET_PATH =
   'M0.279234 0H122.424H154.987V9.45777L154.981 323.582L155 355.671L154.994 388.29V485.182V517.426L154.998 614.542C154.999 632.468 140.468 647 122.542 647H0.308381L0.45338 564.207C27.5307 562.928 57.816 563.509 85.1302 563.495L85.1314 457.382C85.1226 439.747 84.1922 407.983 86.9764 391.912C89.0784 379.232 93.8361 367.139 100.939 356.422C105.926 348.94 112.295 342.477 119.705 337.376C123.271 334.908 141.75 325.987 142.371 325.014C141.674 322.988 137.608 322.305 135.623 321.754C77.0177 305.486 85.146 239.616 85.1454 193.487L85.1308 84.1442L0.265936 84.1764C-0.275573 56.8536 0.157632 27.4317 0.279234 0Z'
 
@@ -149,7 +170,7 @@ const BRACKET_PATH =
  * ไม่ขนานกันจริง และท้องแถบเบี้ยวเล็กน้อย — ใช้พาธของแบบจึงตรงกว่าและไม่ต้องเถียงเรื่อง
  * ทิศอีก (ท้องแถบโป่งไปทางขวาล่าง ใจกลางความโค้งอยู่มุมซ้ายบนของกรอบ)
  */
-const ARC = { x: 979, y: 536, w: 327, h: 299, fill: '#00fa65' }
+const ARC = { x: 1048, y: 536, w: 327, h: 299, fill: '#00fa65' }
 const ARC_PATH =
   'M226.779 30.936C263.913 13.6721 286.89 6.23448 327 0C326.018 19.5489 327.057 41.8574 326.658 61.6914C326.499 69.6178 325.957 93.2356 326.885 99.4869C291.84 107.241 254.428 122.25 226.122 144.819C205.483 159.281 186.056 179.095 170.305 198.711C158.246 213.96 130.881 254.645 125.58 273.006C121.743 280.445 116.346 290.849 114.359 299H0C5.34778 279.662 18.7004 247.623 27.6788 229.849C32.9143 220.208 37.2099 211.382 42.8203 201.66L43.3782 200.972C61.526 167.646 97.9172 126.26 125.732 100.165L126.627 99.4285C146.451 79.0014 201.081 42.1062 226.779 30.936Z'
 
@@ -311,6 +332,14 @@ export function WhatIDoScroll({ id = 'what-i-do' }: { id?: string }) {
   const [shown, setShown] = useState(false)
   /** ยิงแล้วยิงเลย — ลูปเลื่อนเดินทุกเฟรม ต้องมีตัวกันไม่ให้ setState ซ้ำ */
   const fired = useRef(false)
+  /**
+   * ชิ้นส่วนของมือบนจอ — ticker ของการโบกเขียนพิกัด/ขนาด/มุมให้ทุกเฟรม (ดู `SayHi`)
+   *
+   * ผูก element ไว้ล่วงหน้าชิ้นละอันตามจำนวนกระดูก แล้วเขียนทับ ไม่ mount ใหม่ทุกเฟรม
+   */
+  const hiParts = useRef<(SVGRectElement | null)[]>([])
+  /** ความคืบหน้าของท่าทักทาย ที่ลูปเลื่อนวัดไว้ล่าสุด */
+  const hiNow = useRef(0)
   /** สกิลที่กำลังเป็นตัวเอก — ใช้เฉพาะของที่ต้องเปลี่ยน *โครงสร้าง* (สัญลักษณ์ในโมเสก) */
   const [act, setAct] = useState(0)
   /**
@@ -352,6 +381,16 @@ export function WhatIDoScroll({ id = 'what-i-do' }: { id?: string }) {
       const e = clamp01(y / (vh * tt.inSpan))
 
       /**
+       * ท่าทักทาย — เก็บความคืบหน้าไว้ให้ ticker ของการโบกเอาไปใช้ (ดู `SayHi`, ./sayHi)
+       *
+       * ลูป *เลื่อน* ไม่ได้เขียนพาธเอง เพราะมือต้องโบกแม้ตอนนิ้วอยู่นิ่ง — ถ้าเขียนที่นี่
+       * มือจะขยับเฉพาะตอนที่คนเลื่อนจอ ซึ่งไม่ใช่การโบก เป็นการกระตุกตามล้อเมาส์
+       */
+      const hiP = smooth(clamp01(y / (vh * tt.hi)))
+      hiNow.current = hiP
+      el.style.setProperty('--hi', hiP.toFixed(4))
+
+      /**
        * จุดชนวนท่าเข้าฉาก — ยิงเมื่อ **ขอบบนของ section มาถึงยอดจอ** ไม่ใช่ตอนโผล่มาบางส่วน
        *
        * เดิมใช้ IntersectionObserver เกณฑ์ 0.34 บนกล่องที่ตรึง ผลคือมันติดตอนคอลลาจยังอยู่
@@ -363,10 +402,11 @@ export function WhatIDoScroll({ id = 'what-i-do' }: { id?: string }) {
        * เงื่อนไขนี้อ่านจาก `r` ที่ลูปวัดอยู่แล้วทุกเฟรม ไม่ต้องมีผู้สังเกตแยก และถ้าเปิดหน้า
        * ตรงมากลางจอนี้เลย มันยิงตอนอ่านค่ารอบแรก (ลูปเรียก `read()` ครั้งแรกตอนติดตั้ง)
        */
-      if (!fired.current && r.top <= vh * 0.12 && r.bottom > vh * 0.4) {
+      /* คอลลาจเข้าฉากตอนท่าทักทายใกล้จบ ไม่ใช่ตอน section แตะยอดจอ — ไม่งั้นมันโผล่ทับมือ */
+      if (!fired.current && r.top <= vh * 0.12 && r.bottom > vh * 0.4 && hiP > 0.82) {
         fired.current = true
         setShown(true)
-      } else if (fired.current && r.top > vh * 0.8) {
+      } else if (fired.current && (r.top > vh * 0.8 || hiP < 0.3)) {
         /**
          * ติดอาวุธใหม่เมื่อผู้ชมถอยกลับขึ้นไปจอแรก — ท่าเล่นซ้ำได้ทุกครั้งที่ลงมา
          *
@@ -388,7 +428,7 @@ export function WhatIDoScroll({ id = 'what-i-do' }: { id?: string }) {
        * ผังหนึ่งช่วง แล้วเล่าสกิลทีละใบด้วยการกางบล็อก — `--lock`/`--slide` กับการวัดขอบขวา
        * ของกลุ่มบล็อกถูกถอดออกทั้งชุด
        */
-      const stepF = Math.max(0, (y - vh * tt.hold) / (vh * tt.step))
+      const stepF = Math.max(0, (y - vh * (tt.hi + tt.hold)) / (vh * tt.step))
       el.style.setProperty('--step', Math.min(SKILLS.length, stepF).toFixed(4))
       const idx = Math.max(0, Math.min(SKILLS.length - 1, Math.floor(stepF)))
       setAct((prev) => (prev === idx ? prev : idx))
@@ -418,6 +458,55 @@ export function WhatIDoScroll({ id = 'what-i-do' }: { id?: string }) {
   }, [])
 
   /**
+   * ticker ของการโบกมือ — เดินเองตามเวลา ไม่ผูกกับการเลื่อน
+   *
+   * เขียน `d` ของพาธเดียวต่อเฟรม (160 จุด = ต่อสตริงครั้งเดียว) ไม่แตะ React เลย เดินเฉพาะ
+   * ตอนจอนี้อยู่ในสายตาและทรงยังไม่ลงล็อกเป็นวงเล็บ — พอ `hi` ถึง 1 มันเขียนครั้งสุดท้าย
+   * แล้วหยุด ไม่กินเฟรมตลอดช่วงเล่าสกิลที่เหลือ
+   *
+   * เคารพ `prefers-reduced-motion`: ถ้าผู้ชมปิดการเคลื่อนไหว มือไม่โบก แต่ยัง morph ตาม
+   * การเลื่อน (นั่นเป็นการเปลี่ยนรูปตามเจตนาของคนเลื่อน ไม่ใช่การเคลื่อนไหวที่เกิดเอง)
+   */
+  useEffect(() => {
+    if (!live) return undefined
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    let raf = 0
+    let wrote = -1
+    /**
+     * `m` ที่วาดจริงวิ่ง *ตาม* ค่าจากการเลื่อนแบบมีความหนืด ไม่เท่ากับมันทันที
+     *
+     * ค่าจากล้อเมาส์มาเป็นก้อน ๆ (หนึ่งคลิก = หลายสิบพิกเซล) ถ้าเอาไปวาดตรง ๆ ท่านี้จะ
+     * กระตุกเป็นขั้นตามล้อ ตัวหน่วงนี้ทำให้มันไหลต่อเองอีกสองสามเฟรมหลังล้อหยุด
+     */
+    let mNow = hiNow.current
+    const tick = () => {
+      raf = requestAnimationFrame(tick)
+      const target = hiNow.current
+      mNow += (target - mNow) * 0.14
+      if (Math.abs(target - mNow) < 0.0015) mNow = target
+      const m = mNow
+      if (m >= 1 && wrote >= 1) return
+      wrote = m
+      const tt = getWhatIDoTuner()
+      const parts = morphParts(m, still ? 0 : performance.now() / 1000, tt)
+      parts.forEach((q, i) => {
+        const el2 = hiParts.current[i]
+        if (!el2) return
+        /* เขียน attribute ตรง ๆ: 12 ชิ้น × 6 ค่า ไม่แตะ React และไม่เกิด layout */
+        el2.setAttribute('x', (q.cx - q.w / 2).toFixed(1))
+        el2.setAttribute('y', (q.cy - q.h / 2).toFixed(1))
+        el2.setAttribute('width', q.w.toFixed(1))
+        el2.setAttribute('height', q.h.toFixed(1))
+        el2.setAttribute('rx', q.r.toFixed(1))
+        el2.setAttribute('transform', `rotate(${q.rot.toFixed(2)} ${q.cx.toFixed(1)} ${q.cy.toFixed(1)})`)
+        el2.setAttribute('fill', q.fill)
+      })
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [live])
+
+  /**
    * ลำดับของเคอร์เซอร์ในจอนี้: ชี้คำทักทาย → ย้ายไปอยู่กับแถบสกิล → ท่าปิดจอ
    *
    * *จังหวะ* มาจาก `headVh` ของ section ไม่ใช่จากพิกัดของหมุด — ของในกลุ่มที่ถูกตรึงมีพิกัด
@@ -426,7 +515,7 @@ export function WhatIDoScroll({ id = 'what-i-do' }: { id?: string }) {
   useCursorStop(helloAim, { id: 'whatido-hello', keyVh: headVh + 0.3, size: 46, tilt: -12 })
   useCursorStop(skillAim, {
     id: 'whatido-skill',
-    keyVh: headVh + t.hold + 0.45,
+    keyVh: headVh + t.hi + t.hold + 0.45,
     size: 54,
     tilt: -22,
     lift: 40,
@@ -451,12 +540,13 @@ export function WhatIDoScroll({ id = 'what-i-do' }: { id?: string }) {
       <div
         ref={pin}
         className="sticky top-0 h-[100svh] overflow-clip"
-        style={{ ['--step' as string]: 0 }}
+        style={{ ['--hi' as string]: 0, ['--step' as string]: 0 }}
       >
         {/* คอลลาจอยู่กับที่ — ไม่มีการไถลแนวนอนแล้ว (เจ้าของงานสั่งตัดออก) */}
         <Collage
           helloRef={helloAim}
           cardRef={skillAim}
+          hiPartsRef={hiParts}
           live={live}
           shown={shown}
           mark={act}
@@ -514,6 +604,7 @@ function slotVis(i: number, last: boolean) {
 function Collage({
   helloRef,
   cardRef,
+  hiPartsRef,
   live,
   shown,
   mark,
@@ -522,6 +613,8 @@ function Collage({
   helloRef: React.RefObject<HTMLDivElement | null>
   /** หมุดเคอร์เซอร์ของการ์ดสกิล */
   cardRef: React.RefObject<HTMLDivElement | null>
+  /** ชิ้นส่วนของมือตอนทักทาย — ticker เขียนพิกัด/ขนาด/มุมให้ */
+  hiPartsRef: React.MutableRefObject<(SVGRectElement | null)[]>
   live: boolean
   /** จุดชนวนท่าเข้าฉาก — จอเข้ามาในสายตาแล้วหรือยัง (ครั้งเดียว ไม่ย้อน) */
   shown: boolean
@@ -581,6 +674,9 @@ function Collage({
         {/* เนื้อหาสกิลในบล็อกที่กางออก — นอกชั้นที่ถูกกรอง (ดู `SkillCards`) */}
         <SkillCards cardRef={cardRef} mark={mark} />
 
+        {/* ท่าทักทาย — อยู่บนสุด แล้วจางหายตอนวงเล็บจริงเข้ามาแทน (ดู `SayHi`) */}
+        <SayHi partsRef={hiPartsRef} />
+
         {/**
          * คำทักทาย — ไฟล์แบบใหม่ไม่มีข้อความเลย (ทั้งเฟรมมีแต่รูปทรง)
          *
@@ -619,6 +715,78 @@ function Collage({
 }
 
 /**
+ * ท่าทักทายก่อนเข้าคอลลาจ — มือโบกที่กลายเป็นวงเล็บส้ม
+ *
+ * มือประกอบจากสี่เหลี่ยมมนชิ้นละกระดูก (ดู ./handRig) และวงเล็บก็เป็นสี่เหลี่ยมสี่ชิ้น การ
+ * morph จึงเป็นชิ้นต่อชิ้น ไม่ใช่การผสมพาธ — ticker เขียน attribute ของแต่ละชิ้นผ่าน ref
+ * ไม่ผ่าน state เพราะค่าเปลี่ยนทุกเฟรม การ re-render ทั้งกิ่งคือเผาเฟรมเปล่า
+ *
+ * `viewBox` เป็นกรอบแบบ 1440×1024 ตรง ๆ และกล่องนี้ทับกรอบแบบพอดี จุดในไฟล์ ./sayHi จึง
+ * เป็นพิกัดกรอบแบบได้เลย ไม่ต้องแปลงหน่วย
+ *
+ * ชั้นนี้จางหายช่วงท้ายของท่า (`--hi` > 0.88) พร้อมกับที่วงเล็บจริงของคอลลาจโผล่เข้ามาแทน
+ * — สองรูปทับกันเกือบสนิทตอนนั้น (จุดสุดท้ายของ morph คือกรอบวงเล็บจริง) รอยต่อจึงไม่เห็น
+ */
+function SayHi({
+  partsRef,
+}: {
+  partsRef: React.MutableRefObject<(SVGRectElement | null)[]>
+}) {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0"
+      data-part="sayhi"
+      style={{ opacity: 'calc(1 - clamp(0, (var(--hi, 0) - 0.88) / 0.12, 1))' }}
+      aria-hidden
+    >
+      {/**
+       * ชิ้นส่วนทั้งหมดอยู่ใน svg เดียว สีเดียว ทึบ — ที่ทับกันคือข้อต่อ มองเป็นเงาเดียว
+       *
+       * ค่าเริ่มต้นของทุกชิ้นเป็นศูนย์ ticker เขียนของจริงในเฟรมแรกที่จอเข้าสายตา
+       */}
+      <svg viewBox={`0 0 ${ART_W} ${ART_H}`} className="absolute inset-0 h-full w-full">
+        {Array.from({ length: HAND_PARTS }, (_, i) => (
+          <rect
+            key={i}
+            ref={(el) => {
+              partsRef.current[i] = el
+            }}
+            x="0"
+            y="0"
+            width="0"
+            height="0"
+            fill={morphFill(0)}
+          />
+        ))}
+      </svg>
+
+      {/**
+       * คำทักทาย — ตัวโตคู่กับมือ แล้วหลบให้คอลลาจ
+       *
+       * คำเดียวกับที่คอลลาจใช้ (ตัวเล็กกว่า) เพื่อไม่ให้จอนี้พูดสองสำนวน — ที่นี่มันคือ
+       * "การทักทาย" จริง ๆ ส่วนในคอลลาจมันเป็นป้ายชื่อของผัง
+       */}
+      <div
+        className="absolute font-extrabold leading-[0.95] tracking-[-0.03em]"
+        style={{
+          /**
+           * ใต้มือ ไม่ใช่ข้างมือ — มือกินพื้นที่ y 210–657 ของกรอบ ตัวหนังสือ 104px ที่ x 120
+           * ยาวถึง x 750 ซึ่งพาดทับฝ่ามือพอดี (เห็นมาแล้วบนจอ)
+           */
+          left: artPx(96),
+          top: artPx(700),
+          fontSize: artPx(92),
+          /* หายก่อนคอลลาจเข้าฉาก (0.82) ไม่งั้นมันไปทับคำทักทายตัวเล็กของผัง */
+          opacity: 'calc(1 - clamp(0, (var(--hi, 0) - 0.35) / 0.25, 1))',
+        }}
+      >
+        Hello, I’m Joe
+      </div>
+    </div>
+  )
+}
+
+/**
  * บล็อกเทาฝั่งซ้าย — **หลอมเชื่อมกันเป็นก้อนเดียว** ตามเรฟโปสเตอร์ที่เจ้าของงานส่งมา
  *
  * ### ทำไมต้องกรอง ไม่ใช่มนมุมทีละใบ
@@ -644,7 +812,7 @@ function Collage({
  * กลมของคอจึงเท่ากันทุกขนาดจอ (ถ้าใส่เป็น px คอจะหนาขึ้นเรื่อย ๆ เมื่อย่อจอ) ค่าสองตัวเพราะ
  * แกน x อ้างความกว้าง (1440) แกน y อ้างความสูง (1024) ต้องหารให้ได้ความฟุ้งเท่ากันจริง
  */
-const GOO = 26
+const GOO = 16
 const GOO_ID = 'wid-goo'
 
 /** px ของกรอบแบบ → ความยาวจริงบนจอ */
@@ -686,34 +854,46 @@ function Blocks({ t, shown }: { t: WhatIDoTuner; shown: boolean }) {
             <feColorMatrix
               in="blur"
               type="matrix"
-              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10"
+              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 34 -17"
             />
           </filter>
         </defs>
       </svg>
 
-      <div
-        className="absolute inset-0"
-        data-part="blocks"
-        style={{ filter: `url(#${GOO_ID})` }}
-        aria-hidden
-      >
-        {BLOCKS.map((b, i) => {
-          const si = SKILL_BLOBS.indexOf(i)
-          const v = si < 0 ? null : slotVis(si, si === last)
-          return (
-            <div
-              key={`${b.x}-${b.y}`}
-              className="absolute"
-              style={{
-                ...pop(shown, (b.x / 100) * t.apStep, t, { from: fromLeft(b.x, t) }),
-                ...(v ? flowBox(b, CARD, v) : flowBox(b, b, '0')),
-                background: BLOCK_FILL,
-              }}
-            />
-          )
-        })}
-      </div>
+      {/**
+       * หนึ่งชั้นต่อหนึ่งสี ไม่ใช่ชั้นเดียวรวมทุกใบ
+       *
+       * ตัวกรองเบลอ *สี* ไม่ใช่แค่รูปทรง แถบส้มกับการ์ดเทาที่ขอบชนกัน (แถบส้มท้องอยู่ที่
+       * y 287 การ์ดเริ่ม 288) เลยละเลงเป็นคราบเทา-ส้มตรงคอเชื่อม — เห็นบนจอแล้ว แยกชั้น
+       * ตามสีแล้วแต่ละสีเชื่อมกันเองในชั้นของมัน ของต่างสีทับกันเป็นขอบคม เหมือนในแบบ
+       */}
+      {[BLOCK_FILL, '#f16a1a'].map((paint) => (
+        <div
+          key={paint}
+          className="absolute inset-0"
+          data-part="blocks"
+          style={{ filter: `url(#${GOO_ID})` }}
+          aria-hidden
+        >
+          {BLOCKS.map((b, i) => {
+            if ((b.fill ?? BLOCK_FILL) !== paint) return null
+            const si = SKILL_BLOBS.indexOf(i)
+            const v = si < 0 ? null : slotVis(si, si === last)
+            return (
+              <div
+                key={`${b.x}-${b.y}`}
+                className="absolute"
+                style={{
+                  ...pop(shown, (b.x / 100) * t.apStep, t, { from: fromLeft(b.x, t) }),
+                  ...(v ? flowBox(b, CARD, v) : flowBox(b, b, '0')),
+                  borderRadius: artPx(BLOCK_R),
+                  background: paint,
+                }}
+              />
+            )
+          })}
+        </div>
+      ))}
     </>
   )
 }
@@ -877,7 +1057,10 @@ function Bracket({
         className="block h-full w-full"
         role="presentation"
       >
-        <path d={BRACKET_PATH} fill={BRACKET.fill} />
+        {/* พลิกแกน x: พาธในไฟล์เป็นพิกัดก่อนพลิก (ดูหมายเหตุที่หัวผัง) */}
+        <g transform={`translate(${BRACKET.w} 0) scale(-1 1)`}>
+          <path d={BRACKET_PATH} fill={BRACKET.fill} />
+        </g>
       </svg>
     </div>
   )
