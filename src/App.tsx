@@ -21,6 +21,7 @@ import { NotPortedPage } from '@/pages/NotPortedPage'
 import { Portfolio2026Page } from '@/pages/Portfolio2026Page'
 import { Portfolio2026FinalPage } from '@/pages/Portfolio2026FinalPage'
 import { NewHeroPage } from '@/pages/NewHeroPage'
+import { GlassCardsPage } from '@/pages/GlassCardsPage'
 // ฉาก 3D หนัก (three.js) — lazy แยก chunk ไม่ถ่วงหน้าอื่น
 const JoespressoPage = lazy(() => import('@/joespresso/Page'))
 // workspace ปั้นทรง toolbar ของฉาก joespresso — ใช้ three เหมือนกัน แยก chunk เช่นกัน
@@ -64,7 +65,7 @@ const SPLASH_ON = true
  *
  * ปิดเป็นราย route ไม่ใช่ปิด SPLASH_ON ทั้งเว็บ เพราะหน้าอื่น (/joespresso, /2026) ยังต้องมี
  */
-const SPLASH_OFF_ROUTES = ['/2026-final']
+const SPLASH_OFF_ROUTES = ['/2026-final', '/glass']
 
 export function App() {
   /**
@@ -93,6 +94,8 @@ export function App() {
   const isV3 = location.pathname === '/2026-final'
   /** หน้าเปล่าสำหรับทดลอง hero ตัวใหม่ — shell ของตัวเองเหมือนกัน (ดู NewHeroPage) */
   const isNewHero = location.pathname === '/new-hero'
+  /* หน้าปั้น section การ์ดกระจก — ของชิ้นเดียวบนพื้นขาว ไม่ใช้ shell ของเว็บ */
+  const isGlass = location.pathname === '/glass'
   /**
    * หน้าส่องอินโทรเดี่ยว ๆ (dev เท่านั้น)
    *
@@ -306,6 +309,8 @@ export function App() {
         </Suspense>
       ) : isV3 ? (
         <Portfolio2026FinalPage />
+      ) : isGlass ? (
+        <GlassCardsPage />
       ) : isNewHero ? (
         <NewHeroPage />
       ) : isV2 ? (
