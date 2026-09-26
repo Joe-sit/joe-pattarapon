@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect } from 'react'
 import * as THREE from 'three'
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js'
 
 /**
  * คืน GPU buffer ของ geometry/texture ที่ถูกสร้างใหม่
@@ -761,4 +762,99 @@ export function addPrint(material, u) {
   const prevKey = material.customProgramCacheKey
   material.customProgramCacheKey = () => `${prevKey ? prevKey.call(material) : ''}|print`
   return material
+}
+
+/**
+ * ทำผิวเหลี่ยมให้มนด้วย Loop subdivision — ใช้กับชิ้นที่ไม่ใช่กล่องเป๊ะ (ท่องอ กล่องสอบ)
+ *
+ * ต่างจาก `subdivideCloth` ซึ่งแค่ผ่าสามเหลี่ยม (ทรงเดิมทุกอย่าง ไว้ให้ลมดัดผ้า) ตัวนี้ *ขยับ
+ * จุดยอด* ทุกรอบ: จุดเดิมถูกดึงเข้าหาค่าเฉลี่ยของเพื่อนบ้าน จุดกลางขอบถูกถ่วงด้วยจุดตรงข้าม
+ * สองจุด (3/8 · 3/8 · 1/8 · 1/8) — สันคมจึงกลายเป็นโค้ง กล่องกลายเป็นก้อนมน ท่องอกลายเป็น
+ * ท่อที่ผิวเรียบ ต้องเชื่อมจุดยอดที่ซ้อนกันก่อน (GLB เก็บแยกจุดต่อหน้าเพื่อให้เงาเป็นเหลี่ยม)
+ * ไม่งั้นแต่ละหน้าถูกปั้นแยกกันแล้วแตกเป็นแผ่น
+ *
+ * Loop ย่อทรงลงเสมอ (มุมถูกดึงเข้า) — `inflate` ขยายกลับรอบจุดศูนย์กลางให้ขนาดใกล้เดิม
+ * ขอบเปิด (ชิ้นที่ไม่ได้ปิดหน้าตรงที่จมอยู่ในชิ้นอื่น) ไม่ถูกดึง ใช้จุดกึ่งกลางธรรมดา
+ */
+export function loopSmooth(geometry, levels = 2, inflate = 1.08) {
+  const base = geometry.clone()
+  for (const k of Object.keys(base.attributes)) if (k !== 'position') base.deleteAttribute(k)
+  let geo = mergeVertices(base, 1e-5)
+  base.dispose()
+  for (let lv = 0; lv < levels; lv += 1) {
+    const pos = geo.attributes.position
+    const idx = geo.index.array
+    const nV = pos.count
+    const P = (i) => new THREE.Vector3().fromBufferAttribute(pos, i)
+    /** ขอบ → { ปลายสองข้าง, จุดตรงข้าม } */
+    const edges = new Map()
+    const key = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`)
+    const nbr = Array.from({ length: nV }, () => new Set())
+    for (let t = 0; t < idx.length; t += 3) {
+      const tri = [idx[t], idx[t + 1], idx[t + 2]]
+      for (let i = 0; i < 3; i += 1) {
+        const a = tri[i]
+        const b = tri[(i + 1) % 3]
+        const c = tri[(i + 2) % 3]
+        const e = edges.get(key(a, b)) ?? { a, b, opp: [] }
+        e.opp.push(c)
+        edges.set(key(a, b), e)
+        nbr[a].add(b)
+        nbr[b].add(a)
+      }
+    }
+    const boundary = new Set()
+    for (const e of edges.values()) if (e.opp.length < 2) {
+      boundary.add(e.a)
+      boundary.add(e.b)
+    }
+    const out = []
+    /* จุดเดิมที่ถูกขยับ */
+    for (let i = 0; i < nV; i += 1) {
+      const v = P(i)
+      if (boundary.has(i)) {
+        out.push(v)
+        continue
+      }
+      const n = nbr[i].size
+      const beta = n === 3 ? 3 / 16 : 3 / (8 * n)
+      const sum = new THREE.Vector3()
+      for (const j of nbr[i]) sum.add(P(j))
+      out.push(v.multiplyScalar(1 - n * beta).addScaledVector(sum, beta))
+    }
+    /* จุดกลางขอบ */
+    const mid = new Map()
+    for (const [k, e] of edges) {
+      const m =
+        e.opp.length === 2
+          ? P(e.a).add(P(e.b)).multiplyScalar(3 / 8).addScaledVector(P(e.opp[0]).add(P(e.opp[1])), 1 / 8)
+          : P(e.a).add(P(e.b)).multiplyScalar(0.5)
+      mid.set(k, out.length)
+      out.push(m)
+    }
+    const faces = []
+    for (let t = 0; t < idx.length; t += 3) {
+      const [a, b, c] = [idx[t], idx[t + 1], idx[t + 2]]
+      const ab = mid.get(key(a, b))
+      const bc = mid.get(key(b, c))
+      const ca = mid.get(key(c, a))
+      faces.push(a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca)
+    }
+    const arr = new Float32Array(out.length * 3)
+    out.forEach((v, i) => v.toArray(arr, i * 3))
+    const next = new THREE.BufferGeometry()
+    next.setAttribute('position', new THREE.BufferAttribute(arr, 3))
+    next.setIndex(faces)
+    geo.dispose()
+    geo = next
+  }
+  if (inflate !== 1) {
+    geo.computeBoundingBox()
+    const c = geo.boundingBox.getCenter(new THREE.Vector3())
+    geo.translate(-c.x, -c.y, -c.z)
+    geo.scale(inflate, inflate, inflate)
+    geo.translate(c.x, c.y, c.z)
+  }
+  geo.computeVertexNormals()
+  return geo
 }

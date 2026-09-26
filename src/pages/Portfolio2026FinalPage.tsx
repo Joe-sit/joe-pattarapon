@@ -9,7 +9,7 @@ import './portfolio2026.css'
  * import บรรทัดนี้กลับเป็น WhatIDoCard ก็ได้จอเดิมคืนทั้งอัน — ท่าเดียวกับที่จอนั้นเองเคย
  * แทน sections/whatidopixel ชิ้นที่ยังใช้ร่วมกันคือตัวละคร ท่าปิดจอ และชั้นรอยสาด
  */
-import { WhatIDoScroll } from '@/sections/whatidoscroll/WhatIDoScroll'
+import { SkyStory } from '@/sections/skystory/SkyStory'
 import { Logo } from '@/joespresso/Logo'
 
 import { CloudWipe, WIPE_FULL } from '@/components/CloudWipe'
@@ -618,7 +618,9 @@ export function Portfolio2026FinalPage() {
           (ดู WIPE_AT/WIPE_SPAN ใน components/CloudWipe) ช่วงคั่นนี้แค่ *เริ่ม* ที่ปลายของ
           ม่านพอดี ไม่ได้เป็นคนสั่งมัน — จอ About จึงยังรับช่วงจากเมฆที่หุบเสร็จเหมือนเดิม */}
 
-      <WhatIDoScroll id="what-i-do" />
+      {/* จอ What I do = ฉากมือชูจอ (sections/handcompose) พร้อมจังหวะเปิดตัวตอนเลื่อนเข้าจอ
+          จอเดิม (ตัวละครในกรอบ + วงเล็บส้ม) ยังอยู่ที่ sections/whatidoscroll — สลับกลับได้ที่ import */}
+      <SkyStory id="what-i-do" />
 
       {/* ── จอ 3: ประสบการณ์ ───────────────────────────────────────────
           พอร์ทัลเศษกระจกกระจายบนทุ่งฟ้า ตัวละครลอยออกมาทีละช่วงของไทม์ไลน์จริง

@@ -5,8 +5,9 @@ import { useControls, useCreateStore } from 'leva'
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { addPrint, addRim, addWind, bakePrintCoords, clamp, damp, lerp, makePrintUniforms, makeWindUniforms, shirtPrintTexture, subdivideCloth } from './utils'
+import { addPrint, addRim, addWind, bakePrintCoords, clamp, damp, lerp, loopSmooth, makePrintUniforms, makeWindUniforms, shirtPrintTexture, subdivideCloth } from './utils'
 import { extractLumberArms, LUMBER_MODEL } from './lumberArms'
+import { buildToonHand } from './toonHand'
 import { registerRig } from './rigHandle'
 import { scrollState } from '../scroll'
 import { introState } from '../intro'
@@ -116,6 +117,25 @@ const CUP = {
   lid: '#2A2A2C',
   logo: '#0B6E4F',
 }
+
+/**
+ * สัดส่วนแขนการ์ตูน — วัดจากภาพอ้างอิง (ตัวละครใส่ VR) เทียบความสูงหัว H:
+ * แขนไหล่ถึงข้อมือ ~1.3H (ต้นแขนยาวเท่าท่อนล่าง) · หนา ~0.3H · มือยาวราวครึ่งแขน กว้างกว่าข้อมือนิด
+ *
+ * ของเดิมจาก GLB: แขนยาวแค่ 0.8H ต้นแขนสั้นครึ่งเดียวของท่อนล่าง (ศอกเกือบติดไหล่) แต่มือใหญ่
+ * เท่าหัว — อ่านเป็นมือยักษ์ติดแขนกุด
+ *
+ * - ARM_FAT: ท่อแขนหนากว่าเนื้อแขนเดิมกี่เท่า
+ * - ARM_LEN: ยืดแขนทั้งเส้นกี่เท่า (แล้วแบ่งครึ่งให้ต้นแขนเท่าท่อนล่าง — ดู stretchArm)
+ * - HAND_K: รัศมีที่ใช้ปั้นมือ เทียบรัศมีท่อแขน · WRIST_K: ข้อมือเรียวเหลือเท่านี้ของท่อแขน
+ */
+const ARM_FAT = 1.0
+const ARM_LEN = 1.0
+const HAND_K = 0.7
+const WRIST_K = 0.72
+
+/** เล็บของมือการ์ตูน — หนึ่งใบต่อวัสดุเนื้อ ใช้ร่วมทุกตัวละครในจอ */
+const NAIL_MATS = new WeakMap()
 
 function makeCoffeeCup() {
   const mat = (color, roughness = 0.75) =>
@@ -539,6 +559,54 @@ function Legs({ rig, shoe }) {
   )
 }
 
+/**
+ * กรอบของกล่อง — แกนสามแกนของกล่อง ขนาดตามแกน และจุดกลาง หรือ null ถ้าไม่ใช่กล่อง
+ *
+ * ชิ้นแขนมาได้หลายแบบ: กล่องที่ปั้นในไฟล์นี้ (ขนานแกน) กับกล่องจาก GLB ซึ่ง *อบมุมลงไป
+ * ในจุดยอด* (มือบิดไว้ราว 40° — กล่องเอียงอยู่ในตัว geometry เอง) และบางชิ้นมีเส้นแบ่ง
+ * เพิ่ม (60 จุดยอดแทน 24) ตรวจแบบ "ทุกจุดยอดอยู่ที่มุมกล่องครอบ" จึงพลาดชิ้นพวกนั้นหมด
+ * — ท่อนแขนล่างกับกำปั้นทั้งก้อนยังเป็นบล็อกอยู่ (เห็นบนจอ)
+ *
+ * ที่นี่ดูจาก *ทิศ normal ของหน้า* แทน: กล่องหน้าเรียบมี normal แค่สามทิศที่ตั้งฉากกัน
+ * (บวก/ลบ) ไม่ว่าจะเอียงหรือมีเส้นแบ่งกี่เส้น — สามทิศนั้นคือแกนของกล่อง แล้ววัดขนาดโดย
+ * ฉายจุดยอดลงแต่ละแกน ชิ้นที่มีผิวโค้ง (normal หลายทิศ) ไม่ใช่กล่อง ปล่อยไว้
+ */
+function boxFrame(g) {
+  const pos = g.attributes.position
+  const nor = g.attributes.normal
+  if (!pos || !nor || pos.count > 96) return null
+  const axes = []
+  const n = new THREE.Vector3()
+  for (let i = 0; i < nor.count; i += 1) {
+    n.fromBufferAttribute(nor, i).normalize()
+    if (axes.some((a) => Math.abs(a.dot(n)) > 0.995)) continue
+    if (axes.length === 3) return null
+    axes.push(n.clone())
+  }
+  if (axes.length < 2) return null
+  const u = axes[0]
+  const v = axes[1].clone().addScaledVector(u, -axes[1].dot(u))
+  if (v.lengthSq() < 0.98 * 0.98) return null
+  v.normalize()
+  const w = new THREE.Vector3().crossVectors(u, v)
+  if (axes[2] && Math.abs(Math.abs(axes[2].dot(w)) - 1) > 0.01) return null
+  const lo = [Infinity, Infinity, Infinity]
+  const hi = [-Infinity, -Infinity, -Infinity]
+  const p = new THREE.Vector3()
+  for (let i = 0; i < pos.count; i += 1) {
+    p.fromBufferAttribute(pos, i)
+    const q = [p.dot(u), p.dot(v), p.dot(w)]
+    for (let k = 0; k < 3; k += 1) {
+      if (q[k] < lo[k]) lo[k] = q[k]
+      if (q[k] > hi[k]) hi[k] = q[k]
+    }
+  }
+  const size = new THREE.Vector3(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2])
+  const c = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2]
+  const center = u.clone().multiplyScalar(c[0]).addScaledVector(v, c[1]).addScaledVector(w, c[2])
+  return { basis: new THREE.Matrix4().makeBasis(u, v, w), size, center }
+}
+
 export function Mascot({
   position = [0, 0, 0],
   /**
@@ -551,6 +619,12 @@ export function Mascot({
    * เปลี่ยนแค่ "เนื้อที่เห็น" ริกยังเป็นตัวเดิมทุกข้อ ท่าทาง/สไลเดอร์จึงทำงานเหมือนเดิมหมด
    */
   lumberArms = null,
+  /**
+   * แขนการ์ตูน (ท่อแขนเส้นเดียว + มือการ์ตูน ดู tubeArm / toonHand) — ค่าตั้งต้นเปิดเฉพาะเมื่อไม่ใช้
+   * แขน lumberjack: hero ของ /2026-final (แขน lumberjack) จึงได้แขนเดิมทุกอย่าง ส่วนจอที่ส่ง
+   * noLumber (what-i-do, lab) ได้แขนการ์ตูน
+   */
+  toonArms = !lumberArms?.on,
   /** ลายเสื้อ — { on, size, seed } (null = ค่าตั้งต้นในไฟล์นี้) */
   print = null,
   /** ลมที่พัดเสื้อ — { on, amp, freq, speed, dir } (dir = เรเดียนบนระนาบพื้นโลก) */
@@ -1584,6 +1658,381 @@ export function Mascot({
     }
 
 
+    /**
+     * เนื้อแขนเป็น *ท่อเดียว* จากไหล่ถึงข้อมือ — แบบแขนการ์ตูน (rubber hose)
+     *
+     * เนื้อแขนเดิมต่อจากหลายชิ้นที่หนาไม่เท่ากัน (ต้นแขนใต้แขนเสื้อ ท่องอตรงศอก ท่อนแขนล่าง)
+     * ลบเหลี่ยมแล้วก็ยังอ่านเป็นปล้อง ๆ เพราะความหนากระโดดทุกข้อ ที่นี่ซ่อนเนื้อแขนทั้งหมด
+     * (ยกเว้นมือกับแขนเสื้อ) แล้ววางแทนด้วยท่อ *รัศมีเดียว* สองท่อน ปลายชนกันที่ข้อศอกพอดี
+     * กับลูกบอลรัศมีเดียวกันที่ข้อศอก — ผิวต่อกันเนียนไม่มีรอย
+     *
+     * ยังเป็นสองท่อนแยกกันตามกระดูก ไม่ได้หลอมเป็นเมชเดียว เพราะแขนต้องงอที่ศอกได้ (แขนถือแก้ว
+     * มีท่ายกดื่มที่งอศอก) ท่อบนเป็นลูกของไหล่ ท่อล่างกับลูกบอลเป็นลูกของศอก งอเมื่อไรผิวก็ยัง
+     * ต่อกันเอง ความยาวท่อถูกวัดใหม่ทุกเฟรม (ดู `armTubes` ในลูปเฟรม) เพราะสไลเดอร์ของริก
+     * เลื่อนข้อศอกได้หลังปั้นเสร็จ
+     *
+     * รัศมี = ครึ่งความหนาของเนื้อแขนเดิม (ค่ากลางของทุกชิ้น) — ขนาดแขนจึงใกล้ของเดิม
+     */
+    /**
+     * ยืดแขนแล้วย้ายศอกไปกลางแขน — ต้นแขนยาวเท่าท่อนล่าง (ดู ARM_LEN)
+     *
+     * ขยับแค่ระยะของข้อต่อตามทิศเดิม: ศอกเลื่อนออกตามแนวต้นแขน ข้อมือเลื่อนออกตามแนวท่อนล่าง
+     * ลูกของแต่ละข้อติดไปด้วยทั้งชุด ทิศทุกอย่างที่วัดไว้ (แกนมือ แกนแขน ท่าเก็บแขน) ยังถูก ทำก่อน
+     * ลอกแขนกระจก และก่อนคิด IK ยกแก้ว — ความยาวท่อนที่ IK ใช้จึงเป็นของใหม่
+     */
+    const stretchArm = (arm) => {
+      if (!arm) return
+      const E = arm.elbow.position
+      const W = arm.wrist.position
+      const half = ((E.length() + W.length()) * ARM_LEN) / 2
+      if (!(half > 0)) return
+      E.setLength(half)
+      W.setLength(half)
+      /* สไลเดอร์ pointArmFwd คืนศอกไปที่ตำแหน่งตั้งต้นทุกเฟรม (pointLower) — ตำแหน่งตั้งต้นต้องเป็นของใหม่ */
+      arm.elbow.userData.base?.copy(E)
+      model.updateMatrixWorld(true)
+    }
+
+    const tubeArm = (arm) => {
+      if (!arm) return
+      model.updateMatrixWorld(true)
+      const inWrist = (o) => {
+        for (let p = o; p; p = p.parent) if (p === arm.wrist) return true
+        return false
+      }
+      const skins = []
+      arm.shoulder.traverse((o) => {
+        if (!o.isMesh || !o.visible || o.userData.lumber || inWrist(o)) return
+        if (hexOfMesh(o) !== HEX.skin) return
+        skins.push(o)
+      })
+      if (!skins.length) return
+      /**
+       * รัศมีวัดจาก *กรอบของชิ้นเอง* (boxFrame) ไม่ใช่กล่องครอบในพิกัดโลก — ชิ้นที่เอียง
+       * อยู่ได้กล่องครอบพองกว่าตัวจริงมาก รอบแรกวัดแบบนั้นแล้วท่อออกมาอ้วนจนกลบแขนเสื้อ
+       *
+       * อ้างชิ้นที่บางที่สุดในบรรดาชิ้นยาว (ยาวเกินสองเท่าของความหนา = ท่อนแขน) ไม่ใช่ค่ากลาง
+       * ของทุกชิ้น: ชิ้นก้อน ๆ ตรงศอกหนาเกินกว่าจะเป็นความหนาของแขน
+       */
+      const sw = arm.shoulder.getWorldScale(new THREE.Vector3()).x || 1
+      const ws = new THREE.Vector3()
+      let thinnest = Infinity
+      let any = Infinity
+      let box = Infinity
+      for (const o of skins) {
+        const f = boxFrame(o.geometry)
+        const sz = f ? f.size : (o.geometry.computeBoundingBox(), o.geometry.boundingBox.getSize(new THREE.Vector3()))
+        const k = o.getWorldScale(ws).x / sw
+        const dims = [sz.x * k, sz.y * k, sz.z * k].sort((x, y) => x - y)
+        any = Math.min(any, dims[0])
+        if (dims[2] >= dims[0] * 2) thinnest = Math.min(thinnest, dims[0])
+        if (f) box = Math.min(box, dims[0])
+      }
+      /* สำเนากระจกของแขนชี้ได้รัศมีติดมาใน userData — ท่อที่ลอกมาไม่ใช่กล่อง วัดซ้ำแล้วเพี้ยน */
+      /**
+       * ชิ้นกล่องมาก่อน: ท่อนแขนที่ rebuildForearm ปั้นใหม่เป็นกล่องหน้าตัดจริงของแขน (0.42 ทั้งท่ายืน
+       * และท่า skate) — ท่า skate ย้ายชิ้นข้อมือเรียวของ GLB (หนา 0.18) มาอยู่กับศอกด้วย ถ้าเอา
+       * "ชิ้นยาวที่บางสุด" ชิ้นนั้นชนะ แขนทั้งท่อนกับมือเลยเล็กลงเกือบครึ่ง (เห็นบน hero)
+       */
+      const measured = Number.isFinite(box) ? box : Number.isFinite(thinnest) ? thinnest : any
+      const r = arm.shoulder.userData.tubeR ?? measured * 0.5
+      if (!(r > 0)) return
+      arm.shoulder.userData.tubeR = r
+      const src = skins[0]
+      const mat = src.userData.clayFrom ?? src.material
+      /**
+       * แขนเสื้ออ้วนตามแขน — ท่อแขนหนาขึ้น ARM_FAT เท่า แขนเสื้อเดิมเลยคลุมไม่มิด ท่อโผล่ทับหน้า
+       * แขนเสื้อ (เห็นบนจอ) ขยายชิ้นแขนเสื้อรอบจุดกลางของมันเองเท่ากัน ทำครั้งเดียวต่อชิ้น (ธง fat
+       * ติดไปกับสำเนากระจกของแขนอีกข้าง จึงไม่ขยายซ้ำ) และ clone geometry ก่อน — บางชิ้นใช้ร่วมกับ
+       * โมเดลที่แคชไว้
+       */
+      arm.shoulder.traverse((o) => {
+        if (!o.isMesh || !o.visible || o.userData.fat || o.userData.lumber) return
+        if (hexOfMesh(o) === HEX.skin || o.userData.armTube || o.userData.toonHand) return
+        for (let p = o.parent; p; p = p.parent) if (p === arm.elbow) return
+        const g = o.geometry.clone()
+        g.computeBoundingBox()
+        const c = g.boundingBox.getCenter(new THREE.Vector3())
+        g.translate(-c.x, -c.y, -c.z)
+        /* ×1.08: พอคลุมปากท่อแขน — มากกว่านี้แขนเสื้อพองเป็นก้อนเกินตัวเสื้อ */
+        const k = ARM_FAT * 1.08
+        g.scale(k, k, k)
+        g.translate(c.x, c.y, c.z)
+        o.geometry = g
+        o.userData.fat = true
+      })
+      for (const o of skins) {
+        o.visible = false
+        o.userData.replaced = true
+      }
+
+      /**
+       * ท่อเส้นเดียวตามเส้นโค้ง ไหล่ → ศอก → ข้อมือ (แบบแขนตัวการ์ตูน 3D ในภาพอ้างอิงมือหงาย)
+       *
+       * เดิมเป็นทรงกระบอกสองท่อนกับลูกกลมที่ศอก งอแล้วเห็นเป็นข้อต่อหุ่น แขนการ์ตูนงอเป็น *โค้ง*
+       * ต่อเนื่อง — ที่นี่ลากเส้นโค้ง Catmull-Rom ผ่านสามข้อ แล้วปั้นท่อรอบเส้นนั้นใหม่ทุกเฟรม
+       * (แค่เขียนตำแหน่งจุดยอดลงบัฟเฟอร์เดิม ไม่สร้างของใหม่ในลูปเฟรม)
+       *
+       * แขนอ้วนกลมแบบตัวการ์ตูน 3D (ภาพอ้างอิงคนใส่ VR): หนากว่าเนื้อแขนเดิม ~1.25 เท่า แทบไม่เรียว
+       * — ข้อมือเหลือ 86% พอดีกับลูกกลมข้อมือของมือการ์ตูน ปากท่อเริ่มที่จุดหมุนไหล่ ซึ่งอยู่ในแขนเสื้อ
+       * (แขนเสื้อถูกขยายตามแขนข้างล่าง)
+       * ท่ออยู่ใต้ไหล่ ตำแหน่งศอก/ข้อมือแปลงเข้าพิกัดไหล่เอง สเกลของศอก (foreScale) จึงไม่ทำให้
+       * ท่อนล่างอ้วนขึ้น — มือหักสเกลนั้นออกเองเหมือนกัน (ดู toonHand)
+       */
+      const SEG = 40
+      const RAD = 20
+      const ringN = RAD + 1
+      const posA = new Float32Array((SEG + 1) * ringN * 3)
+      const norA = new Float32Array((SEG + 1) * ringN * 3)
+      const idx = []
+      for (let i = 0; i < SEG; i += 1) {
+        for (let j = 0; j < RAD; j += 1) {
+          const q = i * ringN + j
+          /* ลำดับทวนเข็มเมื่อมองจากนอกท่อ (รอบวงไป N → B, ตามยาวไป T) — กลับด้านแล้วเห็นผิวด้านใน */
+          idx.push(q, q + 1, q + ringN, q + 1, q + ringN + 1, q + ringN)
+        }
+      }
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.BufferAttribute(posA, 3))
+      geo.setAttribute('normal', new THREE.BufferAttribute(norA, 3))
+      geo.setIndex(idx)
+      const hose = new THREE.Mesh(geo, mat)
+      hose.castShadow = true
+      hose.receiveShadow = true
+      hose.userData.noMerge = true
+      hose.userData.armTube = true
+      /* ขอบเขตเปลี่ยนทุกเฟรม — ไม่คิด bounding sphere ใหม่ทุกเฟรม ปิดการตัดทิ้งนอกกล้องแทน */
+      hose.frustumCulled = false
+      arm.shoulder.add(hose)
+
+      const pts = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]
+      const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal')
+      const P = Array.from({ length: SEG + 1 }, () => new THREE.Vector3())
+      const T = new THREE.Vector3()
+      const N = new THREE.Vector3()
+      const B = new THREE.Vector3()
+      const D = new THREE.Vector3()
+      const smooth = (x) => x * x * (3 - 2 * x)
+      const R = r * ARM_FAT
+      /** รัศมีตามระยะบนแขน: ไหล่ 1.0 → ศอก 0.95 → ข้อมือ WRIST_K (หน่วย R) */
+      const radiusAt = (t, tE) =>
+        R *
+        (t < tE
+          ? /* โคนแขนหดเข้าไปในแขนเสื้อ (ช่วง 40% แรกของต้นแขน) — ปากท่อไม่ทะลุผ้าตอนแขนชี้เข้ากล้อง */
+            (0.62 + 0.38 * smooth(Math.min(1, t / (tE * 0.4)))) * (1 - 0.05 * smooth(t / tE))
+          : 0.95 - (0.95 - WRIST_K) * smooth(Math.min(1, (t - tE) / (1 - tE))))
+      const update = () => {
+        arm.elbow.updateMatrix()
+        pts[1].copy(arm.elbow.position)
+        pts[0].set(0, 0, 0)
+        pts[2].copy(arm.wrist.position).applyMatrix4(arm.elbow.matrix)
+        /* ปลายท่อจมเข้าไปในมือเล็กน้อย ไม่ให้เห็นปากท่อ */
+        D.subVectors(pts[2], pts[1])
+        const lf = D.length()
+        const lu = pts[1].length()
+        if (lf < 1e-5 || lu < 1e-5) return
+        pts[3].copy(pts[2]).addScaledVector(D, (r * 0.35) / lf)
+        const tE = lu / (lu + lf + r * 0.35)
+        for (let i = 0; i <= SEG; i += 1) curve.getPoint(i / SEG, P[i])
+        for (let i = 0; i <= SEG; i += 1) {
+          T.subVectors(P[Math.min(SEG, i + 1)], P[Math.max(0, i - 1)]).normalize()
+          if (i === 0) {
+            /* ตั้งต้นด้วยแกนที่ตั้งฉากกับท่อมากที่สุด แล้วส่งต่อแบบ parallel transport — ไม่บิดเกลียว */
+            N.set(Math.abs(T.x) < 0.9 ? 1 : 0, Math.abs(T.x) < 0.9 ? 0 : 1, 0)
+          }
+          N.addScaledVector(T, -N.dot(T)).normalize()
+          B.crossVectors(T, N)
+          const rad = radiusAt(i / SEG, tE)
+          for (let j = 0; j <= RAD; j += 1) {
+            const ang = (j / RAD) * Math.PI * 2
+            const c = Math.cos(ang)
+            const sn = Math.sin(ang)
+            const k = (i * ringN + j) * 3
+            const nx = N.x * c + B.x * sn
+            const ny = N.y * c + B.y * sn
+            const nz = N.z * c + B.z * sn
+            norA[k] = nx
+            norA[k + 1] = ny
+            norA[k + 2] = nz
+            posA[k] = P[i].x + nx * rad
+            posA[k + 1] = P[i].y + ny * rad
+            posA[k + 2] = P[i].z + nz * rad
+          }
+        }
+        geo.attributes.position.needsUpdate = true
+        geo.attributes.normal.needsUpdate = true
+        /* มือการ์ตูนหักสเกลของศอกออก — ขนาดมือกับข้อมือเรียวของท่อไม่เพี้ยนตาม foreScale */
+        const hand = arm.wrist.userData.toonGroup
+        if (hand) hand.scale.copy(hand.userData.base).divideScalar(arm.elbow.scale.x || 1)
+      }
+      update()
+      arm.shoulder.userData.tubeUpdate = update
+    }
+
+    /**
+     * เปลี่ยนมือทั้งมือเป็นมือการ์ตูน (ดู ./toonHand) — ซ่อนทุกชิ้นใต้ข้อมือ (กำปั้นกล่องของ
+     * GLB, นิ้วชี้กล่อง, หรือมือที่ลอกมากับสำเนากระจก) แล้ววางมือใหม่ที่ข้อมือ
+     *
+     * กรอบของมือคิดในพิกัดโลกตอนปั้น แล้วแปลงเข้าพิกัดข้อมือ: นิ้วชี้ตามแกนแขน (ศอก → ข้อมือ)
+     * นิ้วโป้งไปทางหน้าตัว ฝ่ามือหันเข้าหาลำตัว (มือห้อยข้างตัวแบบคนจริง) — กรอบนี้กลับข้างเอง
+     * ระหว่างแขนซ้าย/ขวา (ดีเทอร์มิแนนต์ติดลบ = มือซ้าย) ไม่ต้องรู้ว่าแขนไหนถูกสะท้อนมา
+     *
+     * `palm: 'out'` ให้ฝ่ามือหันออกนอกตัวแทน (มือถือแก้ว: แก้วอยู่ด้านนอกกำปั้น) — กลับทั้ง
+     * ฝ่ามือและนิ้วโป้งพร้อมกัน มือจึงยังเป็นข้างเดิม
+     */
+    const toonHand = (arm, pose, { skip = null, palm = 'in' } = {}) => {
+      if (!arm) return null
+      const r = arm.shoulder.userData.tubeR
+      if (!(r > 0)) return null
+      model.updateMatrixWorld(true)
+      let mat = null
+      arm.wrist.traverse((o) => {
+        if (!o.isMesh || !o.visible) return
+        for (let p = o; p; p = p.parent) if (p === skip) return
+        if (!mat && hexOfMesh(o) === HEX.skin) mat = o.userData.clayFrom ?? o.material
+        o.visible = false
+        o.userData.replaced = true
+      })
+      if (!mat) return null
+
+      const wp = arm.wrist.getWorldPosition(new THREE.Vector3())
+      const F = wp.clone().sub(arm.elbow.getWorldPosition(new THREE.Vector3())).normalize()
+      const mq = model.getWorldQuaternion(new THREE.Quaternion())
+      const flat = (v) => v.addScaledVector(F, -v.dot(F))
+      let T = flat(new THREE.Vector3(0, 0, 1).applyQuaternion(mq))
+      if (T.lengthSq() < 0.09) T = flat(new THREE.Vector3(0, 1, 0).applyQuaternion(mq))
+      T.normalize()
+      const P = flat(model.getWorldPosition(new THREE.Vector3()).sub(wp))
+      P.addScaledVector(T, -P.dot(T))
+      if (P.lengthSq() < 1e-8) P.crossVectors(T, F)
+      P.normalize()
+      if (palm === 'down') {
+        /**
+         * คว่ำมือ (ฝ่ามือลงพื้น หลังมือขึ้นฟ้า) — มือกางทรงตัวของท่า skate แขนเหยียดออกข้าง
+         * ทิศ "เข้าหาตัว" ใช้ไม่ได้ (เกือบขนานกับแขน) ตั้งฝ่ามือจากทิศลงแทน แล้วคิดนิ้วโป้งจาก
+         * ข้างของมือเดิม (ดีเทอร์มิแนนต์ของกรอบเดิม) มือจึงยังเป็นข้างเดิม
+         */
+        const hand = Math.sign(new THREE.Matrix4().makeBasis(T, F, P).determinant()) || 1
+        P.set(0, -1, 0).applyQuaternion(mq)
+        flat(P)
+        if (P.lengthSq() < 1e-6) P.crossVectors(T, F)
+        P.normalize()
+        T.crossVectors(F, P).multiplyScalar(hand)
+      } else if (palm === 'out') {
+        P.negate()
+        T.negate()
+      } else {
+        /**
+         * บิดหลังมือเข้าหากล้อง (ด้านหน้าตัว) ~35° — มือห้อยฝ่ามือเข้าตัวตรง ๆ กล้องเห็นแค่สัน
+         * มือด้านนิ้วโป้ง ไม่เห็นข้อนิ้วกับเล็บ ซึ่งเป็นสิ่งที่ทำให้อ่านออกว่าเป็นมือการ์ตูน
+         * หมุนในระนาบ T–P คู่กัน มือจึงยังเป็นข้างเดิม
+         */
+        const a = 0.6
+        const T2 = T.clone().multiplyScalar(Math.cos(a)).addScaledVector(P, Math.sin(a))
+        P.multiplyScalar(Math.cos(a)).addScaledVector(T, -Math.sin(a))
+        T.copy(T2)
+      }
+      const s = Math.abs(arm.shoulder.getWorldScale(new THREE.Vector3()).x) || 1
+      const world = new THREE.Matrix4()
+        .makeBasis(T.multiplyScalar(s), F.multiplyScalar(s), P.multiplyScalar(s))
+        .setPosition(wp)
+      const local = arm.wrist.matrixWorld.clone().invert().multiply(world)
+
+      /* มือปั้นจากรัศมีท่อแขน × HAND_K แต่ลูกกลมข้อมือเท่าปลายท่อพอดี (WRIST_K) — ข้อมือไม่มีขั้น */
+      const R = r * ARM_FAT
+      const { skin, nail, grip } = buildToonHand(R * HAND_K, pose, 'toon', R * WRIST_K)
+      let nailMat = NAIL_MATS.get(mat)
+      if (!nailMat) {
+        nailMat = new THREE.MeshStandardMaterial({
+          color: (mat.color ?? new THREE.Color('#' + HEX.skin)).clone().lerp(new THREE.Color('#fff4ee'), 0.55),
+          roughness: 0.35,
+        })
+        NAIL_MATS.set(mat, nailMat)
+      }
+      const hand = new THREE.Group()
+      local.decompose(hand.position, hand.quaternion, hand.scale)
+      for (const [geo, m] of [
+        [skin, mat],
+        [nail, nailMat],
+      ]) {
+        const mesh = new THREE.Mesh(geo, m)
+        mesh.castShadow = true
+        mesh.receiveShadow = true
+        mesh.userData.noMerge = true
+        mesh.userData.toonHand = true
+        hand.add(mesh)
+      }
+      hand.userData.toonHand = true
+      /* เก็บเป็นเวกเตอร์ ไม่ใช่เลขตัวเดียว: มือข้างที่กรอบกลับด้านได้สเกล x ติดลบ (มือซ้าย) ถ้าตั้ง
+       * สเกลเท่ากันทุกแกนจากค่านั้น จะติดลบทั้งสามแกน = มือหมุนกลับหัว 180° */
+      hand.userData.base = hand.scale.clone()
+      arm.wrist.userData.toonGroup = hand
+      arm.wrist.add(hand)
+      hand.updateMatrix()
+      return { hand, grip: grip.applyMatrix4(hand.matrix) }
+    }
+
+
+    /**
+     * ปั้นแขนให้มนแบบตัวการ์ตูน 3D — ทุกชิ้นกล่องในแขนกลายเป็นกล่องมน *ขนาดเดิมเป๊ะ*
+     *
+     * แขนทั้งท่อนถูกปั้นจากกล่องล้วน (บ่า แขนเสื้อ ท่อนแขน ฝ่ามือ ข้อนิ้ว นิ้วชี้) มองแล้วเป็น
+     * บล็อกต่อกันเป็นปล้อง ตัวการ์ตูน 3D มีแขนเป็น *ท่อ* ไม่มีสันคม — ที่นี่ลบเหลี่ยมทุกชิ้น:
+     *
+     * - ชิ้นยาว (ด้านยาวเกิน 1.6 เท่าของด้านรอง) = ท่อ: รัศมีเกือบครึ่งด้านสั้น หน้าตัดจึง
+     *   เกือบกลม (ท่อนแขน นิ้ว แขนเสื้อ)
+     * - ชิ้นอื่น = ก้อนมน: รัศมี 40% ของด้านสั้น (ฝ่ามือ ข้อนิ้ว บ่า)
+     *
+     * กล่องใหม่วางตามแกนและขนาดเดิมของกล่องเก่า (ดู boxFrame) การวัดทุกอย่างที่ทำไปแล้ว
+     * (แกนแขน ข้อนิ้วที่หาจากปริมาตร ตำแหน่งมือบนแกน) จึงยังถูก — และต้องเรียก *ก่อน*
+     * mergeArm เพราะหลังรวมแล้วชิ้นส่วนไม่เป็นกล่องอีก แยกปั้นไม่ได้
+     *
+     * geometry เดิมไม่ถูก dispose: ชิ้นจาก GLB แชร์ geometry กับโมเดลที่แคชไว้ (ตัวละครชุดอื่น
+     * ในจอเดียวกันยังใช้อยู่)
+     */
+    const softenArm = (arm, skip = null) => {
+      if (!arm) return
+      arm.shoulder.traverse((o) => {
+        if (!o.isMesh || o.userData.softened || o.userData.lumber || o.userData.mergedFrom) return
+        if (o.userData.armTube || o.userData.toonHand || !o.visible) return
+        for (let p = o; p; p = p.parent) if (p === skip) return
+        const f = o.geometry ? boxFrame(o.geometry) : null
+        if (!f) {
+          /**
+           * ไม่ใช่กล่อง (ท่องอตรงศอก กล่องสอบตรงข้อมือ) — กล่องมนแทนทรงพวกนี้ไม่ได้ จะเสียรูป
+           * งอ/สอบไป จึงเกลาผิวของมันเองให้มนด้วย Loop subdivision แทน (ดู utils.loopSmooth)
+           * ชิ้นใหญ่เกิน (ไม่ใช่ชิ้นส่วนแขน) ปล่อยไว้
+           */
+          const pc = o.geometry?.attributes?.position?.count ?? 0
+          if (pc > 0 && pc <= 400) {
+            o.geometry = loopSmooth(o.geometry, 2, 1.12)
+            o.userData.softened = true
+          }
+          return
+        }
+        const dims = [f.size.x, f.size.y, f.size.z].sort((a, b) => a - b)
+        if (dims[0] < 1e-4) return
+        const tube = dims[2] >= dims[1] * 1.6
+        const r = dims[0] * (tube ? 0.48 : 0.4)
+        /**
+         * ท่อยืดตามแกนยาวอีกเกือบเท่ารัศมี — ปลายมนจมเข้าไปในชิ้นข้าง ๆ
+         *
+         * ลบเหลี่ยมอย่างเดียว ปลายท่อที่เคยเป็นหน้าตัดเต็มกลายเป็นโดม ข้อต่อเลยคอดเป็นข้อไส้กรอก
+         * และตรงข้อมือเห็นพื้นหลังลอดเป็นเส้นบาง ๆ (เห็นบนจอ) ยืดให้ปลายซ้อนกันแล้วรอยคอดหาย
+         */
+        const size = f.size.clone()
+        if (tube) {
+          const long = size.x >= size.y && size.x >= size.z ? 'x' : size.y >= size.z ? 'y' : 'z'
+          size[long] += r * 1.2
+        }
+        const ng = new RoundedBoxGeometry(size.x, size.y, size.z, 5, r)
+        ng.applyMatrix4(f.basis)
+        ng.translate(f.center.x, f.center.y, f.center.z)
+        o.geometry = ng
+        o.userData.softened = true
+      })
+    }
+
     const rebuildShoulder = (arm, { bevel = 0 } = {}) => {
       if (!arm) return
       const inv = arm.shoulder.matrixWorld.clone().invert()
@@ -2112,6 +2561,14 @@ export function Mascot({
 
       // รายชื่อชิ้นส่วนแขน เรียงจากบ่าออกไปหาปลายนิ้ว — ใช้กับโหมดทาสีแยกชิ้น (slider 'แยกสีชิ้นแขน')
       rig.current.pointParts = armParts(armPoint)
+      if (toonArms) {
+        stretchArm(armPoint)
+        tubeArm(armPoint)
+        /* ท่า skate: มือกางคว่ำทรงตัว — กำปั้นที่แขนเหยียดมองจากด้านปลายเป็นตอแขนกุด (เห็นบนจอ) */
+        if (skate) toonHand(armPoint, 'relax', { palm: 'down' })
+        else toonHand(armPoint, 'point')
+        softenArm(armPoint)
+      }
       rig.current.pointMerged = mergeArm(armPoint)
     }
 
@@ -2178,6 +2635,15 @@ export function Mascot({
       armMug.shoulder.userData.rest = armMug.shoulder.quaternion.clone()
       armMug.elbow.userData.rest = armMug.elbow.quaternion.clone()
 
+      /* มือการ์ตูนก่อนวัดจุดจับ — จุดจับของแก้วคือกลางวงนิ้วของมือใหม่ ไม่ใช่กำปั้นเดิม */
+      if (toonArms) tubeArm(armMug)
+      /* ไม่ถือแก้ว (noMug) = มือปล่อยสบาย ฝ่ามือเข้าตัวแบบแขนชี้ — กำลมเปล่า ๆ อ่านไม่ออกว่าเป็นมือ */
+      const toon = !toonArms
+        ? null
+        : noMug
+          ? toonHand(armMug, 'relax')
+          : toonHand(armMug, 'grip', { palm: 'out' })
+
       const mug = makeCoffeeCup()
       // แขวนกับข้อมือ แก้วจะได้ติดไปกับมือทุกท่า (ของเดิมผูกกับข้อศอก พอขยับแขนแล้วหลุดมือ)
       armMug.wrist.updateMatrixWorld(true)
@@ -2192,7 +2658,11 @@ export function Mascot({
       })
       // จุดจับ = กลางกำปั้น; ตัวแก้วห้อยต่ำลงมาจากตรงนั้นอีกทีตอน useFrame
       // (ต้องคิดตอนนั้นเพราะ "ทิศลงในโลกจริง" ขึ้นกับมุมข้อต่อที่ยังไม่ถูก apply ตอนนี้)
-      mug.userData.grip = hand.isEmpty() ? new THREE.Vector3() : hand.getCenter(new THREE.Vector3())
+      mug.userData.grip = toon
+        ? toon.grip
+        : hand.isEmpty()
+          ? new THREE.Vector3()
+          : hand.getCenter(new THREE.Vector3())
       mug.position.copy(mug.userData.grip)
       // ค่านิ่งต่อ instance — effect นี้รันครั้งเดียวตอนสร้างโมเดล ไม่ต้องใส่ deps
       mug.visible = !noMug
@@ -2247,8 +2717,17 @@ export function Mascot({
       rig.current.sipIK = ik
 
       // แก้วไม่นับ มันเป็นของที่ถืออยู่ ไม่ใช่ชิ้นของแขน
-      rig.current.mugParts = armParts(armMug, mug)
+      /* ท่อแขนกับมือการ์ตูนถูกปั้นก่อนบรรทัดนี้ (ต้องรู้จุดจับแก้ว) — ไม่นับเป็นชิ้นแขน: เอฟเฟกต์
+       * ทาสีแยกชิ้นตั้ง visible ให้ทุกชิ้นในรายการ ของพวกนี้จะโผล่ทับตอนแขน lumberjack ซ่อนแขนเดิม */
+      rig.current.mugParts = armParts(armMug, mug).filter(
+        (m) => !m.userData.armTube && !m.userData.toonHand,
+      )
+      /* แก้วไม่ใช่แขน — ปล่อยทรงเดิม */
+      if (toonArms) softenArm(armMug, mug)
       rig.current.mugMerged = mergeArm(armMug)
+      rig.current.armTubes = [armPoint, armMug]
+        .map((a) => a?.shoulder.userData.tubeUpdate)
+        .filter(Boolean)
     }
 
     headGroup.current = g
@@ -2270,7 +2749,7 @@ export function Mascot({
     model.userData.headGroup = g
     model.userData.eyes = parts.eye
 
-  }, [model, skate, cartoonFace])
+  }, [model, skate, cartoonFace, toonArms])
 
   /**
    * สลับ "เนื้อแขน" เป็นของ lumberjack — ริกไม่ถูกแตะเลย
@@ -2370,7 +2849,8 @@ export function Mascot({
         m.material = pose.armDebug ? debugMat(i) : m.userData.armMat
         // ชิ้นที่ถูกรวมไปแล้วเท่านั้นที่ต้องซ่อน — ชิ้นที่ไม่มีคู่ให้รวม (เช่นแขนเสื้อกับบ่า
         // ที่ตั้ง receiveShadow ต่างกันเลยรวมกันไม่ได้) ยังเป็นตัวจริงที่ต้องแสดงตลอด
-        m.visible = pose.armDebug || !m.userData.mergedAway
+        // ชิ้นที่ท่อแขน/มือการ์ตูนแทนที่แล้ว (userData.replaced) ก็ต้องซ่อนต่อ — ไม่งั้นโผล่ซ้อนของใหม่
+        m.visible = pose.armDebug || !(m.userData.mergedAway || m.userData.replaced)
       })
     })
     const merged = [rig.current.pointMerged, rig.current.mugMerged].filter(Boolean)
@@ -3710,6 +4190,15 @@ export function Mascot({
       drag.current = null
     }
   }
+
+  /**
+   * ท่อเนื้อแขนปั้นใหม่ตามข้อต่อ (ดู tubeArm) — useFrame แยกที่ประกาศหลังลูปหลัก จึงรันหลังจาก
+   * ลูปหลักตั้งมุมศอก/ข้อมือของเฟรมนี้เสร็จแล้ว (ถ้าอยู่ต้นลูปหลัก ท่อจะตามท่าช้าไปหนึ่งเฟรม)
+   */
+  useFrame(() => {
+    const tubes = rig.current.armTubes
+    if (tubes) for (const t of tubes) t()
+  })
 
   return (
     <>

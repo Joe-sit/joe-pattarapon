@@ -17,7 +17,7 @@ import { Rider } from './Rider'
 const RAD = Math.PI / 180
 
 /** ท่าแขนจากค่าในแผงจูน — แยกออกมาให้ JSX ข้างล่างสั้นลง ค่าทั้งชุดยังมาจากที่เดียว */
-function armPoseFromTuner(t) {
+export function armPoseFromTuner(t) {
   return {
   /* เลื่อนโคนแขน — ไม่ใช่องศา จึงไม่คูณ RAD */
   aimOut: t.aimOut,

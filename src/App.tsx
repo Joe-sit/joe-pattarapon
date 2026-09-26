@@ -22,6 +22,9 @@ import { Portfolio2026Page } from '@/pages/Portfolio2026Page'
 import { Portfolio2026FinalPage } from '@/pages/Portfolio2026FinalPage'
 import { NewHeroPage } from '@/pages/NewHeroPage'
 import { GlassCardsPage } from '@/pages/GlassCardsPage'
+import { WhatIDoLabPage } from '@/pages/WhatIDoLabPage'
+import { HandCompose } from '@/sections/handcompose/HandCompose'
+import { GalleryPage } from '@/sections/gallery/GalleryPage'
 // ฉาก 3D หนัก (three.js) — lazy แยก chunk ไม่ถ่วงหน้าอื่น
 const JoespressoPage = lazy(() => import('@/joespresso/Page'))
 // workspace ปั้นทรง toolbar ของฉาก joespresso — ใช้ three เหมือนกัน แยก chunk เช่นกัน
@@ -65,7 +68,7 @@ const SPLASH_ON = true
  *
  * ปิดเป็นราย route ไม่ใช่ปิด SPLASH_ON ทั้งเว็บ เพราะหน้าอื่น (/joespresso, /2026) ยังต้องมี
  */
-const SPLASH_OFF_ROUTES = ['/2026-final', '/glass']
+const SPLASH_OFF_ROUTES = ['/2026-final', '/glass', '/whatido-lab', '/hand', '/gallery']
 
 export function App() {
   /**
@@ -96,6 +99,12 @@ export function App() {
   const isNewHero = location.pathname === '/new-hero'
   /* หน้าปั้น section การ์ดกระจก — ของชิ้นเดียวบนพื้นขาว ไม่ใช้ shell ของเว็บ */
   const isGlass = location.pathname === '/glass'
+  /* หน้าปั้นจอ "สิ่งที่ทำ" แบบเรนเดอร์ (ตามเว็บอ้างอิง guillaumecolombel.fr) — จอเดียว ไม่ใช้ shell */
+  const isWhatIDoLab = location.pathname === '/whatido-lab'
+  /* หน้าปั้นองค์ประกอบ "มือชูจอ" ตามภาพอ้างอิง — จอเดียว ไม่ใช้ shell */
+  const isHand = location.pathname === '/hand'
+  /* หน้า gallery — ฉาก 3D ตัวละครนั่งทำงานหน้าผนังไอคอน จอเดียว ไม่ใช้ shell */
+  const isGallery = location.pathname === '/gallery'
   /**
    * หน้าส่องอินโทรเดี่ยว ๆ (dev เท่านั้น)
    *
@@ -311,6 +320,12 @@ export function App() {
         <Portfolio2026FinalPage />
       ) : isGlass ? (
         <GlassCardsPage />
+      ) : isWhatIDoLab ? (
+        <WhatIDoLabPage />
+      ) : isHand ? (
+        <HandCompose />
+      ) : isGallery ? (
+        <GalleryPage />
       ) : isNewHero ? (
         <NewHeroPage />
       ) : isV2 ? (

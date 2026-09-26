@@ -1,0 +1,81 @@
+/*
+ * What I do บนฟ้า — ฟ้าไล่สีลึกลงตามทางร่วง (ด้านบนสว่างต่อจาก hero) ข้อความขาวมุมซ้ายล่าง
+ * แบบภาพอ้างอิง Chzzk · บรรทัดเลื่อนขึ้นจากหน้ากากทีละบรรทัด ผ่านแล้วเลื่อนพ้นขึ้นไป
+ */
+.ss-root {
+  background: #fff;
+}
+.ss-sky {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, #1f6fe0 0%, #3f8cf0 55%, #6aaaf5 100%);
+}
+/* ม่านขาวรับช่วงจากม่านเมฆของ hero — จางออกในช่วงแรกของการเลื่อน */
+.ss-veil {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: var(--ss-veil, 1);
+  pointer-events: none;
+}
+
+.ss-head {
+  padding: 0 24px clamp(40px, 9svh, 110px) clamp(24px, 7vw, 120px);
+  color: #fff;
+  filter: drop-shadow(0 8px 28px rgba(10, 30, 120, 0.3));
+}
+.ss-line {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.18em;
+}
+.ss-line > span {
+  display: block;
+  transform: translateY(135%);
+  transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ss-head[data-pos='past'] .ss-line > span {
+  transform: translateY(-135%);
+}
+.ss-head[data-pos='on'] .ss-line > span {
+  transform: none;
+  transition-duration: 0.9s;
+  transition-delay: 0.15s;
+}
+.ss-head[data-pos='on'] .ss-title > span {
+  transition-delay: 0.25s;
+}
+.ss-head[data-pos='on'] .ss-body > span {
+  transition-delay: 0.38s;
+}
+.ss-kicker {
+  font: 600 clamp(0.8rem, 1vw, 1rem) / 1.2 'Momo Trust Sans', system-ui, sans-serif;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+.ss-title {
+  margin: 0.2em 0 0.1em;
+  font: 400 clamp(3.2rem, 7.6vw, 8rem) / 0.95 'Momo Trust Display', 'Mona Sans', system-ui, sans-serif;
+}
+.ss-body {
+  max-width: 26ch;
+  margin-top: 0.6em;
+  font: 500 clamp(1.05rem, 1.6vw, 1.5rem) / 1.4 'Momo Trust Sans', system-ui, sans-serif;
+}
+.ss-dot {
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-right: 0.6em;
+  border-radius: 50%;
+  box-sizing: border-box;
+  border: 2px solid #fff;
+  background: var(--ss-c);
+  vertical-align: -0.05em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ss-line > span {
+    transition: none;
+  }
+}
