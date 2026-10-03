@@ -1,6 +1,6 @@
-import { Suspense, useEffect, useMemo, useRef } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { Grid, MeshTransmissionMaterial } from '@react-three/drei'
+import { Grid, MeshTransmissionMaterial, PerformanceMonitor } from '@react-three/drei'
 import * as THREE from 'three'
 import { Mascot } from '@/joespresso/scene/Mascot'
 import { useDisposable, makeRandom, gradientTexture, LOW_END, damp, clamp, addCel, makeCelUniforms } from '@/joespresso/scene/utils'
@@ -23,6 +23,9 @@ import { PortalFx } from './PortalFx'
 import { EchoTrail } from './EchoTrail'
 import { HeroRider } from './HeroRider'
 import { WindTrail } from './WindTrail'
+import { heroView } from './heroView'
+import { CardClip } from './cardClip'
+import { SLAB_CURVE, WaveSlab, slabFrame } from './WaveSlab'
 import { heroPointer, holdHeroPointer } from './heroPointer'
 import { IntroClock, introSet, introSkip, introTime, outBack as introBack } from './intro'
 import { setNewHeroReady } from './ready'
@@ -819,7 +822,11 @@ const SKY_SUN = new THREE.Color('#fff6e2')
 const SKY_CLAY_TOP = new THREE.Color(CLAY_BG_TOP)
 const SKY_CLAY_BOT = new THREE.Color(CLAY_BG_BOT)
 
-function Backdrop({ clay }) {
+/**
+ * clip: ตัดฟ้าให้อยู่ในการ์ดของ hero แบบการ์ด (ดู ./heroView) — แผ่นฟ้าวางตามกรวยภาพ
+ * ซึ่งกล้องย่อลงพอดีการ์ดแล้ว เหลือแค่ตัดส่วนที่เผื่อไว้ 4% กับมุมมนให้ตรงกล่องการ์ด DOM
+ */
+function Backdrop({ clay, clip = false }) {
   const t = useTuner()
   const uniforms = useMemo(
     () => ({
@@ -843,6 +850,10 @@ function Backdrop({ clay }) {
       uCloudCut: { value: 0.52 },
       uCloudDot: { value: 9 },
       uTime: { value: 0 },
+      /* การ์ด: x, y (ล่างซ้าย), กว้าง, สูง เป็นพิกเซลบัฟเฟอร์ · รัศมีมุม (ติดลบ = ไม่ตัด) */
+      uClip: { value: new THREE.Vector4(0, 0, 1, 1) },
+      uClipR: { value: -1 },
+      /* กรอบบานบนจอ (พิกเซล CSS แกน y ชี้ลง): ศูนย์กลาง xy + ครึ่งกว้าง/สูง zw และรัศมีมุม */
     }),
     [],
   )
@@ -856,13 +867,29 @@ function Backdrop({ clay }) {
    */
   const ref = useRef()
   const DIST = 60
-  useFrame(({ camera, clock }) => {
+  /**
+   * วางแผ่นตอน "กำลังจะวาด" (onBeforeRender) ไม่ใช่ใน useFrame
+   *
+   * CameraRig ขยับกล้องใน useFrame ของมันเอง ซึ่งลงทะเบียนหลัง Backdrop — ถ้าวางแผ่นใน
+   * useFrame แผ่นจะอ่านกล้องของเฟรมก่อนเสมอ ช่วงเปิดตัวที่กล้องซูมออกเร็ว แผ่นจึงตามหลัง
+   * กล้องหนึ่งเฟรมทุกเฟรม เมฆเลื่อนไปมาเทียบกับตะแกรงจุด (ซึ่งผูกกับพิกเซลจอ) จุดจึงกะพริบ
+   * เป็นอาการกระตุก ตอนวาดกล้องขยับครบแล้ว ใช้ท่านั้นได้ตรงเฟรม
+   * (three คูณ modelViewMatrix หลัง onBeforeRender — อัปเดต matrixWorld ตรงนี้จึงทันใช้)
+   */
+  const place = useCallback((_gl, _scene, camera) => {
     const m = ref.current
     if (!m) return
     m.quaternion.copy(camera.quaternion)
     m.position.set(0, 0, -DIST).applyQuaternion(camera.quaternion).add(camera.position)
     const h = 2 * DIST * Math.tan((camera.fov * Math.PI) / 360) * 1.04
     m.scale.set(h * camera.aspect, h, 1)
+    m.updateMatrixWorld()
+    const u = m.material.uniforms
+    u.uAspect.value = camera.aspect
+  }, [])
+  useFrame(({ camera, clock, gl }) => {
+    const m = ref.current
+    if (!m) return
     /* อ่านค่าจากแผงจูนในลูปเฟรม ไม่ผ่าน prop — ลากสไลเดอร์แล้วเห็นผลทันทีโดยไม่ reconcile */
     const u = m.material.uniforms
     u.uAspect.value = camera.aspect
@@ -878,10 +905,15 @@ function Backdrop({ clay }) {
     u.uCloudDot.value = t.skyCloudDot
     /* เมฆลอยด้วยนาฬิกาของฉาก ไม่ใช่ตามระยะเลื่อน — ฟ้าต้องมีชีวิตแม้คนดูไม่ขยับ */
     u.uTime.value = clock.elapsedTime * t.skyCloudDrift
+    /* กล่องการ์ดเป็นพิกเซลของบัฟเฟอร์ (gl_FragCoord แกน y ชี้ขึ้น) — ผ้าใบกับบัฟเฟอร์ของ CameraFX ขนาดเท่ากัน */
+    const k = gl.getPixelRatio()
+    const H = gl.domElement.clientHeight
+    u.uClip.value.set(heroView.x * k, (H - heroView.y - heroView.h) * k, heroView.w * k, heroView.h * k)
+    u.uClipR.value = clip && heroView.on ? heroView.r * k : -1
   })
 
   return (
-    <mesh ref={ref} renderOrder={-1}>
+    <mesh ref={ref} renderOrder={-1} onBeforeRender={place} frustumCulled={false}>
       <planeGeometry args={[1, 1]} />
       <shaderMaterial
         uniforms={uniforms}
@@ -916,6 +948,8 @@ function Backdrop({ clay }) {
           uniform float uCloudCut;
           uniform float uCloudDot;
           uniform float uTime;
+          uniform vec4 uClip;
+          uniform float uClipR;
           varying vec2 vUv;
 
           /* hash คงที่ต่อพิกเซล — dither ต้องนิ่ง ไม่ใช่สัญญาณรบกวนที่วิ่งทุกเฟรม */
@@ -941,21 +975,39 @@ function Backdrop({ clay }) {
            * สี่ชั้นพอให้ได้ทั้งก้อนใหญ่และขอบหยักย่อย มากกว่านั้นตาไม่เห็นเพิ่มแต่จ่ายค่า
            * ตัวอย่างทุกพิกเซลของฟ้าซึ่งกินเต็มเฟรม
            */
-          float fbm(vec2 p) {
+          /**
+           * fbm แบบกำหนดจำนวนชั้น — เมฆคิดทุกพิกเซลทุกเฟรม (เป็นงานหนักสุดของฟ้า วัดแล้ว: ปิดเมฆ
+           * เฟรมขึ้น ~30%) ก้อนใหญ่ใช้ 2 ชั้น ขอบใช้ 3 ชั้น แทน 5+5 — เมฆถูกวาดเป็นจุดอยู่แล้ว
+           * รายละเอียดชั้นสูงหายไปในช่องจุด ผลรวมถูกปรับให้เท่าของ 5 ชั้นเดิม (0.969)
+           * ค่าตัดเมฆ (uCloudCut) จึงได้ปริมาณเมฆเท่าเดิม
+           */
+          float fbmN(vec2 p, int oct) {
             /* หมุนทุกชั้น: value noise สุ่มที่มุมช่องตามแกน ถ้าไม่หมุน ทุกชั้นวางทับแกน
                เดียวกันจนก้อนเมฆออกมาเป็นปื้นสี่เหลี่ยม (เห็นมาแล้วบนจอ) */
             mat2 rot = mat2(0.80, -0.60, 0.60, 0.80);
             float v = 0.0;
             float a = 0.5;
+            float sum = 0.0;
             for (int i = 0; i < 5; i++) {
+              if (i >= oct) break;
               v += a * vnoise(p);
+              sum += a;
               p = rot * p * 2.03 + 7.13;
               a *= 0.5;
             }
-            return v;
+            return v * (0.969 / sum);
           }
 
           void main() {
+            /* hero แบบการ์ด: ฟ้าอยู่แค่ในกล่องการ์ด มุมมน (เฟรมภาพสูงเกินการ์ด จึงตัดด้วยพิกัดจอ ไม่ใช่ uv) */
+            if (uClipR >= 0.0) {
+              /* ห้ามชื่อ half — คำสงวนของ GLSL (shader คอมไพล์ไม่ผ่าน ฟ้าหายทั้งผืน) */
+              vec2 hb = uClip.zw * 0.5;
+              vec2 p = abs(gl_FragCoord.xy - (uClip.xy + hb));
+              vec2 b = hb - uClipR;
+              float sd = length(max(p - b, 0.0)) - uClipR;
+              if (sd > 0.0) discard;
+            }
             float y = vUv.y;
 
             /* ไล่ตั้งสี่ช่วง — smoothstep ทุกช่วงไม่ให้เห็นรอยต่อของจุดสี */
@@ -1009,8 +1061,8 @@ function Backdrop({ clay }) {
                * ชั้นเดียวได้เมฆกระจายสม่ำเสมอทั้งฟ้าเท่ากันหมด ซึ่งอ่านเป็นลายพื้น ไม่ใช่เมฆ
                * — ฟ้าจริงมีย่านที่โปร่งสนิทสลับกับย่านที่ก้อนเกาะกันเป็นแพ
                */
-              float mass = fbm(flow * 0.3);
-              float n = fbm(flow) * 0.62 + mass * 0.52;
+              float mass = fbmN(flow * 0.3, 2);
+              float n = fbmN(flow, 3) * 0.62 + mass * 0.52;
               float dens = smoothstep(uCloudCut, uCloudCut + 0.2, n) * band;
               /* รัศมีจุด: √ความหนาแน่น เพื่อให้ *พื้นที่* ของจุดโตเป็นเส้นตรงตามความหนาแน่น */
               float rad = sqrt(dens) * 0.62;
@@ -1181,6 +1233,8 @@ function PortalGlass({ w, h, r, z, bevel, intensity, sheen }) {
  * ทำงานเฉพาะเมื่อมีคนรอ (panelScreen.want) — สปแลชปิดไปแล้วก็ไม่ต้องเสียเวลาฉายทุกเฟรม
  */
 const PROBE_P = new THREE.Vector3()
+/** จุดต่อมุมของเส้นรอบรูปบาน (= panelScreen.outlineSeg — สปแลชสุ่มวงกลมตั้งต้นด้วยจำนวนเดียวกัน) */
+const OUTLINE_SEG = panelScreen.outlineSeg
 
 function PanelProbe({ count, w, h, d, y, xAt }) {
   const g = useRef()
@@ -1204,6 +1258,7 @@ function PanelProbe({ count, w, h, d, y, xAt }) {
     const rects = []
     const quads = []
     const radii = []
+    const outlines = []
     /* หน้าบานอยู่ที่ z = +d/2 ไม่ใช่ z = 0 — กล่องวางกลางที่ระนาบศูนย์ ฉายที่ศูนย์คือได้
        ระนาบกลางความหนา ซึ่งเล็กกว่าหน้าที่คนดูเห็นจริง */
     const zFront = d / 2
@@ -1241,7 +1296,32 @@ function PanelProbe({ count, w, h, d, y, xAt }) {
       const leftEdge = Math.hypot(corner[0].x - corner[3].x, corner[0].y - corner[3].y)
       const rightEdge = Math.hypot(corner[1].x - corner[2].x, corner[1].y - corner[2].y)
       radii.push(((Math.min(w, h) * 0.17) / h) * ((leftEdge + rightEdge) / 2))
+      /* เส้นรอบรูปจริงของหน้าบาน — มุมเป็นโค้งกำลังสองแบบเดียวกับ roundedBoxGeo (ไม่ใช่วงกลม)
+         ฉายทีละจุด มุมไกล/ใกล้กล้องจึงบีบตามเพอร์สเปกทีฟเอง ดู panelScreen.outlines */
+      const rr = Math.min(Math.min(w, h) * 0.17, Math.min(w, h) / 2)
+      const x0 = x - w / 2
+      const x1 = x + w / 2
+      const y0 = y - h / 2
+      const y1 = y + h / 2
+      const line = []
+      for (const [ax, ay, cx, cy, bx, by] of [
+        [x0, y1 - rr, x0, y1, x0 + rr, y1],
+        [x1 - rr, y1, x1, y1, x1, y1 - rr],
+        [x1, y0 + rr, x1, y0, x1 - rr, y0],
+        [x0 + rr, y0, x0, y0, x0, y0 + rr],
+      ]) {
+        for (let k = 0; k <= OUTLINE_SEG; k += 1) {
+          const t = k / OUTLINE_SEG
+          const m = 1 - t
+          PROBE_P.set(m * m * ax + 2 * m * t * cx + t * t * bx, m * m * ay + 2 * m * t * cy + t * t * by, zFront)
+          o.localToWorld(PROBE_P)
+          PROBE_P.project(camera)
+          line.push({ x: (PROBE_P.x * 0.5 + 0.5) * size.width, y: (1 - (PROBE_P.y * 0.5 + 0.5)) * size.height })
+        }
+      }
+      outlines.push(line)
     }
+    panelScreen.outlines = outlines
     panelScreen.rects = rects
     panelScreen.quads = quads
     panelScreen.radii = radii
@@ -1952,7 +2032,8 @@ function WindowWorld({
           scale={tetris.scale}
         />
       )}
-      <PortalRibbon {...ribbon} />
+      {/* hero แบบการ์ด: ไม่มีถนนในโลกหลังหน้าต่าง (แผ่นลอน S แทนถนนทั้งชุด) */}
+      {ribbon && <PortalRibbon {...ribbon} />}
     </group>
   )
 }
@@ -1995,6 +2076,47 @@ function useRibbonDraw(geo, part, onStep) {
     if (rest) rest.count = k * 18
     onStep?.(local)
   })
+}
+
+/**
+ * แผ่นลอน S ของ hero แบบการ์ด (ดู ./WaveSlab) — ผิวบนใช้ลายตารางคอมมิตชุดเดียวกับถนน
+ * ตำแหน่งเป็นพิกัดโลก (แผงจูน กลุ่ม "แผ่นลอน (การ์ด)"): ภาพเต็มเฟรมถูกย่อลงการ์ด ที่ z -8
+ * การ์ดกินราว x -5…38, y -9…9
+ */
+/** ตำแหน่งแผ่นเป็นเมทริกซ์โลก — ทางไถลของตัวละครต้องใช้ตัวเดียวกัน (ดู slabRide ใน Scene) */
+function slabMatrix(t) {
+  const k = t.slabScale
+  return new THREE.Matrix4().compose(
+    new THREE.Vector3(t.slabX, t.slabY, t.slabZ),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(t.slabRotX * RAD, t.slabRotY * RAD, t.slabRotZ * RAD)),
+    new THREE.Vector3(k, k, k),
+  )
+}
+
+function CardSlab() {
+  const t = useTuner()
+  const hover = useCellHover()
+  const maxAniso = useThree((st) => st.gl.capabilities.getMaxAnisotropy())
+  const tex = useMemo(() => {
+    const t = checkerTex.clone()
+    t.anisotropy = maxAniso
+    t.needsUpdate = true
+    return t
+  }, [maxAniso])
+  useDisposable(tex)
+  return (
+    <group {...hover}>
+      <WaveSlab
+        position={[t.slabX, t.slabY, t.slabZ]}
+        rotation={[t.slabRotX * RAD, t.slabRotY * RAD, t.slabRotZ * RAD]}
+        scale={t.slabScale}
+        width={t.slabW}
+        thick={t.slabThick}
+      >
+        <RibbonTopMaterial map={tex} aniso={maxAniso} />
+      </WaveSlab>
+    </group>
+  )
 }
 
 function CheckerRibbon({ width, thick, wave, waves, scale, offset, rot }) {
@@ -2453,7 +2575,9 @@ function CameraRig() {
      */
     // ถอยได้จำกัด — ถอยเกิน 1.25 เท่าแล้วครึ่งบนของจอเหลือแต่พื้นหลังว่าง เสียเฟรมกว่าโดนตัด
     const t = getTuner()
-    const fit = clamp(1.62 / (state.size.width / state.size.height), 1, t.fitMax)
+    /* hero แบบการ์ด: จัดเฟรมตามสัดส่วนของการ์ด ไม่ใช่ของผ้าใบ (ดู ./heroView) */
+    const view = heroView.on ? heroView : null
+    const fit = clamp(1.62 / (view ? view.fw / view.fh : state.size.width / state.size.height), 1, t.fitMax)
     /**
      * อินโทรของกล้อง: เริ่มจากมุมที่เข้าใกล้/ต่ำ/เฉียงกว่า แล้วค่อย ๆ ถอยกลับมาที่มุมจริง
      * ฉากมีชั้นลึก (หน้าต่าง → ริบบิ้น → ตัวละคร → ของลอยหน้าสุด) กล้องที่เคลื่อนคือสิ่งที่
@@ -2491,9 +2615,24 @@ function CameraRig() {
     cam.position.x = damp(cam.position.x, t.camX - (fit - 1) * 2.1 + heroPointer.x * 0.6 + dollyX, 0.06, dt)
     cam.position.y = damp(cam.position.y, t.camY + heroPointer.y * 0.4 + dollyY + t.cruDrop * pull, 0.06, dt)
     // fov มาจากแผงปรับ — เปลี่ยนแล้วต้อง updateProjectionMatrix เอง
-    if (cam.fov !== t.fov) {
+    if (view) {
+      /**
+       * ภาพเต็มเฟรมเดิมไปลงกรอบการ์ด ส่วนนอกการ์ดยังวาดต่อ (หน้าต่างมองที่ใหญ่กว่า "ภาพเต็ม")
+       * aspect ต้องเป็นของการ์ด ไม่งั้นภาพถูกยืดตามสัดส่วนผ้าใบ
+       */
       cam.fov = t.fov
-      cam.updateProjectionMatrix()
+      cam.aspect = view.fw / view.fh
+      cam.setViewOffset(view.fw, view.fh, -view.fx, -view.fy, state.size.width, state.size.height)
+    } else if (heroView.fullH > state.size.height + 1) {
+      /* ผ้าใบเป็นท่อนบนของภาพเต็มกรอบ (ดู fullH ใน ./heroView) — จัดภาพตามกรอบเต็ม วาดแค่ท่อนที่เห็น */
+      const W = state.size.width
+      cam.fov = t.fov
+      cam.aspect = W / heroView.fullH
+      cam.setViewOffset(W, heroView.fullH, 0, 0, W, state.size.height)
+    } else if (cam.fov !== t.fov || cam.view) {
+      cam.fov = t.fov
+      cam.aspect = state.size.width / state.size.height
+      cam.clearViewOffset()
     }
     /* ประตูให้สคริปต์ตรวจงานอ่านท่ากล้องได้ — dev เท่านั้น (ท่าเดียวกับ window.__intro) */
     if (import.meta.env.DEV) {
@@ -2513,7 +2652,7 @@ function CameraRig() {
 
 /* ---------- ฉากรวม ---------- */
 
-function Scene() {
+function Scene({ bare = false }) {
   const t = useTuner()
   const clay = t.clay > 0.5
   const props = t.props > 0.5
@@ -2645,6 +2784,28 @@ function Scene() {
       },
     }
   }, [t.ribbonRotX, t.ribbonRotY, t.ribbonRotZ, t.ribbonX, t.ribbonY, t.ribbonZ, t.ribbonScale, t.ribbonWave, t.ribbonWaves, t.enT1])
+  /**
+   * hero แบบการ์ด: ตัวละครไถลบนแผ่นลอน S แทนถนนเดิม — โค้ดท่าเข้าฉากชุดเดิม แค่เปลี่ยนเส้น
+   *
+   * ตัวละครอยู่ในกลุ่มแถบหน้าต่าง (เลื่อน panelZ แล้วหมุน bandYaw) ส่วนแผ่นวางด้วยพิกัดโลก
+   * เมทริกซ์ของทางไถลจึงต้องถอดกลุ่มนั้นออกก่อน ไม่มีปากบาน (mouthT 0) ไม่มีท่อนงอกตามการเลื่อน
+   */
+  const slabRide = useMemo(() => {
+    if (!bare) return null
+    const band = new THREE.Matrix4()
+      .makeTranslation(0, 0, t.panelZ)
+      .multiply(new THREE.Matrix4().makeRotationY(t.bandYaw * RAD))
+    return {
+      curve: SLAB_CURVE,
+      matrix: band.invert().multiply(slabMatrix(t)),
+      wave: 0,
+      waves: 1,
+      frame: slabFrame,
+      mouthT: 0,
+      cruise: null,
+    }
+  }, [bare, t.panelZ, t.bandYaw, t.slabX, t.slabY, t.slabZ, t.slabRotX, t.slabRotY, t.slabRotZ, t.slabScale])
+  const rideNow = slabRide ?? ride
   const ribbon = (
     <CheckerRibbon
       width={t.ribbonW}
@@ -2719,10 +2880,11 @@ function Scene() {
        * ฉากนอกพอร์ทัล: อวกาศ (sp) หรือพื้นหลังไล่สีน้ำเงินชุดเดิม
        * โหมด clay ต้องเป็นเทาเรียบเสมอ — มันคือโหมดตรวจรูปทรง สีทุกอย่างต้องถูกถอดทิ้ง
        */}
-      {t.sp > 0.5 && !clay ? (
+      {/* bare = ฟ้าถูกตัดให้อยู่ในการ์ด นอกการ์ดโปร่ง ของในฉากจึงล้นขอบการ์ดได้ */}
+      {t.sp > 0.5 && !clay && !bare ? (
         <SpaceBackdrop seed={t.spSeed} stars={t.spStars} nebula={t.spNebula} />
       ) : (
-        <Backdrop clay={clay} />
+        <Backdrop clay={clay} clip={bare} />
       )}
       <ShadowFlags on={t.sh > 0.5 && !clay} />
       {/**
@@ -2740,7 +2902,7 @@ function Scene() {
         <Planets dist={t.plDist} scale={t.plScale} drift={t.plDrift} spin={t.plSpin} />
       )}
       {/* เมฆหน้าสุด — เกาะขอบจอเป็นกรอบ ไม่ได้อยู่ในโลกของฉาก (ดู EdgeClouds) */}
-      {t.cl > 0.5 && !clay && (
+      {t.cl > 0.5 && !clay && !bare && (
         <EdgeClouds dist={t.clDist} scale={t.clScale} drift={t.clDrift} />
       )}
       {/**
@@ -2800,6 +2962,8 @@ function Scene() {
          * และแถบแผงใน ref กินแนวตั้งจาก y 4.68 (จอ 28%) ถึง -10.94 (จอ 68%)
          * ดังนั้นสูง 15.62 ฐาน -10.94 กว้าง 11.5 ห่างกัน 13.3
          */}
+        {/* hero แบบการ์ด: บานยืนบนการ์ด — ตัดข้าง/ล่าง โผล่ขอบบนได้ (ดู ./cardClip) */}
+        <CardClip on={bare}>
         {Array.from({ length: Math.round(t.panelCount) }, (_, i) => {
           // เรียงสมมาตรรอบศูนย์ ระยะห่างเท่ากันทุกช่อง ไม่ว่าจะกี่ใบ
           const x = t.panelX + (i - (Math.round(t.panelCount) - 1) / 2) * t.panelGap
@@ -2827,6 +2991,7 @@ function Scene() {
             </Appear>
           )
         })}
+        </CardClip>
         {/* ฉายกรอบบานลงพิกัดจอให้สปแลชเอาไปเป็นเป้ามอร์ฟ (ดู newhero/panelScreen) */}
         <PanelProbe
           count={Math.round(t.panelCount)}
@@ -2836,8 +3001,12 @@ function Scene() {
           y={t.panelBase + t.panelH / 2}
           xAt={(i) => t.panelX + (i - (Math.round(t.panelCount) - 1) / 2) * t.panelGap}
         />
-        {ribbon}
+        {/* ถนนคือแผ่นชั้นหน้า — ตัดแค่ซ้าย/ขวา ปล่อยโผล่ทั้งขอบบนและขอบล่างของการ์ด (ดู ./cardClip) */}
+        <CardClip on={bare} open="bottom">
+        {/* hero แบบการ์ด: ถนนเดิมถูกแทนด้วยแผ่นลอน S (CardSlab) */}
+        {!bare && ribbon}
         {/* ช่วงต่อของถนน — งอกตามการเลื่อนจอ ไปจบที่ขอบขวา (ดู CruiseRibbon) */}
+        {!bare && (
         <CruiseRibbon
           width={t.ribbonW}
           thick={t.ribbonThick}
@@ -2848,6 +3017,8 @@ function Scene() {
           rot={[t.ribbonRotX * RAD, t.ribbonRotY * RAD, t.ribbonRotZ * RAD]}
           split={ride.cruise.split}
         />
+        )}
+        </CardClip>
         {/* ริบบิ้นกระจก — พุ่งออกจากปากบานที่ 2 คนละชิ้นกับเส้นหมากรุก */}
         {t.gr > 0.5 && !clay && (
           <GlassRibbon
@@ -2919,7 +3090,7 @@ function Scene() {
           </Appear>
         )}
         {/* เส้นทางวางเอง (debug): เส้น + ลูกบอลที่ waypoint ในพิกัดกลุ่มนี้ */}
-        {import.meta.env.DEV && t.enPath > 0.5 && t.enShowPath > 0.5 && <PathGizmo ride={ride} />}
+        {import.meta.env.DEV && t.enPath > 0.5 && t.enShowPath > 0.5 && <PathGizmo ride={rideNow} />}
         {/* ตัวละครอยู่ในพิกัดกลุ่มเดียวกับริบบิ้น จะได้วางบนถนนได้ตรง ๆ ไม่ต้องแปลงพิกัด */}
         {/**
          * ตัวละครห่อด้วย Entrance: กลุ่มนอกถือปลายทาง (ค่าจากแผง) กลุ่มในวิ่งเข้ามาจาก
@@ -2943,7 +3114,7 @@ function Scene() {
         {skater && (
           <Entrance
             replay={t.enReplay}
-            ride={ride}
+            ride={rideNow}
             rideMode={t.enRide > 0.5}
             pathMode={t.enPath > 0.5}
             position={[t.skaterX, t.skaterY, t.skaterZ]}
@@ -2955,8 +3126,14 @@ function Scene() {
         )}
       </group>
       </group>
+      {bare && (
+        <CardClip on open="bottom">
+          <CardSlab />
+        </CardClip>
+      )}
       {/* ต้องอยู่หลังแถบหน้าต่างในลำดับ JSX — หน้ากาก stencil ต้องถูกวาดก่อนของข้างใน */}
       {portal && (
+        <CardClip on={bare}>
         <InsideWindow>
           <WindowWorld
             z={t.portalZ}
@@ -3024,7 +3201,7 @@ function Scene() {
                 scale: t.teScale,
               }
             }
-            ribbon={{
+            ribbon={bare ? null : {
               width: t.prW,
               thick: t.prThick,
               wave: t.prWave,
@@ -3035,6 +3212,7 @@ function Scene() {
             }}
           />
         </InsideWindow>
+        </CardClip>
       )}
       {/**
        * จานสี — ของลอยนอกหน้าต่าง ไม่ได้อยู่ในกลุ่ม props
@@ -3190,15 +3368,36 @@ function SceneReady() {
   return null
 }
 
-export default function NewHeroScene() {
+/**
+ * bare: ผ้าใบโปร่ง ฟ้าอยู่แค่ในการ์ด ไม่มีเมฆขอบ (hero แบบการ์ด ตาม ref
+ * creativecruise.nl: ของ 3D ล้นออกนอกขอบการ์ดได้ เพราะการ์ดเป็น DOM อยู่หลังผ้าใบ)
+ */
+export default function NewHeroScene({ bare = false, className = 'absolute inset-0' }) {
   // เลื่อนพ้นไปไกลจนไม่มีใครเห็นแล้ว = หยุดวาด (ดู setSceneOn ใน scrolly.js)
   const on = useSceneOn()
+  /**
+   * dpr ปรับตามเครื่อง — เริ่มที่เพดาน ถ้าเฟรมตก (PerformanceMonitor วัดเฉลี่ยหลายรอบ ไม่ใช่เฟรม
+   * เดียว) ลดลงพื้น (minDpr) ถ้าไหวค่อยขึ้นกลับ เครื่องแรงได้ภาพคม เครื่องอ่อนได้ความลื่น
+   */
+  const maxDpr = LOW_END ? 1.25 : 1.5
+  /**
+   * พื้นตอนเฟรมตก 1.25 ไม่ใช่ 1 — ที่ 1 บนจอ retina ภาพแตกเป็นเม็ด จ่ายค่าความละเอียดที่เพิ่มด้วยงานที่
+   * เคยทำทิ้ง (ผ้าใบไม่ลบรอยหยักซ้ำ, MSAA ของบัฟเฟอร์ 2 ไม่ใช่ 4 ดู CameraFX) วัดที่ 1440×900 จอ 2x:
+   * dpr 1 แบบเดิม 18.7ms/เฟรม · dpr 1.25 แบบนี้ 19.9ms — พิกเซลมากขึ้น 56% ต้นทุนแทบเท่าเดิม
+   */
+  const minDpr = LOW_END ? 1 : 1.25
+  const [dpr, setDpr] = useState(maxDpr)
   return (
     <Canvas
       shadows="soft"
       frameloop={on ? 'always' : 'never'}
-      className="absolute inset-0"
-      dpr={[1, LOW_END ? 1.5 : 2]}
+      className={className}
+      /**
+       * dpr สูงสุด 1.5 ไม่ใช่ 2 — ฉากนี้ติดคอขวดที่จำนวนพิกเซล (ฟ้า fbm, พาส rim ของ CameraFX
+       * เต็มจอ) ไม่ใช่ draw call: ปิดเงา/พอร์ทัลแล้ว fps แทบไม่ขยับ แต่พิกเซลลด 44% ที่ 1.5
+       * ตัวอักษรในฉากไม่มี ขอบที่นุ่มลงนิดเดียวแลกกับเฟรมที่ลื่นขึ้นเกือบเท่าตัว (วัดแล้ว)
+       */
+      dpr={dpr}
       camera={{
         position: [DEFAULTS.camX, DEFAULTS.camY, DEFAULTS.camZ],
         fov: DEFAULTS.fov,
@@ -3211,10 +3410,15 @@ export default function NewHeroScene() {
        * จะสว่างพอ — ที่นี่อัตราส่วนระหว่างด้านสว่างกับด้านมืดคงเดิม
        */
       // stencil ต้องเปิดเอง — พอร์ทัลของหน้าต่างใช้ stencil buffer เป็นตัวจำกัดพื้นที่วาด
-      gl={{ antialias: true, stencil: true, toneMappingExposure: DEFAULTS.exposure }}
+      /**
+       * antialias ของผ้าใบปิดเมื่อเอฟเฟกต์กล้องเปิด (ค่าตั้งต้น) — ฉากวาดลงบัฟเฟอร์ของ CameraFX ที่ลบรอยหยัก
+       * เองอยู่แล้ว แล้วค่อยแปะลงผ้าใบเป็นแผ่นเดียว MSAA ของผ้าใบจึงไม่ได้ลบอะไร แค่กินหน่วยความจำกับแบนด์วิดท์
+       */
+      gl={{ antialias: !(DEFAULTS.fx > 0.5 || DEFAULTS.rimFx > 0.5), stencil: true, alpha: bare, toneMappingExposure: DEFAULTS.exposure }}
     >
+      <PerformanceMonitor onDecline={() => setDpr(minDpr)} onIncline={() => setDpr(maxDpr)} flipflops={3} onFallback={() => setDpr(minDpr)} />
       <Suspense fallback={null}>
-        <Scene />
+        <Scene bare={bare} />
       </Suspense>
     </Canvas>
   )

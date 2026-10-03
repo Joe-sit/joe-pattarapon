@@ -55,6 +55,13 @@ const REVEAL_PHOTO = '/photos/joe-portrait.jpg'
  */
 /** ระยะเลื่อน (เท่าของความสูงจอ) ที่ใช้พาของทั้งจอเข้าที่ */
 const IN_SPAN = 0.55
+/**
+ * กองหน้าต่างไถลไปทางขวาหลังกางครบสี่บาน — ระยะเป็นสัดส่วนของ IN_SPAN (ท่ากางจบราว 0.91)
+ * ต้องจบก่อนท่าปิดจอ (WRAP_AT 0.72 จอ) และระยะเลื่อนเป็น vw ของทั้งฉาก 3D กับชั้นรอยสาด (ต้องไปด้วยกัน ไม่งั้นรูปไม่ตรงช่อง)
+ */
+/** ท่าปิดจอ (ขาวห่อ + นิ้วจิ้มเคอร์เซอร์ ดู ./WhiteWrap) — ปิดไว้ก่อน จอเลื่อนพ้นไปเฉย ๆ */
+const WRAP = false
+const SIDE = { from: 0.92, span: 0.28, vw: 14 }
 
 /** ยกของแต่ละชั้นขึ้นมาจากใต้จอกี่ส่วนของความสูงจอ — มากคือมาไกล มาก่อน */
 const LIFT = {
@@ -132,6 +139,8 @@ export function WhatIDoCard({ id = 'what-i-do' }: { id?: string }) {
       const y = Math.max(0, -sec.getBoundingClientRect().top)
       const e = clamp01(y / (vh * IN_SPAN))
       el.style.setProperty('--in', smooth(e).toFixed(4))
+      const side = clamp01((y / (vh * IN_SPAN) - SIDE.from) / SIDE.span)
+      el.style.setProperty('--side', smooth(side).toFixed(4))
       /* ระยะเดียวกันไปคุมท่ากางกองหน้าต่างในฉาก 3D (ดู stageIn ใน ./stageTuner) — ส่งเป็น
          ค่าดิบ ฉากมี ease ของตัวเองต่อใบ */
       stageIn.v = e
@@ -195,6 +204,8 @@ export function WhatIDoCard({ id = 'what-i-do' }: { id?: string }) {
       style={{ background: '#ffffff' }}
     >
       <div ref={pin} className="sticky top-0 h-[100svh] overflow-clip" style={{ ['--in' as string]: 0 }}>
+        {/* ฉาก 3D กับรอยสาดเลื่อนไปขวาพร้อมกันหลังกางครบ (ดู SIDE) */}
+        <div className="absolute inset-0" style={{ transform: `translate3d(calc(var(--side, 0) * ${SIDE.vw}vw), 0, 0)` }}>
         {/* ฉาก 3D — การ์ดโพสต์ ตัวละคร และของสกิล อยู่ในฉากเดียวกันทั้งหมด */}
         <div className="pointer-events-none absolute inset-0" style={rise(LIFT.stage)}>
           {live && (
@@ -203,13 +214,6 @@ export function WhatIDoCard({ id = 'what-i-do' }: { id?: string }) {
             </Suspense>
           )}
         </div>
-
-        {/* แผงจูนฉาก — dev เท่านั้น อยู่นอกชั้นที่เลื่อน (rise) เพราะมันไม่ใช่ของในฉาก */}
-        {import.meta.env.DEV && live && (
-          <Suspense fallback={null}>
-            <StagePanel />
-          </Suspense>
-        )}
 
         {/**
          * รอยสาดของเคอร์เซอร์ — อยู่เหนือแคนวาสของฉาก
@@ -222,6 +226,14 @@ export function WhatIDoCard({ id = 'what-i-do' }: { id?: string }) {
             <SplashReveal photo={REVEAL_PHOTO} live={live} place={place} rects={rects} />
           </Suspense>
         )}
+        </div>
+
+        {/* แผงจูนฉาก — dev เท่านั้น อยู่นอกชั้นที่เลื่อน (rise) เพราะมันไม่ใช่ของในฉาก */}
+        {import.meta.env.DEV && live && (
+          <Suspense fallback={null}>
+            <StagePanel />
+          </Suspense>
+        )}
 
         {/**
          * ท่าปิดจอ — ขาวห่อฉากจนสนิทแล้วส่งต่อจอถัดไป
@@ -230,7 +242,7 @@ export function WhatIDoCard({ id = 'what-i-do' }: { id?: string }) {
          * แต่ยังต่ำกว่าชั้นเคอร์เซอร์นำสายตาของหน้า (fixed z 55) — เคอร์เซอร์จึงยังอยู่บน
          * ความขาวให้เห็น เหมือนมือในภาพอ้างอิงที่อยู่บนพื้น ไม่ได้ถูกพื้นทับ
          */}
-        <WhiteWrap sectionRef={section} />
+        {WRAP && <WhiteWrap sectionRef={section} />}
 
         {/* หัวจอ — เฉพาะชื่อจอ ไม่มีหัวเรื่อง เพราะยังไม่มีข้อความจริงของจอนี้ */}
         <div className="pointer-events-none absolute left-[6%] top-[9%]" style={rise(LIFT.head)}>
@@ -262,6 +274,7 @@ export function WhatIDoCard({ id = 'what-i-do' }: { id?: string }) {
        * (ซึ่งคิดจากตำแหน่งในหน้า) จึงจะไม่เดินตามระยะเลื่อน ตัวนี้เป็นของในโฟลว์ปกติที่ระยะ
        * WRAP_AT + ครึ่งช่วง บวกครึ่งจอของหัวอ่าน
        */}
+      {WRAP && (
       <div
         ref={wrapAim}
         className="pointer-events-none absolute left-[34%] h-0 w-0"
@@ -276,6 +289,7 @@ export function WhatIDoCard({ id = 'what-i-do' }: { id?: string }) {
         style={{ top: `${(WRAP_AT - 0.06 + 0.5) * 100}svh` }}
         aria-hidden
       />
+      )}
     </section>
   )
 }

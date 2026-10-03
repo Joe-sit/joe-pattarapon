@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react'
 import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber'
@@ -16,7 +17,9 @@ import { useNewHeroReady } from '@/newhero/ready'
 import { getTuner } from '@/newhero/tuner'
 import { introSince } from '@/newhero/intro'
 import { headlineReady } from './headlineReady'
+import { BubbleCrowd, CHROME, chromeOutline } from './bubbleCrowd'
 import { useTuner } from '@/newhero/tuner'
+import { bubbleTravel, setHeadBubbleLive, subscribeBubbleAway } from './bubbleTravel'
 
 /**
  * หัวเรื่องจอแรกเป็นตัวอักษรสามมิติจริง — เรขาคณิตอัดขึ้นรูปจากเส้นของฟอนต์เดียวกับหน้า
@@ -31,7 +34,7 @@ import { useTuner } from '@/newhero/tuner'
  * วาดตามคำขอ (demand): ขอเฟรมเมื่อเมาส์ขยับหรือตัวอักษรยังไม่เข้าที่ นอกนั้นหยุดสนิท
  */
 
-const FONT = '/fonts/momo-trust-display.json'
+export const FONT = '/fonts/momo-trust-display.json'
 
 
 
@@ -535,9 +538,17 @@ function useBox(el: HTMLElement | null, text: string, src?: string, glass?: bool
  * ฉาก hero อยู่คนละแคนวาสข้างหลัง (คนละ WebGL context) ถ้าไม่บอกฉากหลัง กระจกจะหักเห
  * ความว่าง = ก้อนมืด — ป้อนสีฟ้าอ่อนของท้องฟ้าหลังหัวเรื่องให้มันแทน
  */
-const GLASS_BG = new THREE.Color('#a6d4f4')
+export const GLASS_BG = new THREE.Color('#a6d4f4')
 /** ความหนาของฟิล์มบาง (นาโนเมตร) — ช่วงนี้ให้รุ้งครบวงตามมุมมอง */
-const IRID_RANGE: [number, number] = [180, 720]
+export const IRID_RANGE: [number, number] = [180, 720]
+
+/**
+ * ฟองคำพูดแบบกรอบโครเมียม + ของเล่นล้นกรอบ (ภาพอ้างอิงหน้าโปรโมโค้ด ดู ./bubbleCrowd)
+ * ปิดแล้วได้ฟองแก้วใสกับของฟิสิกส์ข้างในแบบเดิมคืน
+ */
+const CHROME_BUBBLE = false
+/** ทรายกับของเล่นในฟองแก้ว (BubbleLife) — ปิดไว้ ฟองเหลือแก้วใสเปล่า ๆ เปิดคืนได้ทั้งชุด */
+const BUBBLE_TOYS = false
 
 /**
  * งานเวกเตอร์ที่ถูกอัดขึ้นรูป — ฟองคำพูดกับคำว่า LIFE ใช้ไฟล์ SVG ใบเดียวกับที่ HTML เคยวาง
@@ -556,6 +567,18 @@ function SvgArt({ box }: { box: LineBox }) {
    */
   const t = useTuner()
   const thick = box.glass ? t.bbThick : 26
+  /**
+   * หน้าที่มีฟองเดินทาง (ดู ./BubbleTraveler) ใบนั้นเป็นฟองใบเดียวของหน้า นั่งอยู่ตรงนี้ตั้งแต่ต้น = ใบนี้ไม่วาด
+   * (ยังวัดกรอบจากผัง HTML เหมือนเดิม) แค่บอกเขาว่าถึงคิวโชว์เมื่อไร
+   */
+  const away = useSyncExternalStore(subscribeBubbleAway, () => bubbleTravel.away)
+  useEffect(() => {
+    invalidate()
+  }, [away, invalidate])
+  /* ล็อกไว้ครั้งเดียว — หัวเรื่องปิดตัวเองเมื่อเลื่อนพ้น hero (active={onHero}) แต่ฟองใบนั้นยังเดินทางต่อ */
+  useEffect(() => {
+    if (box.glass && live) setHeadBubbleLive(true)
+  }, [box.glass, live])
 
   /**
    * profile = ขอบล่างของรูปทีละช่วงความกว้าง (0 = ขอบบนของกรอบ, 1 = ขอบล่าง)
@@ -565,8 +588,12 @@ function SvgArt({ box }: { box: LineBox }) {
     list: { geo: THREE.ExtrudeGeometry; color: string }[]
     bb: THREE.Box3
     profile: Float32Array | null
+    /** กรอบโครเมียมของฟอง (ท่อตามขอบนอก) — มีเฉพาะงานที่เป็นฟอง */
+    outline: THREE.TubeGeometry | null
   }
   const [parts, setParts] = useState<Parts | null>(null)
+  const chromeMat = useMemo(() => CHROME(), [])
+  useEffect(() => () => chromeMat.dispose(), [chromeMat])
 
   /**
    * อัดขึ้นรูปตอนเธรดหลักว่าง ไม่ใช่ตอน mount
@@ -682,7 +709,26 @@ function SvgArt({ box }: { box: LineBox }) {
         profile[k] = low === -Infinity ? 1 : (low - bb.min.y) / spanY
       }
     }
-    return { list: out, bb, profile }
+    /* ขอบนอกของฟอง = รูปที่ใหญ่ที่สุดในไฟล์ → ท่อโครเมียม (ดู CHROME_BUBBLE) */
+    let outline: THREE.TubeGeometry | null = null
+    if (box.glass && CHROME_BUBBLE) {
+      let best: THREE.Vector2[] | null = null
+      let area = 0
+      for (const path of data.paths) {
+        const fill = path.userData?.style?.fill
+        if (!fill || fill === 'none') continue
+        for (const shape of SVGLoader.createShapes(path)) {
+          const pts = shape.getPoints(24)
+          const a = Math.abs(THREE.ShapeUtils.area(pts))
+          if (a > area) {
+            area = a
+            best = pts
+          }
+        }
+      }
+      if (best) outline = chromeOutline(best, Math.max(2, (bb.max.y - bb.min.y) * 0.034))
+    }
+    return { list: out, bb, profile, outline }
   }, [data, thick, box.glass, t.bbRound])
 
   useEffect(() => {
@@ -698,6 +744,7 @@ function SvgArt({ box }: { box: LineBox }) {
       if (hasIdle) window.cancelIdleCallback(id)
       else window.clearTimeout(id)
       for (const p of made?.list ?? []) p.geo.dispose()
+      made?.outline?.dispose()
     }
   }, [build, invalidate])
 
@@ -717,7 +764,7 @@ function SvgArt({ box }: { box: LineBox }) {
      * กลุ่มพ่อไม่ได้ ถ้าอยู่ในกลุ่มที่กลับด้าน โลกของ rapier จะกลับด้านตามและของจะ "ตกขึ้น"
      * จึงคิดใจกลาง/ครึ่งขนาดเป็นพิกเซลของแคนวาสให้เสร็จแล้วส่งเข้าไปเลย
      */}
-    {box.glass && (
+    {box.glass && !CHROME_BUBBLE && (
       <GlassBackdrop
         cx={originX + (w * s) / 2}
         cy={originY - (h * s) / 2}
@@ -726,7 +773,10 @@ function SvgArt({ box }: { box: LineBox }) {
         z={-t.bbThick * s * 0.6}
       />
     )}
-    {box.glass && (
+    {box.glass && CHROME_BUBBLE && (
+      <BubbleCrowd cx={originX + (w * s) / 2} cy={originY - (h * s) / 2} hy={(h * s) / 2} live={live} />
+    )}
+    {box.glass && !CHROME_BUBBLE && BUBBLE_TOYS && (
       <BubbleLife
         cx={originX + (w * s) / 2}
         cy={originY - (h * s) / 2}
@@ -738,9 +788,10 @@ function SvgArt({ box }: { box: LineBox }) {
       />
     )}
     {/* แกน y ของ SVG ชี้ลง ของฉากชี้ขึ้น — พลิกด้วยสเกลติดลบ แล้วเลื่อนมุมซ้ายบนมาที่กรอบ */}
-    <group position={[originX, originY, 0]} scale={[s, -s, s]} visible={live}>
+    <group position={[originX, originY, 0]} scale={[s, -s, s]} visible={live && !(box.glass && away)}>
       <group position={[-parts.bb.min.x, -parts.bb.min.y, 0]}>
-        {parts.list.map((p, i) => (
+        {parts.outline && <mesh geometry={parts.outline} material={chromeMat} />}
+        {!parts.outline && parts.list.map((p, i) => (
           <mesh key={i} geometry={p.geo}>
             {box.glass ? (
               /**
@@ -826,7 +877,7 @@ function SvgArt({ box }: { box: LineBox }) {
  * env map เก็บแค่ทิศ ระยะไม่มีความหมาย — ตัวเลข position คือทิศจากใจกลางฟองล้วน ๆ
  * และเพราะไม่ผูกกับผังอีกแล้ว จึงอบครั้งเดียวตลอดอายุแคนวาส (key คงที่ + frames={1})
  */
-function StageLight({ gain }: { gain: number }) {
+export function StageLight({ gain }: { gain: number }) {
   return (
     <>
       <Environment resolution={128} frames={1}>
@@ -1617,17 +1668,20 @@ function BubbleLife({
 export function Headline3DField({
   active,
   className = '',
+  scale = 1,
   children,
 }: {
   /** ยังอยู่ที่จอแรกอยู่ไหม — พ้นไปแล้วถอดแคนวาสทิ้ง ไม่ต้องแบกบริบท WebGL ไว้ */
   active: boolean
   className?: string
+  /** ตัวคูณเพิ่มจากฝั่งหน้า (คูณกับ hlSize ของแผงจูน) — เช่นหัวเรื่องย่อในมุมการ์ด */
+  scale?: number
   children: ReactNode
 }) {
   const t = useTuner()
   const pad = t.hlPad
   /** ตัวคูณขนาดของทั้งบล็อก — ส่งลง CSS ให้ทั้งตัวหนังสือ, LIFE และฟองใช้ค่าเดียวกัน */
-  const size = t.hlSize
+  const size = t.hlSize * scale
   const cfg = useMemo<Cfg>(
     () => ({
       rad: t.hlRad,

@@ -25,6 +25,8 @@ import { GlassCardsPage } from '@/pages/GlassCardsPage'
 import { WhatIDoLabPage } from '@/pages/WhatIDoLabPage'
 import { HandCompose } from '@/sections/handcompose/HandCompose'
 import { GalleryPage } from '@/sections/gallery/GalleryPage'
+import { TextStoryPage } from '@/pages/TextStoryPage'
+import { CompactPage } from '@/pages/CompactPage'
 // ฉาก 3D หนัก (three.js) — lazy แยก chunk ไม่ถ่วงหน้าอื่น
 const JoespressoPage = lazy(() => import('@/joespresso/Page'))
 // workspace ปั้นทรง toolbar ของฉาก joespresso — ใช้ three เหมือนกัน แยก chunk เช่นกัน
@@ -68,7 +70,7 @@ const SPLASH_ON = true
  *
  * ปิดเป็นราย route ไม่ใช่ปิด SPLASH_ON ทั้งเว็บ เพราะหน้าอื่น (/joespresso, /2026) ยังต้องมี
  */
-const SPLASH_OFF_ROUTES = ['/2026-final', '/glass', '/whatido-lab', '/hand', '/gallery']
+const SPLASH_OFF_ROUTES = ['/2026-final', '/glass', '/whatido-lab', '/hand', '/gallery', '/text-story', '/compact']
 
 export function App() {
   /**
@@ -105,6 +107,9 @@ export function App() {
   const isHand = location.pathname === '/hand'
   /* หน้า gallery — ฉาก 3D ตัวละครนั่งทำงานหน้าผนังไอคอน จอเดียว ไม่ใช้ shell */
   const isGallery = location.pathname === '/gallery'
+  /* เล่าเรื่องด้วยตัวหนังสือแบบภาพยนตร์ (ซูมข้อความ → ยิงลำแสงไปขวา) — จอเดียว ไม่ใช้ shell */
+  const isTextStory = location.pathname === '/text-story'
+  const isCompact = location.pathname === '/compact'
   /**
    * หน้าส่องอินโทรเดี่ยว ๆ (dev เท่านั้น)
    *
@@ -324,6 +329,10 @@ export function App() {
         <WhatIDoLabPage />
       ) : isHand ? (
         <HandCompose />
+      ) : isTextStory ? (
+        <TextStoryPage />
+      ) : isCompact ? (
+        <CompactPage />
       ) : isGallery ? (
         <GalleryPage />
       ) : isNewHero ? (

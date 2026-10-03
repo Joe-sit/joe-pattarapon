@@ -119,18 +119,25 @@ function shapesOf(path: { subPaths: THREE.Path[] }) {
   return outers.map((o) => o.shape)
 }
 
-/** ไอคอนสกิลของเว็บ (SVG เดียวกับการ์ด what-i-do) อัดนูน ขนาดกว้าง `width` ศูนย์กลางที่ 0 */
-export function svgInlay(svg: string, width: number, depth: number) {
+/**
+ * ไอคอนสกิลของเว็บ (SVG เดียวกับการ์ด what-i-do) อัดนูน ขนาดกว้าง `width` ศูนย์กลางที่ 0
+ *
+ * `flat` = ทุกชิ้นอยู่ระนาบเดียวกัน (โลโก้ตัวอักษร) — ค่าเริ่มต้นยกชั้นหลังขึ้นทีละนิดสำหรับไอคอน
+ * ที่ชั้นซ้อนทับกัน · `grow` = ขยายขอบออกกี่หน่วย SVG แทนเส้นขอบ (stroke) ที่ไฟล์วาดทับไว้
+ * โลโก้ JOE ใช้ stroke กว้าง 1 ปิดร่องระหว่างตัว E กับหูข้าง — ไม่ขยายตามแล้วหูหลุดเป็นชิ้นแยก
+ */
+export function svgInlay(svg: string, width: number, depth: number, opts: { flat?: boolean; grow?: number } = {}) {
+  const grow = opts.grow ?? 0.35
   const data = new SVGLoader().parse(svg)
   const parts: THREE.BufferGeometry[] = []
   data.paths.forEach((path, i) => {
     const fill = path.userData?.style?.fill
     if (!fill || fill === 'none') return
     for (const shape of shapesOf(path)) {
-      const g = new THREE.ExtrudeGeometry(shape, { depth: 10, bevelEnabled: true, bevelThickness: 1.2, bevelSize: 0.35, bevelSegments: 3, curveSegments: 10 })
+      const g = new THREE.ExtrudeGeometry(shape, { depth: 10, bevelEnabled: true, bevelThickness: 1.2, bevelSize: grow, bevelSegments: 3, curveSegments: 10 })
       g.deleteAttribute('uv')
       /* ชั้นหลังใน SVG ทับชั้นก่อน — ยกขึ้นทีละนิด ไม่งั้นหน้าซ้อนระนาบเดียวกันกะพริบเป็นลาย */
-      g.translate(0, 0, i * 3)
+      if (!opts.flat) g.translate(0, 0, i * 3)
       parts.push(g.index ? g.toNonIndexed() : g)
     }
   })

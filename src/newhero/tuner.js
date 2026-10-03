@@ -273,8 +273,11 @@ export const DEFAULTS = {
   hlStag: 0.038,
   hlAfter: -1.2,
   hlPad: 46,
-  /** ตัวคูณขนาดหัวเรื่องทั้งบล็อก (ตัวอักษร + LIFE + ฟอง) 1 = ขนาดที่ CSS คิดไว้ */
-  hlSize: 1,
+  /**
+   * ตัวคูณขนาดหัวเรื่องทั้งบล็อก (ตัวอักษร + LIFE + ฟอง) 1 = ขนาดที่ CSS คิดไว้
+   * 0.8: ที่ 1 วัดได้ว่า "Bring your" ตัดเป็นสองบรรทัดในผัง และฟองข้าง Ideas ล้นขอบขวาจอ 35px
+   */
+  hlSize: 0.8,
   /** เอียงตัวอักษรทั้งชุด — หน่วยองศา (ในโค้ดแปลงเป็นเรเดียนเอง) */
   hlRotX: -17,
   hlRotY: -11,
@@ -460,6 +463,16 @@ export const DEFAULTS = {
   grChroma: 0.03,
   grIor: 1.25,
   /* ริบบิ้น — อยู่ในพิกัดของกลุ่มแถบหน้าต่าง ออฟเซ็ต/การหมุนจึงเป็นพิกัดท้องถิ่น */
+  /* แผ่นลอน S ของ hero แบบการ์ด — พิกัดโลก (ดู CardSlab ใน NewHeroScene) */
+  slabX: 14.5,
+  slabY: -1.6,
+  slabZ: -8,
+  slabRotX: 9.2,
+  slabRotY: -17.2,
+  slabRotZ: 0,
+  slabScale: 0.95,
+  slabW: 6.5,
+  slabThick: 1.1,
   ribbonScale: 1.57,
   ribbonW: 6.5,
   ribbonThick: 0.12,
@@ -555,7 +568,7 @@ export const DEFAULTS = {
   wtWarm: 0,
   wtDbg: 0,
   /** รอยเงาซิลูเอตต์ท้ายตัวละคร — ความเข้ม, จำนวนใบ, ระยะห่าง (หน่วยฉาก), ยกสูง, จาง, ย่อ */
-  etAmt: 1,
+  etAmt: 0,
   etCount: 6,
   etStep: 0.14,
   etY: 0.05,

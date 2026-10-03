@@ -9,8 +9,9 @@ import './portfolio2026.css'
  * import บรรทัดนี้กลับเป็น WhatIDoCard ก็ได้จอเดิมคืนทั้งอัน — ท่าเดียวกับที่จอนั้นเองเคย
  * แทน sections/whatidopixel ชิ้นที่ยังใช้ร่วมกันคือตัวละคร ท่าปิดจอ และชั้นรอยสาด
  */
-import { SkyStory } from '@/sections/skystory/SkyStory'
 import { Logo } from '@/joespresso/Logo'
+import { SkyStory } from '@/sections/skystory/SkyStory'
+import { WhatIDoCard } from '@/sections/whatidocard/WhatIDoCard'
 
 import { CloudWipe, WIPE_FULL } from '@/components/CloudWipe'
 import { AnchorNav } from '@/components/AnchorNav'
@@ -23,8 +24,10 @@ import { setCruise, setSceneOn } from '@/newhero/scrolly'
 import { useIntroDone } from '@/stores/intro'
 /** ฉาก 3D ของจอแรก — แยก chunk ไม่ให้ถ่วงจอที่เหลือ */
 const NewHeroScene = lazy(() => import('@/newhero/NewHeroScene'))
+import { heroView } from '@/newhero/heroView'
 import { ExperiencePortals } from '@/sections/portals/ExperiencePortals'
 import { fadeToArt, Headline3D, Headline3DField, useHeadlineArt } from '@/sections/hero/Headline3D'
+import { BubbleTraveler } from '@/sections/hero/BubbleTraveler'
 
 import heroLife from '@/assets/v2final/hero-life.svg'
 import heroBubble from '@/assets/v2final/hero-ideas-bubble.svg'
@@ -46,6 +49,13 @@ const SECTIONS = ['hero', 'what-i-do', 'experiences', 'works', 'health', 'stacks
 type SectionId = (typeof SECTIONS)[number]
 
 /** ชื่อที่โผล่เป็น tooltip ข้างจุดของราวนำสายตา */
+/** เมนูกลางของแถบบน */
+const NAV = [
+  { label: 'About', href: '#what-i-do' },
+  { label: 'Work', href: '#works' },
+  { label: 'Contact', href: `mailto:${SITE.email}` },
+]
+
 const SECTION_LINKS: { id: SectionId; label: string }[] = [
   { id: 'hero', label: 'Intro' },
   { id: 'what-i-do', label: 'What I Do' },
@@ -110,8 +120,19 @@ function TopBar() {
         color="var(--v3-orange)"
         className="v3-in shrink-0 [--v3-in-delay:60ms]"
       />
-      {/* เหลือปุ่มเดียว — ลิงก์ในแถบซ้ำกับราวจุดด้านซ้ายที่พาไปทุกจออยู่แล้ว
-          มุมขวาจึงเก็บไว้ให้สิ่งที่ราวนั้นทำแทนไม่ได้: เรซูเม่ที่ลิงก์ออกนอกหน้า */}
+      {/* เมนูกลาง — about/work พาไปจอของมันในหน้านี้ contact เปิดอีเมลจริง (ยังไม่มีจอติดต่อ) */}
+      <nav aria-label="Main" className="v3-in pointer-events-auto absolute left-1/2 -translate-x-1/2 [--v3-in-delay:100ms]">
+        <ul className="flex items-center gap-[clamp(20px,2.6vw,40px)] text-[clamp(13px,1.05vw,15px)] font-semibold text-white">
+          {NAV.map((n) => (
+            <li key={n.label}>
+              <a href={n.href} className="cursor-pointer opacity-90 transition-opacity duration-200 hover:opacity-100 hover:underline hover:underline-offset-4">
+                {n.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+      {/* มุมขวาเก็บไว้ให้สิ่งที่ราวจุดด้านซ้ายทำแทนไม่ได้: เรซูเม่ที่ลิงก์ออกนอกหน้า */}
       <a
         href={SITE.resumeUrl}
         target="_blank"
@@ -388,6 +409,7 @@ export function Portfolio2026FinalPage() {
       const frame = frameRef.current
       if (frame) {
         frame.style.visibility = gone
+        heroView.fullH = frame.clientHeight
         // กางเสร็จก่อนเมฆถมเต็ม ฉากจึงเต็มจอตอนที่ยังเห็นมันอยู่ ไม่ใช่กางตอนถูกบังไปแล้ว
         const o = Math.min(1, y / (vh * 0.55))
         frame.style.setProperty('--v3-frame-open', (o * o * (3 - 2 * o)).toFixed(4))
@@ -430,6 +452,7 @@ export function Portfolio2026FinalPage() {
       window.removeEventListener('resize', on)
       if (raf) cancelAnimationFrame(raf)
       setCruise(0)
+      heroView.fullH = 0
     }
   }, [])
 
@@ -461,7 +484,8 @@ export function Portfolio2026FinalPage() {
         className="v3-scene-frame pointer-events-none [&_canvas]:pointer-events-auto"
       >
         <Suspense fallback={null}>
-          <NewHeroScene />
+          {/* ผ้าใบสูงแค่จอ ไม่ใช่เต็มกรอบที่ยื่นเลยขอบล่าง — ท่อนนั้นไม่มีใครเห็น (ดู fullH ใน newhero/heroView) */}
+          <NewHeroScene className="absolute inset-x-0 top-0 h-[100svh]" />
         </Suspense>
       </div>
       {/* แผงจูนของฉาก — dev เท่านั้น เหมือน /new-hero (ดู newhero/CameraTuner) */}
@@ -480,6 +504,9 @@ export function Portfolio2026FinalPage() {
 
       {/* เคอร์เซอร์นำสายตา — ชั้นเดียวทั้งหน้า ต้องอยู่นอก section ทุกอัน ไม่งั้นข้ามจอไม่ได้ */}
       <CursorGuideLayer />
+
+      {/* ฟองคำพูดของหัวเรื่องเดินทางลงไปเปิด What I do — ชั้นเหนือม่านเมฆ (ดู BubbleTraveler) */}
+      <BubbleTraveler />
 
       <TopBar />
       {/* ราวจุดนำสายตา — ตัวเดียวกับที่ใช้ในเวอร์ชัน Vue (branch `2026`)
@@ -621,6 +648,8 @@ export function Portfolio2026FinalPage() {
       {/* จอ What I do = ฉากมือชูจอ (sections/handcompose) พร้อมจังหวะเปิดตัวตอนเลื่อนเข้าจอ
           จอเดิม (ตัวละครในกรอบ + วงเล็บส้ม) ยังอยู่ที่ sections/whatidoscroll — สลับกลับได้ที่ import */}
       <SkyStory id="what-i-do" />
+      {/* ปุ่มค้นหาในฟองคำพูดยืดตัวมาเป็นหน้าต่างพอร์ทัลของจอนี้ (ดู hero/MacWindow) */}
+      <WhatIDoCard id="what-i-do-windows" />
 
       {/* ── จอ 3: ประสบการณ์ ───────────────────────────────────────────
           พอร์ทัลเศษกระจกกระจายบนทุ่งฟ้า ตัวละครลอยออกมาทีละช่วงของไทม์ไลน์จริง

@@ -168,7 +168,9 @@ const FRAG = /* glsl */ `
     float t = uRimThresh * d0;
     float t2 = t * (1.0 + uRimSoft * 4.0);
     float glow = 0.0;
-    const int N = 10;
+    /* 6 ก้าว ไม่ใช่ 10 — ช่วงกว้างเท่าเดิม (k = i/N) ก้าวห่างขึ้น แสงขอบแทบเหมือนเดิม
+       แต่การอ่านความลึกต่อพิกเซลลดจาก 50 เหลือ 30 (พาสนี้เต็มจอทุกเฟรม) */
+    const int N = 6;
     for (int i = 1; i <= N; i++) {
       float k = float(i) / float(N);
       vec2 px = uTexel * uRimW * k;
@@ -206,14 +208,17 @@ const FRAG = /* glsl */ `
     } else {
       col = texture2D(uTex, uvG).rgb;
     }
+    // ความทึบของฉาก — ผ้าใบโปร่ง (hero แบบการ์ด) ที่ว่างต้องโปร่งตาม ไม่ใช่ดำ
+    float alpha = texture2D(uTex, uvG).a;
     if (uRim > 0.0001) {
       // ผสมแบบ screen ไม่ใช่บวกตรง ๆ — ที่สว่างอยู่แล้วไม่กลายเป็นขาวตัน เนื้อสียังอยู่
       vec3 r = uRimColor * (rimGlow(uvG) * uRim);
       col = 1.0 - (1.0 - col) * (1.0 - clamp(r, 0.0, 1.0));
+      alpha = max(alpha, clamp(max(r.r, max(r.g, r.b)), 0.0, 1.0));
     }
     // uTone 0 = ไม่ tone map (โหมดแบน) แค่คูณ exposure แล้วตัดที่ 1
     col = uTone > 0.5 ? acesFilmic(col) : clamp(col * uExposure, 0.0, 1.0);
-    gl_FragColor = vec4(toSRGB(col), 1.0);
+    gl_FragColor = vec4(toSRGB(col), alpha);
   }
 `
 
@@ -254,8 +259,11 @@ export function CameraFX({
         stencilBuffer: true,
         depthBuffer: true,
         type: THREE.HalfFloatType,
-        // MSAA ในบัฟเฟอร์ — ผ้าใบจริงเปิด antialias ไว้ ถ้าบัฟเฟอร์ไม่มี ขอบจะหยักขึ้นมาทันที
-        samples: 4,
+        /**
+         * MSAA ในบัฟเฟอร์ — ที่นี่คือที่เดียวที่ลบรอยหยัก (ผ้าใบปิด antialias เมื่อพาสนี้เปิด ดู NewHeroScene)
+         * 2 ไม่ใช่ 4: ที่ dpr 1.25 ขึ้นไป 2 ตัวอย่างขอบเนียนพอ ประหยัด ~4ms/เฟรมไปจ่ายความละเอียดแทน
+         */
+        samples: 2,
         /**
          * เก็บความลึกเป็น texture ด้วย — rim แบบตรวจขอบอ่านจากตรงนี้
          * ต้องเป็น Depth24Stencil8 เพราะบัฟเฟอร์นี้ใช้ stencil (พอร์ทัล) อยู่แล้ว

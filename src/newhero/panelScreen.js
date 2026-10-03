@@ -22,7 +22,13 @@
  * แต่บานวางเอียง กรอบบนจอจึงถูกบีบตามแนวนอน — เอา 0.17 ไปคูณด้านสั้นของกรอบบนจอจะได้
  * รัศมีที่ใหญ่กว่าของจริง (วัดได้ราว 9px) เห็นเป็นมุมที่ไม่ลงล็อกกับพอร์ทัลตอนส่งไม้ต่อ
  */
-/** @type {{ want: boolean, ready: boolean, rects: { x: number, y: number, w: number, h: number }[], quads: { x: number, y: number }[][], radii: number[], radius: number, ticks?: number }} */
-export const panelScreen = { want: false, ready: false, rects: [], quads: [], radii: [], radius: 0 }
+/**
+ * `outlines` = **เส้นรอบรูปจริงของหน้าบานบนจอ** 4 มุม × (outlineSeg + 1) จุด เริ่มมุมซ้ายบน วนตามเข็ม
+ *
+ * มุมของบานเป็นโค้งกำลังสอง (roundedBoxGeo) ไม่ใช่วงกลม และถูกบีบตามเพอร์สเปกทีฟคนละขนาด
+ * ต่อมุม — วาดมุมเป็นส่วนโค้งวงกลมจากสี่มุม + รัศมีเดียว ความโค้งจึงไม่ลงล็อกกับบานตอนส่งไม้ต่อ
+ */
+/** @type {{ want: boolean, ready: boolean, rects: { x: number, y: number, w: number, h: number }[], quads: { x: number, y: number }[][], radii: number[], radius: number, outlines: { x: number, y: number }[][], outlineSeg: number, ticks?: number }} */
+export const panelScreen = { want: false, ready: false, rects: [], quads: [], radii: [], radius: 0, outlines: [], outlineSeg: 12 }
 
 if (import.meta.env.DEV) window.__panels = panelScreen

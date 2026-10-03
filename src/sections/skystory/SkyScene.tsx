@@ -2,7 +2,6 @@ import { Suspense, useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { SKILLS } from '@/sections/whatido/WhatIDo'
 import { JOURNEY } from '@/data/journey'
 import cursorSvg from '@/assets/v2/skills-cursor.svg?raw'
@@ -10,16 +9,17 @@ import pencilSvg from '@/assets/v2/skills-pencil.svg?raw'
 import promptSvg from '@/assets/v2/prompt-mark.svg?raw'
 import logoSvg from '@/assets/v2final/logo-joe.svg?raw'
 import { acrylicCharm, chrome, magnifierCharm, strapCharm, svgInlay, tagCharm, tileCharm, type Charm } from '@/sections/keychain/charms'
-import { buildTin } from './tin'
 import { CharacterHead } from './head'
+import { KEYCHAIN, SKY_LEAVE, SKY_VH, TOTAL_VH } from './beats'
 
 /**
  * What I do — ยังลอยอยู่บนฟ้าต่อจาก hero แล้วค่อย ๆ ร่วงลงผ่านหมอกเมฆ
  *
- * 1. กล่องสังกะสีร่วงหมุนคว้างผ่านเมฆ (เมฆพุ่งขึ้นผ่านกล้อง) แล้วตั้งตัว ฝาเปิด
+ * 0. ฟ้าเหนือหมอก — ฟองคำพูดของหัวเรื่อง hero ลอยตามลงมาอยู่ตรงนี้ (ดู hero/BubbleTraveler) แล้วกล้องร่วงลงผ่านหมอก
+ * 1. กล่องกระดาษ ABOUT ME (ดู aboutBox) ร่วงหมุนคว้างผ่านเมฆ (เมฆพุ่งขึ้นผ่านกล้อง) แล้วตั้งตัว ฝากางออก
  * 2. ของในกล่องกระเด็นออก ร่วงลงไปรอข้างล่าง: หัวตัวละคร · บล็อกโลโก้ JOE · พวงกุญแจ
  * 3. เลื่อนต่อ = กล้องร่วงตามลงไปจ่อทีละชิ้น (วางองค์ประกอบแบบภาพอ้างอิง Chzzk: ของชิ้นใหญ่ค่อนขวา
- *    ชิ้นถัดไปโผล่มุมล่าง ข้อความมุมซ้ายล่าง) — เรื่องของตัวเองก่อน แล้วจึงจี้พวงกุญแจทีละอัน
+ *    ชิ้นถัดไปโผล่มุมล่าง) — เรื่องของตัวเองก่อน แล้วจึงจี้พวงกุญแจทีละอัน
  *
  * ระยะเลื่อนมาทาง ref ใบเดียว ฉากอ่านเองในลูปเฟรม ไม่มี setState ต่อเฟรม
  */
@@ -55,16 +55,35 @@ const CHARMS: Charmed[] = [
   },
 ]
 
+const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x)
+const span = (t: number, a: number, d: number) => clamp01((t - a) / d)
+const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2)
+const outCubic = (x: number) => 1 - (1 - x) ** 3
+
 /**
- * บทของเรื่อง (ข้อความมุมซ้ายล่างสลับตามนี้) — ชื่อ ตำแหน่ง สกิล ที่ทำงาน มาจากข้อมูลจริงของเว็บ
+ * บทของเรื่อง (กล้องจ่อทีละบท ไม่มีข้อความบนจอแล้ว) — ชื่อ ตำแหน่ง สกิล ที่ทำงาน มาจากข้อมูลจริงของเว็บ
  * `at` = ระยะเลื่อนที่กล้องจ่อชิ้นนั้นพอดี
  */
+/**
+ * ช่วงต้นของ section เป็นของฟองคำพูด — เรื่องเดิม (กล่อง → ของสามชิ้น → พวงกุญแจ) เลื่อนไปเล่นใน
+ * ระยะที่เหลือ `old(p)` แปลงระยะเลื่อนจริงกลับเป็นระยะของเรื่องเดิม ตัวเลขจังหวะเดิมจึงไม่ต้องแก้
+ */
+/**
+ * ฟ้าเหนือหมอก = เวทีของฟองคำพูด (ตารางจังหวะใน ./beats) ยาว SKY_VH จอ ตามด้วยเรื่องพวงกุญแจ
+ * (เปิด/ปิดด้วย KEYCHAIN) ความสูง section (ดู SkyStory) = SECTION_VH
+ */
+const PRE = SKY_VH / TOTAL_VH
+const old = (p: number) => clamp01((p - PRE) / Math.max(1e-6, 1 - PRE))
+const late = (at: number) => PRE + at * (1 - PRE)
+/** ฟ้าเหนือชั้นหมอก (ฟองคำพูด แล้วโลกในหน้าต่างพอร์ทัล — ดู ./portalWorld, hero/MacWindow) — กล้องเริ่มที่นี่แล้วร่วงทะลุหมอกลงไปหากล่อง */
+const NOTE = new THREE.Vector3(1.7, 22, 0)
+
 export const STEPS: { kicker: string; title: string; body?: string; color: string; at: number }[] = [
-  { kicker: 'Skills & teams', title: 'What I do', color: '#ffffff', at: 0.07 },
-  { kicker: "Hello, I'm", title: 'Joe', body: 'UX/UI Designer', color: '#f6bb9f', at: 0.27 },
-  { kicker: 'UX/UI Designer', title: 'Joe Pattarapon', color: '#7fb2ff', at: 0.38 },
-  { kicker: 'On my keychain', title: 'Skills & teams', color: '#e3e6ea', at: 0.49 },
-  ...CHARMS.map((c, i) => ({ kicker: c.kicker, title: c.title, body: c.body, color: c.color, at: 0.58 + i * 0.08 })),
+  { kicker: 'Skills & teams', title: 'What I do', color: '#ffffff', at: SKY_LEAVE - 0.022 },
+  { kicker: "Hello, I'm", title: 'Joe', body: 'UX/UI Designer', color: '#f6bb9f', at: late(0.27) },
+  { kicker: 'UX/UI Designer', title: 'Joe Pattarapon', color: '#7fb2ff', at: late(0.38) },
+  { kicker: 'On my keychain', title: 'Skills & teams', color: '#e3e6ea', at: late(0.49) },
+  ...CHARMS.map((c, i) => ({ kicker: c.kicker, title: c.title, body: c.body, color: c.color, at: late(0.58 + i * 0.08) })),
 ]
 /** บทที่กล้องกำลังจ่อ — แบ่งที่กึ่งกลางระหว่างสองบท */
 export const stepAt = (p: number) => {
@@ -73,28 +92,13 @@ export const stepAt = (p: number) => {
   return k
 }
 
-const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x)
-const span = (t: number, a: number, d: number) => clamp01((t - a) / d)
-const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2)
-const outCubic = (x: number) => 1 - (1 - x) ** 3
 
 /* ---------------------------------------------------------------- ตำแหน่งในฟ้า */
 
-/** กล่องอยู่บนสุด ของสามชิ้นรอเป็นขั้นบันไดลงไปข้างล่าง (ค่อนขวา ข้อความอยู่ซ้าย) */
-const BOX = new THREE.Vector3(1.7, 0, 0)
-/* ห่างกันพอให้ชิ้นถัดไปโผล่ขอบล่างของภาพตอนจ่อชิ้นบน (แบบภาพอ้างอิง Chzzk) — สลับซ้ายขวานิดหน่อย */
+/** หมอกพุ่งขึ้นผ่านกล้องในช่วงแรกของเรื่องเดิม (ระยะของ old(p)) */
+const FOG_RISE = 0.11
+/* ของสามชิ้นลอยรอเป็นขั้นบันไดลงไปข้างล่าง ห่างกันพอให้ชิ้นถัดไปโผล่ขอบล่างของภาพตอนจ่อชิ้นบน (แบบภาพอ้างอิง Chzzk) — สลับซ้ายขวานิดหน่อย */
 const STATION = [new THREE.Vector3(2.2, -4.0, 0), new THREE.Vector3(1.4, -7.9, 0.3), new THREE.Vector3(2.1, -11.8, 0)]
-/** ทางบินออกจากกล่องของแต่ละชิ้น — เบนออกคนละข้าง ไม่บินทะลุกัน */
-const ARC = [
-  { x: -1.8, y: 2.4, z: 1.2 },
-  { x: 0.4, y: 3.0, z: -0.8 },
-  { x: 2.2, y: 2.0, z: 0.4 },
-]
-const TEXT_SHIFT = 2.0
-/** จังหวะของกล่อง */
-const SETTLE = [0.02, 0.09] as const
-const OPEN = [0.1, 0.06] as const
-const LAUNCH = 0.14
 
 /* ---------------------------------------------------------------- แสง */
 
@@ -190,7 +194,7 @@ function Fog({ state }: { state: React.RefObject<SkyState> }) {
     const s = state.current
     if (!g || !s) return
     /* เริ่ม: ชั้นหมอกเลื่อนลงมาคลุมกล้อง (พื้นขาวต่อจาก hero) แล้วพุ่งขึ้นพ้นไปตอนกล่องตั้งตัว */
-    g.position.y = -15 * (1 - outCubic(span(s.p, 0, SETTLE[0] + SETTLE[1])))
+    g.position.y = -15 * (1 - outCubic(span(old(s.p), 0, FOG_RISE)))
   })
   return (
     <group ref={ref}>
@@ -203,22 +207,19 @@ function Fog({ state }: { state: React.RefObject<SkyState> }) {
 
 /* ---------------------------------------------------------------- บล็อกโลโก้ */
 
-/** โลโก้ JOE อัดนูนบนก้อนมนสีเข้ม (แบบบล็อกโลโก้ในภาพอ้างอิง Chzzk) โลโก้สีฟ้าอ่อนเงา */
+/**
+ * โลโก้ JOE เป็นตัวอักษร 3D ล้วน ไม่มีก้อนรอง — อัดหนาจากโลโก้จริงของเว็บ สีส้มเดียวกับโลโก้หัวเว็บ
+ * (--v3-orange / #F5501E) พลาสติกมันเงา · จัดกลางความหนา หมุนแล้วไม่ส่ายออกข้าง
+ */
+const LOGO_DEPTH = 0.42
 function LogoBlock() {
   const made = useMemo(() => {
-    const body = new RoundedBoxGeometry(2.4, 1.3, 1.0, 6, 0.3)
-    const logo = svgInlay(logoSvg, 1.7, 0.16)
-    const dark = new THREE.MeshPhysicalMaterial({ color: '#1b2240', roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.2 })
-    const glow = new THREE.MeshPhysicalMaterial({ color: '#9fd0ff', roughness: 0.2, clearcoat: 1, emissive: '#3d7bff', emissiveIntensity: 0.25 })
-    return { body, logo, dark, glow }
+    const logo = svgInlay(logoSvg, 2.6, LOGO_DEPTH, { flat: true, grow: 0.55 })
+    const mat = new THREE.MeshPhysicalMaterial({ color: '#F5501E', roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.12 })
+    return { logo, mat }
   }, [])
   useEffect(() => () => Object.values(made).forEach((x) => x.dispose()), [made])
-  return (
-    <group>
-      <mesh geometry={made.body} material={made.dark} />
-      <mesh geometry={made.logo} material={made.glow} position={[0, 0, 0.49]} />
-    </group>
-  )
+  return <mesh geometry={made.logo} material={made.mat} position={[0, 0, -LOGO_DEPTH / 2]} />
 }
 
 /* ---------------------------------------------------------------- พวงกุญแจ */
@@ -318,21 +319,15 @@ function Keychain({ active, spins, charms }: { active: () => number; spins: Reac
 
 /* ---------------------------------------------------------------- ฉาก */
 
-const TMP = new THREE.Vector3()
 const A = new THREE.Vector3()
 const B = new THREE.Vector3()
 const LOOK = new THREE.Vector3()
 const CAM = new THREE.Vector3()
-/** ท่าพักของกล่อง: มุมสามส่วนสี่ เห็นด้านหน้ากับด้านข้าง เงยให้เห็นในกล่อง */
-const BOX_REST = new THREE.Euler(0.42, -0.55, 0.06)
 
 export function SkyScene({ state }: { state: React.RefObject<SkyState> }) {
-  const tin = useMemo(() => buildTin(), [])
-  useEffect(() => () => tin.dispose(), [tin])
   const charms = useMemo(() => CHARMS.map((c) => c.build()), [])
   useEffect(() => () => charms.forEach((c) => c.dispose()), [charms])
 
-  const box = useRef<THREE.Group>(null)
   const items = useRef<(THREE.Group | null)[]>([])
   const spins = useRef<(THREE.Group | null)[]>([])
   const q = useRef(0)
@@ -342,8 +337,9 @@ export function SkyScene({ state }: { state: React.RefObject<SkyState> }) {
   }
 
   /** จุดที่กล้องจ่อของบท k (โลก) — ของที่ขยับได้คิดจากตำแหน่งจริงทุกเฟรม · คืนระยะกล้องด้วย */
-  const focusOf = (k: number, out: THREE.Vector3) => {
-    if (k === 0) return out.copy(BOX).setY(BOX.y + 0.6), 8.2
+  const focusOf = (step: number, out: THREE.Vector3) => {
+    if (step === 0) return out.copy(NOTE).setY(NOTE.y + 0.2), 10.2
+    const k = step
     if (k <= 3) {
       const it = items.current[k - 1]
       if (it) it.getWorldPosition(out)
@@ -363,53 +359,25 @@ export function SkyScene({ state }: { state: React.RefObject<SkyState> }) {
   useFrame(({ clock, camera, pointer, size }, dt) => {
     const s = state.current
     if (!s) return
-    /* จอแนวตั้ง (มือถือ): ของอยู่กลางค่อนบน ข้อความอยู่ล่าง — ไม่เลื่อนจุดมองไปซ้าย */
+    /* จอแนวตั้ง (มือถือ): ถอยกล้องให้ของไม่ล้นขอบ */
     const narrow = size.width / Math.max(1, size.height) < 0.9
     q.current += (s.p - q.current) * (1 - Math.exp(-dt * 6))
-    const p = q.current
+    const pRaw = q.current
     const t = clock.elapsedTime
 
-    /* กล่อง: หมุนคว้างตอนร่วง → ตั้งตัวเข้าท่าพัก → ฝาเปิด */
-    const settle = easeInOut(span(p, SETTLE[0], SETTLE[1]))
-    const b = box.current
-    if (b) {
-      const tumble = 1 - settle
-      b.position.set(BOX.x, BOX.y + Math.sin(t * 0.9) * 0.08, BOX.z)
-      b.rotation.set(
-        BOX_REST.x + tumble * (t * 1.3 + 0.8),
-        BOX_REST.y + tumble * (t * 0.9 + 1.2),
-        BOX_REST.z + tumble * Math.sin(t * 1.7) * 0.6,
-      )
-    }
-    const open = easeInOut(span(p, OPEN[0], OPEN[1]))
-    tin.lid.rotation.x = -open * 1.95 + Math.sin(open * Math.PI) * -0.2
-
-    /* ของสามชิ้น: รอในกล่อง → กระเด็นขึ้นแล้วร่วงลงไปที่จุดรอของตัวเอง (โค้งพาราโบลา) */
-    if (b) b.updateMatrixWorld()
+    /* ของสามชิ้นลอยรอที่จุดของตัวเอง หมุนช้า ๆ ขึ้นลงเบา ๆ */
     items.current.forEach((g, i) => {
       if (!g) return
-      const f = span(p, LAUNCH + i * 0.035, 0.1)
-      const e = outCubic(f)
-      A.copy(tin.inside).add(TMP.set((i - 1) * 0.6, 0.1, 0)).applyMatrix4(b ? b.matrixWorld : new THREE.Matrix4())
-      B.copy(STATION[i])
-      g.position.lerpVectors(A, B, e)
-      const arc = Math.sin(Math.PI * Math.min(1, f * 1.2))
-      g.position.x += arc * ARC[i].x
-      g.position.y += arc * ARC[i].y
-      g.position.z += arc * ARC[i].z
-      /* ในกล่องย่อเล็ก (ซ่อนจนฝาเปิด) บินออกมาขยายเต็มตัว */
-      const inBox = open < 0.3 && f === 0
-      g.visible = !inBox
-      g.scale.setScalar(THREE.MathUtils.lerp(0.28, i === 2 ? 1 : 1.25, e))
-      /* ลอยหมุนช้า ๆ ที่จุดรอ — ระหว่างบินหมุนควงเร็ว */
+      g.position.copy(STATION[i])
+      g.position.y += Math.sin(t * 0.8 + i) * 0.06
+      g.scale.setScalar(i === 2 ? 1 : 1.25)
       const idle = i === 2 ? 0 : Math.sin(t * 0.6 + i) * 0.3
-      g.rotation.set(Math.sin(t * 0.5 + i) * 0.08 + (1 - e) * 3, (i === 0 ? -0.65 : -0.35) + idle + (1 - e) * 4, Math.sin(t * 0.7 + i) * 0.05)
-      g.position.y += e * Math.sin(t * 0.8 + i) * 0.06
+      g.rotation.set(Math.sin(t * 0.5 + i) * 0.08, (i === 0 ? -0.65 : -0.35) + idle, Math.sin(t * 0.7 + i) * 0.05)
     })
 
     /**
-     * กล้อง: ค้างที่บทหนึ่งช่วงหนึ่ง แล้วไหลไปบทถัดไปแบบ ease — ของอยู่ค่อนขวา (เลื่อนจุดมองไปซ้าย)
-     * ข้อความอยู่มุมซ้ายล่าง ชิ้นถัดไปข้างล่างโผล่ขอบจอ
+     * กล้อง: ค้างที่บทหนึ่งช่วงหนึ่ง แล้วไหลไปบทถัดไปแบบ ease — ของอยู่กลางจอ
+     * ชิ้นถัดไปข้างล่างโผล่ขอบจอ
      */
     const HOLD = 0.022
     let k0 = 0
@@ -417,24 +385,21 @@ export function SkyScene({ state }: { state: React.RefObject<SkyState> }) {
     let w = 0
     for (let i = 0; i < STEPS.length; i += 1) {
       const a = STEPS[i].at
-      if (p >= a - HOLD) {
+      if (pRaw >= a - HOLD) {
         k0 = i
         k1 = i
         w = 0
       }
       const nx = STEPS[i + 1]
-      if (nx && p > a + HOLD && p < nx.at - HOLD) {
+      if (nx && pRaw > a + HOLD && pRaw < nx.at - HOLD) {
         k0 = i
         k1 = i + 1
-        w = easeInOut((p - a - HOLD) / (nx.at - a - HOLD * 2))
+        w = easeInOut((pRaw - a - HOLD) / (nx.at - a - HOLD * 2))
       }
     }
     const d0 = focusOf(k0, A)
     const d1 = focusOf(k1, B)
     LOOK.lerpVectors(A, B, w)
-    /* จี้ใกล้กล้องกว่า เลื่อนจุดมองน้อยลง — ไม่งั้นจี้ตกขอบขวา */
-    if (narrow) LOOK.y -= 1.1
-    else LOOK.x -= THREE.MathUtils.lerp(k0 >= 4 ? 1.3 : TEXT_SHIFT, k1 >= 4 ? 1.3 : TEXT_SHIFT, w)
     const dist = THREE.MathUtils.lerp(d0, d1, w) * (narrow ? 1.35 : 1)
     CAM.set(LOOK.x + pointer.x * 0.35, LOOK.y + 0.35 + pointer.y * 0.25, LOOK.z + dist)
     camera.position.lerp(CAM, 1 - Math.exp(-dt * 5))
@@ -444,10 +409,10 @@ export function SkyScene({ state }: { state: React.RefObject<SkyState> }) {
   return (
     <>
       <Studio />
+      {/* เรื่องพวงกุญแจปิดอยู่ (KEYCHAIN ใน ./beats) = ไม่วาดหมอกกับของสามชิ้นเลย ฟ้าเปล่ารับฟองคำพูด */}
+      {KEYCHAIN && (
+      <>
       <Fog state={state} />
-      <group ref={box}>
-        <primitive object={tin.group} />
-      </group>
       <group
         ref={(g) => {
           items.current[0] = g
@@ -473,6 +438,8 @@ export function SkyScene({ state }: { state: React.RefObject<SkyState> }) {
       >
         <Keychain active={activeCharm} spins={spins} charms={charms} />
       </group>
+      </>
+      )}
     </>
   )
 }

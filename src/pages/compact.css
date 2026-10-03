@@ -1,0 +1,51 @@
+/* ── /compact ─────────────────────────────────────────────────────────────
+   hero แบบการ์ด ตาม ref creativecruise.nl — พื้นขาว การ์ดฟ้ากลางจอ ของ 3D ยืนบนการ์ดแล้วโผล่
+   ทะลุขอบ (ฉากวาดแบบ bare: ฟ้าถูกตัดในการ์ด ดู newhero/heroView) เมนูกระจกลอยล่าง */
+.cp {
+  /**
+   * การ์ด — วัดจาก ref: กว้าง ~73.5% ของจอทุกอัตราส่วน (1054/1440, 1472/2000) สูง ~63% ของ
+   * ความสูงจอ อยู่กลางจอ สัดส่วนไม่ล็อก จอกว้างการ์ดยาวตาม ตัวแปรอยู่ระดับหน้า: ทั้งการ์ด
+   * และหัวเรื่องมุมขวาบนของการ์ดอ่านชุดเดียวกัน
+   */
+  --cp-card-w: 73.5vw;
+  --cp-card-h: 63svh;
+  --cp-card-x: calc((100vw - var(--cp-card-w)) / 2);
+  --cp-card-y: calc((100svh - var(--cp-card-h)) / 2);
+  background: #fff;
+}
+
+/**
+ * การ์ดฟ้าหลังผ้าใบ — พื้นรองตอนฉากยังโหลดไม่เสร็จ (พอฉากวาดได้ ฟ้าในฉากทับพอดีกล่องนี้)
+ * ไล่สีชุดเดียวกับ Backdrop ใน newhero/NewHeroScene
+ */
+.cp-card {
+  position: absolute;
+  top: var(--cp-card-y);
+  left: var(--cp-card-x);
+  width: var(--cp-card-w);
+  height: var(--cp-card-h);
+  border-radius: clamp(12px, 1.2vw, 20px);
+  background: linear-gradient(180deg, #1466b5 0%, #2f92dd 38%, #74c6f1 74%, #cfe9f9 100%);
+}
+
+.cp-nav {
+  background: rgba(255, 255, 255, 0.5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  backdrop-filter: blur(14px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow:
+    0 10px 30px -10px rgba(32, 82, 205, 0.28),
+    0 2px 6px rgba(22, 34, 44, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+.cp-link {
+  transition: background-color 200ms ease;
+}
+.cp-link:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+.cp-link[aria-current='page'] {
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(22, 34, 44, 0.1);
+  font-weight: 600;
+}

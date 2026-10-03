@@ -7,7 +7,6 @@ import { setIntroDone } from '@/stores/intro'
 import { headlineReady } from '@/sections/hero/headlineReady'
 import { useSceneProgress } from '@/stores/ready'
 import { preloadFinalAssets } from './final2026Assets'
-import { gateMesh } from './gateMesh'
 
 /**
  * ด่านโหลดของ /2026-final — จุดโหลดสามจุด *มอร์ฟ* เป็นบานพอร์ทัลของจอแรก
@@ -56,25 +55,6 @@ const DOTS = 3
 /** ขนาดจุดและระยะห่าง (พิกเซล) */
 const DOT = 28
 const DOT_GAP = 18
-/**
- * จำนวนบล็อกพิกเซลต่อช่อง เป็น log2 — 3 = แปดบล็อกตามด้านกว้าง (ดู ./gateMesh)
- *
- * **คงที่เป็นจำนวนบล็อกต่อช่อง ไม่ใช่คงที่เป็นพิกเซลจอ** ฉากถูกแมปเข้ากับแต่ละช่อง ช่องจึงเป็น
- * จอพิกเซลแปดคูณสิบกว่าบล็อกที่มีฉากครบทั้งฉากตั้งแต่ยังเป็นจุดกว้าง 28px แล้วบล็อกโตตามช่อง
- * ที่คลี่ออก = ภาพเดิมที่ใหญ่ขึ้น ก่อนจะเพิ่มจำนวนบล็อกตอนท้าย = ภาพเดิมที่ละเอียดขึ้น
- *
- * เคยผูกขนาดบล็อกกับพิกเซลจอแล้วแมปฉากกับจอ ซึ่งวัดได้ว่าพัง: ช่องซ้ายสุดถูกกล้องดันให้โต
- * ล้นจอ ด้านสั้นวัดได้ 889px = บล็อก 148px ทั้งผืน (เห็นเป็นแถบสี) และเมื่อลดบล็อกเหลือ 4px
- * คงที่ ช่องกว้าง 119px บนฉากที่กางเต็ม 2285px ก็เห็นแค่เสี้ยวที่สีข้างกันเท่ากันหมด
- */
-const WAIT_LEV = 3
-/**
- * จำนวนบล็อกตอนจบท่า — 2^7 = ร้อยยี่สิบแปดบล็อกต่อช่อง ราวสองพิกเซลจอ
- *
- * เกินกว่านี้ไม่มีใครเห็นความต่าง (วัดมาแล้ว: ที่ 64 บล็อกภาพเรียบสนิทแล้ว) เพดานสูงเกินไป
- * ทำให้ขั้นที่ *อ่านออก* คือ 8→16→32 ไปกระจุกอยู่ต้นหน้าต่างการคลี่ แล้วที่เหลือนิ่งเฉย
- */
-const DONE_LEV = 7
 /**
  * พื้นของด่าน = **ขาว** แล้วค่อยกลายเป็นท้องฟ้าของ hero
  *
@@ -144,21 +124,6 @@ function dotCorners(r: Rect): Pt[] {
   ]
 }
 
-/** สี่เหลี่ยมครอบของสี่มุม — เชดเดอร์ใช้กรอบนี้แมปฉากเข้ากับช่อง (ดู ./gateMesh) */
-function bboxOf(p: Pt[]): Rect {
-  let x0 = p[0].x
-  let y0 = p[0].y
-  let x1 = x0
-  let y1 = y0
-  for (let i = 1; i < p.length; i += 1) {
-    if (p[i].x < x0) x0 = p[i].x
-    if (p[i].x > x1) x1 = p[i].x
-    if (p[i].y < y0) y0 = p[i].y
-    if (p[i].y > y1) y1 = p[i].y
-  }
-  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
-}
-
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v)
 /** ไล่เข้า-ออกชุดเดียวกับที่ของในฉากใช้ — จังหวะการเคลื่อนเป็นภาษาเดียวกัน */
 const inOut = (x: number) => {
@@ -206,12 +171,9 @@ export function Final2026Gate() {
   const veil = useRef<HTMLDivElement>(null)
   /** ชั้นท้องฟ้าที่ค่อย ๆ ขึ้นมาทับพื้นขาว */
   const sky = useRef<HTMLDivElement>(null)
-  /** ช่องทั้งสาม — `<path>` ใน clipPath เดียวกัน */
-  const holes = useRef<(SVGPathElement | null)[]>([])
-  /** แคนวาสของลายไล่สี (เชดเดอร์ — ดู ./gateMesh) และผืนที่ครอบมันไว้ */
-  const canvas = useRef<HTMLCanvasElement>(null)
-  const sheet = useRef<HTMLDivElement>(null)
-  const mesh = useRef<ReturnType<typeof gateMesh>>(null)
+  /** เม็ดแก้ว — ทรงเดียวกับรูบนม่าน วาดทับรูให้เห็นเป็นแก้วใสตอนรอ แล้วละลายเผยฉากจริงตอนคลี่ */
+  const glass = useRef<(SVGPathElement | null)[]>([])
+  const glassSvg = useRef<SVGSVGElement>(null)
   /**
    * ที่ยืนของช่องในเฟรมล่าสุดของท่ารอ — จุดตั้งต้นของการมอร์ฟ
    *
@@ -238,17 +200,6 @@ export function Final2026Gate() {
     introSkip.camera = true
     return () => {
       panelScreen.want = false
-    }
-  }, [])
-
-  /* ผูกเชดเดอร์ครั้งเดียว — ลูปของด่าน (ทั้งตอนรอและตอนมอร์ฟ) เป็นคนสั่งวาด */
-  useEffect(() => {
-    const el = canvas.current
-    if (!el) return undefined
-    mesh.current = gateMesh(el)
-    return () => {
-      mesh.current?.dispose()
-      mesh.current = null
     }
   }, [])
 
@@ -293,12 +244,42 @@ export function Final2026Gate() {
     return () => clearTimeout(id)
   }, [])
 
-  /** เขียนช่องที่ i ลง clipPath */
+  /** เขียนช่องที่ i เป็นเส้นรอบรูปจุดต่อจุด (ช่วงมอร์ฟ) — `corners` เก็บไว้ให้เชดเดอร์คิดกรอบ */
+  /**
+   * ม่านเจาะรู — ช่องทั้งสามเป็น "รู" บนม่านขาว (clip-path evenodd) คนดูมองทะลุไปเห็นฉาก 3D จริง
+   *
+   * เดิมในช่องเป็นลายจำลอง (ผืนไล่สีพิกเซล) แล้วสลับเป็นบานจริงตอนม่านจาง = ของในช่องเปลี่ยน
+   * ทันทีตรงจุดส่งไม้ต่อ ต่อให้รูปทรงลงล็อกก็ยังเห็นรอย เจาะรูแทน ของในช่องคือบานจริงตั้งแต่
+   * เฟรมแรกของการคลี่ ไม่มีอะไรถูกสลับเลย
+   */
+  const holeD = useRef<string[]>(Array.from({ length: DOTS }, () => ''))
+  const cutVeil = (i: number, d: string) => {
+    holeD.current[i] = d
+    const el = veil.current
+    if (!el) return
+    const w = window.innerWidth
+    const h = window.innerHeight
+    el.style.clipPath = `path(evenodd, "M0 0H${w}V${h}H0Z ${holeD.current.join(' ')}")`
+  }
+
+  const putOutline = (i: number, line: Pt[], corners: Pt[]) => {
+    const el = glass.current[i]
+    if (!el) return
+    at.current[i] = corners
+    let d = ''
+    for (let k = 0; k < line.length; k += 1) d += `${k ? 'L' : 'M'}${line[k].x.toFixed(1)},${line[k].y.toFixed(1)}`
+    el.setAttribute('d', `${d}Z`)
+    cutVeil(i, `${d}Z`)
+  }
+
+  /** เขียนช่องที่ i (รูบนม่าน + เม็ดแก้ว) */
   const put = (i: number, pts: Pt[], radius: number) => {
-    const el = holes.current[i]
+    const el = glass.current[i]
     if (!el) return
     at.current[i] = pts
-    el.setAttribute('d', roundPath(pts, Math.max(0, radius)))
+    const d = roundPath(pts, Math.max(0, radius))
+    el.setAttribute('d', d)
+    cutVeil(i, d)
   }
 
   /** ท่ามอร์ฟ — เขียนลง DOM ตรง ๆ ทุกเฟรม ไม่ผ่าน state */
@@ -357,11 +338,19 @@ export function Final2026Gate() {
        */
       if (sky.current) sky.current.style.opacity = inOut((all - 0.05) / 0.5).toFixed(3)
       if (veil.current) veil.current.style.opacity = `${1 - inOut((all - 0.84) / 0.16)}`
+      /* ตอนรอเป็นเม็ดแก้วใสไม่มีสีข้างใน — สีของฉากในพอร์ทัลค่อยซึมเข้ามาตอนช่องเริ่มคลี่
+         แล้วแก้วจางทิ้งก่อนส่งไม้ต่อ บานจริงไม่มีขอบแก้วซ้อน */
 
       for (let i = 0; i < DOTS; i += 1) {
         const a = src[i]
         const idx = picked[i]
         const u = inOut((now / MORPH - HOLD - i * STAGGER) / 0.74)
+        /**
+         * แก้วของเม็ดนี้ค้างไว้จนรูเกือบลงล็อกกับบาน แล้วค่อยใส — ระหว่างทางรูยังไม่ตรงบาน
+         * ถ้าใสเร็ว จะเห็นฟ้า/จุดเมฆรอบบานแทรกเข้ามาในรู พอใสตอนท้าย สิ่งที่เผยคือบานจริงพอดี
+         */
+        const g = glass.current[i]
+        if (g) g.style.opacity = (1 - inOut((u - 0.72) / 0.28)).toFixed(3)
         if (idx === undefined) {
           /* จุดที่ไม่มีบานรองรับ (บานบนจอน้อยกว่าจำนวนจุด) — ยุบหายเข้าหาใจกลางตัวเอง */
           const k = 1 - clamp01(now / (MORPH * 0.28))
@@ -404,6 +393,29 @@ export function Final2026Gate() {
           x: p0.x + (q[m].x - p0.x) * u,
           y: p0.y + (q[m].y - p0.y) * u,
         }))
+        /**
+         * มอร์ฟ *เส้นรอบรูป* ทีละจุด: วงกลมของจุด → เส้นขอบจริงของบานที่ฉากฉายมา
+         *
+         * เดิมวาดมุมเป็นส่วนโค้งวงกลมรัศมีเดียวบนสี่มุม แต่มุมบานเป็นโค้งกำลังสอง และบานเอียง
+         * จึงบีบแต่ละมุมไม่เท่ากัน — เฟรมส่งไม้ต่อความโค้งไม่ลงล็อก เห็นเป็นมุมกระตุกตอนสลับ
+         * จุดที่ k ของวงกลมจับคู่กับจุดที่ k ของบาน (มุมเดียวกัน ตำแหน่งบนโค้งเดียวกัน)
+         */
+        const line = panelScreen.outlines[idx]
+        if (line) {
+          const seg = panelScreen.outlineSeg
+          const cx = (a[0].x + a[2].x) / 2
+          const cy = (a[0].y + a[2].y) / 2
+          const R = (a[1].x - a[0].x) / 2
+          const pts = line.map((p1, k) => {
+            const th = Math.PI - (Math.floor(k / (seg + 1)) + (k % (seg + 1)) / seg) * (Math.PI / 2)
+            const x0 = cx + R * Math.cos(th)
+            const y0 = cy - R * Math.sin(th)
+            return { x: x0 + (p1.x - x0) * u, y: y0 + (p1.y - y0) * u }
+          })
+          lastOut[i] = out
+          putOutline(i, pts, out)
+          continue
+        }
         /* รัศมีปลายทางมาจากฉาก (พิกเซลจริง) ไม่ใช่ 0.17 ของด้านสั้นของกรอบบนจอ — ดู panelScreen */
         const wantR = DOT / 2 + ((panelScreen.radii[idx] ?? Math.min(b.w, b.h) * 0.17) - DOT / 2) * u
         lastOut[i] = out
@@ -411,40 +423,6 @@ export function Final2026Gate() {
         put(i, out, wantR)
       }
 
-      /**
-       * ช่วงท้าย: ลายเดินเข้าหาหน้าตาของเนื้อในบานจริง (ฟ้าบน หญ้าล่าง) แทนการจางสลับ
-       *
-       * รูปทรงตรงกันอยู่แล้ว (สี่มุมจริงของบาน) เหลือแค่สี — พอสีตรงกันด้วย เฟรมที่สลับจาก
-       * ลายเป็นบานจริงจึงไม่มีอะไรให้ตาจับ ไม่ต้องมีการจางเข้า-ออกเลย
-       */
-      /**
-       * บล็อกพิกเซลคมขึ้นตลอดท่า แล้วชั้นสุดท้ายกลืนเป็นเนื้อในบานจริง
-       *
-       * `uPix` เดินตามท่า (ไม่ใช่ตามเวลาจริง) ความคมจึงผูกกับการคลี่ของช่อง — ตาอ่านว่า
-       * "ฉากในพอร์ทัลกำลังชัดขึ้นพร้อมกับที่ช่องเปิดออก" ไม่ใช่สองเรื่องที่เดินคนละนาฬิกา
-       */
-      /**
-       * บล็อกใหญ่ตามช่อง แล้วยุบลงเป็นหนึ่งพิกเซลช่วงท้าย
-       *
-       * ระหว่างบิน ขนาดบล็อกผูกกับขนาดช่อง (ราวหกบล็อกต่อด้านสั้น) ฉากในช่องจึงเป็นพิกเซล
-       * โต ๆ อ่านออกว่าเป็นฉากเดียวกันตั้งแต่ยังเล็ก แล้วช่วงท้ายบล็อกยุบลงเหลือหนึ่งพิกเซล
-       * พร้อมกับที่สีเพิ่มขั้น = ภาพคมขึ้นจนกลืนกับฉาก 3D จริงในเฟรมที่สลับ
-       */
-      /**
-       * จำนวนบล็อกต่อช่องไล่ขึ้นเป็นเท่าตัวช่วงท้าย: 8 → 16 → … → 512 (เรียบ)
-       *
-       * ทุกขั้นเป็นกำลังสอง กริดของขั้นละเอียดจึงซ้อนในกริดของขั้นหยาบพอดี และเชดเดอร์ไล่สี
-       * ข้ามสองขั้นที่ประกบค่าอยู่ — ตาเห็น "สี่บล็อกแยกตัวออกจากบล็อกเดียว" ไม่ใช่ลายสองผืน
-       * ที่เส้นแบ่งไม่ตรงกันจางทับกัน และไม่มีเฟรมไหนที่กริดเลื่อน
-       */
-      /* หน้าต่างการคลี่ยืดถึงเฟรมส่งไม้ต่อ — ขั้น 8→16→32→64→128 จึงกระจายเท่า ๆ กันทั้งท่า */
-      const resolve = inOut((all - 0.4) / 0.6)
-      mesh.current?.draw(
-        performance.now(),
-        lastOut.map(bboxOf),
-        inOut((all - 0.68) / 0.3),
-        WAIT_LEV + (DONE_LEV - WAIT_LEV) * resolve,
-      )
 
       if (import.meta.env.DEV) {
         /* ทางเดินที่ *เขียนลงจอจริง* ของช่องขวาสุด — วัดความเรียบข้ามลูปอื่นไม่ได้ ต้องเก็บที่นี่ */
@@ -491,8 +469,6 @@ export function Final2026Gate() {
         const d = DOT * (0.52 + 0.48 * fill) * (1 + 0.16 * Math.sin(now / 320 - i * 0.7))
         put(i, dotCorners(dotRect(i, d)), d / 2)
       }
-      /* ตอนรอ: แปดบล็อกต่อด้านของจุด จุดจึงเป็นฉากพิกเซลจิ๋วที่ยังมีเมฆลอยกับใบพัดหมุน */
-      mesh.current?.draw(now, at.current.map(bboxOf), 0, WAIT_LEV)
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -528,39 +504,37 @@ export function Final2026Gate() {
           />
         </div>
       </div>
-      {/* ช่องของ clipPath — พิกัดเป็นพิกเซลของวิวพอร์ตตรง ๆ (userSpaceOnUse ปริยาย) */}
-      <svg width="0" height="0" className="absolute" aria-hidden>
-        <defs>
-          <clipPath id="v3-gate-holes">
-            {Array.from({ length: DOTS }, (_, i) => (
-              <path
-                key={i}
-                ref={(n) => {
-                  holes.current[i] = n
-                }}
-                d=""
-              />
-            ))}
-          </clipPath>
-        </defs>
-      </svg>
-      {/**
-       * ผืนลาย — ไล่สีของฉากในพอร์ทัลทั้งชุด วาดด้วยเชดเดอร์ (ดู ./gateMesh)
-       *
-       * ผืนนี้ตรึงกับจอ ไม่ได้ติดไปกับช่อง ช่องที่คลี่ออกจึงเป็นการ "เปิดให้เห็นผืนเดิมกว้างขึ้น"
-       * ไม่ใช่ลายที่ยืดตามช่อง — และเพราะลายมาจากเชดเดอร์ ทุกจุดของผืนเปลี่ยนสีคนละจังหวะ
-       * ไม่มีลายซ้ำให้เห็นเป็นตารางเวลาช่องโตเป็นบาน (ปัญหาของลาย CSS ชุดก่อน)
-       *
-       * แคนวาสเล็ก (320×200) ถูก CSS ขยายเต็มจอ — การกรอง bilinear ของเบราว์เซอร์ให้ไล่สี
-       * ที่เนียนกว่าวาดเต็มความละเอียด และงานต่อเฟรมเหลือหกหมื่นพิกเซล
-       */}
-      <div
-        ref={sheet}
-        className="absolute inset-0"
-        style={{ clipPath: 'url(#v3-gate-holes)', willChange: 'opacity' }}
+      {/* เม็ดแก้ว — ไล่ขาวใสบนซ้ายลงฟ้าหม่นล่างขวา ขอบบนสว่าง ขอบล่างเข้ม เงานุ่มใต้เม็ด */}
+      <svg
+        ref={glassSvg}
+        className="absolute inset-0 h-full w-full"
+        style={{ filter: 'drop-shadow(0 6px 10px rgba(29, 70, 140, 0.16))' }}
+        aria-hidden
       >
-        <canvas ref={canvas} className="block h-full w-full" />
-      </div>
+        <defs>
+          <linearGradient id="v3-gate-glass" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#ffffff" stopOpacity="0.98" />
+            <stop offset="0.55" stopColor="#eef3f9" stopOpacity="0.92" />
+            <stop offset="1" stopColor="#cfdcee" stopOpacity="0.94" />
+          </linearGradient>
+          <linearGradient id="v3-gate-rim" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#ffffff" stopOpacity="1" />
+            <stop offset="1" stopColor="#8fa6c6" stopOpacity="0.7" />
+          </linearGradient>
+        </defs>
+        {Array.from({ length: DOTS }, (_, i) => (
+          <path
+            key={i}
+            ref={(n) => {
+              glass.current[i] = n
+            }}
+            d=""
+            fill="url(#v3-gate-glass)"
+            stroke="url(#v3-gate-rim)"
+            strokeWidth={1.2}
+          />
+        ))}
+      </svg>
       <span className="sr-only">{`Loading ${Math.round(Math.min(1, progress) * 100)}%`}</span>
     </div>
   )
