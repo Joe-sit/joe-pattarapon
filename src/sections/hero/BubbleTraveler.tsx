@@ -36,8 +36,11 @@ import { bubbleTravel, setBubbleAway, setHeadBubbleLive, subscribeBubbleAway } f
 /** จอถัดไปที่ปุ่มพาไป — กองหน้าต่าง Mac (sections/whatidocard) */
 export const NEXT_ID = 'what-i-do-windows'
 
-/** สามจังหวะของฟอง: ทักทาย → บอกว่าจะพาไปดูอะไร → กลายเป็นหัวข้อของหน้าบริการ (แบบ Figma: What I Do) */
-const LINES = ["Hello, I'm Joe", 'Here is what I do', 'What I Do'] as const
+/**
+ * จังหวะของฟอง: ทักทาย → บอกว่าจะพาไปดูอะไร → เป็นหัวพาเนล = ชื่อบริการของหน้าที่เปิดอยู่ (UX/UI, …)
+ * เลื่อนข้ามหน้า หัวพาเนลลบชื่อเดิมแล้วพิมพ์ชื่อบริการถัดไป
+ */
+const LINES = ["Hello, I'm Joe", 'Here is what I do', ...SERVICES] as const
 /**
  * ข้อความในฟองน้ำหนักปกติ — Momo Trust Sans Regular (ครอบครัวเดียวกับ Momo Trust Display ของหัวเรื่อง
  * ซึ่งมีน้ำหนักเดียวคือหนา) แปลงจากไฟล์ static ของ Google Fonts — ไม่ใช่ไฟล์ variable: ตัวนั้นเส้นขอบตัวอักษร
@@ -72,6 +75,18 @@ const inOut01 = (x: number) => {
 
 /** ท่าของเฟรมนี้ — คิดจากการเลื่อน อ่านในลูปเฟรม ไม่ผ่าน React */
 type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number }
+
+/**
+ * หัวพาเนลตอนนี้ = ชื่อบริการของหน้าที่ใกล้ที่สุด พิมพ์เต็มตอนอยู่กลางหน้า ลบหมดตอนเลื่อนถึงครึ่งทางไปหน้าถัดไป
+ * แล้วพิมพ์ชื่อถัดไป · ครั้งแรกพิมพ์ระหว่างฟองพองเป็นพาเนล (up)
+ */
+function serviceTitle(up: number, slide: number) {
+  const page = slide * (SERVICES.length - 1)
+  const n = Math.round(page)
+  const near = clamp01((1 - 2 * Math.abs(page - n)) * 1.6)
+  const line = 2 + n
+  return { line, chars: Math.round(clamp01((up - 0.22) / 0.4) * near * LINES[line].length) }
+}
 
 function readPose(): Pose {
   const off: Pose = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0 }
@@ -132,7 +147,7 @@ function readPose(): Pose {
       ? { line: 0, chars: Math.round(at(sv2, BEAT.greet) * (1 - at(sv2, BEAT.erase)) * LINES[0].length) }
       : up < 0.2
         ? { line: 1, chars: Math.round(at(sv2, BEAT.line2) * (1 - up / 0.2) * LINES[1].length) }
-        : { line: 2, chars: Math.round(clamp01((up - 0.22) / 0.4) * LINES[2].length) }),
+        : serviceTitle(up, smooth(at(sv2, BEAT.slide)))),
     /* พิมพ์จบแล้ว ปุ่มกลมหนึ่งปุ่มต่อสกิลงอกออกมาจากท้ายฟอง (ท่า Spotlight) */
     sprout: smooth(at(sv2, BEAT.sprout)),
     head,
