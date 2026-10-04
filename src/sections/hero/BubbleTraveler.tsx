@@ -1,16 +1,18 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber'
-import { MeshTransmissionMaterial } from '@react-three/drei'
 import * as THREE from 'three'
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js'
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js'
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
 import bubbleSvg from '@/assets/v2final/hero-ideas-bubble.svg?raw'
+import penNibSvg from '@/assets/icons/pen-nib.svg?raw'
 import { useCursorStop } from '@/cursorguide/useCursorStop'
 import { BEAT, SKY_LEAVE, at } from '@/sections/skystory/beats'
-import { bentoBlobs, headOf, liquidGeo, sproutShift } from './LiquidBento'
+import { headOf, liquidGeo, skillBlobs, sproutShift } from './LiquidBento'
+import { FW, SERVICES, ServiceScene, panelBox, panelLayout } from './ServiceTrack'
+import { makeLiquidGlass } from './liquidGlass'
 import { useTuner } from '@/newhero/tuner'
-import { FONT, GLASS_BG, StageLight } from './Headline3D'
+import { StageLight } from './Headline3D'
 import { bubbleTravel, setBubbleAway, setHeadBubbleLive, subscribeBubbleAway } from './bubbleTravel'
 
 /**
@@ -24,7 +26,8 @@ import { bubbleTravel, setBubbleAway, setHeadBubbleLive, subscribeBubbleAway } f
  *   ระหว่างทาง   จุดกำลังพิมพ์ "..." → พิมพ์ "Hello, I'm Joe" ทีละตัว ฟองยืดตามความยาวข้อความ
  *   ม่านเมฆ      ฟองหมุนส่ายช้า ๆ ระหว่างม่านพาไปจอถัดไป
  *   What I do    ลบคำทักทาย → พิมพ์ "Here is what I do" → ปุ่มกลมหนึ่งปุ่มต่อสกิลงอกจากท้ายฟอง
- *                → ปุ่มไหลลงเป็นช่อง bento เต็มจอ ฟองลอยขึ้นเป็นแถบบนสุด (ดู ./LiquidBento)
+ *                → ฟองพิมพ์ What I Do แล้วกลายเป็นหัวข้อมุมซ้ายบน วงกลมแยกไปจอดใต้หัวข้อ
+ *                → รางเล่าบริการทีละหน้าเลื่อนแนวนอน (ดู ./ServiceTrack · แบบ Figma 1572:3831)
  *
  * ทุกท่าคิดจากตำแหน่งเลื่อนล้วน ๆ เลื่อนกลับแล้วถอยกลับจนฟองกลับเข้าที่ในหัวเรื่อง
  */
@@ -33,7 +36,15 @@ import { bubbleTravel, setBubbleAway, setHeadBubbleLive, subscribeBubbleAway } f
 /** จอถัดไปที่ปุ่มพาไป — กองหน้าต่าง Mac (sections/whatidocard) */
 export const NEXT_ID = 'what-i-do-windows'
 
-const LINES = ["Hello, I'm Joe", 'Here is what I do'] as const
+/** สามจังหวะของฟอง: ทักทาย → บอกว่าจะพาไปดูอะไร → กลายเป็นหัวข้อของหน้าบริการ (แบบ Figma: What I Do) */
+const LINES = ["Hello, I'm Joe", 'Here is what I do', 'What I Do'] as const
+/**
+ * ข้อความในฟองน้ำหนักปกติ — Momo Trust Sans Regular (ครอบครัวเดียวกับ Momo Trust Display ของหัวเรื่อง
+ * ซึ่งมีน้ำหนักเดียวคือหนา) แปลงจากไฟล์ static ของ Google Fonts — ไม่ใช่ไฟล์ variable: ตัวนั้นเส้นขอบตัวอักษร
+ * ซ้อนทับกัน (เช่น w) อัดขึ้นรูปแล้วเติมเนื้อผิดเป็นสามเหลี่ยมทึบ (OFL ดู public/fonts/momo-trust-sans-OFL.txt)
+ * เก็บเฉพาะ ASCII ที่พิมพ์ได้
+ */
+const FONT = '/fonts/momo-trust-sans.json'
 /** viewBox ของไฟล์ฟอง — ทรงถูกยืดตรงกลาง ส่วนโค้งหัวท้ายคงเดิม (ดู ./LiquidBento) */
 const VB_W = 211
 const VB_H = 99
@@ -46,48 +57,7 @@ const INK = '#2052cd'
 const WHITE = new THREE.Color('#ffffff')
 const TMP_C = new THREE.Color()
 const SHEAR = new THREE.Matrix4()
-/** ความทึบของแก้ว — ในหัวเรื่อง / บนฟ้าของ What I do (ฉากหลังสำรองของแก้วอ่อนกว่าฟ้าจริง ทึบเท่ากันจะเป็นแผ่นซีด) */
-const SW_OPACITY = 0.85
-const SW_OPACITY_SKY = 0.6
 
-/**
- * ไฟขอบฝั่งซ้ายแบบเดียวกับราง switch ใน hero (rim ของ CameraFX: ไฟจากซ้าย 180° สี #fff3dc) — แสงเกาะ
- * ขอบมนที่หันไปทางไฟ ไม่ใช่เส้นขอบรอบตัว หน้าที่หันหากล้องตรง ๆ ไม่ติด
- *
- * ฉากนี้ไม่มีพาสหลังภาพ (CameraFX) จึงคิดจากทิศผิวของเมชเอง: ขอบมนครึ่งความหนาของฟองหมุนทิศผิว
- * จากหน้า (z) ไปข้าง ฝั่งที่หันซ้ายจึงได้แถบแสงกว้างเท่าขอบมนพอดี วาดซ้อนบนเมชเดียวกันเป็นสีขาวนวล
- */
-const RIM_COLOR = new THREE.Color('#fff3dc')
-function makeRimMat() {
-  return new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    toneMapped: false,
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -1,
-    uniforms: { uColor: { value: RIM_COLOR }, uInt: { value: 0.85 } },
-    vertexShader: /* glsl */ `
-      varying vec3 vN;
-      void main() {
-        vN = normalize(normalMatrix * normal);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }`,
-    fragmentShader: /* glsl */ `
-      uniform vec3 uColor;
-      uniform float uInt;
-      varying vec3 vN;
-      void main() {
-        vec3 n = normalize(vN);
-        // แสงนวลแผ่ทั้งขอบมนฝั่งซ้าย (ผสมทับแบบสีขาว ไม่ใช่บวกแสง) — บวกแสงได้เส้นจ้าบางที่อ่านเป็นโลหะ
-        float side = clamp(-n.x * 1.4, 0.0, 1.0);
-        float edge = smoothstep(0.0, 0.35, 1.0 - n.z);
-        // ขอบมนด้านอื่นจางขาวนิด ๆ กลบขอบมืดของแก้ว (ตรงที่แสงลอดเนื้อแก้วหนาสุด) ขอบจึงไม่ขึ้นเงาเป็นโลหะ
-        float r = max(pow(side, 0.7) * uInt, 0.28) * edge;
-        gl_FragColor = vec4(uColor, r);
-      }`,
-  })
-}
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x)
 const smooth = (x: number) => {
@@ -95,12 +65,16 @@ const smooth = (x: number) => {
   return u * u * (3 - 2 * u)
 }
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k
+const inOut01 = (x: number) => {
+  const u = clamp01(x)
+  return u < 0.5 ? 4 * u ** 3 : 1 - (-2 * u + 2) ** 3 / 2
+}
 
 /** ท่าของเฟรมนี้ — คิดจากการเลื่อน อ่านในลูปเฟรม ไม่ผ่าน React */
-type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; sprout: number; morph: number; hand: number; lift: number; rise: number; white: number }
+type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number }
 
 function readPose(): Pose {
-  const off: Pose = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, sprout: 0, morph: 0, hand: 0, lift: 0, rise: 0, white: 0 }
+  const off: Pose = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0 }
   const vw = window.innerWidth
   const vh = window.innerHeight || 1
   const el = document.querySelector<HTMLElement>('.v3-hero-bubble')
@@ -130,15 +104,25 @@ function readPose(): Pose {
    * r.width / offsetWidth จึงเป็นสเกลจริงของทรานส์ฟอร์มอื่นที่ครอบอยู่
    */
   const h0 = el.offsetHeight * (r.width / Math.max(1, el.offsetWidth))
-  /* ปุ่มกลายเป็น bento: ฟองลอยขึ้นไปเป็นแถบบนสุด ช่องไหลลงมาเต็มจอใต้ฟอง */
-  const morph = smooth(at(sv2, BEAT.morph))
+  /* พิมพ์จบ ปุ่มงอก แล้วฟองกับแถวปุ่มลอยขึ้นไปเป็นแถบบนสุด — ใต้แถบคือรางบริการ (ดู ./ServiceTrack) */
+  const up = at(sv2, BEAT.up)
   const lift = Math.min(0, glue - vh)
-  const head = headOf(morph)
+  /**
+   * ฟองขยายเป็นพาเนลแบบหน้าต่าง Spotlight กลางจอ (ดู panelLayout) — ตัวพาเนลคือฟองเอง:
+   * ฟองยุบหายเข้าไปในก้อนแก้วที่พองจากตัวมันออกไปเป็นพาเนล ข้อความลอยไปเป็นหัวพาเนล
+   * ไอคอนไปอยู่หน้าข้อความ วงกลมไหลเข้าไปเป็นจุดบอกหน้าที่มุมขวาของหัวพาเนล (ดู skillBlobs)
+   * กลางกลุ่ม = กลางพาเนล · สเกลให้ตัวอักษรสูง 26 ต่อกรอบแบบ 1280 (FS 32 หน่วย)
+   */
+  const head = headOf(up)
+  const sh = vw / FW
+  const pl = panelLayout(vw, vh)
+  const barY = pl.cy
+  const barH = VB_H * ((26 * sh) / FS)
   return {
     on: true,
     x: lerp(r.left + r.width / 2, vw / 2, d),
-    y: lerp(lerp(r.top + r.height / 2, vh * 0.5, d), Math.max(16, vh * 0.035) + h1 * 0.62, head) + lift,
-    h: lerp(lerp(h0, h1, d), h1 * 0.8, head),
+    y: lerp(lerp(r.top + r.height / 2, vh * 0.5, d), barY, head) + lift,
+    h: lerp(lerp(h0, h1, d), barH, head),
     /* หัวเรื่องถูกบิด skewY(-5deg) — ตอนยังอยู่ที่เดิมฟองบิดตาม (เฉือน ไม่ใช่หมุน) แล้วค่อยตั้งตรง */
     rot: (1 - d) * Math.tan((5 * Math.PI) / 180),
     /* ระหว่างทางลงมา (ช่วงจอแรก + ม่านเมฆ) มีแต่จุดกำลังพิมพ์ ข้อความรอพิมพ์ในฟ้าของ What I do */
@@ -146,12 +130,17 @@ function readPose(): Pose {
     /* ใน What I do: พิมพ์คำทักทาย → ค้างให้อ่าน → ลบทีละตัว → พิมพ์ประโยคที่สอง */
     ...(sv2 < BEAT.erase[0] + BEAT.erase[1]
       ? { line: 0, chars: Math.round(at(sv2, BEAT.greet) * (1 - at(sv2, BEAT.erase)) * LINES[0].length) }
-      : { line: 1, chars: Math.round(at(sv2, BEAT.line2) * LINES[1].length) }),
+      : up < 0.2
+        ? { line: 1, chars: Math.round(at(sv2, BEAT.line2) * (1 - up / 0.2) * LINES[1].length) }
+        : { line: 2, chars: Math.round(clamp01((up - 0.22) / 0.4) * LINES[2].length) }),
     /* พิมพ์จบแล้ว ปุ่มกลมหนึ่งปุ่มต่อสกิลงอกออกมาจากท้ายฟอง (ท่า Spotlight) */
     sprout: smooth(at(sv2, BEAT.sprout)),
-    morph,
+    head,
+    paint: smooth((up - 0.6) / 0.4),
+    stage: at(sv2, BEAT.stage),
+    slide: smooth(at(sv2, BEAT.slide)),
     hand,
-    /* bento ติดท้าย section — จอถัดไปเลื่อนขึ้นมา bento ก็เลื่อนขึ้นไปด้วย */
+    /* แถบกับรางติดท้าย section — จอถัดไปเลื่อนขึ้นมา ทั้งชุดก็เลื่อนขึ้นไปด้วย */
     lift,
     rise,
     /* หมึกน้ำเงินอ่านออกบนม่านเมฆขาว แต่จมหายบนฟ้าของ What I do — เข้าฟ้าแล้วเปลี่ยนเป็นขาว */
@@ -224,11 +213,30 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
   )
 
   const root = useRef<THREE.Group>(null)
-  const rim = useRef<THREE.Mesh>(null)
-  const rimMat = useMemo(makeRimMat, [])
-  useEffect(() => () => rimMat.dispose(), [rimMat])
+  const glass = useMemo(makeLiquidGlass, [])
+  useEffect(() => () => glass.dispose(), [glass])
   const shell = useRef<THREE.Mesh>(null)
   const ink = useRef<THREE.Mesh>(null)
+  /**
+   * ไอคอนบริการบนวงกลมแรก — SVG ปากกาออกแบบ (svgrepo, ชุด lines and angles) แบนเป็นรูปทรง
+   * จุดศูนย์กลาง viewBox 32×32 ไว้ที่ 0 แกน y กลับขึ้น · สูงราวครึ่งเส้นผ่านศูนย์กลางวงกลม
+   */
+  const icon = useRef<THREE.Mesh>(null)
+  const iconGeo = useMemo(() => {
+    const data = new SVGLoader().parse(penNibSvg)
+    const g = new THREE.ShapeGeometry(data.paths.flatMap((p) => SVGLoader.createShapes(p)), 8)
+    g.translate(-16, -16, 0)
+    g.scale(1 / 32, -1 / 32, 1)
+    return g
+  }, [])
+  const iconMat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#ffffff', side: THREE.DoubleSide, transparent: true, toneMapped: false }), [])
+  useEffect(
+    () => () => {
+      iconGeo.dispose()
+      iconMat.dispose()
+    },
+    [iconGeo, iconMat],
+  )
   const dots = useRef<(THREE.Mesh | null)[]>([])
   /** ความกว้างฟองตอนนี้ (หน่วย viewBox) — ไล่ตามความยาวข้อความ ไม่กระโดดทีละตัว */
   const width = useRef(VB_W)
@@ -250,24 +258,78 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
     const s = lerp(s0, Math.min(s0, (size.width * 0.88) / full), p.clear)
     /* ปุ่มงอกทางขวา — ฟองหลบไปทางซ้ายให้ทั้งแถว (ฟอง + ปุ่ม) อยู่กลางจอ */
     const shift = sproutShift(VB_H * s, p)
-    g.position.set(p.x - shift - size.width / 2, size.height / 2 - p.y, 0)
+    /* ลอยไปมุมซ้ายบน: ขอบซ้ายของตัวอักษรลงที่ x = 64 ในแบบ */
+    const shw = size.width / FW
+    const pl = panelLayout(size.width, size.height)
+    /* กลางกลุ่มไปที่กลางพาเนล (แนวตั้งมาจาก pose.y แล้ว) */
+    const gx = lerp(p.x - shift, pl.cx, p.head)
+    /** พาเนลเฟรมนี้ (หน่วยท้องถิ่นของกลุ่ม) — ไอคอนกับข้อความยึดมุมซ้ายบนของมัน ขยับไปพร้อมพาเนลที่กำลังพอง */
+    let panelNow: { x: number; y: number; hw: number; hh: number } | null = null
+    g.position.set(gx - size.width / 2, size.height / 2 - p.y, 0)
     /**
-     * ทรงของฟองเฟรมนี้ — ปั้นจากสนามระยะที่ตั้งต้นจากเส้นขอบในไฟล์ SVG ตลอดทาง พอปุ่มงอก (sprout → morph)
-     * ปุ่มกับช่องหลอมเข้ามาในสนามเดียวกัน (ดู ./LiquidBento) — เมชเดียว วัสดุแก้วตัวเดิม ไม่มีจังหวะสลับทรง
+     * ทรงของฟองเฟรมนี้ — ปั้นจากสนามระยะที่ตั้งต้นจากเส้นขอบในไฟล์ SVG ตลอดทาง พอปุ่มงอก (sprout)
+     * ปุ่มหลอมเข้ามาในสนามเดียวกัน (ดู ./LiquidBento) — เมชเดียว วัสดุแก้วตัวเดิม ไม่มีจังหวะสลับทรง
      * ปั้นใหม่เฉพาะตอนทรงเปลี่ยน (ความกว้างตามข้อความ / ปุ่มกำลังไหล) ช่วงค้างไม่ปั้น
      */
     {
       const bw = w * s
       const bh = VB_H * s
-      const liquid = bentoBlobs(p, { x: p.x - shift - bw / 2, y: p.y - bh / 2, w: bw, h: bh, s }, size.width, size.height)
+      /**
+       * จุดบอกความคืบหน้าของการเลื่อนใต้หัวข้อ (แทนวงกลม 64 ในแบบ): จุด 12 ห่าง 8 ขอบซ้ายที่ x 64 กลางแนวตั้งที่ y 104
+       * จุดของบริการที่เปิดอยู่ยืดเป็นแคปซูล ไล่ตามการเลื่อนข้ามหน้า — นับจากกลางฟองตอนเป็นหัวข้อ (x ที่ gxEnd, y ที่ 72.4)
+       */
+      /* จุดบอกหน้า 12 ห่าง 8 ชิดขวาของหัวพาเนล — จุดของบริการที่เปิดอยู่ยืดเป็นแคปซูล (กว้างรวม = 12·(2+2.6) + 8·2) */
+      const dd = 12 * shw
+      const dg = 8 * shw
+      const rowW = dd * (2 + 2.6) + dg * 2
+      /* มีพาเนล = จุดยึดมุมขวาบนของพาเนลขนาดเฟรมนี้ (inset/headOff) ไม่ใช่ตำแหน่งตอนพองเต็ม */
+      const dest = { x: pl.dotsR - rowW - pl.cx, y: pl.headY - pl.cy, d: dd, gap: dg, page: p.slide * (SERVICES.length - 1), inset: 40 * shw, headOff: 46 * shw }
+      /* พาเนล = ก้อนแก้วที่พองออกจากตัวฟอง ไปเป็นกล่องมนกลางจอ */
+      const panel = { cx: 0, cy: 0, hw: pl.w / 2, hh: pl.h / 2, r: pl.r, k: p.head }
+      const liquid = skillBlobs(p, { x: gx - bw / 2, y: p.y - bh / 2, w: bw, h: bh, s }, dest, panel)
+      const pb = liquid.panel
+      panelNow = pb
+      if (pb) glass.uniforms.uPanel.value.set(pb.x, pb.y, pb.hw, pb.hh)
+      else glass.uniforms.uPanel.value.set(1e5, 0, 0, 0)
+      glass.uniforms.uPanelR.value = pb ? pb.r : 0
+      glass.uniforms.uPanelTint.value = smooth((p.head - 0.2) / 0.6)
+      /* กรอบเนื้อหาให้ฉากบริการ — เปิดเมื่อพาเนลขยายเต็มแล้ว ตามการเลื่อนขึ้นตอนจบ section */
+      panelBox.on = p.head > 0.98
+      panelBox.x = pl.content.x
+      panelBox.y = pl.content.y + p.lift
+      panelBox.w = pl.content.w
+      panelBox.h = pl.content.h
       const wq = Math.round(w / 0.6) * 0.6
-      const fullKey = `${wq.toFixed(1)}|${liquid.k.toFixed(2)}|${liquid.blobs.map((o) => `${o.x.toFixed(1)},${o.y.toFixed(1)},${o.hw.toFixed(1)},${o.hh.toFixed(1)},${o.r.toFixed(1)}`).join('|')}|${t.bbThick}|${t.bbRound}`
+      const cu = [glass.uniforms.uC0, glass.uniforms.uC1, glass.uniforms.uC2]
+      cu.forEach((u, i) => {
+        const c = liquid.blobs[i]
+        if (c) u.value.set(c.x, c.y, c.hw, c.hh)
+        else u.value.set(1e5, 0, 0, 0)
+      })
+      glass.uniforms.uAct.value.set(liquid.act[0], liquid.act[1], liquid.act[2])
+      /* ไอคอนตามวงกลมแรก — สีเดียวกับตัวอักษรในฟอง (ตั้งตรงที่ตั้งสีหมึก ข้างล่าง) */
+      const ic = icon.current
+      const c0 = liquid.blobs[0]
+      if (ic) {
+        /* ไอคอนออกจากวงกลมแรก ไปอยู่หน้าข้อความบนหัวพาเนล (ตำแหน่งไอคอนแอปในหน้าต่าง Spotlight) สูง 26 */
+        ic.visible = !!c0
+        if (c0) {
+          const h = inOut01(p.head)
+          const pn = panelNow
+          const hx = pn ? pn.x - pn.hw + (pl.iconX - pl.left) / s : c0.x
+          const hy = pn ? pn.y + pn.hh - (pl.headY - pl.top) / s : c0.y
+          ic.position.set(lerp(c0.x, hx, h), lerp(c0.y, hy, h), t.bbThick / 2 + 1.5)
+          ic.scale.setScalar(Math.max(1e-3, lerp(c0.hh * 1.05, (26 * shw) / s, h)))
+        }
+      }
+      /* ฟองยุบหายเข้าไปในพาเนลที่พองจากมัน (หน่วย viewBox — 55 หายหมด) — เริ่มยุบหลังพาเนลพองพ้นตัวฟองแล้ว */
+      const shrinkU = smooth((p.head - 0.15) / 0.6) * 55
+      const fullKey = `${wq.toFixed(1)}|${shrinkU.toFixed(1)}|${liquid.k.toFixed(2)}|${liquid.blobs.map((o) => `${o.x.toFixed(1)},${o.y.toFixed(1)},${o.hw.toFixed(1)},${o.hh.toFixed(1)},${o.r.toFixed(1)}`).join('|')}|${t.bbThick}|${t.bbRound}`
       if (!geo.current || built.current !== fullKey) {
         geo.current?.dispose()
-        geo.current = liquidGeo(outline, wq, liquid.blobs, liquid.k, t.bbThick, t.bbRound)
+        geo.current = liquidGeo(outline, wq, liquid.blobs, liquid.k, t.bbThick, t.bbRound, shrinkU)
         built.current = fullKey
         if (shell.current) shell.current.geometry = geo.current
-        if (rim.current) rim.current.geometry = geo.current
       }
     }
     g.scale.setScalar(s)
@@ -288,26 +350,26 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
      */
     g.updateMatrix()
     if (p.rot) g.matrix.multiply(SHEAR.makeShear(p.rot, 0, 0, 0, 0, 0))
-    /**
-     * แก้วใสขึ้นเมื่อออกจากหัวเรื่อง
-     *
-     * วัสดุหักเหได้แค่ของในแคนวาสตัวเอง (ว่าง) จึงเห็น "ฉากหลังสำรอง" สีฟ้าอ่อนคงที่ (GLASS_BG)
-     * ตรงกับฟ้าหลังหัวเรื่องพอดี แต่บนฟ้าของ What I do ที่เข้มกว่า มันกลายเป็นแผ่นฟ้าหม่นทึบ ๆ
-     * ลดความทึบลง = ฟ้าจริงของหน้าทะลุขึ้นมาผ่านอัลฟาของแคนวาส ขอบกับไฮไลต์ยังอยู่เหมือนเดิม
-     */
-    const gm = shell.current?.material as THREE.Material | undefined
-    if (gm) gm.opacity = lerp(SW_OPACITY, SW_OPACITY_SKY, p.clear)
+    /* จบที่สีเทาแบนตามแบบ Figma — ทาผิวเมชเดิม (ดู ./liquidGlass) */
+    glass.uniforms.uPaint.value = p.paint
 
+    /* หมึกน้ำเงิน → ขาวบนฟ้า — หน้าบริการพื้นยังเป็นฟ้าเดิม หัวข้อจึงขาวต่อ */
     TMP_C.set(INK).lerp(WHITE, p.white)
     inkMat.color.copy(TMP_C)
     inkMat.emissive.copy(TMP_C)
+    iconMat.color.copy(TMP_C)
     const m = ink.current
     if (m) {
       m.material = inkMat
       m.visible = !!tx.geo
       if (tx.geo) {
         m.geometry = tx.geo
-        m.position.set(-w / 2 + PAD_L, -tx.midY + 2, t.bbThick / 2 + 1)
+        /* ข้อความลอยไปเป็นหัวพาเนล: เริ่มที่ x textX กลางแนวตั้งที่ headY (ตำแหน่ง "Applications" ใน Spotlight) */
+        const h = inOut01(p.head)
+        const pn = panelNow
+        const tx0 = pn ? pn.x - pn.hw + (pl.textX - pl.left) / s : -w / 2 + PAD_L
+        const ty0 = pn ? pn.y + pn.hh - (pl.headY - pl.top) / s : 0
+        m.position.set(lerp(-w / 2 + PAD_L, tx0, h), lerp(-tx.midY + 2, ty0 - tx.midY + 2, h), t.bbThick / 2 + 1)
       }
     }
     const inner = (PAD_L - PAD_R) / 2
@@ -325,40 +387,11 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
   return (
     <>
       <group ref={root} matrixAutoUpdate={false}>
-        <mesh ref={shell}>
-          {/**
-           * แก้วชุดเดียวกับราง switch ใน hero (ดู newhero/Switch, ค่า bc* ในแผงจูน) — แบนและทึบกว่าแก้วฟองเดิม
-           * ior 1 (ไม่หักเหบิด), ไม่แยกสี ไม่มีรุ้ง, สะท้อนแผงไฟเบา ๆ, เนื้อขาวอมม่วงอ่อน (#dfe3ff)
-           * แก้วฟองเดิม (ior 2 + แยกสี + รุ้ง + แผงไฟแรง) ขอบมนจับแสงมืด-สว่างสลับเป็นวง อ่านเป็นโลหะ
-           */}
-          <MeshTransmissionMaterial
-            transmission={1}
-            thickness={t.bbThick * 0.9}
-            ior={1}
-            roughness={0}
-            anisotropicBlur={1.9}
-            chromaticAberration={0}
-            envMapIntensity={0.3}
-            distortion={0}
-            samples={6}
-            resolution={1024}
-            attenuationDistance={t.bbThick * 9}
-            attenuationColor="#dfe3ff"
-            background={GLASS_BG}
-            transparent
-            opacity={SW_OPACITY}
-          />
-        </mesh>
-        {/* ไฟขอบซ้าย — เมชเดียวกับแก้ว วาดทับแบบบวกแสง · ซ่อนตอนแก้วถ่ายภาพข้างหลัง ไม่งั้นแก้วหักเหแสงขอบซ้ำ */}
-        <mesh
-          ref={rim}
-          material={rimMat}
-          renderOrder={2}
-          onBeforeRender={(renderer) => {
-            rimMat.colorWrite = renderer.getRenderTarget() === null
-          }}
-        />
-        <mesh ref={ink} material={inkMat} />
+        {/* แก้วแบบ Liquid Glass (ดู ./liquidGlass) — ตัวอักษรวาดหลังแก้ว (renderOrder) จึงคมทับผิวแก้ว */}
+        <mesh ref={shell} material={glass} />
+        <mesh ref={ink} material={inkMat} renderOrder={2} />
+        {/* ไอคอนของบริการแรก (UX/UI — ปากกาออกแบบ) บนหน้าวงกลมแรก */}
+        <mesh ref={icon} geometry={iconGeo} material={iconMat} renderOrder={3} visible={false} />
         {[0, 1, 2].map((i) => (
           <mesh
             key={i}
@@ -395,8 +428,8 @@ export function BubbleTraveler() {
    */
   const park = { x: 0.9, y: 1.12 }
   useCursorStop(null, { id: 'bubble-park-in', at: park, keyVh: top === undefined ? undefined : top + 0.5, size: 54, tilt: -14 })
-  useCursorStop(null, { id: 'bubble-park-after', at: park, keyVh: top === undefined ? undefined : top + BEAT.morph[0] + BEAT.morph[1] + 0.5, size: 54, tilt: -14 })
-  const pose = useRef<Pose>({ on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, sprout: 0, morph: 0, hand: 0, lift: 0, rise: 0, white: 0 })
+  useCursorStop(null, { id: 'bubble-park-after', at: park, keyVh: top === undefined ? undefined : top + BEAT.slide[0] + BEAT.slide[1] + 0.5, size: 54, tilt: -14 })
+  const pose = useRef<Pose>({ on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0 })
   const [on, setOn] = useState(false)
   const wake = useRef<() => void>(() => {})
 
@@ -456,6 +489,8 @@ export function BubbleTraveler() {
         <StageLight gain={t.bbGlow} />
         <Suspense fallback={null}>
           <Bubble pose={pose} wake={wake} />
+          {/* ฉากบริการ 3D — แคนวาสเดียวกับฟอง วางหลังฟองในแกนลึก */}
+          <ServiceScene pose={pose} />
         </Suspense>
       </Canvas>
     </div>

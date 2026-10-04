@@ -1,16 +1,16 @@
 import * as THREE from 'three'
 
 /**
- * ฟองคำพูด + ปุ่มสกิล + ช่อง bento = ฟองแก้ว 3D ใบเดิมใบเดียว ที่ปุ่มกับช่องงอกออกมาจากเนื้อของมันเอง
+ * ฟองคำพูด + ปุ่มสกิล = ฟองแก้ว 3D ใบเดิมใบเดียว ที่ปุ่มงอกออกมาจากเนื้อของมันเอง
  * (ท่า liquid glass ของ iOS / Spotlight ของ macOS)
  *
  * ทำไมปั้นเรขาคณิตใหม่ทุกเฟรม แทนที่จะวางปุ่มเป็นชิ้นแยก: ชิ้นแยก (แผ่น DOM, เชดเดอร์อีกแผ่นวางทับ)
  * เป็นของคนละชิ้นกับฟองเสมอ เห็นรอยต่อ/เห็นสองชั้น ที่นี่ฟอง ปุ่ม ช่อง เป็นรูปทรงระยะ (signed distance)
  * ในสนามเดียวกัน หลอมกันด้วย smooth-min แล้วลากเส้นขอบ (marching squares) อัดขึ้นรูปเป็นเมชเดียว
- * ใส่วัสดุแก้วตัวเดิมของฟอง — ระหว่างไหลจึงมีคอของเหลวยืดแล้วขาด หยุดไหลแล้วแต่ละชิ้นแยกขอบคม
+ * ใส่วัสดุแก้วตัวเดิมของฟอง — ระหว่างแตกหน่อจึงมีคอของเหลวยืดแล้วขาด หยุดแล้วแต่ละชิ้นแยกขอบคม
  *
  * ทรงฟองในสนามคือเส้นขอบจากไฟล์ SVG ตรง ๆ และฟองที่เดินทางปั้นด้วยวิธีนี้ตลอดทาง (ดู BubbleTraveler)
- * ไม่มีจังหวะสลับทรง ยังไม่มีเนื้อหาในปุ่ม/ช่อง — ค่อยใส่ทีหลัง
+ * ไม่มีจังหวะสลับทรง ยังไม่มีเนื้อหาในปุ่ม — ค่อยใส่ทีหลัง
  */
 
 export const SKILLS = ['Research', 'Design', 'Coding'] as const
@@ -18,12 +18,9 @@ export const SKILLS = ['Research', 'Design', 'Coding'] as const
 type Rect = { x: number; y: number; w: number; h: number }
 /** กล่องมนในพิกัดท้องถิ่นของฟอง: กลาง x y, ครึ่งกว้าง ครึ่งสูง, รัศมีมุม */
 export type Blob = { x: number; y: number; hw: number; hh: number; r: number; rs: readonly number[] }
-/** sprout/morph 0..1 · lift = เลื่อนขึ้นไปพร้อมท้าย section (px, ติดลบ) */
-type Pose = { sprout: number; morph: number; lift: number }
 /** กรอบฟองบนจอ (รวมหาง) + สเกลพิกเซลต่อหน่วย viewBox ของ SVG */
 export type BubbleBox = Rect & { s: number }
 
-const RADIUS = 28
 /** ระยะหลอมของ smooth-min ตอนกำลังไหล (px บนจอ) — หยุดไหลแล้วเป็น 0 ขอบแต่ละชิ้นคมแยกกัน */
 const MELT = 34
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v)
@@ -35,77 +32,100 @@ const outBack = (x: number) => 1 + 1.9 * (x - 1) ** 3 + 0.9 * (x - 1) ** 2
 /** 0 ที่ปลายทั้งสองข้าง ขึ้นเร็วลงเร็ว — ระยะหลอมเปิดเฉพาะตอนไหล */
 const bump = (x: number) => (x <= 0 || x >= 1 ? 0 : Math.sin(Math.PI * x) ** 0.4)
 
-/** ปุ่มกลมสูงเท่าฟอง (bh = กรอบทั้งทรง ตัวฟองสูงเต็มกรอบ หางอยู่ในกรอบเดียวกัน) */
-const dims = (bh: number) => {
+/**
+ * ปุ่มกลมสูงเท่าฟอง (bh = กรอบทั้งทรง ตัวฟองสูงเต็มกรอบ หางอยู่ในกรอบเดียวกัน)
+ */
+export const rowDims = (bh: number) => {
   const d = bh
   return { d, gap: Math.max(16, d * 0.22) }
 }
-/** ฟองลอยขึ้นเป็นแถบบนสุดในช่วงแรกของ morph — ตรงกับ head ใน BubbleTraveler */
-export const headOf = (morph: number) => inOut(clamp01(morph / 0.45))
+/** ฟองกับแถวปุ่มลอยขึ้นเป็นแถบบนสุด (0..1 ของบท up) — ใช้ร่วมกับ BubbleTraveler */
+export const headOf = (up: number) => inOut(clamp01(up))
 
-/** ฟองหลบซ้ายเท่าไร (px) ให้แถว ฟอง + ปุ่ม อยู่กลางจอ — กลับเข้ากลางตอนปุ่มไหลไปเป็นช่อง */
-export function sproutShift(bh: number, p: { sprout: number; morph: number }) {
-  const { d, gap } = dims(bh)
-  return ((SKILLS.length * (d + gap)) / 2) * inOut(p.sprout) * (1 - headOf(p.morph))
-}
-
-/** กรอบของแต่ละช่องใต้ฟอง — จอกว้าง: Research สูงเต็มทางซ้าย, Design/Coding ซ้อนกันทางขวา · จอแคบ: เรียงลง */
-function cells(W: number, H: number, top: number): Rect[] {
-  const pad = Math.max(16, Math.min(W, H) * 0.035)
-  const gap = Math.max(14, pad * 0.75)
-  const full = { x: pad, y: top + gap, w: W - pad * 2, h: H - pad - top - gap }
-  if (W < 720) {
-    const h = (full.h - gap * 2) / 3
-    return SKILLS.map((_, i) => ({ x: full.x, y: full.y + i * (h + gap), w: full.w, h }))
-  }
-  const lw = (full.w - gap) * 0.46
-  const rw = full.w - gap - lw
-  const rh = (full.h - gap) / 2
-  return [
-    { x: full.x, y: full.y, w: lw, h: full.h },
-    { x: full.x + lw + gap, y: full.y, w: rw, h: rh },
-    { x: full.x + lw + gap, y: full.y + rh + gap, w: rw, h: rh },
-  ]
+/** ฟองหลบซ้ายเท่าไร (px) ให้แถว ฟอง + ปุ่ม อยู่กลางจอ */
+export function sproutShift(bh: number, p: { sprout: number }) {
+  const { d, gap } = rowDims(bh)
+  return ((SKILLS.length * (d + gap)) / 2) * inOut(p.sprout)
 }
 
 /**
- * ปุ่ม/ช่องของเฟรมนี้ในพิกัดท้องถิ่นของฟอง (หน่วย viewBox แกน y ชี้ขึ้น กลางกรอบฟอง = จุดศูนย์)
- * b = กรอบฟองบนจอ (px รวมการเลื่อนขึ้นแล้ว) · k = ระยะหลอม (หน่วยเดียวกัน)
+ * ปุ่มของเฟรมนี้ในพิกัดท้องถิ่นของฟอง (หน่วย viewBox แกน y ชี้ขึ้น กลางกรอบฟอง = จุดศูนย์)
+ * b = กรอบฟองบนจอ (px) · k = ระยะหลอม (หน่วยเดียวกัน)
  */
-export function bentoBlobs(p: Pose, b: BubbleBox, W: number, H: number): { blobs: Blob[]; k: number } {
+/**
+ * ปลายทางของแถว (px) นับจากกลางฟอง ณ ปลายทางของฟอง — อิงฟอง ไม่ใช่จอ: วงกลมถูกพาไปกับฟองแล้วไหลลงไปใต้มัน
+ * ไม่วิ่งแซงขึ้นไปเหนือฟองระหว่างทาง
+ * x = ขอบซ้ายของจุดแรก · y = กลางแนวตั้ง · d = เส้นผ่านศูนย์กลางจุด · gap = ช่องไฟ · page = หน้าที่เปิดอยู่ (ทศนิยมได้)
+ */
+export type RowDest = { x: number; y: number; d: number; gap: number; page: number; inset?: number; headOff?: number }
+/** จุดของหน้าที่เปิดอยู่ยืดเป็นแคปซูลยาวกว่าจุดปกติกี่เท่า */
+const PILL = 2.6
+
+/**
+ * head = แยกตัวจากฟองไปเป็นจุดบอกหน้าใต้หัวข้อ (0..1) — วงกลมไหลจากแถวข้างฟองไปที่ปลายทาง ย่อเป็นจุดเล็ก
+ * ระหว่างนั้นระยะหลอมเปิด คอของเหลวระหว่างฟองกับวงกลมจึงยืดแล้วขาด
+ * ปลายทางคือจุดบอกความคืบหน้าของการเลื่อน: จุดของหน้าที่เปิดอยู่ยืดเป็นแคปซูล (act = น้ำหนักความ "เปิดอยู่" ต่อจุด)
+ */
+/** พาเนลที่ฟองพองออกไปเป็น (px นับจากกลางฟองตอนนี้) — k = พองไปแค่ไหน 0..1 */
+export type PanelDest = { cx: number; cy: number; hw: number; hh: number; r: number; k: number }
+
+export function skillBlobs(
+  p: { sprout: number; head: number },
+  b: BubbleBox,
+  dest: RowDest,
+  panel?: PanelDest,
+): { blobs: Blob[]; k: number; act: number[]; panel: Blob | null } {
   const blobs: Blob[] = []
-  const ox = b.x + b.w / 2
-  const oy = b.y + b.h / 2
-  const { d, gap } = dims(b.h)
+  const act: number[] = []
+  /**
+   * พาเนลแบบ Spotlight = ตัวฟองเอง: เริ่มเป็นก้อนขนาดตัวฟอง ณ กลางฟอง แล้วพองออกเป็นกล่องมนกลางจอ
+   * ระหว่างนั้นทรงฟองยุบหายเข้าไปข้างใน (ดู shrink ใน liquidGeo) — อยู่ในสนามเดียวกัน จึงเป็นก้อนเดียวที่เปลี่ยนทรง
+   */
+  let pb: Blob | null = null
+  if (panel && panel.k > 0) {
+    const k = inOut(clamp01(panel.k))
+    /* เริ่มเท่าตัวฟองพอดี (ไม่รวมหาง) — จังหวะแรกฟองไม่หดก่อนพอง */
+    const hw = lerp((b.w / 2) * 0.97, panel.hw, k) / b.s
+    const hh = lerp((b.h / 2) * 0.92, panel.hh, k) / b.s
+    const r = Math.min(lerp((b.h / 2) * 0.92, panel.r, k) / b.s, hw, hh)
+    pb = { x: (panel.cx * k) / b.s, y: (-panel.cy * k) / b.s, hw, hh, r, rs: [r, r, r, r] }
+  }
+  const { d, gap } = rowDims(b.h)
   /* ตัวฟองไม่รวมหาง: กลางแนวตั้ง = กลางกรอบ, ขอบขวา = ขอบกรอบ */
-  const cy = b.y + b.h / 2
-  const right = b.x + b.w
-  /* ช่องคิดจากฟองก่อนเลื่อน แล้วเลื่อนทั้งชุด — ไม่งั้นช่องยืดตามตอนจอถัดไปดันขึ้น */
-  const cell = cells(W, H, b.y - p.lift + b.h)
+  const half = b.w / 2
   /** จุดแตกหน่อของปุ่มถัดไป = กลางปุ่มก่อนหน้า (ตอนนี้) — ปุ่มไหลต่อกันเป็นสาย */
-  let from = right - d * 0.55
+  let from = half - d * 0.55
+  /*
+   * ปลายทาง: ความกว้างของแต่ละจุดตามหน้าที่เปิดอยู่ แล้วเรียงต่อกันจากขอบซ้าย
+   * มีพาเนล = ยึดมุมขวาบนของพาเนลขนาดเฟรมนี้ (ไม่ใช่ขนาดตอนพองเต็ม) จุดจึงขยับไปพร้อมพาเนลที่กำลังพอง ไม่ลอยหลุดออกนอก
+   */
+  const rowW = dest.d * (SKILLS.length - 1 + PILL) + dest.gap * (SKILLS.length - 1)
+  let edge = pb ? (pb.x + pb.hw) * b.s - (dest.inset ?? 0) - rowW : dest.x
+  const destY = pb ? -(pb.y + pb.hh) * b.s + (dest.headOff ?? 0) : dest.y
   for (let i = 0; i < SKILLS.length; i += 1) {
+    const a = Math.max(0, 1 - Math.abs(dest.page - i))
+    act.push(a)
+    const fw = dest.d * (1 + (PILL - 1) * a)
+    const fx = edge + fw / 2
+    edge += fw + dest.gap
+
     const ks = clamp01((p.sprout - i * 0.22) / 0.56)
     if (ks <= 0) continue
-    const home = right + gap + d / 2 + i * (d + gap)
+    const home = half + gap + d / 2 + i * (d + gap)
     const x = lerp(from, home, outBack(ks))
-    const size = d * lerp(0.55, 1, outQuint(ks))
     from = x
-
-    /* ปุ่ม → ช่อง: หยดลงก่อน แล้วแผ่ข้าง ไล่ทีละช่อง */
-    const k = clamp01((p.morph - 0.15 - i * 0.12) / 0.6)
-    const c = { ...cell[i], y: cell[i].y + p.lift }
-    const top = lerp(cy - size / 2, c.y, outBack(clamp01(k / 0.9)))
-    const bot = lerp(cy + size / 2, c.y + c.h, inOut(k))
-    const kx = inOut(clamp01((k - 0.08) / 0.92))
-    const left = lerp(x - size / 2, c.x, kx)
-    const rr = lerp(x + size / 2, c.x + c.w, kx)
-    const hw = Math.max(0, (rr - left) / 2)
-    const hh = Math.max(0, (bot - top) / 2)
-    const r = Math.min(lerp(size / 2, RADIUS, k), hw, hh)
-    blobs.push({ x: ((left + rr) / 2 - ox) / b.s, y: (oy - (top + bot) / 2) / b.s, hw: hw / b.s, hh: hh / b.s, r: r / b.s, rs: [r / b.s, r / b.s, r / b.s, r / b.s] })
+    /* วงหลังออกตัวช้ากว่าเล็กน้อย — ไหลตามกันเป็นสาย */
+    const h = inOut(clamp01((p.head - i * 0.08) / 0.84))
+    const r0 = (d * lerp(0.55, 1, outQuint(ks))) / 2
+    const rx = lerp(x, fx, h)
+    const ry = lerp(0, destY, h)
+    const hw = lerp(r0, fw / 2, h) / b.s
+    const hh = lerp(r0, dest.d / 2, h) / b.s
+    const r = Math.min(hw, hh)
+    blobs.push({ x: rx / b.s, y: -ry / b.s, hw, hh, r, rs: [r, r, r, r] })
   }
-  return { blobs, k: (MELT * Math.max(bump(p.sprout), bump(p.morph))) / b.s }
+  if (pb) blobs.push(pb)
+  return { blobs, k: (MELT * Math.max(bump(p.sprout), bump(p.head), panel ? bump(panel.k) : 0)) / b.s, act, panel: pb }
 }
 
 /* ---------- สนามระยะ (หน่วย viewBox แกน y ชี้ลงแบบ SVG) ---------- */
@@ -196,9 +216,10 @@ const CASES: number[][] = [[], [3, 0], [0, 1], [3, 1], [1, 2], [], [0, 2], [3, 2
 
 /**
  * เมชแก้วของฟอง + ปุ่ม/ช่อง — หน่วยและจุดศูนย์เดียวกับ bubbleGeo ใน BubbleTraveler (กลางกรอบฟอง แกน y ชี้ขึ้น)
- * outline = เส้นขอบฟองจากไฟล์ (viewBox แกน y ชี้ลง) · w = ความกว้างฟอง (viewBox) · blobs/k จาก bentoBlobs
+ * outline = เส้นขอบฟองจากไฟล์ (viewBox แกน y ชี้ลง) · w = ความกว้างฟอง (viewBox) · blobs/k จาก skillBlobs
+ * shrink = หดตัวฟอง (หน่วย viewBox)
  */
-export function liquidGeo(outline: Float32Array, w: number, blobs: Blob[], k: number, thick: number, round: number) {
+export function liquidGeo(outline: Float32Array, w: number, blobs: Blob[], k: number, thick: number, round: number, shrink = 0) {
   /*
    * ขอบมนตามความหนา — bevel ดันขอบออก จึงลากเส้นที่ระยะ -inset แล้วให้ bevel พองกลับเท่าทรงจริง
    * ดันออกแค่ครึ่งของความมนด้านหนา: หางฟองบาง ถ้าหดเข้าเต็มครึ่งความหนา ปลายหางจะทู่หาย
@@ -214,7 +235,8 @@ export function liquidGeo(outline: Float32Array, w: number, blobs: Blob[], k: nu
     const qx = x + w / 2
     const qy = 49.5 - y
     const box = sdBox(qx - w / 2, qy - 49.5, w / 2, 49.5)
-    let d = box > far ? box : (sampleBubble(g, qx, qy, dx) ?? box)
+    /* shrink = หดตัวฟองเข้าหาแกน (หน่วย viewBox) — ราว 50 ฟองหายหมด ตอนหลอมเข้าวงกลมแรก */
+    let d = (box > far ? box : (sampleBubble(g, qx, qy, dx) ?? box)) + shrink
     for (const b of blobs) d = smin(d, sdRB(x - b.x, b.y - y, b.hw, b.hh, b.rs), k)
     return d + inset
   }
