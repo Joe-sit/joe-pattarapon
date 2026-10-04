@@ -55,6 +55,9 @@ const VB_H = 99
 const FS = 32
 const PAD_L = 38
 const PAD_R = 40
+/** ช่องค้นหา: ที่ของแว่นขยายหน้าข้อความ / ช่องของเคอร์เซอร์ท้ายข้อความ (หน่วย viewBox) */
+const SEARCH_LEAD = 40
+const CARET_GAP = 10
 const INK = '#2052cd'
 
 const WHITE = new THREE.Color('#ffffff')
@@ -74,7 +77,7 @@ const inOut01 = (x: number) => {
 }
 
 /** ท่าของเฟรมนี้ — คิดจากการเลื่อน อ่านในลูปเฟรม ไม่ผ่าน React */
-type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number }
+type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number }
 
 /**
  * หัวพาเนลตอนนี้ = ชื่อบริการของหน้าที่ใกล้ที่สุด พิมพ์เต็มตอนอยู่กลางหน้า ลบหมดตอนเลื่อนถึงครึ่งทางไปหน้าถัดไป
@@ -89,7 +92,7 @@ function serviceTitle(up: number, slide: number) {
 }
 
 function readPose(): Pose {
-  const off: Pose = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0 }
+  const off: Pose = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0 }
   const vw = window.innerWidth
   const vh = window.innerHeight || 1
   const el = document.querySelector<HTMLElement>('.v3-hero-bubble')
@@ -149,6 +152,8 @@ function readPose(): Pose {
         ? { line: 1, chars: Math.round(at(sv2, BEAT.line2) * (1 - up / 0.2) * LINES[1].length) }
         : serviceTitle(up, smooth(at(sv2, BEAT.slide)))),
     /* พิมพ์จบแล้ว ปุ่มกลมหนึ่งปุ่มต่อสกิลงอกออกมาจากท้ายฟอง (ท่า Spotlight) */
+    /* ลบคำทักทายเสร็จ ฟองคำพูดกลายเป็นช่องค้นหาแบบ Spotlight (หางหด ทรงแคปซูล แว่นขยาย เคอร์เซอร์) */
+    search: smooth(at(sv2, BEAT.search)),
     sprout: smooth(at(sv2, BEAT.sprout)),
     head,
     paint: smooth((up - 0.6) / 0.4),
@@ -237,6 +242,19 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
    * จุดศูนย์กลาง viewBox 32×32 ไว้ที่ 0 แกน y กลับขึ้น · สูงราวครึ่งเส้นผ่านศูนย์กลางวงกลม
    */
   const icon = useRef<THREE.Mesh>(null)
+  const magnifier = useRef<THREE.Group>(null)
+  const caret = useRef<THREE.Mesh>(null)
+  /** แว่นขยายเส้นบาง (วง + ด้าม) กับเคอร์เซอร์ — หน่วย viewBox ของฟอง สูงราวตัวอักษร */
+  const searchGeo = useMemo(() => {
+    const ring = new THREE.RingGeometry(9.6, 12.2, 48)
+    ring.translate(-2.5, 3, 0)
+    const handle = new THREE.PlaneGeometry(3, 11)
+    handle.rotateZ(Math.PI / 4)
+    handle.translate(8.6, -8.1, 0)
+    const caretG = new THREE.PlaneGeometry(2.2, 34)
+    return { ring, handle, caret: caretG }
+  }, [])
+  useEffect(() => () => Object.values(searchGeo).forEach((g) => g.dispose()), [searchGeo])
   const iconGeo = useMemo(() => {
     const data = new SVGLoader().parse(penNibSvg)
     const g = new THREE.ShapeGeometry(data.paths.flatMap((p) => SVGLoader.createShapes(p)), 8)
@@ -264,7 +282,9 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
     const g = root.current
     if (!p || !g || !p.on) return
     const tx = texts[p.line][p.chars]
-    const want = Math.max(VB_W, PAD_L + tx.w + PAD_R)
+    /* ช่องค้นหา: เว้นที่ให้แว่นขยายหน้าข้อความ + เคอร์เซอร์ท้ายข้อความ */
+    const lead = SEARCH_LEAD * p.search
+    const want = Math.max(VB_W, PAD_L + lead + tx.w + PAD_R + CARET_GAP * p.search)
     width.current += (want - width.current) * (1 - Math.exp(-dt * 14))
     const w = width.current
     /* จอแคบ: ข้อความเต็มประโยคต้องไม่ล้นจอ — ย่อฟองให้ความกว้างสุดท้ายอยู่ในจอ 88% */
@@ -339,10 +359,10 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
       }
       /* ฟองยุบหายเข้าไปในพาเนลที่พองจากมัน (หน่วย viewBox — 55 หายหมด) — เริ่มยุบหลังพาเนลพองพ้นตัวฟองแล้ว */
       const shrinkU = smooth((p.head - 0.15) / 0.6) * 55
-      const fullKey = `${wq.toFixed(1)}|${shrinkU.toFixed(1)}|${liquid.k.toFixed(2)}|${liquid.blobs.map((o) => `${o.x.toFixed(1)},${o.y.toFixed(1)},${o.hw.toFixed(1)},${o.hh.toFixed(1)},${o.r.toFixed(1)}`).join('|')}|${t.bbThick}|${t.bbRound}`
+      const fullKey = `${wq.toFixed(1)}|${p.search.toFixed(3)}|${shrinkU.toFixed(1)}|${liquid.k.toFixed(2)}|${liquid.blobs.map((o) => `${o.x.toFixed(1)},${o.y.toFixed(1)},${o.hw.toFixed(1)},${o.hh.toFixed(1)},${o.r.toFixed(1)}`).join('|')}|${t.bbThick}|${t.bbRound}`
       if (!geo.current || built.current !== fullKey) {
         geo.current?.dispose()
-        geo.current = liquidGeo(outline, wq, liquid.blobs, liquid.k, t.bbThick, t.bbRound, shrinkU)
+        geo.current = liquidGeo(outline, wq, liquid.blobs, liquid.k, t.bbThick, t.bbRound, shrinkU, p.search)
         built.current = fullKey
         if (shell.current) shell.current.geometry = geo.current
       }
@@ -382,10 +402,28 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
         /* ข้อความลอยไปเป็นหัวพาเนล: เริ่มที่ x textX กลางแนวตั้งที่ headY (ตำแหน่ง "Applications" ใน Spotlight) */
         const h = inOut01(p.head)
         const pn = panelNow
-        const tx0 = pn ? pn.x - pn.hw + (pl.textX - pl.left) / s : -w / 2 + PAD_L
+        const left = -w / 2 + PAD_L + lead
+        const tx0 = pn ? pn.x - pn.hw + (pl.textX - pl.left) / s : left
         const ty0 = pn ? pn.y + pn.hh - (pl.headY - pl.top) / s : 0
-        m.position.set(lerp(-w / 2 + PAD_L, tx0, h), lerp(-tx.midY + 2, ty0 - tx.midY + 2, h), t.bbThick / 2 + 1)
+        m.position.set(lerp(left, tx0, h), lerp(-tx.midY + 2, ty0 - tx.midY + 2, h), t.bbThick / 2 + 1)
       }
+    }
+    /**
+     * แว่นขยายของช่องค้นหา — หน้าข้อความ หดหายตอนช่องพองเป็นพาเนล (ไอคอนบริการมาแทนที่ แบบ Spotlight ที่ไอคอนหมวด
+     * มาแทนแว่นขยาย) · เคอร์เซอร์กะพริบท้ายข้อความ ระหว่างเป็นช่องค้นหา
+     */
+    const mg = magnifier.current
+    if (mg) {
+      const k = p.search * (1 - clamp01(p.head * 3))
+      mg.visible = k > 0.01
+      mg.position.set(-w / 2 + PAD_L + 14, 0, t.bbThick / 2 + 1)
+      mg.scale.setScalar(Math.max(1e-3, k))
+    }
+    const cr = caret.current
+    const caretOn = p.search > 0.6 && p.head < 0.05
+    if (cr) {
+      cr.visible = caretOn && clock.elapsedTime % 1.06 < 0.56
+      cr.position.set(-w / 2 + PAD_L + lead + tx.w + CARET_GAP * 0.5, 0, t.bbThick / 2 + 1)
     }
     const inner = (PAD_L - PAD_R) / 2
     dots.current.forEach((d, i) => {
@@ -396,7 +434,7 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
     })
 
     /* ยังขยับเองอยู่ (จุดกำลังพิมพ์ ลอยตามลม ฟองยืดตามข้อความ) = ขอเฟรมต่อ นอกนั้นรอการเลื่อนปลุก */
-    if (p.dots > 0.01 || p.turn > 0 || Math.abs(want - width.current) > 0.3) invalidate(3)
+    if (p.dots > 0.01 || p.turn > 0 || caretOn || Math.abs(want - width.current) > 0.3) invalidate(3)
   })
 
   return (
@@ -407,6 +445,11 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
         <mesh ref={ink} material={inkMat} renderOrder={2} />
         {/* ไอคอนของบริการแรก (UX/UI — ปากกาออกแบบ) บนหน้าวงกลมแรก */}
         <mesh ref={icon} geometry={iconGeo} material={iconMat} renderOrder={3} visible={false} />
+        <group ref={magnifier} visible={false}>
+          <mesh geometry={searchGeo.ring} material={iconMat} renderOrder={3} />
+          <mesh geometry={searchGeo.handle} material={iconMat} renderOrder={3} />
+        </group>
+        <mesh ref={caret} geometry={searchGeo.caret} material={iconMat} renderOrder={3} visible={false} />
         {[0, 1, 2].map((i) => (
           <mesh
             key={i}
@@ -444,7 +487,7 @@ export function BubbleTraveler() {
   const park = { x: 0.9, y: 1.12 }
   useCursorStop(null, { id: 'bubble-park-in', at: park, keyVh: top === undefined ? undefined : top + 0.5, size: 54, tilt: -14 })
   useCursorStop(null, { id: 'bubble-park-after', at: park, keyVh: top === undefined ? undefined : top + BEAT.slide[0] + BEAT.slide[1] + 0.5, size: 54, tilt: -14 })
-  const pose = useRef<Pose>({ on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0 })
+  const pose = useRef<Pose>({ on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0 })
   const [on, setOn] = useState(false)
   const wake = useRef<() => void>(() => {})
 

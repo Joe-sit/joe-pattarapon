@@ -209,6 +209,8 @@ function sampleBubble(g: NonNullable<typeof grid>, qx: number, qy: number, dx: n
   return (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty
 }
 
+const PILL_R = [49.5, 49.5, 49.5, 49.5] as const
+
 /* ---------- marching squares ---------- */
 
 /** เส้นที่ลากในแต่ละกรณีของช่อง (ขอบ 0 ล่าง 1 ขวา 2 บน 3 ซ้าย · มุม a=ซ้ายล่าง b=ขวาล่าง c=ขวาบน d=ซ้ายบน) */
@@ -217,9 +219,9 @@ const CASES: number[][] = [[], [3, 0], [0, 1], [3, 1], [1, 2], [], [0, 2], [3, 2
 /**
  * เมชแก้วของฟอง + ปุ่ม/ช่อง — หน่วยและจุดศูนย์เดียวกับ bubbleGeo ใน BubbleTraveler (กลางกรอบฟอง แกน y ชี้ขึ้น)
  * outline = เส้นขอบฟองจากไฟล์ (viewBox แกน y ชี้ลง) · w = ความกว้างฟอง (viewBox) · blobs/k จาก skillBlobs
- * shrink = หดตัวฟอง (หน่วย viewBox)
+ * shrink = หดตัวฟอง (หน่วย viewBox) · pill = ฟองกลายเป็นช่องค้นหาทรงแคปซูล (0..1)
  */
-export function liquidGeo(outline: Float32Array, w: number, blobs: Blob[], k: number, thick: number, round: number, shrink = 0) {
+export function liquidGeo(outline: Float32Array, w: number, blobs: Blob[], k: number, thick: number, round: number, shrink = 0, pill = 0) {
   /*
    * ขอบมนตามความหนา — bevel ดันขอบออก จึงลากเส้นที่ระยะ -inset แล้วให้ bevel พองกลับเท่าทรงจริง
    * ดันออกแค่ครึ่งของความมนด้านหนา: หางฟองบาง ถ้าหดเข้าเต็มครึ่งความหนา ปลายหางจะทู่หาย
@@ -236,7 +238,13 @@ export function liquidGeo(outline: Float32Array, w: number, blobs: Blob[], k: nu
     const qy = 49.5 - y
     const box = sdBox(qx - w / 2, qy - 49.5, w / 2, 49.5)
     /* shrink = หดตัวฟองเข้าหาแกน (หน่วย viewBox) — ราว 50 ฟองหายหมด ตอนหลอมเข้าวงกลมแรก */
-    let d = (box > far ? box : (sampleBubble(g, qx, qy, dx) ?? box)) + shrink
+    let d = box > far ? box : (sampleBubble(g, qx, qy, dx) ?? box)
+    /*
+     * pill = ฟองคำพูดกลายเป็นช่องค้นหาแบบ Spotlight — ผสมระยะของทรงฟองกับแคปซูลกว้างเท่ากัน หางค่อย ๆ หดหาย
+     * มุมแหลมกลายเป็นมนเต็มความสูง (ผสมระยะสองทรงคือการ morph ทรงที่ต่อเนื่อง ไม่ใช่สลับ)
+     */
+    if (pill > 0) d = lerp(d, sdRB(qx - (w + 6) / 2, qy - 49.5, (w - 6) / 2, 49.5, PILL_R), pill)
+    d += shrink
     for (const b of blobs) d = smin(d, sdRB(x - b.x, b.y - y, b.hw, b.hh, b.rs), k)
     return d + inset
   }
