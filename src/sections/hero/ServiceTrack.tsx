@@ -3,6 +3,8 @@ import { useFrame, useLoader } from '@react-three/fiber'
 import * as THREE from 'three'
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js'
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
+import { DeviceScene } from './DeviceScene'
+import { DESK, DesktopUI, widgetAt, type DesktopApi } from './DesktopUI'
 
 /**
  * รางเล่าบริการทีละหน้า เลื่อนแนวนอนตามการเลื่อนลง — ต่อจากฟองคำพูดที่กลายเป็นหัวข้อ + วงกลมสามวงมุมซ้ายบน
@@ -19,7 +21,50 @@ import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
  * (แก้วโปร่งวาดทีหลัง ถ้าฉากอยู่หลังมัน เนื้อกรมท่าของพาเนลจะทาทับฉาก) แล้วตัดขอบตามกรอบเนื้อหาด้วย scissor
  */
 
-export const SERVICES = ['UX/UI', 'Design', 'Coding'] as const
+/** บริการตามลำดับหน้า (เมนูวงกลม / จุดบอกหน้า / หัวพาเนล) — หน้าแรกคือแนะนำตัว ฉาก UX/UI อยู่หน้า UXUI_PAGE */
+/** สกิลตามลำดับ (จุดบอกหน้า / หัวพาเนล / ชั้นในหัวของ About me — ดู AboutFigure) */
+export const SERVICES = ['UX/UI', 'Coding', 'Research'] as const
+/** กรอบของทุกชิ้นในฉาก UX/UI บนจอในแบบ (จากกล่องของแต่ละชิ้นใน Figma รวมความหนา) — ใช้ย่อให้อยู่ในพาเนลครบ */
+const SCENE_BB = { x0: -260, y0: 30, x1: 1795, y1: 1130 }
+const UXUI_PAGE = 1
+/** ฉากแฟ้มงาน + ถาดปุ่มอุปกรณ์ (ดู ./DeviceScene) — ขนาดสูงราว 86% ของกรอบเนื้อหา */
+/** ฉากแฟ้มงาน + ถาดอุปกรณ์ เป็นตอนจบ "ส่งมอบ" ต่อจาก Coding */
+const DEVICE_ON = true
+/** ฉากถาดอุปกรณ์โผล่เฉพาะช่วงส่งมอบ (ship) ไม่ใช่หน้าของตัวเอง — วางกลางล่างของพาเนล */
+const SHIP_AT = { x: 0.5, y: 0.6 }
+/** จุดบนปุ่มแท็บเล็ต (ปุ่มกลาง สีส้ม) ในพิกัดของ DeviceScene — จอเดสก์ท็อปย่อลงไปเสียบตรงนี้ */
+const TABLET_KEY = new THREE.Vector3(40, -230, 200)
+/**
+ * ฟองไอเดีย (หน้าแนะนำตัว): ฟองความคิดลอยจากหัวตัวละคร มีหลอดไฟข้างใน — เลื่อนไป UX/UI ฟองลอยตามไปแล้วแตก
+ * เป็นบล็อกออกแบบ (บล็อกผุดขึ้นตรงที่ฟองหายไป) · ตำแหน่งเป็นสัดส่วนของกรอบเนื้อหา
+ */
+const IDEA = { x: 0.5, y: 0.3, size: 0.2 }
+/**
+ * จอเดสก์ท็อป — แผงม่วงในแบบ (1573:3850 กลางที่ 1248, 502) ทำเป็นสัดส่วน 16:10 widget หล่นลงมาประกอบเป็นหน้า
+ * แล้วเลื่อนต่อไป Coding: จอไม่เลื่อนหายไปกับหน้า แต่ลอยมากลางพาเนล ขยายขึ้น และแยกชั้นเชิงเทคนิค (ดู DesktopUI)
+ */
+const DESK_AT = { x: 1248.33, y: 502.5 }
+const DESK_Q = new THREE.Quaternion()
+const FLY_TO = new THREE.Vector3()
+const SHIP_TO = new THREE.Vector3()
+const FLY_FROM = new THREE.Vector3()
+const FLY_S = new THREE.Matrix4()
+const DESK_AXIS = new THREE.Vector3()
+const DESK_V = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]
+const CODING_PAGE = 2
+/**
+ * บล็อกออกแบบ (ลำดับใน UXUI) บินเข้าจอไปเป็น widget ลำดับไหน (ดู DesktopUI) — design system กลายเป็นหน้า UI
+ * การ์ดน้ำเงิน → Sidebar · การ์ด UX/UI → NavBar · แคปซูล (+ปุ่มของมัน) → Button · ไทล์ขาว → StatCard · ไทล์เขียว → Chart
+ */
+const BLOCK_TO_WIDGET: Record<number, number> = { 0: 1, 1: 0, 2: 7, 3: 7, 4: 2, 5: 5 }
+const WIDGET_FROM_BLOCK: Record<number, number> = { 1: 0, 0: 1, 7: 2, 2: 4, 5: 5 }
+/** ลำดับที่บินเข้า (เร็ว → ช้า) */
+const FLY_ORDER: Record<number, number> = { 1: 0, 0: 1, 4: 2, 5: 3, 2: 4, 3: 4 }
+/** จังหวะบนแกนหน้า: บล็อกบินเข้าจอ (1.0 → 1.45) · จอลอยมากลางแล้วแยกชั้น (1.5 → 2) */
+const FLY = { from: 1.0, each: 0.06, dur: 0.3 }
+const BUILD = { from: CODING_PAGE - 0.5, dur: 0.5 }
+const flyOf = (block: number, page: number) => clamp01((page - FLY.from - FLY_ORDER[block] * FLY.each) / FLY.dur)
+const DEVICE = { x: 0.5, y: 0.5, size: 0.86 / 1000 }
 /** กรอบของแบบ — วางฉากด้วยสเกลคลุมจอ (cover) จัดกลาง */
 export const FW = 1280
 const FH = 832
@@ -40,7 +85,6 @@ type Shape = { x: number; y: number; w: number; h: number; r: number; c: string;
  */
 const UXUI: Shape[] = [
   { x: 116.735, y: 471.037, w: 529.255, h: 311.669, r: 40, c: '#3b6fe3', depth: 22, base: 0 }, // การ์ดซ้าย น้ำเงิน (1573:3831)
-  { x: 1248.33, y: 502.5, w: 796.095, h: 673.865, r: 40, c: '#c592f2', depth: 22, base: 0 }, // แผงขวา ม่วง (1573:3850)
   { x: 288.33, y: 771.18, w: 1034.175, h: 288.079, r: 40, c: '#e8ebf3', depth: 22, base: 22, card: true }, // การ์ด UX/UI (1573:3844)
   { x: 628.27, y: 293.4, w: 309.471, h: 149.586, r: 74.79, c: '#c592f2', depth: 30, base: 0 }, // แคปซูลค้นหา (1573:3852)
   { x: 557.19, y: 327.41, w: 98.523, h: 98.523, r: 49.26, c: '#f5f3fb', depth: 14, base: 30 }, // ปุ่มในแคปซูล (1573:3859)
@@ -73,10 +117,12 @@ const FONT_UI = '/fonts/dm-sans-light.json'
  */
 export function panelLayout(W: number, H: number) {
   const sh = W / FW
-  const w = Math.min(W * 0.66, 1080)
-  const h = H * 0.78
-  const cx = W / 2
-  const cy = H * 0.54
+  /* เกือบเต็มจอ — เว้นขอบรอบตัวพอให้เห็นว่าเป็นหน้าต่างแก้วลอยบนฟ้า (ขอบซ้ายเผื่อแถบจุดนำทางของหน้า) */
+  const m = Math.max(16, 24 * sh)
+  const w = W - m * 2 - 44 * sh
+  const h = H - m * 2
+  const cx = W / 2 + 22 * sh
+  const cy = H / 2
   const left = cx - w / 2
   const top = cy - h / 2
   const head = 46 * sh
@@ -102,10 +148,11 @@ export function panelLayout(W: number, H: number) {
 export const panelBox = { on: false, x: 0, y: 0, w: 1, h: 1 }
 
 /** ท่าของเฟรมนี้ — stage = ชิ้นผุดขึ้น · slide = ข้ามหน้า (0..1) · lift = เลื่อนขึ้นไปพร้อมท้าย section (px) */
-export type ServicePose = { stage: number; slide: number; lift: number }
+export type ServicePose = { stage: number; slide: number; lift: number; ship: number }
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v)
 const outBack = (x: number) => 1 + 2.2 * (x - 1) ** 3 + 1.2 * (x - 1) ** 2
+const inOutE = (x: number) => (x < 0.5 ? 4 * x ** 3 : 1 - (-2 * x + 2) ** 3 / 2)
 
 function roundRect(w: number, h: number, r: number) {
   const rr = Math.min(r, w / 2, h / 2)
@@ -239,6 +286,20 @@ export function ServiceScene({ pose }: { pose: React.RefObject<ServicePose> }) {
   )
 
   const root = useRef<THREE.Group>(null)
+  const device = useRef<THREE.Group>(null)
+  const desk = useRef<THREE.Group>(null)
+  const deskApi = useMemo<DesktopApi>(() => ({ current: null }), [])
+  const deskBasis = useMemo(() => new THREE.Matrix4(), [])
+  const idea = useRef<THREE.Group>(null)
+  const ideaParts = useMemo(() => {
+    const ball = new THREE.SphereGeometry(1, 32, 20)
+    const cloud = new THREE.MeshStandardMaterial({ color: new THREE.Color('#f4f6ff').multiplyScalar(0.62), roughness: 0.5, envMapIntensity: 0.2 })
+    const bulb = new THREE.MeshBasicMaterial({ color: '#ffd23f', toneMapped: false })
+    const base = new THREE.MeshStandardMaterial({ color: new THREE.Color('#9aa3b5').multiplyScalar(0.62), roughness: 0.5 })
+    const neck = new THREE.CylinderGeometry(0.12, 0.12, 0.2, 20)
+    return { ball, cloud, bulb, base, neck }
+  }, [])
+  useEffect(() => () => Object.values(ideaParts).forEach((x) => x.dispose()), [ideaParts])
   const groups = useRef<(THREE.Group | null)[]>([])
   const bodies = useRef<(THREE.Group | null)[]>([])
   const basis = useMemo(() => new THREE.Matrix4(), [])
@@ -257,11 +318,126 @@ export function ServiceScene({ pose }: { pose: React.RefObject<ServicePose> }) {
       rt.visible = false
       return
     }
-    const s = Math.max(cb.w / FW, cb.h / FH)
-    const ox = cb.x + (cb.w - FW * s) / 2 - p.slide * (SERVICES.length - 1) * cb.w
-    const oy = cb.y + (cb.h - FH * s) / 2
+    /*
+     * ย่อฉากให้อยู่ในพาเนลครบทุกชิ้น (contain) — กรอบของชิ้นทั้งหมดบนจอในแบบ (รวมส่วนที่ล้นกรอบ 1280×832
+     * ของแบบเอง) ไม่ใช่คลุมเต็มแล้วตัดขอบ
+     */
+    const s = Math.min(cb.w / (SCENE_BB.x1 - SCENE_BB.x0), cb.h / (SCENE_BB.y1 - SCENE_BB.y0))
+    const page = p.slide * (SERVICES.length - 1)
+    const ox = cb.x + (cb.w - (SCENE_BB.x1 - SCENE_BB.x0) * s) / 2 - SCENE_BB.x0 * s + (UXUI_PAGE - page) * cb.w
+    const oy = cb.y + (cb.h - (SCENE_BB.y1 - SCENE_BB.y0) * s) / 2 - SCENE_BB.y0 * s
+
+    /* ฟองไอเดีย: อยู่ข้างหัวในหน้าแนะนำตัว เลื่อนไป UX/UI แล้วลอยไปแตกเป็นบล็อกออกแบบ */
+    const id = idea.current
+    if (id) {
+      const kin = clamp01(p.stage / 0.6)
+      const go = inOutE(clamp01(page / 0.6))
+      const hx = cb.x + cb.w * IDEA.x - page * cb.w
+      const hy = cb.y + cb.h * IDEA.y
+      /* ลอยไปหากลุ่มบล็อกออกแบบ (กลางกลุ่มราว 330, 560 ในแบบ) ซึ่งกำลังเลื่อนเข้ามาจากขวา — ไปแตกตรงนั้น */
+      const tx = ox + 330 * s
+      const ty = oy + 560 * s
+      const pop = 1 - clamp01((page - 0.4) / 0.25)
+      id.visible = kin > 0 && pop > 0.01
+      id.position.set(hx + (tx - hx) * go - W / 2, H / 2 - (hy + (ty - hy) * go), 650)
+      id.scale.setScalar(Math.max(1e-3, cb.h * IDEA.size * outBack(kin) * (pop < 1 ? pop * (1 + 0.3 * Math.sin(Math.PI * pop)) : 1)))
+      id.traverse((o) => {
+        const m = o as THREE.Mesh
+        if (m.isMesh && m.onBeforeRender !== clipOn) {
+          m.onBeforeRender = clipOn
+          m.onAfterRender = clipOff
+        }
+      })
+    }
+    /* ถาดอุปกรณ์: โผล่ตอนส่งมอบ (ship) กลางล่างพาเนล — จอเดสก์ท็อปย่อลงไปเสียบปุ่มแท็บเล็ต */
+    const dv = device.current
+    const ship = p.ship
+    if (dv) {
+      /* โผล่หลังชั้นยุบกลับเสร็จ (ship 0.35) ไม่ซ้อนกับภาพแยกชั้น */
+      const k = clamp01((ship - 0.3) / 0.3)
+      dv.visible = DEVICE_ON && k > 0
+      const dx = cb.x + cb.w * SHIP_AT.x
+      const dy = cb.y + cb.h * SHIP_AT.y
+      dv.position.set(dx - W / 2, H / 2 - dy, 600)
+      dv.scale.setScalar(Math.max(1e-3, cb.h * DEVICE.size * outBack(k)))
+      dv.updateMatrix()
+      dv.traverse((o) => {
+        const m = o as THREE.Mesh
+        if (m.isMesh && m.onBeforeRender !== clipOn) {
+          m.onBeforeRender = clipOn
+          m.onAfterRender = clipOff
+        }
+      })
+    }
     /* ฐานของระนาบที่สเกลจอนี้ — ทุกชิ้นใช้ชุดเดียวกัน */
     basis.makeBasis(AX.clone().multiplyScalar(s), AY.clone().multiplyScalar(s), AN.clone().multiplyScalar(s))
+    /*
+     * จอเดสก์ท็อป: เลื่อนเข้ามาพร้อมหน้า UX/UI แต่ไม่เลื่อนออก — พอเลื่อนต่อไป Coding มันลอยมากลางพาเนล
+     * ขยายขึ้น แล้วแยกชั้น (ฉากอื่นของ UX/UI เลื่อนออกไปตามปกติ) เรื่องจึงต่อเนื่องจากออกแบบไปเขียนโค้ด
+     */
+    const dk = desk.current
+    if (dk) {
+      const pin = Math.max(0, UXUI_PAGE - page) * cb.w
+      const sx0 = ox - (UXUI_PAGE - page) * cb.w + pin + DESK_AT.x * s
+      const sy0 = oy + DESK_AT.y * s
+      const e = inOutE(clamp01((page - BUILD.from) / BUILD.dur))
+      const fit = (cb.w * 0.6) / (DESK.w * s)
+      const sd = s * (1 + (fit - 1) * e)
+      const sx = sx0 + (cb.x + cb.w * 0.5 - sx0) * e
+      const sy = sy0 + (cb.y + cb.h * 0.56 - sy0) * e
+      const pl = unproject(DESK_AT.x - FW / 2, DESK_AT.y - FH / 2)
+      const z = s * (AX.z * pl.x - AY.z * pl.y) * (1 - e)
+      /*
+       * ตอนแยกชั้น เอนจอไปด้านหลังมากขึ้น (หมุนรอบแกน x ของจอ) — ระนาบเดิมหันเข้าหากล้องเกือบตรง ชั้นที่ยก
+       * ตามแกนตั้งฉากจึงพุ่งเข้าหากล้องจนมองไม่เห็นว่าแยก เอนลงแล้วชั้นเรียงซ้อนให้เห็นแบบภาพแยกชิ้น
+       */
+      DESK_Q.setFromAxisAngle(DESK_AXIS.copy(AX).normalize(), -0.85 * e)
+      /*
+       * ส่งมอบ: ชั้นยุบกลับเป็นหน้าเดียว (ดู collapse ข้างล่าง) แล้วจอย่อลงไปเสียบปุ่มแท็บเล็ตบนถาดอุปกรณ์
+       * ขนาดปลายทาง = กว้างเท่าปุ่ม (236 ในหน่วยของถาด) · หายตอนถึง
+       */
+      const fly = inOutE(clamp01((ship - 0.5) / 0.4))
+      let sdx = sd
+      let px = sx - W / 2
+      let py = H / 2 - sy
+      let pz = z + 600
+      if (fly > 0 && dv) {
+        SHIP_TO.copy(TABLET_KEY).applyMatrix4(dv.matrix)
+        const sEnd = (236 * dv.scale.x) / DESK.w
+        sdx = sd + (sEnd - sd) * fly
+        px += (SHIP_TO.x - px) * fly
+        py += (SHIP_TO.y - py) * fly
+        pz += (SHIP_TO.z - pz) * fly
+      }
+      deskBasis.makeBasis(
+        DESK_V[0].copy(AX).applyQuaternion(DESK_Q).multiplyScalar(sdx),
+        DESK_V[1].copy(AY).applyQuaternion(DESK_Q).multiplyScalar(sdx),
+        DESK_V[2].copy(AN).applyQuaternion(DESK_Q).multiplyScalar(sdx),
+      )
+      dk.matrix.copy(deskBasis).setPosition(px, py, pz)
+      dk.matrixWorldNeedsUpdate = true
+      const k = clamp01((clamp01((page - (UXUI_PAGE - 0.7)) / 0.55) - 0.06) / 0.4)
+      dk.visible = k > 0 && fly < 0.97
+      dk.children[0].position.z = (1 - outBack(k)) * 160
+      /* widget ที่มาจากบล็อกออกแบบ ขยายขึ้นตอนบล็อกบินถึง · ที่เหลือหล่นลงมาเติมหลังบล็อกบินเข้าครบ */
+      deskApi.current?.(
+        (i) => {
+          const blk = WIDGET_FROM_BLOCK[i]
+          if (blk !== undefined) return clamp01((flyOf(blk, page) - 0.75) / 0.25)
+          return clamp01((page - (FLY.from + 0.3) - (i - 3) * 0.04) / 0.2)
+        },
+        /* ส่งมอบ: ชั้นยุบกลับก่อนจอย่อลงไปเสียบ */
+        clamp01((page - BUILD.from) / BUILD.dur) * (1 - inOutE(clamp01(ship / 0.35))),
+        (i) => WIDGET_FROM_BLOCK[i] !== undefined,
+      )
+      dk.traverse((o) => {
+        const m = o as THREE.Mesh & THREE.Line
+        if ((m.isMesh || m.isLine) && m.onBeforeRender !== clipOn) {
+          m.onBeforeRender = clipOn
+          m.onAfterRender = clipOff
+        }
+      })
+    }
     UXUI.forEach((sh, i) => {
       const g = groups.current[i]
       if (!g) return
@@ -270,10 +446,24 @@ export function ServiceScene({ pose }: { pose: React.RefObject<ServicePose> }) {
       const sy = oy + sh.y * s
       const pl = unproject(sh.x - FW / 2, sh.y - FH / 2)
       const z = s * (AX.z * pl.x - AY.z * pl.y)
-      g.matrix.copy(basis).setPosition(sx - W / 2, H / 2 - sy, z + 180)
+      g.matrix.copy(basis).setPosition(sx - W / 2, H / 2 - sy, z + 600)
+      /* บินเข้าจอไปเป็น widget: เคลื่อนไปจุดของ widget บนจอ ย่อลง แล้วหายตอนถึง (widget ขยายขึ้นแทนที่) */
+      const wi = BLOCK_TO_WIDGET[i]
+      const fly = wi !== undefined && dk ? flyOf(i, page) : 0
+      if (fly > 0 && dk) {
+        const at = widgetAt(wi)
+        FLY_TO.set(at.x, at.y, at.z).applyMatrix4(dk.matrix)
+        FLY_FROM.setFromMatrixPosition(g.matrix)
+        const f = inOutE(fly)
+        /* โค้งขึ้นกลางทาง (ตามแกนตั้งฉากของระนาบ) — บิน ไม่ใช่ไถล */
+        FLY_FROM.lerp(FLY_TO, f).addScaledVector(AN, Math.sin(Math.PI * f) * 120 * s)
+        g.matrix.copy(basis).multiply(FLY_S.makeScale(1 - 0.6 * f, 1 - 0.6 * f, 1 - 0.6 * f)).setPosition(FLY_FROM)
+      }
+      g.visible = fly < 0.97
       g.matrixWorldNeedsUpdate = true
       /* ผุดขึ้นทีละชิ้น: หล่นลงตามแกนตั้งฉากของระนาบ */
-      const k = clamp01((p.stage - i * 0.06) / 0.4)
+      /* ผุดขึ้นตอนเลื่อนเข้าหน้านี้ (ไม่ใช่ตอนพาเนลเปิด — ตอนนั้นยังอยู่หน้าแนะนำตัว) */
+      const k = clamp01((clamp01((page - (UXUI_PAGE - 0.7)) / 0.55) - i * 0.06) / 0.4)
       const b = bodies.current[i]
       if (b) {
         b.visible = k > 0
@@ -284,6 +474,32 @@ export function ServiceScene({ pose }: { pose: React.RefObject<ServicePose> }) {
 
   return (
     <group ref={root} visible={false}>
+      <group ref={idea} visible={false}>
+        {/* ฟองความคิด: เม็ดเล็กสองเม็ดไล่จากหัว + ก้อนเมฆจากลูกกลมซ้อน + หลอดไฟเหลืองตรงกลาง */}
+        <mesh geometry={ideaParts.ball} material={ideaParts.cloud} position={[1.25, -0.95, 0]} scale={0.1} />
+        <mesh geometry={ideaParts.ball} material={ideaParts.cloud} position={[0.95, -0.65, 0]} scale={0.16} />
+        {[
+          [0, 0, 0.42],
+          [-0.38, -0.05, 0.3],
+          [0.38, -0.06, 0.32],
+          [-0.18, 0.24, 0.3],
+          [0.22, 0.22, 0.28],
+        ].map(([x, y, r], i) => (
+          <mesh key={i} geometry={ideaParts.ball} material={ideaParts.cloud} position={[x, y, -0.2]} scale={r} />
+        ))}
+        <group position={[0, 0.02, 0.32]}>
+          <mesh geometry={ideaParts.ball} material={ideaParts.bulb} position={[0, 0.06, 0]} scale={0.16} />
+          <mesh geometry={ideaParts.neck} material={ideaParts.base} position={[0, -0.15, 0]} />
+        </group>
+      </group>
+      <group ref={device} visible={false}>
+        <DeviceScene />
+      </group>
+      <group ref={desk} matrixAutoUpdate={false} visible={false}>
+        <group>
+          <DesktopUI api={deskApi} />
+        </group>
+      </group>
       {parts.items.map(({ sh, geo, mat }, i) => (
         <group
           key={i}

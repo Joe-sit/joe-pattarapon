@@ -9,7 +9,8 @@ import penNibSvg from '@/assets/icons/pen-nib.svg?raw'
 import { useCursorStop } from '@/cursorguide/useCursorStop'
 import { BEAT, SKY_LEAVE, at } from '@/sections/skystory/beats'
 import { headOf, liquidGeo, skillBlobs, sproutShift } from './LiquidBento'
-import { FW, SERVICES, ServiceScene, panelBox, panelLayout } from './ServiceTrack'
+import { FW, SERVICES, panelBox, panelLayout } from './ServiceTrack'
+import { AboutFigure, aboutBox } from './AboutFigure'
 import { makeLiquidGlass } from './liquidGlass'
 import { useTuner } from '@/newhero/tuner'
 import { StageLight } from './Headline3D'
@@ -40,7 +41,7 @@ export const NEXT_ID = 'what-i-do-windows'
  * จังหวะของฟอง: ทักทาย → บอกว่าจะพาไปดูอะไร → เป็นหัวพาเนล = ชื่อบริการของหน้าที่เปิดอยู่ (UX/UI, …)
  * เลื่อนข้ามหน้า หัวพาเนลลบชื่อเดิมแล้วพิมพ์ชื่อบริการถัดไป
  */
-const LINES = ["Hello, I'm Joe", 'Here is what I do', ...SERVICES] as const
+const LINES = ["Hello, I'm Joe", 'Here is what I do', 'About me', ...SERVICES] as const
 /**
  * ข้อความในฟองน้ำหนักปกติ — Momo Trust Sans Regular (ครอบครัวเดียวกับ Momo Trust Display ของหัวเรื่อง
  * ซึ่งมีน้ำหนักเดียวคือหนา) แปลงจากไฟล์ static ของ Google Fonts — ไม่ใช่ไฟล์ variable: ตัวนั้นเส้นขอบตัวอักษร
@@ -77,22 +78,26 @@ const inOut01 = (x: number) => {
 }
 
 /** ท่าของเฟรมนี้ — คิดจากการเลื่อน อ่านในลูปเฟรม ไม่ผ่าน React */
-type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number }
+type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; xray: number; stack: number; back: number; hand: number; lift: number; rise: number; white: number }
 
 /**
- * หัวพาเนลตอนนี้ = ชื่อบริการของหน้าที่ใกล้ที่สุด พิมพ์เต็มตอนอยู่กลางหน้า ลบหมดตอนเลื่อนถึงครึ่งทางไปหน้าถัดไป
- * แล้วพิมพ์ชื่อถัดไป · ครั้งแรกพิมพ์ระหว่างฟองพองเป็นพาเนล (up)
+ * หัวพาเนล: "About me" ระหว่างเป็นหัวตัวละคร/x-ray → พอชั้นแยก ลบแล้วพิมพ์ชื่อชั้นที่ไฮไลต์ (UX/UI, …)
+ * เลื่อนข้ามชั้น ลบชื่อเดิมตอนถึงครึ่งทางแล้วพิมพ์ชื่อถัดไป · ครั้งแรกพิมพ์ระหว่างฟองพองเป็นพาเนล (up)
  */
-function serviceTitle(up: number, slide: number) {
+function serviceTitle(up: number, stack: number, slide: number, back: number) {
+  const typed = clamp01((up - 0.22) / 0.4)
+  /* ตอนจบหัวประกอบกลับ = About me อีกครั้ง */
+  if (back > 0.5) return { line: 2, chars: Math.round(clamp01((back - 0.5) * 3) * LINES[2].length) }
+  if (stack < 0.5) return { line: 2, chars: Math.round(typed * clamp01((0.5 - stack) * 3) * LINES[2].length) }
   const page = slide * (SERVICES.length - 1)
   const n = Math.round(page)
-  const near = clamp01((1 - 2 * Math.abs(page - n)) * 1.6)
-  const line = 2 + n
-  return { line, chars: Math.round(clamp01((up - 0.22) / 0.4) * near * LINES[line].length) }
+  const near = clamp01((1 - 2 * Math.abs(page - n)) * 1.6) * clamp01((stack - 0.5) * 3) * clamp01((0.5 - back) * 3)
+  const line = 3 + n
+  return { line, chars: Math.round(near * LINES[line].length) }
 }
 
 function readPose(): Pose {
-  const off: Pose = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0 }
+  const off: Pose = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, xray: 0, stack: 0, back: 0, hand: 0, lift: 0, rise: 0, white: 0 }
   const vw = window.innerWidth
   const vh = window.innerHeight || 1
   const el = document.querySelector<HTMLElement>('.v3-hero-bubble')
@@ -150,7 +155,7 @@ function readPose(): Pose {
       ? { line: 0, chars: Math.round(at(sv2, BEAT.greet) * (1 - at(sv2, BEAT.erase)) * LINES[0].length) }
       : up < 0.2
         ? { line: 1, chars: Math.round(at(sv2, BEAT.line2) * (1 - up / 0.2) * LINES[1].length) }
-        : serviceTitle(up, smooth(at(sv2, BEAT.slide)))),
+        : serviceTitle(up, smooth(at(sv2, BEAT.stack)), smooth(at(sv2, BEAT.slide)), smooth(at(sv2, BEAT.back)))),
     /* พิมพ์จบแล้ว ปุ่มกลมหนึ่งปุ่มต่อสกิลงอกออกมาจากท้ายฟอง (ท่า Spotlight) */
     /* ลบคำทักทายเสร็จ ฟองคำพูดกลายเป็นช่องค้นหาแบบ Spotlight (หางหด ทรงแคปซูล แว่นขยาย เคอร์เซอร์) */
     search: smooth(at(sv2, BEAT.search)),
@@ -159,6 +164,9 @@ function readPose(): Pose {
     paint: smooth((up - 0.6) / 0.4),
     stage: at(sv2, BEAT.stage),
     slide: smooth(at(sv2, BEAT.slide)),
+    xray: smooth(at(sv2, BEAT.xray)),
+    stack: smooth(at(sv2, BEAT.stack)),
+    back: smooth(at(sv2, BEAT.back)),
     hand,
     /* แถบกับรางติดท้าย section — จอถัดไปเลื่อนขึ้นมา ทั้งชุดก็เลื่อนขึ้นไปด้วย */
     lift,
@@ -255,20 +263,34 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
     return { ring, handle, caret: caretG }
   }, [])
   useEffect(() => () => Object.values(searchGeo).forEach((g) => g.dispose()), [searchGeo])
-  const iconGeo = useMemo(() => {
+  /**
+   * ไอคอนต่อบริการ (ลำดับเดียวกับ SERVICES) ขนาดหนึ่งหน่วย จุดศูนย์กลางที่ 0:
+   * แนะนำตัว = คน (หัว + ไหล่) · UX/UI = ปากกาออกแบบ (SVG) · ตัวที่สามยังไม่มีไอคอน
+   */
+  const iconGeos = useMemo(() => {
+    const person = (() => {
+      const head = new THREE.Shape()
+      head.absarc(0, 0.2, 0.19, 0, Math.PI * 2, false)
+      const body = new THREE.Shape()
+      body.moveTo(-0.36, -0.46)
+      body.absarc(0, -0.46, 0.36, Math.PI, 0, true)
+      body.lineTo(-0.36, -0.46)
+      return new THREE.ShapeGeometry([head, body], 24)
+    })()
     const data = new SVGLoader().parse(penNibSvg)
-    const g = new THREE.ShapeGeometry(data.paths.flatMap((p) => SVGLoader.createShapes(p)), 8)
-    g.translate(-16, -16, 0)
-    g.scale(1 / 32, -1 / 32, 1)
-    return g
+    const pen = new THREE.ShapeGeometry(data.paths.flatMap((p) => SVGLoader.createShapes(p)), 8)
+    pen.translate(-16, -16, 0)
+    pen.scale(1 / 32, -1 / 32, 1)
+    return [person, pen, null] as const
   }, [])
+  const iconGeo = iconGeos[0]
   const iconMat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#ffffff', side: THREE.DoubleSide, transparent: true, toneMapped: false }), [])
   useEffect(
     () => () => {
-      iconGeo.dispose()
+      iconGeos.forEach((g) => g?.dispose())
       iconMat.dispose()
     },
-    [iconGeo, iconMat],
+    [iconGeos, iconMat],
   )
   const dots = useRef<(THREE.Mesh | null)[]>([])
   /** ความกว้างฟองตอนนี้ (หน่วย viewBox) — ไล่ตามความยาวข้อความ ไม่กระโดดทีละตัว */
@@ -347,14 +369,27 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
       const c0 = liquid.blobs[0]
       if (ic) {
         /* ไอคอนออกจากวงกลมแรก ไปอยู่หน้าข้อความบนหัวพาเนล (ตำแหน่งไอคอนแอปในหน้าต่าง Spotlight) สูง 26 */
-        ic.visible = !!c0
+        /* หัวพาเนลแสดงไอคอนของหน้าที่ใกล้ที่สุด — สลับตอนข้ามครึ่งทาง ย่อหายแล้วขยายกลับคู่กับชื่อที่ลบ/พิมพ์ใหม่ */
+        const page = p.slide * (SERVICES.length - 1)
+        /* About me = คน · ชั้น UX/UI = ปากกา · ชั้นอื่นยังไม่มีไอคอน — สลับคู่กับชื่อที่ลบ/พิมพ์ใหม่ */
+        /* ไอคอนคนของ About me ขยายลงไปเป็นหัวตัวละคร (ดู AboutFigure) — บนหัวพาเนลจึงหายไปตอนนั้น */
+        const about = p.head <= 0.5 || p.stack < 0.5 || p.back > 0.5
+        const n = about ? 0 : 1 + Math.round(page)
+        const near = about
+          ? p.head <= 0.5
+            ? 1
+            : 1 - clamp01(p.stage / 0.25)
+          : clamp01((1 - 2 * Math.abs(page - Math.round(page))) * 1.6) * clamp01((p.stack - 0.5) * 3) * clamp01((0.5 - p.back) * 3)
+        const gi = iconGeos[n]
+        if (gi && ic.geometry !== gi) ic.geometry = gi
+        ic.visible = !!c0 && !!gi && near > 0.01
         if (c0) {
           const h = inOut01(p.head)
           const pn = panelNow
           const hx = pn ? pn.x - pn.hw + (pl.iconX - pl.left) / s : c0.x
           const hy = pn ? pn.y + pn.hh - (pl.headY - pl.top) / s : c0.y
           ic.position.set(lerp(c0.x, hx, h), lerp(c0.y, hy, h), t.bbThick / 2 + 1.5)
-          ic.scale.setScalar(Math.max(1e-3, lerp(c0.hh * 1.05, (26 * shw) / s, h)))
+          ic.scale.setScalar(Math.max(1e-3, lerp(c0.hh * 1.05, (26 * shw) / s, h) * near))
         }
       }
       /* ฟองยุบหายเข้าไปในพาเนลที่พองจากมัน (หน่วย viewBox — 55 หายหมด) — เริ่มยุบหลังพาเนลพองพ้นตัวฟองแล้ว */
@@ -487,8 +522,10 @@ export function BubbleTraveler() {
   const park = { x: 0.9, y: 1.12 }
   useCursorStop(null, { id: 'bubble-park-in', at: park, keyVh: top === undefined ? undefined : top + 0.5, size: 54, tilt: -14 })
   useCursorStop(null, { id: 'bubble-park-after', at: park, keyVh: top === undefined ? undefined : top + BEAT.slide[0] + BEAT.slide[1] + 0.5, size: 54, tilt: -14 })
-  const pose = useRef<Pose>({ on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0 })
+  const pose = useRef<Pose>({ on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, xray: 0, stack: 0, back: 0, hand: 0, lift: 0, rise: 0, white: 0 })
   const [on, setOn] = useState(false)
+  /** แคนวาสตัวละครของหน้าแนะนำตัวทำงานเฉพาะช่วงนั้น (ดู AboutFigure) */
+  const [aboutOn, setAboutOn] = useState(false)
   const wake = useRef<() => void>(() => {})
 
   /* อ่านท่าทุกเฟรมที่มีการเลื่อน/ปรับขนาด — setState เฉพาะตอนเปิด/ปิดชั้น ไม่ใช่ทุกเฟรม */
@@ -496,6 +533,7 @@ export function BubbleTraveler() {
     let raf = 0
     let was = false
     let last = ''
+    let wasAbout = false
     const read = () => {
       raf = 0
       const p = readPose()
@@ -503,6 +541,30 @@ export function BubbleTraveler() {
       if (p.on !== was) {
         was = p.on
         setOn(was)
+      }
+      /* เรื่องในพาเนล (หัว → x-ray → ชั้นสกิล) — แคนวาสของตัวเอง กรอบ = เนื้อหาของพาเนล (ดู AboutFigure) */
+      const ab = p.on && p.stage > 0
+      {
+        const pl = panelLayout(window.innerWidth, window.innerHeight)
+        const b = aboutBox
+        b.x = pl.content.x
+        b.y = pl.content.y + p.lift
+        b.w = pl.content.w
+        b.h = pl.content.h
+        b.k = clamp01(p.stage / 0.5)
+        b.xray = p.xray
+        b.stack = p.stack
+        b.page = p.slide * (SERVICES.length - 1)
+        b.back = p.back
+        /* ไอคอนบนหัวพาเนล (นับจากกรอบเนื้อหา) — หัวตัวละครเริ่มจากตรงนั้น */
+        b.iconX = pl.iconX - pl.content.x
+        b.iconY = pl.headY - pl.content.y
+        b.iconH = (26 * window.innerWidth) / FW
+        b.show = ab
+      }
+      if (ab !== wasAbout) {
+        wasAbout = ab
+        setAboutOn(ab)
       }
       /* เปลี่ยนจริงค่อยวาด — ตอนนิ่งในหัวเรื่องไม่วาดซ้ำ */
       const sig = `${p.on}|${p.x.toFixed(1)}|${p.y.toFixed(1)}|${p.h.toFixed(1)}|${p.sv.toFixed(4)}`
@@ -538,7 +600,8 @@ export function BubbleTraveler() {
         frameloop={on ? 'demand' : 'never'}
         dpr={[1, 1.75]}
         orthographic
-        camera={{ position: [0, 0, 400], zoom: 1, near: 1, far: 1200 }}
+        /* กล้องออร์โธถอยไกล (ไม่เปลี่ยนภาพ) — ฉากบริการ 3D ในพาเนลวางบนระนาบเอียง ลึกหลายร้อยพิกเซล ต้องการช่วงลึกกว้าง */
+        camera={{ position: [0, 0, 2000], zoom: 1, near: 1, far: 4000 }}
         gl={{ antialias: true, alpha: true }}
       >
         <ambientLight intensity={1.35} />
@@ -547,10 +610,10 @@ export function BubbleTraveler() {
         <StageLight gain={t.bbGlow} />
         <Suspense fallback={null}>
           <Bubble pose={pose} wake={wake} />
-          {/* ฉากบริการ 3D — แคนวาสเดียวกับฟอง วางหลังฟองในแกนลึก */}
-          <ServiceScene pose={pose} />
         </Suspense>
       </Canvas>
+      {/* ตัวละครหน้าแนะนำตัว — แคนวาสของตัวเอง ไฟชุดเดียวกับ hero ซ้อนบนพาเนล */}
+      <AboutFigure on={aboutOn} />
     </div>
   )
 }
