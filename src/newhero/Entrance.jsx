@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { getTuner } from './tuner'
-import { armIntro, introTime, resetIntro } from './intro'
+import { armIntro, introTime, resetIntro, ribbonStart } from './intro'
 import { portalRide } from './portalRide'
 import { entranceLift } from './entranceLift'
 import { cruiseGrow } from './scrolly'
@@ -130,7 +130,7 @@ function outQuint(t) {
  */
 function ribbonDrawn(t, part) {
   if (t.intro <= 0.5) return 1
-  const u = Math.min(1, Math.max(0, (introTime() - t.inRibAt) / Math.max(0.01, t.inRibDur)))
+  const u = Math.min(1, Math.max(0, (introTime() - ribbonStart(t)) / Math.max(0.01, t.inRibDur)))
   const e = u * u * u * (u * (u * 6 - 15) + 10)
   const f = Math.min(0.95, Math.max(0.05, t.inRibSplit))
   return part === 'portal' ? Math.min(1, e / f) : Math.min(1, Math.max(0, (e - f) / (1 - f)))

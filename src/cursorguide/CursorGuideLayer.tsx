@@ -43,6 +43,8 @@ export function CursorGuideLayer() {
   return (
     <div className="pointer-events-none fixed inset-0" style={{ zIndex: Z }} aria-hidden>
       <Canvas
+        /* แคนวาสซ้อนทับทั้งจอ — r3f ตั้ง pointer-events: auto ให้กล่องของมันเอง จะกินเมาส์ของฉากข้างใต้ (หัวตัวละคร hero เลยไม่หันตามเคอร์เซอร์) */
+        style={{ pointerEvents: 'none' }}
         orthographic
         camera={{ position: [0, 0, 100], zoom: 1, near: 0.1, far: 400 }}
         frameloop="demand"

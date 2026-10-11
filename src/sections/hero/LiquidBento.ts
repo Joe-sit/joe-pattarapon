@@ -221,7 +221,49 @@ const CASES: number[][] = [[], [3, 0], [0, 1], [3, 1], [1, 2], [], [0, 2], [3, 2
  * outline = เส้นขอบฟองจากไฟล์ (viewBox แกน y ชี้ลง) · w = ความกว้างฟอง (viewBox) · blobs/k จาก skillBlobs
  * shrink = หดตัวฟอง (หน่วย viewBox) · pill = ฟองกลายเป็นช่องค้นหาทรงแคปซูล (0..1)
  */
-export function liquidGeo(outline: Float32Array, w: number, blobs: Blob[], k: number, thick: number, round: number, shrink = 0, pill = 0) {
+/** หน้าต่างบิด (แผนผังสกิล): มุมสี่มุมในพิกัดท้องถิ่น (y ขึ้น) รัศมีมุม และน้ำหนักการหลอม k (0 = ฟอง, 1 = หน้าต่าง) */
+export type Quad = { v: Float32Array; r: number; k: number }
+/**
+ * ระยะถึงสี่เหลี่ยมบิดมุมมน: เลื่อนขอบทุกด้านเข้าในเท่ารัศมี (มุมเลื่อนตามเส้นแบ่งครึ่งมุม ระยะ r / sin(ครึ่งมุม))
+ * แล้วพองกลับด้วยระยะ — รูปไม่บวม ไม่ว่าจะกว้างแค่ไหน (เลื่อนมุมเข้าหาจุดกลางตรง ๆ ใช้ได้แค่จัตุรัส)
+ */
+const QV = new Float32Array(8)
+function sdQuad(x: number, y: number, q: Quad) {
+  /* รัศมีไม่เกินครึ่งด้านสั้นสุด — เท่าพอดี = มุมสองฝั่งยุบมาชนกัน (รูปแบนเป็นเส้น) ระยะลบรัศมีจึงเป็นแคปซูลพอดี */
+  let rr = q.r
+  for (let i = 0; i < 4; i += 1) {
+    const n = (i + 1) % 4
+    rr = Math.min(rr, Math.hypot(q.v[n * 2] - q.v[i * 2], q.v[n * 2 + 1] - q.v[i * 2 + 1]) / 2)
+  }
+  for (let i = 0; i < 4; i += 1) {
+    const cx = q.v[i * 2]
+    const cy = q.v[i * 2 + 1]
+    const p = (i + 3) % 4
+    const n = (i + 1) % 4
+    let ax = q.v[p * 2] - cx
+    let ay = q.v[p * 2 + 1] - cy
+    let bx = q.v[n * 2] - cx
+    let by = q.v[n * 2 + 1] - cy
+    const la = Math.hypot(ax, ay) || 1
+    const lb = Math.hypot(bx, by) || 1
+    ax /= la
+    ay /= la
+    bx /= lb
+    by /= lb
+    let hx = ax + bx
+    let hy = ay + by
+    const lh = Math.hypot(hx, hy) || 1
+    hx /= lh
+    hy /= lh
+    const sinHalf = Math.max(0.2, Math.abs(ax * hy - ay * hx))
+    const m = rr / sinHalf
+    QV[i * 2] = cx + hx * m
+    QV[i * 2 + 1] = cy + hy * m
+  }
+  return sdPoly(x, y, QV) - rr
+}
+
+export function liquidGeo(outline: Float32Array, w: number, blobs: Blob[], k: number, thick: number, round: number, shrink = 0, pill = 0, quad: Quad | null = null) {
   /*
    * ขอบมนตามความหนา — bevel ดันขอบออก จึงลากเส้นที่ระยะ -inset แล้วให้ bevel พองกลับเท่าทรงจริง
    * ดันออกแค่ครึ่งของความมนด้านหนา: หางฟองบาง ถ้าหดเข้าเต็มครึ่งความหนา ปลายหางจะทู่หาย
@@ -246,12 +288,21 @@ export function liquidGeo(outline: Float32Array, w: number, blobs: Blob[], k: nu
     if (pill > 0) d = lerp(d, sdRB(qx - (w + 6) / 2, qy - 49.5, (w - 6) / 2, 49.5, PILL_R), pill)
     d += shrink
     for (const b of blobs) d = smin(d, sdRB(x - b.x, b.y - y, b.hw, b.hh, b.rs), k)
+    /* ฟองแชท → หน้าต่างบิด: ผสมระยะสองทรง (morph ต่อเนื่องแบบเดียวกับช่องค้นหา ไม่ใช่สลับเมช) */
+    if (quad && quad.k > 0) d = lerp(d, sdQuad(x, y, quad), quad.k)
     return d + inset
   }
   let x0 = -w / 2
   let x1 = w / 2
   let y0 = -49.5
   let y1 = 49.5
+  if (quad && quad.k > 0)
+    for (let i = 0; i < 4; i += 1) {
+      x0 = Math.min(x0, quad.v[i * 2])
+      x1 = Math.max(x1, quad.v[i * 2])
+      y0 = Math.min(y0, quad.v[i * 2 + 1])
+      y1 = Math.max(y1, quad.v[i * 2 + 1])
+    }
   for (const b of blobs) {
     x0 = Math.min(x0, b.x - b.hw)
     x1 = Math.max(x1, b.x + b.hw)

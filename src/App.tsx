@@ -26,6 +26,8 @@ import { WhatIDoLabPage } from '@/pages/WhatIDoLabPage'
 import { HandCompose } from '@/sections/handcompose/HandCompose'
 import { GalleryPage } from '@/sections/gallery/GalleryPage'
 import { TextStoryPage } from '@/pages/TextStoryPage'
+const GlassCubesPage = lazy(() => import('@/sections/glasscubes/GlassCubesPage').then((m) => ({ default: m.GlassCubesPage })))
+const BalloonSkyPage = lazy(() => import('@/sections/balloonsky/BalloonSkyPage').then((m) => ({ default: m.BalloonSkyPage })))
 import { CompactPage } from '@/pages/CompactPage'
 // ฉาก 3D หนัก (three.js) — lazy แยก chunk ไม่ถ่วงหน้าอื่น
 const JoespressoPage = lazy(() => import('@/joespresso/Page'))
@@ -70,7 +72,7 @@ const SPLASH_ON = true
  *
  * ปิดเป็นราย route ไม่ใช่ปิด SPLASH_ON ทั้งเว็บ เพราะหน้าอื่น (/joespresso, /2026) ยังต้องมี
  */
-const SPLASH_OFF_ROUTES = ['/2026-final', '/glass', '/whatido-lab', '/hand', '/gallery', '/text-story', '/compact']
+const SPLASH_OFF_ROUTES = ['/2026-final', '/glass', '/whatido-lab', '/hand', '/gallery', '/text-story', '/compact', '/balloons', '/cubes']
 
 export function App() {
   /**
@@ -110,6 +112,10 @@ export function App() {
   /* เล่าเรื่องด้วยตัวหนังสือแบบภาพยนตร์ (ซูมข้อความ → ยิงลำแสงไปขวา) — จอเดียว ไม่ใช้ shell */
   const isTextStory = location.pathname === '/text-story'
   const isCompact = location.pathname === '/compact'
+  /* ฉากเล่าเรื่องกล้องน้อยกับบอลลูน (ภาพอ้างอิงพาสเทลฟ้าเมฆ) — จอเดียวเลื่อนเล่า ไม่ใช้ shell */
+  const isBalloons = location.pathname === '/balloons'
+  /* ฉากกล่องแก้วฟ้าประกอบตัวเล่าสกิล (ภาพอ้างอิงแบนเนอร์กล่องแก้ว) — จอเดียวเลื่อนเล่า ไม่ใช้ shell */
+  const isCubes = location.pathname === '/cubes'
   /**
    * หน้าส่องอินโทรเดี่ยว ๆ (dev เท่านั้น)
    *
@@ -333,6 +339,14 @@ export function App() {
         <TextStoryPage />
       ) : isCompact ? (
         <CompactPage />
+      ) : isCubes ? (
+        <Suspense fallback={null}>
+          <GlassCubesPage />
+        </Suspense>
+      ) : isBalloons ? (
+        <Suspense fallback={null}>
+          <BalloonSkyPage />
+        </Suspense>
       ) : isGallery ? (
         <GalleryPage />
       ) : isNewHero ? (

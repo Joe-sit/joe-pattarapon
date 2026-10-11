@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { startIntro } from '@/joespresso/intro'
-import { holdIntro, introSkip, releaseIntro } from '@/newhero/intro'
+import { holdIntro, introGate, introSkip, releaseIntro } from '@/newhero/intro'
 import { panelScreen } from '@/newhero/panelScreen'
 import { useNewHeroReady } from '@/newhero/ready'
 import { setIntroDone } from '@/stores/intro'
@@ -296,11 +296,13 @@ export function Final2026Gate() {
      * (ดูข้างล่าง) ส่วนสิ่งที่ทำให้ "เห็นการ fade จาก loading เป็น portal" ไม่ใช่เรื่องนี้
      * มันคือพื้นที่จางระหว่างทาง + ผืนลายที่จางสลับกับบานจริง ซึ่งถอดออกแล้วทั้งคู่
      */
+    /* ผ้าคลุมจางหมดตอนจบท่า — ริบบิ้นนอกหน้าต่างรอถึงตอนนั้นค่อยงอกออกจากปากบาน (ดู ribbonStart) */
+    const picked = pickPanels()
+    introGate.clearAt = picked.length ? MORPH : 0.42
     releaseIntro()
     startIntro()
     setIntroDone()
 
-    const picked = pickPanels()
     /* ไม่มีบานให้เล็ง (ปิดฉาก/โหลดพลาด) = จางออกเฉย ๆ ต้องมีทางถอย ไม่ใช่ค้างรอเป้า */
     if (!picked.length) {
       const el = veil.current

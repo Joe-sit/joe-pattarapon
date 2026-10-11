@@ -284,6 +284,12 @@
   width: calc(clamp(98px, 26.4svh, 270px) * var(--v3-hl-size, 1));
 }
 
+/* หัวเรื่องจอแรกเล็กกว่า .v3-h1 ของจออื่นนิดหนึ่ง (100 แทน 108 ที่ 1440) — เลื่อนคอลัมน์ไปชิดขวาได้โดยบรรทัด
+   "Bring your" ไม่ล้นขอบจอ */
+.v3-hero-skew .v3-h1 {
+  font-size: calc(clamp(34px, min(6.9vw, 11svh), 100px) * var(--v3-hl-size, 1));
+}
+
 .v3-hero-skew {
   transform: skewY(-5deg);
   transform-origin: 100% 50%;

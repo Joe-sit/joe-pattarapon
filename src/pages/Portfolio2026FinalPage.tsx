@@ -574,7 +574,7 @@ export function Portfolio2026FinalPage() {
             หัวเรื่องอยู่กลาง ประโยคปิดถูกดันลงไปติดล่างด้วย mt-auto */}
         <div
           ref={copyRef}
-          className="pointer-events-none relative z-10 ml-auto flex h-[100svh] w-[min(46%,560px)] flex-col pt-[clamp(72px,16svh,164px)] pr-[clamp(34px,3.4vw,54px)] pb-[clamp(24px,14svh,143px)] text-[var(--v3-hero-ink)] will-change-transform">
+          className="pointer-events-none relative z-10 ml-auto flex h-[100svh] w-[min(46%,560px)] flex-col pt-[clamp(56px,8svh,100px)] pl-[clamp(24px,5.6vw,92px)] pr-[clamp(4px,0.4vw,8px)] pb-[clamp(24px,14svh,143px)] text-[var(--v3-hero-ink)] will-change-transform">
           {/* my-auto ไม่ใช่ justify-center — ประโยคปิดถูกตรึงไว้ล่างสุด ที่ว่างที่เหลือ
               จึงต้องถูกแบ่งรอบหัวเรื่องเอง ไม่งั้นมันจะถูกดันไปชนแถบเมนูด้านบน */}
           <Headline3DField

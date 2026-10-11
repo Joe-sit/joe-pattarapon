@@ -2,7 +2,9 @@ import { Suspense, useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { RoundedBox } from '@react-three/drei'
-import { CharacterHead } from '@/sections/skystory/head'
+import { AboutBody } from './AboutBody'
+import { AboutWidgets, FOV } from './AboutWidgets'
+import { AboutTags } from './AboutTags'
 import { HeroLights } from '@/newhero/heroLights'
 import { DEFAULTS } from '@/newhero/tuner'
 import { SKILLS } from '@/sections/whatido/WhatIDo'
@@ -24,16 +26,20 @@ import { SKILLS } from '@/sections/whatido/WhatIDo'
 /** ชั้นตามสกิล บนลงล่าง (ลำดับเดียวกับ SERVICES ของพาเนล) */
 export const LAYERS = ['UX/UI', 'Coding', 'Research'] as const
 /**
+ * เรื่องของ About me: true = ตัวละครยืนกลาง พาเนลสกิลลอยโผล่รอบตัวตามการเลื่อน (ดู ./AboutPanels)
+ * false = เรื่องเดิม ตัวหมุนแตกเป็นบล็อกแล้วเรียงเป็นกองชั้นสกิล
+ */
+const PANELS = true
+/**
  * คำอธิบายใต้ชื่อชั้น — ข้อความจริงจากส่วน What I do (sections/whatido) UX/UI ใช้ของ Design
  * Research ยังเป็นข้อความชั่วคราว (Lorem — Joe เขียนเอง) จึงไม่แสดง
  */
 const DESC = [SKILLS.find((s) => s.title === 'Design')?.desc ?? '', SKILLS.find((s) => s.title === 'Coding')?.desc ?? '', '']
 
-/**
- * กรอบเนื้อหาของพาเนลบนจอ (px) + จุดไอคอนบนหัวพาเนล (นับจากกรอบ) + ท่าของเรื่อง:
- * k = ไอคอนขยายเป็นหัว · xray = หมุนแล้ว morph เป็นกองชั้น · stack = ชั้นแยกเป็นแผนผัง · page = ชั้นที่ไฮไลต์ · back = กลับเป็นหัว
- */
-export const aboutBox = { show: false, x: 0, y: 0, w: 1, h: 1, iconX: 0, iconY: 0, iconH: 26, k: 0, xray: 0, stack: 0, page: 0, back: 0 }
+export { aboutBox } from './aboutBox'
+import { ABOUT_STORY, CHAT_ITEM, DIAGRAM_MORPH, aboutBox, aboutClip, aboutCubeBox } from './aboutBox'
+import { AboutCube } from './AboutCube'
+import { AboutGlobe } from './AboutGlobe'
 
 /**
  * สีประจำสกิล (สีเดียวกับส่วน What I do) — UX/UI ใช้สีของ Design · ตอนไม่ไฮไลต์เป็นพาสเทลของสีนั้น
@@ -44,6 +50,12 @@ const PASTEL = SKILL_COLOR.map((c) => c.clone().lerp(new THREE.Color('#ffffff'),
 const SLAB = '#f4f5f7'
 const FRONT = new THREE.Euler(0.05, -0.5, 0)
 const ISO = new THREE.Euler(0.6, -Math.PI / 4, 0)
+/** ระนาบตัดของแคนวาสนี้ (ตัวละครโผล่จากฟอง) — เก็บด้านบนของเส้น */
+const CLIP = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+/** ระนาบตัดของกล่องแก้ว (ตอนโผล่จากฟอง) — แยกจากของตัวละคร */
+const CLIP_CUBE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+/** ท่าส่องกล้อง: หันหลังเฉียงไปทางขวาบน เงยนิด (เห็นไหล่กับหลังหัว แบบภาพอ้างอิง) */
+const LOOK = new THREE.Euler(-0.15, 2.75, 0)
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v)
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k
@@ -64,12 +76,14 @@ export function AboutFigure({ on }: { on: boolean }) {
   return (
     <div ref={wrap} className="absolute top-0 left-0" style={{ visibility: on ? 'visible' : 'hidden' }}>
       <Canvas
-        orthographic
+        /* แคนวาสซ้อนทับทั้งจอ — r3f ตั้ง pointer-events: auto ให้กล่องของมันเอง จะกินเมาส์ของฉากข้างใต้ (หัวตัวละคร hero เลยไม่หันตามเคอร์เซอร์) */
+        style={{ pointerEvents: 'none' }}
         frameloop={on ? 'always' : 'never'}
         /* กล้องออร์โธถอยไกล — ของขนาดหลายร้อยพิกเซล ลึกหลายร้อย ระยะใกล้/ไกลแคบจะตัด */
-        camera={{ position: [0, 0, 2000], zoom: 1, near: 1, far: 4000 }}
+        /* กล้องเพอร์สเปกทีฟ — AboutWidgets ตั้งระยะให้ระนาบ z 0 เป็นหนึ่งหน่วยต่อพิกเซล แล้วถอยออกตอนวิดเจ็ตโผล่ */
+        camera={{ fov: FOV, position: [0, 0, 2000], near: 10, far: 12000 }}
         dpr={[1, 2]}
-        gl={{ antialias: true, alpha: true, toneMappingExposure: DEFAULTS.exposure }}
+        gl={{ antialias: true, alpha: true, stencil: true, toneMappingExposure: DEFAULTS.exposure }}
         onCreated={({ gl }) => {
           gl.toneMapping = THREE.NoToneMapping
         }}
@@ -77,9 +91,13 @@ export function AboutFigure({ on }: { on: boolean }) {
         <HeroLights shadows={false} />
         <Suspense fallback={null}>
           <Story wrap={wrap} call={call} line={line} labels={labels} />
+          {PANELS && <AboutWidgets />}
+          {CHAT_ITEM === 'cube' && <AboutCube clip={CLIP_CUBE} />}
+          {CHAT_ITEM === 'globe' && <AboutGlobe />}
         </Suspense>
       </Canvas>
       {/* ป้ายด้านขวา: เส้นโยงจากมุมขวาของชั้นที่ไฮไลต์ → วงเล็บ + ชื่อชั้น + คำอธิบาย · ชั้นอื่นเป็นชื่อจาง */}
+      {PANELS && <AboutTags on={on} />}
       <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
         <path ref={line} fill="none" stroke="#ffffff" strokeWidth={1.5} strokeOpacity={0} />
       </svg>
@@ -149,7 +167,10 @@ function buildVoxels(head: THREE.Object3D, root: THREE.Object3D): Voxels | null 
     const bb = (m.geometry.boundingBox as THREE.Box3).clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld))
     const c = (m.material as THREE.MeshStandardMaterial).color.clone()
     const hex = c.getHexString()
-    parts.push({ box: bb, color: c, pri: hex === '262424' ? 3 : hex === '232224' ? 2 : 1 })
+    const pri = hex === '262424' ? 3 : hex === '232224' ? 2 : 1
+    /* ตาเป็นกล่องบาง ตารางบล็อกสุ่มไม่โดน (ตาหายตอนสลับ) — ขยายกล่องตาครึ่งบล็อกให้ติดผิวหน้าแน่ ๆ */
+    if (pri === 3) bb.expandByScalar(VOX * 0.6)
+    parts.push({ box: bb, color: c, pri })
   })
   if (!parts.length) return null
   parts.sort((a, b) => b.pri - a.pri)
@@ -170,7 +191,10 @@ function buildVoxels(head: THREE.Object3D, root: THREE.Object3D): Voxels | null 
         if (shell) cells.push({ x, y, z, c: p.color })
       }
   if (!cells.length) return null
-  /* ปลายทาง: แผ่นละ 12×12 บล็อก (บาง) + ของบนผิวตามสกิล */
+  /*
+   * ปลายทาง: แผ่นละ 12×12 บล็อก (บาง) เท่านั้น — ของบนผิวแผ่นเป็นชิ้นจริงที่เด้งออกมาหลังสลับ (ดู Story)
+   * เคยปั้นของบนผิวจากบล็อกด้วย แต่ทรงไม่ตรงกับชิ้นจริง ตอนสลับเลยกระตุก
+   */
   const slabC = new THREE.Color(SLAB)
   const dsts: { x: number; y: number; z: number; c: THREE.Color; sy: number }[] = []
   const thick = 0.1
@@ -179,10 +203,6 @@ function buildVoxels(head: THREE.Object3D, root: THREE.Object3D): Voxels | null 
     for (let a = 0; a < SLAB_CELLS; a += 1)
       for (let b = 0; b < SLAB_CELLS; b += 1)
         dsts.push({ x: (a - (SLAB_CELLS - 1) / 2) * VOX, y, z: (b - (SLAB_CELLS - 1) / 2) * VOX, c: slabC, sy: thick / VOX })
-    const top = y + thick / 2 + VOX / 2
-    if (li === 0) for (let a = 0; a < 3; a += 1) for (let b = 0; b < 3; b += 1) dsts.push({ x: (a - 1) * VOX * 3.4, y: top, z: (b - 1) * VOX * 3.4, c: PASTEL[0], sy: 1 })
-    if (li === 1) for (let r = 0; r < 5; r += 1) for (let q = 0; q < 2 + (r % 3); q += 1) dsts.push({ x: (-3 + q) * VOX, y: top, z: (r - 2) * VOX * 1.8, c: PASTEL[1], sy: 0.6 })
-    if (li === 2) for (let r = 0; r < 5; r += 1) for (let q = 0; q <= r % 3; q += 1) dsts.push({ x: (r - 2) * VOX * 1.8, y: top + q * VOX, z: VOX, c: PASTEL[2], sy: 1 })
   })
   /* จับคู่จากบนลงล่าง (ผมไปชั้นบน คางไปชั้นล่าง) ภายในระดับเดียวกันเรียงตาม x,z ให้บินใกล้ ๆ */
   const byY = <T extends { x: number; y: number; z: number }>(a: T, b: T) => b.y - a.y || a.x - b.x || a.z - b.z
@@ -229,7 +249,8 @@ function driveVoxels(mesh: THREE.InstancedMesh, v: Voxels, m: number) {
       lerp(v.src[i * 3 + 2], v.dst[i * 3 + 2], k),
     )
     VQ.setFromEuler(VE.set(arc * 1.6, arc * 2.2, 0))
-    const pop = 1 + arc * 0.35
+    /* ต้นทาง/ปลายทางบล็อกชิดกันพอดี (เรขาคณิต 0.94 บล็อก × 1/0.94) ไม่มีร่องเส้นตารางแวบตอนสลับ — ระหว่างบินพองแยกกัน */
+    const pop = 1 / 0.94 + arc * 0.3
     VS.set(pop, lerp(1, v.sy[i], k) * pop, pop)
     mesh.setMatrixAt(i, M4.compose(VP, VQ, VS))
     VC.setRGB(lerp(v.srcC[i * 3], v.dstC[i * 3], k), lerp(v.srcC[i * 3 + 1], v.dstC[i * 3 + 1], k), lerp(v.srcC[i * 3 + 2], v.dstC[i * 3 + 2], k))
@@ -257,6 +278,10 @@ function Story({
   const layers = useRef<(THREE.Group | null)[]>([])
   const corner = useRef<(THREE.Object3D | null)[]>([])
   const vox = useRef<Voxels | null>(null)
+  /** น้ำหนักโบกมือ — ตัวโผล่เต็มแล้วโบก หยุดก่อนเริ่มหมุน */
+  const wave = useRef(0)
+  /** น้ำหนักท่าส่องกล้องสองตา (ดู AboutBody) */
+  const look = useRef(0)
   const voxMesh = useRef<THREE.InstancedMesh>(null)
   const voxGeo = useMemo(() => new THREE.BoxGeometry(VOX * 0.94, VOX * 0.94, VOX * 0.94), [])
   const voxMat = useMemo(() => new THREE.MeshStandardMaterial({ roughness: 0.55 }), [])
@@ -268,7 +293,7 @@ function Story({
     [voxGeo, voxMat],
   )
 
-  useFrame(({ size, clock }) => {
+  useFrame(({ size, clock, gl }) => {
     const t = clock.elapsedTime
     const b = aboutBox
     const el = wrap.current
@@ -288,17 +313,25 @@ function Story({
     const k = inOut(b.k)
     const back = inOut(b.back)
     /* หมุน (xray beat): หัวหมุนติ้วสองรอบ แบนลงแผ่ออก แล้วกลายเป็นกองชั้น — ตอนจบเล่นย้อนกลับ */
-    const spin = inOut(b.xray) * (1 - back)
+    const spin = PANELS ? 0 : inOut(b.xray) * (1 - back)
     /* morph = หัว → กองชั้น (สลับตอนหมุนเร็วสุด กลางรอบ) */
-    const m = clamp01((spin - 0.12) / 0.76)
+    const m = clamp01((spin - 0.12) / 0.7)
+    /* ของบนผิวแผ่น (ชิ้นจริง) เด้งออกทีละชิ้นหลังบล็อกเรียงเป็นแผ่นแล้ว */
+    const grow = clamp01((spin - 0.82) / 0.18)
     /* e = ความเป็นแผนผัง (ชั้นแยก หมุน isometric) */
-    const e = inOut(b.stack) * (1 - back)
+    const e = PANELS ? 0 : inOut(b.stack) * (1 - back)
 
     /* ทั้งกลุ่ม: จากไอคอนบนหัวพาเนล → กลางเรื่อง (38% ของความกว้าง) */
-    const full = H * 0.74
-    const sz = lerp(b.iconH, full, k) * lerp(1, 0.62, e)
-    const cx = lerp(b.iconX, W * 0.38, k)
-    const cy = lerp(b.iconY, H * (0.5 + 0.07 * e), k)
+    /* ครึ่งตัว (ดู AboutBody) สูงเกือบเต็มกรอบ ขอบล่างของช่วงครึ่งตัว (เอว) ชนขอบล่างพอดี ขาถูกตัดทิ้ง */
+    const full = H * 0.92
+    /*
+     * PANELS: โบกทักกลางจอแล้วหันหลังเดินไปมุมซ้ายล่าง ยกกล้องสองตาส่องขึ้นขวา — แสงที่ส่องไปเปิดให้เห็น
+     * ของที่ลอยอยู่ (ดู AboutWidgets) · ตอนจบหันกลับมากลางจอ
+     */
+    const turn = PANELS && ABOUT_STORY === 'binoc' ? inOut(clamp01(b.xray / 0.3)) * (1 - back) : 0
+    const sz = lerp(b.iconH, full, k) * lerp(1, 0.62, e) * lerp(1, 0.8, turn)
+    const cx = lerp(b.iconX, W * lerp(PANELS ? 0.5 : 0.38, 0.16, turn), k)
+    const cy = lerp(b.iconY, H * (0.54 + 0.03 * e + 0.2 * turn), k)
     rt.position.set(cx - W / 2, H / 2 - cy, 0)
     /* ยืดหดแบบการ์ตูนตอนเด้งออกจากไอคอน */
     const squash = Math.sin(Math.PI * clamp01(b.k)) * 0.22
@@ -309,7 +342,45 @@ function Story({
     QB.setFromEuler(ISO)
     SPIN.setFromAxisAngle(YAXIS, spin * Math.PI * 4)
     rt.quaternion.copy(Q.copy(QA).slerp(QB, e)).multiply(SPIN)
+    if (turn > 0) rt.quaternion.slerp(QB.setFromEuler(LOOK), turn)
     rt.rotateZ(Math.sin(t * 0.7) * 0.03 * e)
+    /*
+     * เรื่องโผล่จากฟองแชท: ครึ่งตัวลอยขึ้นจากขอบบนของฟอง (ส่วนที่ยังอยู่ต่ำกว่าขอบถูกตัดด้วยระนาบ — เหมือนออกมาจากในฟอง)
+     * ฟองหลอมเป็นแผนผังแล้ว ระนาบตัดเลื่อนลงไปขอบล่างของหน้าต่าง ตัวละครยืนอยู่ในหน้าต่าง หัวทะลุขอบบน
+     */
+    if (b.chat) {
+      /* พุ่งขึ้นเลยนิดแล้วดีดกลับ ยืดตัวตอนพุ่ง (ท่าการ์ตูน — ออกจากของเหลว) */
+      const em = outBack(b.emerge)
+      const stretch = Math.sin(Math.PI * clamp01(b.emerge)) * 0.14
+      /*
+       * โผล่แค่หัว: ขึ้นมาจนคอพ้นขอบ (NECK = ระดับคอ นับจากขอบบนของช่วงครึ่งตัว ดู AboutBody) ลำตัวยังอยู่ในฟอง
+       * พอฟองเป็นแผนผัง เส้นขอบเลื่อนไปขอบบนของหน้าต่าง — หัวโผล่พ้นขอบบนหน้าต่าง ตัวอยู่หลังหน้าต่าง
+       */
+      const szc = H * 0.6
+      const NECK = 0.6
+      const top = b.by - b.bh * 0.32
+      /*
+       * ไม่หลอมแผนผัง: หัวขึ้นมาจากขอบล่างของฟอง (ระนาบตัดที่ขอบล่าง — ใต้ฟองไม่เห็นอะไร) ผ่านเนื้อแก้ว
+       * แล้วพ้นขอบบนจนคอถึงขอบบน · แคนวาสนี้อยู่ใต้แคนวาสฟอง ช่วงที่อยู่ในฟองจึงเห็นผ่านแก้ว
+       */
+      const bottom = b.by + b.bh * 0.42
+      const qTop = (b.qc[1] + b.qc[3]) / 2
+      const line = DIAGRAM_MORPH ? lerp(top, qTop, inOut(b.quad)) : bottom
+      const cyc = DIAGRAM_MORPH ? lerp(line + szc * 0.55, line + szc * (0.5 - NECK), em) : lerp(bottom + szc * 0.5, top + szc * (0.5 - NECK), em)
+      if (CHAT_ITEM === 'head') {
+        aboutCubeBox.x = b.bx
+        aboutCubeBox.y = top - szc * 0.18
+        aboutCubeBox.size = szc * 0.32
+        aboutCubeBox.on = b.emerge > 0.05 ? 1 : 0
+      }
+      rt.position.set(b.bx - W / 2, H / 2 - cyc, 0)
+      rt.scale.set(szc * (1 - stretch * 0.5), szc * (1 + stretch), szc * (1 - stretch * 0.5))
+      rt.quaternion.setFromEuler(FRONT)
+      rt.visible = b.emerge > 0.001 && CHAT_ITEM === 'head'
+      CLIP.constant = -(H / 2 - line)
+      gl.localClippingEnabled = true
+      aboutClip.planes = CHAT_ITEM === 'head' ? [CLIP] : []
+    } else aboutClip.planes = []
 
     /*
      * หัว → กองชั้นแบบเรียงบล็อกใหม่ (ดู buildVoxels): ตอนเริ่ม morph หัวจริงหาย บล็อกที่สีตรงกับส่วนของหัว
@@ -317,7 +388,14 @@ function Story({
      * เรียงครบ (m = 1) สลับเป็นแผ่นชั้นจริงที่ขนาดตรงกัน · ตอนจบเล่นย้อนกลับ
      */
     const vx = vox.current
-    if (!vx && hd.children.length) vox.current = buildVoxels(hd, rt)
+    /* ปั้นบล็อกตอนเริ่ม morph — ตัวละครวัดขนาดตัวเองเสร็จแล้ว (ดู AboutBody) */
+    if (!vx && m > 0 && hd.children.length) vox.current = buildVoxels(hd, rt)
+    /* โบกทักตอนโผล่ — พาเนลเริ่มลอยมาแล้วค่อยลดมือ */
+    look.current = PANELS && ABOUT_STORY === 'binoc' ? inOut(clamp01((b.xray - 0.12) / 0.22)) * (1 - back) : 0
+    /* โผล่แค่หัว — ไม่โบก (มือที่ยกจะโผล่พ้นขอบ) */
+    wave.current = b.chat
+      ? 0
+      : inOut(clamp01((b.k - 0.7) / 0.3)) * (1 - inOut(clamp01((b.xray - 0.1) / 0.15))) * (1 - back)
     hd.visible = m <= 0
     st.visible = m >= 1
     const vm = voxMesh.current
@@ -338,7 +416,10 @@ function Story({
         const mm = o as THREE.Mesh
         if (mm.isMesh && mm.userData.tile) (mm.material as THREE.MeshStandardMaterial).color.copy(PASTEL[i]).lerp(SKILL_COLOR[i], a)
         const ud = o.userData as { bump?: number; baseY?: number }
-        if (ud.bump !== undefined && ud.baseY !== undefined) o.position.y = ud.baseY + a * 16 * Math.max(0, Math.sin(t * 4.2 - ud.bump * 0.7))
+        if (ud.bump !== undefined && ud.baseY !== undefined) {
+          o.position.y = ud.baseY + a * 16 * Math.max(0, Math.sin(t * 4.2 - ud.bump * 0.7))
+          o.scale.setScalar(Math.max(1e-3, outBack(grow * 1.8 - ud.bump * 0.09 - i * 0.12)))
+        }
       })
     })
 
@@ -383,7 +464,7 @@ function Story({
   return (
     <group ref={root} visible={false}>
       <group ref={head}>
-        <CharacterHead />
+        <AboutBody wave={wave} look={look} />
       </group>
       {/* บล็อกของการเรียงใหม่ (หัว ↔ กองชั้น) — จำนวนพอสำหรับเปลือกหัว */}
       <instancedMesh ref={voxMesh} args={[voxGeo, voxMat, MAX_VOX]} visible={false} frustumCulled={false} />
@@ -443,7 +524,7 @@ function Layer({ kind }: { kind: number }) {
   )
   return (
     <group>
-      <RoundedBox args={[300, 36, 300]} radius={14} smoothness={4} material={slabMat} />
+      <RoundedBox args={[300, 36, 300]} radius={5} smoothness={3} material={slabMat} />
       {items.map((it, j) => (
         <group key={j} position={[it.x, 18 + it.h / 2, it.z]} userData={{ bump: j, baseY: 18 + it.h / 2 }}>
           <RoundedBox

@@ -607,6 +607,66 @@ function boxFrame(g) {
   return { basis: new THREE.Matrix4().makeBasis(u, v, w), size, center }
 }
 
+/**
+ * หน้าแบบ Figma (Joe Space 1576:3863): ตาครึ่งหลับ (ครึ่งวงกลมล่าง ลูกตาชิดซ้าย) คิ้วซ้ายตรง คิ้วขวายก ยิ้มมุมปาก
+ *
+ * ไม่วาดภาพทั้งแผ่นทับ — สัดส่วนในแบบ (ตาถึงปากห่าง ~2.2 เท่ารัศมีตา) ไม่เข้ากับหัวทรงกล่องของริก
+ * แต่ละชิ้นจึงวางที่ตำแหน่งเดียวกับหน้าใน hero (ตา gap/baseY · คิ้ว browY · ปาก mouthY) ขนาดเทียบรัศมีตา
+ * หน่วยในแบบ: รัศมีตา 22.5 = eyeR · คิ้วซ้ายเป็นเส้นตรงครึ่งนอก คิ้วขวาโค้งยก · เส้นหนา 4 หน่วย
+ */
+function drawFigmaFace(ctx, { X, Y, sx, sy, gap, eyeR, baseY, browY, mouthX, mouthY, k }) {
+  const u = (eyeR * sx) / 22.5
+  const line = 4 * u
+  const brow = '#E19A73'
+  /*
+   * ตาใน hero เป็นครึ่งบน (ฐานแบนที่ baseY) ตาแบบนี้เป็นครึ่งล่าง — ยกเส้นตาขึ้นเท่ารัศมีตา
+   * ให้เนื้อตาอยู่แถบเดียวกับตาใน hero ไม่ห้อยลงไปเบียดปาก (คิ้วยกตาม)
+   */
+  const lift = eyeR
+  for (const side of [-1, 1]) {
+    const cx = X(side * gap)
+    const cy = Y(baseY + lift)
+    const R = eyeR * sx
+    const Ry = eyeR * sy * k
+    /* ตาขาว: ครึ่งวงรีล่าง (เปลือกตาตกปิดครึ่งบน) */
+    ctx.beginPath()
+    ctx.ellipse(cx, cy, R, Math.max(0.5, Ry), 0, 0, Math.PI, false)
+    ctx.closePath()
+    ctx.fillStyle = '#ffffff'
+    ctx.fill()
+    /* ลูกตาดำครึ่งวงกลมล่าง ชิดซ้าย (มองค้อน ๆ ไปทางซ้าย) */
+    const px = cx + (side < 0 ? -3 : -5) * u
+    ctx.beginPath()
+    ctx.ellipse(px, cy, 11.5 * u, Math.max(0.5, 11.5 * u * k * (sy / sx)), 0, 0, Math.PI, false)
+    ctx.closePath()
+    ctx.fillStyle = '#16121f'
+    ctx.fill()
+  }
+  /* คิ้ว: ซ้ายตรง (ครึ่งนอกของตา) · ขวาโค้งยก */
+  const by = Y(browY + lift)
+  ctx.lineWidth = line
+  ctx.lineCap = 'round'
+  ctx.strokeStyle = brow
+  const lx = X(-gap)
+  ctx.beginPath()
+  ctx.moveTo(lx + 0.5 * u, by + 2 * u)
+  ctx.lineTo(lx + 22.5 * u, by + 2 * u)
+  ctx.stroke()
+  const rx = X(gap)
+  ctx.beginPath()
+  ctx.moveTo(rx - 25.5 * u, by + 2 * u)
+  ctx.bezierCurveTo(rx - 19 * u, by - 4.5 * u, rx - 13 * u, by - 5 * u, rx - 2 * u, by - 2 * u)
+  ctx.stroke()
+  /* ปาก: ยิ้มมุมขวา (โค้งตื้นยกปลายขวา) */
+  const mx = X(mouthX)
+  const my = Y(mouthY)
+  ctx.strokeStyle = '#16121f'
+  ctx.beginPath()
+  ctx.moveTo(mx - 11.5 * u, my - 2 * u)
+  ctx.bezierCurveTo(mx - 5 * u, my + 4.5 * u, mx + 1 * u, my + 5 * u, mx + 12 * u, my + 1.5 * u)
+  ctx.stroke()
+}
+
 export function Mascot({
   position = [0, 0, 0],
   /**
@@ -1162,6 +1222,8 @@ export function Mascot({
       plane.receiveShadow = false
       plane.userData.keepColor = true
       plane.userData.noMerge = true
+      /* หน้าอื่นเลือกสีหน้าได้ทาง userData.faceStyle ของแผ่นนี้ (เช่น 'figma' ใน hero/AboutBody) */
+      plane.name = 'FacePlane'
       parent.add(plane)
       plane.position.copy(hc).addScaledVector(n, D / 2 + 0.002)
       plane.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n)
@@ -2409,6 +2471,11 @@ export function Mascot({
     })
     rig.current.pointShoulder = armPoint?.shoulder
     rig.current.pointElbow = armPoint?.elbow
+    /* ชื่อไว้ให้หน้าอื่นหาเจอเพื่อทับท่าทีหลัง (เช่นโบกมือใน hero/AboutBody) — ไม่มีผลกับที่นี่ */
+    if (armPoint) {
+      armPoint.shoulder.name = 'PointShoulder'
+      armPoint.elbow.name = 'PointElbow'
+    }
     rig.current.pointWrist = armPoint?.wrist
     // เฉพาะแขนที่ยกชี้ — แขนถือแก้วห้อยลงตามท่าพัก ข้อยังไม่พับ รอยต่อเลยยังตันอยู่เอง
     rebuildShoulder(armPoint)
@@ -2578,6 +2645,10 @@ export function Mascot({
      */
     const armMug = cloneMirroredArm(armPoint)
     rig.current.mugShoulder = armMug?.shoulder
+    if (armMug) {
+      armMug.shoulder.name = 'MugShoulder'
+      armMug.elbow.name = 'MugElbow'
+    }
     rig.current.mugElbow = armMug?.elbow
     // ข้อมือของแขนนี้ไม่เคยถูกเก็บไว้ ท่ายืนไม่ได้ใช้ — ท่า skate ต้องหมุนมือข้างนี้ได้ด้วย
     rig.current.mugWrist = armMug?.wrist
@@ -4098,7 +4169,9 @@ export function Mascot({
       ctx.scale(fp.scale ?? 1, fp.scale ?? 1)
       ctx.translate(-size / 2, -size / 2)
 
-      for (const side of [-1, 1]) {
+      /** สีหน้าจากแบบ Figma (Joe Space 1576:3863) — วาดแทนตา/คิ้ว/ปากปกติ ตำแหน่งชุดเดียวกับหน้าใน hero */
+      const figma = face.group.userData.faceStyle === 'figma'
+      for (const side of figma ? [] : [-1, 1]) {
         const cx = X(side * gap)
         const cy = Y(baseY)
         const rx = eyeR * sx
@@ -4130,7 +4203,9 @@ export function Mascot({
         ctx.stroke()
         ctx.restore()
       }
+      if (figma) drawFigmaFace(ctx, { X, Y, sx, sy, gap, eyeR, baseY, browY, mouthX, mouthY, k })
       // ปาก: แท่งมนแนวตั้ง + ลิ้นครึ่งวงกลมที่ก้น
+      if (!figma) {
       const mw = mouthW * sx
       const mh = mouthH * sy
       const mcx = X(mouthX)
@@ -4146,6 +4221,7 @@ export function Mascot({
       ctx.fillStyle = '#A65A3C'
       ctx.fill()
       ctx.restore()
+      }
       tex.needsUpdate = true
 
       // แผ่นหน้า: ยื่นออก/จมเข้า และก้ม-เงย/หันซ้ายขวา ของทั้งแผ่น (เลื่อน/เอียงทำใน canvas แล้ว)

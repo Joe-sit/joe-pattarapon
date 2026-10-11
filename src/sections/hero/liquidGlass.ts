@@ -33,6 +33,11 @@ export function makeLiquidGlass() {
       uPanelTint: { value: 0 },
       uPaintA: { value: new THREE.Color('#f2f3f8') },
       uPaintB: { value: new THREE.Color('#8db3f4') },
+      /* ฟองกลายเป็นกระเบื้องลูกโลก (เรื่องโลก): ทาทึบไล่ฟ้าเขียว → น้ำเงิน ตามแนวทแยงของตัวฟอง */
+      uTile: { value: 0 },
+      uTileA: { value: new THREE.Color('#38e3c4') },
+      uTileB: { value: new THREE.Color('#3d6bff') },
+      uTileSpan: { value: 100 },
     },
     vertexShader: /* glsl */ `
       varying vec3 vN;
@@ -54,6 +59,10 @@ export function makeLiquidGlass() {
       uniform float uPanelTint;
       uniform vec3 uPaintA;
       uniform vec3 uPaintB;
+      uniform float uTile;
+      uniform vec3 uTileA;
+      uniform vec3 uTileB;
+      uniform float uTileSpan;
       varying vec3 vN;
       varying vec2 vLocal;
       // อยู่ในจุด/แคปซูลไหม (กล่องมนรัศมีเท่าครึ่งด้านสั้น) — เผื่อขอบมนของเมชนิดหน่อย
@@ -100,6 +109,13 @@ export function makeLiquidGlass() {
         a = mix(a, clamp(0.62 + spec * 0.5 + line, 0.0, 1.0), pn);
         col = mix(col, mix(uPaintB, uPaintA, act), pt);
         a = mix(a, 1.0, pt);
+        /* กระเบื้อง: ไล่สีตามแนวทแยง + ขอบที่หันออกข้างเข้มลง (ผนังกระเบื้อง) + ไฮไลต์ขอบฝั่งไฟ */
+        float tg = clamp(0.5 + (vLocal.x * 0.8 - vLocal.y * 0.6) / max(uTileSpan, 1.0), 0.0, 1.0);
+        vec3 tc = mix(uTileA, uTileB, smoothstep(0.1, 0.95, tg));
+        tc = mix(tc, uTileB * 0.8, smoothstep(0.3, 0.9, rim));
+        tc += vec3(spec * 0.6 + line * 0.5);
+        col = mix(col, tc, uTile);
+        a = mix(a, 1.0, uTile);
         gl_FragColor = vec4(col, a);
         // สีเทาของแบบเป็น sRGB — three แปลงเป็นเชิงเส้นตอนตั้งค่า ต้องแปลงกลับตอนออก ไม่งั้นเทาเข้มกว่าแบบ
         #include <colorspace_fragment>

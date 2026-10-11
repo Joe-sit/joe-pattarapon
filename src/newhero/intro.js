@@ -23,6 +23,31 @@ export const intro = { armed: false, time: 0, waited: 0, held: false, wants: fal
  */
 export const introSkip = { windows: false, camera: false }
 
+/**
+ * วินาที (นาฬิกาอินโทร) ที่ผ้าคลุมของด่านโหลด (pages/Final2026Gate) จางหมด — 0 = ไม่มีผ้าคลุม
+ * ริบบิ้นนอกหน้าต่างอยู่ใต้ผ้าคลุม (ช่องเปิดเฉพาะตรงบาน) ถ้ามันงอกออกจากปากบานก่อนผ้าคลุมจางหมด
+ * คนดูเห็นมัน "ค่อย ๆ จางขึ้นมา" แทนที่จะเห็นมันงอกออกมา
+ */
+export const introGate = { clearAt: 0 }
+
+/**
+ * วินาทีที่เริ่มวาดริบบิ้น — เลื่อนให้ท่อนนอกหน้าต่างเริ่มงอก (สัดส่วน inRibSplit ของเส้น) พอดีตอนผ้าคลุมจางหมด
+ * ท่อนในพอร์ทัลยังวาดก่อนหน้านั้นตามปกติ (ช่องเปิดตรงบาน เห็นอยู่แล้ว) ส่งไม้ต่อไม่มีจังหวะหยุด
+ */
+export function ribbonStart(t) {
+  if (!(introGate.clearAt > 0)) return t.inRibAt
+  const f = Math.min(0.95, Math.max(0.05, t.inRibSplit))
+  /* หา u ที่ smootherstep(u) = f (เส้นเดียวกับ useRibbonDraw) */
+  let lo = 0
+  let hi = 1
+  for (let i = 0; i < 24; i += 1) {
+    const u = (lo + hi) / 2
+    if (u * u * u * (u * (u * 6 - 15) + 10) < f) lo = u
+    else hi = u
+  }
+  return Math.max(t.inRibAt, introGate.clearAt - lo * Math.max(0.01, t.inRibDur))
+}
+
 export const FALLBACK_AFTER = 2
 const MAX_DT = 1 / 20
 
@@ -40,7 +65,7 @@ export function introEnd() {
   const t = getTuner()
   if (t.intro < 0.5) return 0
   const windows = t.inWinAt + Math.max(0, Math.round(t.panelCount) - 1) * t.inWinStep + t.inWinDur
-  const ribbon = t.inRibAt + t.inRibDur
+  const ribbon = ribbonStart(t) + t.inRibDur
   const rider = t.enDelay + t.enDur
   // prop โผล่ไล่กันสามชิ้น (จานสี → สวิตช์ → เคอร์เซอร์) ชิ้นท้ายห่างจากชิ้นแรกสองช่วง
   const props = rider + t.inPropAt + t.inPropGap * 2 + t.inPropDur
@@ -114,6 +139,7 @@ export function resetIntro() {
   // เล่นใหม่โดยไม่มีสปแลชมามอร์ฟให้ = บานกับกล้องต้องกลับไปเล่นท่าของตัวเอง
   introSkip.windows = false
   introSkip.camera = false
+  introGate.clearAt = 0
   intro.armed = false
   intro.time = 0
   intro.waited = 0

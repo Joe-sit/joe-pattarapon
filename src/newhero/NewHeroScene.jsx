@@ -27,7 +27,7 @@ import { heroView } from './heroView'
 import { CardClip } from './cardClip'
 import { SLAB_CURVE, WaveSlab, slabFrame } from './WaveSlab'
 import { heroPointer, holdHeroPointer } from './heroPointer'
-import { IntroClock, introSet, introSkip, introTime, outBack as introBack } from './intro'
+import { IntroClock, introSet, introSkip, introTime, outBack as introBack, ribbonStart } from './intro'
 import { setNewHeroReady } from './ready'
 import { Entrance, entranceBlend, entranceSample, entranceU } from './Entrance'
 import { portalRide } from './portalRide'
@@ -2057,7 +2057,7 @@ function useRibbonDraw(geo, part, onStep) {
     const t = getTuner()
     let local = 1
     if (t.intro > 0.5) {
-      const u = Math.min(1, Math.max(0, (introTime() - t.inRibAt) / Math.max(0.01, t.inRibDur)))
+      const u = Math.min(1, Math.max(0, (introTime() - ribbonStart(t)) / Math.max(0.01, t.inRibDur)))
       /**
        * smootherstep ไม่ใช่ ease-out กำลังสาม — สูตรเดียวกับ ribbonDrawn ใน Entrance.jsx
        *
