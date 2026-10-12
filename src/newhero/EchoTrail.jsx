@@ -43,8 +43,13 @@ import { ridePose } from './ridePose'
  */
 const RT_SIZE = 1024
 
-/** ถ่ายซิลูเอตต์ใหม่ทุกกี่เฟรม — ท่าเปลี่ยนช้ากว่านั้นมาก ถ่ายทุกเฟรมคือจ่ายค่าฟรี */
-const REFRESH_EVERY = 3
+/**
+ * ถ่ายซิลูเอตต์ใหม่ทุกกี่เฟรม — ทุกเฟรม
+ *
+ * เคยถ่ายทุกสามเฟรม (ประหยัดหนึ่ง draw call) แต่ตัวละครส่ายท่า idle อยู่ตลอด เงาจึงขยับ
+ * เป็นขั้น 20 ครั้งต่อวินาทีตามหลังตัวจริงที่ขยับ 60 — อ่านเป็นเงากระตุก ไม่ใช่รอยที่ลื่นไปกับตัว
+ */
+const REFRESH_EVERY = 1
 
 /** วัดกล่องครอบตัวใหม่ทุกกี่เฟรม — setFromObject ไล่ทุกเมชในริก ไม่ใช่ของถูก */
 const BOX_EVERY = 15
@@ -70,20 +75,28 @@ const POP_SPAN = 0.25
 const POP_RISE_F = 0.11
 
 /**
- * ผ่อนแบบเลยเป้าแล้วกลับ — ค่าพุ่งเกิน 1 ช่วงกลางทาง
+ * ผ่อนแบบไม่เลยเป้า (quintic smootherstep) — ท่าโผล่ปัจจุบัน
  *
- * ตัวเลข 1.35 คือความแรงที่เลยเป้า เทียบกับภาพของ githubuniverse ที่ใบใหม่โผล่ออกมา
- * เกินตำแหน่งสุดท้ายแล้วหุบกลับ ถ้าใช้ ease ธรรมดาการโผล่จะอ่านเป็น "จางเข้ามา" ไม่ใช่
- * "ถูกสลัดออกมา" ซึ่งเป็นคนละความรู้สึกกัน
+ * เคยใช้ท่าสลัด (easeOutBack เลยเป้า 1.35 แล้วผ่อนกลับ) อ่านเป็นเงาเด้งออกมาทีละใบ
+ * ขัดกับรอยที่ต้องการให้ไหลเนียนเป็นผืนเดียว
  */
-function easeOutBack(x) {
-  const c = 1.35
-  const u = x - 1
-  return 1 + (c + 1) * u * u * u + c * u * u
+function smoother(x) {
+  const t = Math.min(1, Math.max(0, x))
+  return t * t * t * (t * (t * 6 - 15) + 10)
 }
+
+/**
+ * ชั้นแทรกระหว่างเงาแต่ละใบ — ทำให้รอยเป็นผืนไล่สีต่อเนื่อง ไม่ใช่การ์ดสีวางเรียง
+ *
+ * ใบหลัก (ตามจำนวนในแผงจูน) ยังอยู่ที่เดิม เพิ่มชั้นบาง ๆ ตรงตำแหน่งเศษส่วนระหว่างใบ สีไล่ระหว่างสองใบ
+ * ความเข้มต่อชั้นหารด้วยจำนวนชั้นแบบ "ทับกันแล้วได้เท่าเดิม" (1 − (1 − a)^(1/SUB)) — รวมแล้วเข้มเท่ารอยเดิม
+ */
+const SUB = 3
 
 /** จำนวนเงามากสุดที่เตรียมของไว้ — สไลเดอร์ลดลงได้ แต่ไม่ต้องปั้นของใหม่ */
 const MAX_ECHO = 10
+/** แผ่นที่วาดจริง = ใบหลัก × ชั้นแทรก */
+const MAX_PLANE = MAX_ECHO * SUB
 
 /**
  * สีเงา — สีทึบไล่โทนไม่ซ้ำอย่างในแบบ แต่ *เรียงเป็นวงสี* ไม่ใช่สุ่มสลับ
@@ -307,12 +320,19 @@ export function EchoTrail() {
    */
   const mat = useMemo(
     () =>
-      Array.from({ length: MAX_ECHO }, (_, i) => {
+      Array.from({ length: MAX_PLANE }, (_, j) => {
+        /* สีของแผ่นที่ตำแหน่งเศษส่วน f — ไล่ระหว่างสีของสองใบหลักที่ขนาบอยู่ */
+        const f = j / SUB
+        const a = Math.floor(f)
+        const col = new THREE.Color(ECHO_COLORS[a % ECHO_COLORS.length]).lerp(
+          new THREE.Color(ECHO_COLORS[(a + 1) % ECHO_COLORS.length]),
+          f - a,
+        )
         const m = new THREE.ShaderMaterial({
           glslVersion: THREE.GLSL3,
           uniforms: {
             uMap: { value: rt.texture },
-            uColor: { value: new THREE.Color(ECHO_COLORS[i % ECHO_COLORS.length]) },
+            uColor: { value: col },
             uAlpha: { value: 1 },
             uSoft: { value: 0.55 },
           },
@@ -468,7 +488,12 @@ export function EchoTrail() {
     // ── โผล่หลังไถลจบ ─────────────────────────────────────────────────────
     /** นับเป็น *วินาที* ไม่ใช่ 0..1 เพราะแต่ละใบมีนาฬิกาของตัวเองที่เหลื่อมกัน */
     const slid = ridePose.p >= 1
-    gate.current = slid ? gate.current + delta : 0
+    /**
+     * ไม่รีเซ็ตเป็นศูนย์ทันทีตอนเริ่มไถลใหม่ — ไหลถอยกลับ (เร็วกว่าตอนขึ้นนิดหน่อย) เงาจึงหุบเข้าตัว
+     * ทีละใบย้อนลำดับ แทนที่จะหายวับทั้งชุด · เพดานคือจุดที่ทุกแผ่นขึ้นครบแล้ว ไม่สะสมเกินไปเรื่อย ๆ
+     */
+    const gateMax = Math.max(0.08, t.enDur * POP_SPAN) + Math.max(0.05, t.enDur * POP_RISE_F)
+    gate.current = Math.min(gateMax, Math.max(0, gate.current + (slid ? delta : -delta * 1.6)))
     /** คาบทั้งหมด/ต่อใบ คิดจากความยาวการไถลของเฟรมนี้ — จูน enDur แล้วจังหวะนี้ตามไปเอง */
     const popAll = Math.max(0.08, t.enDur * POP_SPAN)
     const popRise = Math.max(0.05, t.enDur * POP_RISE_F)
@@ -490,7 +515,8 @@ export function EchoTrail() {
     }
     if (sphere.radius <= 0) return
 
-    if (frames.current % REFRESH_EVERY === 1) {
+    /* นับจากเฟรมแรก (frames เริ่มที่ 1) — เขียน `% N === 1` ไว้ ค่า N = 1 จะไม่มีวันจริง เงาไม่ถูกถ่ายเลย */
+    if ((frames.current - 1) % REFRESH_EVERY === 0) {
       CENTER.copy(sphere.center)
       camera.getWorldDirection(CAM_DIR)
       /**
@@ -591,20 +617,21 @@ export function EchoTrail() {
     }
     /** ขนาดที่คิดไว้เป็นหน่วยโลก แต่ scale ของ mesh เป็นของกลุ่มแม่ — ต้องหารสเกลแม่ออก */
     const worldToLocalScale = 1 / Math.max(1e-6, PAR_S.x)
-    for (let i = 0; i < MAX_ECHO; i += 1) {
-      const m = echoes.current[i]
+    for (let j = 0; j < MAX_PLANE; j += 1) {
+      const m = echoes.current[j]
       if (!m) continue
-      const on = i < count
+      /** ตำแหน่งเศษส่วนตามลำดับใบ (0 = ติดตัว) — ชั้นแทรกอยู่ระหว่างใบหลัก */
+      const i = j / SUB
+      const on = i <= count - 1
       if (!on) {
         m.visible = false
         continue
       }
-      /** นาฬิกาของใบนี้ — ใบ 0 (ติดตัว) เริ่มก่อน ใบถัดไปช้าลงทีละ POP_STEP */
-      const ga = Math.min(1, Math.max(0, (gate.current - i * popStep) / popRise))
+      /** นาฬิกาของแผ่นนี้ — ไล่ต่อเนื่องตามตำแหน่งเศษส่วน รอยจึงยืดออกจากตัวเป็นผืน ไม่ใช่ทีละการ์ด */
+      const ga = smoother((gate.current - i * popStep) / popRise)
       m.visible = ga > 0.001
       if (!m.visible) continue
-      /** เลยสล็อตไปนิดแล้วผ่อนกลับ — ใบใหม่จึงอ่านว่าถูกสลัดออกมา ไม่ใช่ค่อย ๆ จางเข้ามา */
-      const pop = easeOutBack(ga)
+      const pop = ga
       const u = count <= 1 ? 0 : i / (count - 1)
       /** เงาใบที่ i ถอยหลังไปตามทิศที่วิ่ง — ยิ่งเร็วยิ่งยืดออก */
       /**
@@ -627,7 +654,7 @@ export function EchoTrail() {
       const dist = Math.max(0.001, TMP.distanceTo(camera.position))
       TMP.addScaledVector(CAM_DIR, behind)
       const comp = (dist + behind) / dist
-      const shrink = (1 - u * t.etShrink) * (1 + 0.12 * (1 - ga))
+      const shrink = 1 - u * t.etShrink
       m.scale.setScalar(size * shrink * comp * worldToLocalScale)
       if (parent) parent.worldToLocal(TMP)
       m.position.copy(TMP)
@@ -640,7 +667,8 @@ export function EchoTrail() {
        * 0.78: ไม่เต็มความเข้ม — ชั้นที่ทับกันต้องมองผ่านถึงกันได้ สีจึงผสม ถ้าใบไหนทึบเต็ม
        * มันจะกลืนใบข้างหลังหมดแล้วเห็นเป็นแผ่นสีเดียว ไม่ใช่การไล่สี
        */
-      m.material.uniforms.uAlpha.value = 0.78 * ga * amt * push * (1 - u * t.etFade)
+      const base = Math.min(0.999, 0.78 * ga * amt * push * (1 - u * t.etFade))
+      m.material.uniforms.uAlpha.value = 1 - Math.pow(1 - base, 1 / SUB)
       m.material.uniforms.uSoft.value = t.etSoft
     }
     invalidate()
@@ -650,7 +678,7 @@ export function EchoTrail() {
 
   return (
     <group ref={grp}>
-      {Array.from({ length: MAX_ECHO }, (_, i) => (
+      {Array.from({ length: MAX_PLANE }, (_, i) => (
         <mesh
           key={i}
           ref={(m) => {
