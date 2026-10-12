@@ -403,3 +403,275 @@
   will-change: transform, opacity;
 }
 
+
+/*
+ * แถบบน (TopBar) — ถอดท่าจาก zoox.com: top โปร่งเต็มกว้าง → down หุบเป็นก้อนขาวกลางจอ → up คลี่เป็นแคปซูลขาว
+ * ทุกสถานะเป็นแถบเดียวกัน เปลี่ยนแค่ clip-path (inset สองข้าง) สีพื้น และความทึบของปุ่มข้าง — clip-path
+ * inset() ต่อ inset() ไล่ค่าได้ลื่น จึงไม่ใช้ none ในสถานะไหนเลย
+ */
+.v3-nav {
+  --nav-ease: cubic-bezier(0.2, 0, 0, 1);
+  --nav-text: #fff;
+  --nav-h: 64px;
+  --clip-x: 0px;
+  --clip-r: 16px;
+  position: fixed;
+  top: calc(var(--v3-frame-gap) + 20px);
+  left: 50%;
+  z-index: 30;
+  width: calc(100% - 2 * var(--v3-frame-gap) - 48px);
+  height: var(--nav-h);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.v3-nav[data-mode='down'] {
+  --nav-text: #1d2433;
+  --clip-x: calc(50% - 44px);
+}
+.v3-nav[data-mode='up'] {
+  --nav-text: #1d2433;
+  --clip-x: 40px;
+}
+.v3-nav[data-mode='up']:hover {
+  --clip-x: 0px;
+  --clip-r: 24px;
+}
+.v3-nav-main {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  align-items: center;
+  height: 100%;
+  padding: 0 8px;
+  border-radius: 24px;
+  background-color: transparent;
+  clip-path: inset(0 var(--clip-x) 0 var(--clip-x) round var(--clip-r));
+  pointer-events: auto;
+  transition:
+    clip-path 0.6s var(--nav-ease),
+    background-color 0.25s var(--nav-ease);
+}
+.v3-nav[data-mode='top'] .v3-nav-main {
+  pointer-events: none;
+}
+.v3-nav[data-mode='top'] .v3-nav-main > * {
+  pointer-events: auto;
+}
+.v3-nav:not([data-mode='top']) .v3-nav-main {
+  background-color: #fff;
+}
+/* เส้นขอบบาง + เงายาวจาง — โผล่เฉพาะตอนเป็นก้อน/แคปซูล */
+.v3-nav-shadow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid rgb(0 0 0 / 0.1);
+  border-radius: inherit;
+  box-shadow: 0 30px 30px rgb(23 33 30 / 0.03);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s var(--nav-ease);
+}
+.v3-nav:not([data-mode='top']) .v3-nav-shadow {
+  opacity: 1;
+}
+
+/* ลิงก์: ซ้ายสองชิดโลโก้ · โลโก้กลาง · ขวาสองชิดโลโก้ */
+.v3-nav-routes {
+  display: grid;
+  grid-template-areas: 'left logo right';
+  grid-template-columns: 1fr auto 1fr;
+  grid-column: 2;
+  align-items: center;
+  gap: 40px;
+  padding: 0 24px;
+}
+.v3-nav-routes > li {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+}
+.v3-nav-routes > li:first-child {
+  grid-area: logo;
+}
+.v3-nav-routes > li:nth-child(2) {
+  grid-area: left;
+  margin-left: auto;
+}
+.v3-nav-routes > li:nth-child(3) {
+  grid-area: right;
+  margin-right: auto;
+}
+.v3-nav-link {
+  color: var(--nav-text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 0.3s cubic-bezier(1, 0, 1, 0.6),
+    opacity 0.3s var(--nav-ease);
+}
+.v3-nav-link:hover {
+  opacity: 0.6;
+}
+.v3-nav-logo {
+  position: relative;
+  display: block;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+/* ปุ่มข้าง (เมนู / Resume) — ตอนหุบเป็นก้อน จางออกก่อนแถบหุบ ตอนคลี่ค่อยโผล่ตามหลัง */
+.v3-nav-side {
+  transition:
+    opacity 0.35s var(--nav-ease) 0.15s,
+    color 0.3s cubic-bezier(1, 0, 1, 0.6);
+}
+.v3-nav[data-mode='down'] .v3-nav-side,
+.v3-nav[data-mode='down'] .v3-nav-link {
+  opacity: 0;
+  pointer-events: none;
+  transition-delay: 0s;
+  transition-duration: 0.2s;
+}
+
+/* ปุ่มเมนู: สี่เหลี่ยมมน 48px ขอบบางจาง ขีดสองเส้น — ชี้แล้วสองขีดเข้าหากัน ขอบเข้มขึ้น */
+.v3-nav-ham {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 48px;
+  height: 48px;
+  border-radius: 33.33%;
+  color: var(--nav-text);
+  cursor: pointer;
+}
+.v3-nav-ham::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid currentColor;
+  border-radius: inherit;
+  opacity: 0.2;
+  transition: opacity 0.25s var(--nav-ease);
+}
+.v3-nav-ham > span {
+  width: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transition: translate 0.25s var(--nav-ease);
+}
+.v3-nav-ham:hover::after {
+  opacity: 0.7;
+}
+.v3-nav-ham:hover > span:first-child {
+  translate: 0 2px;
+  transition-duration: 0.5s;
+}
+.v3-nav-ham:hover > span:nth-child(2) {
+  translate: 0 -2px;
+  transition-duration: 0.5s;
+}
+
+/* Resume: ปุ่มเข้มมน 16px — ชี้แล้วลูกศรขวาวิ่งออก ลูกศรใหม่เลื่อนเข้ามาทางซ้าย ตัวหนังสือขยับตาม */
+.v3-nav-cta {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  overflow: hidden;
+  padding: 15px 22px;
+  border-radius: 16px;
+  background: #1d2433;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.v3-nav-cta-in,
+.v3-nav-cta-out {
+  display: flex;
+  width: 20px;
+  justify-content: center;
+  transition:
+    transform 0.5s var(--nav-ease),
+    opacity 0.5s var(--nav-ease);
+}
+.v3-nav-cta-in {
+  margin-left: -20px;
+  opacity: 0;
+  transform: translateX(-30px);
+}
+.v3-nav-cta-text {
+  transition: transform 0.5s var(--nav-ease);
+}
+.v3-nav-cta:hover .v3-nav-cta-in {
+  opacity: 1;
+  transform: translateX(10px);
+}
+.v3-nav-cta:hover .v3-nav-cta-text {
+  transform: translateX(20px);
+}
+.v3-nav-cta:hover .v3-nav-cta-out {
+  opacity: 0;
+  transform: translateX(30px);
+}
+
+/*
+ * โลโก้ = แถบความคืบหน้า (ดู ProgressLogo): ชั้นจาง (ghost) + ชั้นทึบที่ clip ตามระยะเลื่อน
+ * นอกสถานะ down ชั้นจางทึบเต็ม — โลโก้ดูปกติ · ถึงท้ายหน้า ดอก (ตัว O) เด้งบานหนึ่งที
+ */
+.v3-logo {
+  fill: var(--nav-text);
+  transition: fill 0.3s cubic-bezier(1, 0, 1, 0.6);
+  overflow: hidden;
+}
+.v3-logo-ghost {
+  transition: opacity 0.4s var(--nav-ease);
+}
+.v3-nav[data-mode='down'] .v3-logo-ghost {
+  opacity: 0.22;
+}
+.v3-logo-bloom {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.5s cubic-bezier(0.34, 1.8, 0.5, 1);
+}
+.v3-nav[data-mode='down'] .v3-logo.is-done .v3-logo-bloom {
+  transform: scale(1.15);
+}
+
+/*
+ * ท่าโผล่ของแถบ: โลโก้ประกอบตัวก่อน (ProgressLogo) แล้วของที่เหลือกระเพื่อมจากโลโก้ออกไปหาขอบ
+ * (--d = ลำดับนับจากกลาง) — ลอยขึ้น + หายเบลอ + ชัดขึ้น · ถอดแอนิเมชันทิ้งตอน done
+ */
+.v3-nav[data-phase='pre'] .v3-nav-enter,
+.v3-nav[data-phase='logo'] .v3-nav-enter {
+  opacity: 0;
+  pointer-events: none;
+}
+.v3-nav[data-phase='in'] .v3-nav-enter {
+  animation: v3-nav-enter 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc((var(--d, 1) - 1) * 90ms);
+}
+@keyframes v3-nav-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -10px, 0);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}

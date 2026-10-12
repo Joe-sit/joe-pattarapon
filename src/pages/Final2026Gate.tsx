@@ -3,7 +3,7 @@ import { startIntro } from '@/joespresso/intro'
 import { holdIntro, introGate, introSkip, releaseIntro } from '@/newhero/intro'
 import { panelScreen } from '@/newhero/panelScreen'
 import { useNewHeroReady } from '@/newhero/ready'
-import { setIntroDone } from '@/stores/intro'
+import { setGateOpen, setIntroDone } from '@/stores/intro'
 import { headlineReady } from '@/sections/hero/headlineReady'
 import { useSceneProgress } from '@/stores/ready'
 import { preloadFinalAssets } from './final2026Assets'
@@ -476,6 +476,11 @@ export function Final2026Gate() {
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
   }, [morphing, gone, progress])
+
+  /* บอกหน้าว่าม่านถอดแล้ว (ดู setGateOpen) — ของที่ต้องเล่นท่าโผล่ให้คนเห็นรอจังหวะนี้ */
+  useEffect(() => {
+    if (gone) setGateOpen()
+  }, [gone])
 
   if (gone) return null
   return (

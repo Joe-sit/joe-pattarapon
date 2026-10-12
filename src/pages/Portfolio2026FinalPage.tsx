@@ -1,4 +1,5 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { gsap } from 'gsap'
 import type { CSSProperties, ReactNode } from 'react'
 import './portfolio2026final.css'
 import './portfolio2026.css'
@@ -21,7 +22,7 @@ import { cursorShow, cursorWake } from '@/cursorguide/morph'
 import { useCursorStop } from '@/cursorguide/useCursorStop'
 import { SITE } from '@/config/site'
 import { setCruise, setSceneOn } from '@/newhero/scrolly'
-import { useIntroDone } from '@/stores/intro'
+import { useGateOpen, useIntroDone } from '@/stores/intro'
 /** ฉาก 3D ของจอแรก — แยก chunk ไม่ให้ถ่วงจอที่เหลือ */
 const NewHeroScene = lazy(() => import('@/newhero/NewHeroScene'))
 import { heroView } from '@/newhero/heroView'
@@ -49,10 +50,13 @@ const SECTIONS = ['hero', 'what-i-do', 'experiences', 'works', 'health', 'stacks
 type SectionId = (typeof SECTIONS)[number]
 
 /** ชื่อที่โผล่เป็น tooltip ข้างจุดของราวนำสายตา */
-/** เมนูกลางของแถบบน */
-const NAV = [
+/** เมนูกลางของแถบบน — ซ้ายสอง ขวาสอง โลโก้คั่นกลาง (แบบ zoox.com) */
+const NAV_L = [
   { label: 'About', href: '#what-i-do' },
   { label: 'Work', href: '#works' },
+]
+const NAV_R = [
+  { label: 'Health', href: '#health' },
   { label: 'Contact', href: `mailto:${SITE.email}` },
 ]
 
@@ -66,82 +70,327 @@ const SECTION_LINKS: { id: SectionId; label: string }[] = [
 ]
 
 /**
- * แถบบนของหน้า — มีตัวเดียวทั้งหน้า ไม่ใช่ตัวหนึ่งต่อจอ
+ * แถบบนของหน้า — มีตัวเดียวทั้งหน้า ไม่ใช่ตัวหนึ่งต่อจอ (ทุกเฟรมใน Figma วาดแถบไว้ในตัวเอง ถอดตรง ๆ จะได้หกอันซ้อน)
  *
- * ในไฟล์ Figma ทุกเฟรมวาดแถบนี้ไว้ในตัวเอง (เพราะเฟรมออกแบบแยกกัน) ถ้าถอดตามตรงจะได้
- * header ซ้ำหกอันซ้อนกันเวลาเลื่อน — อันของจอถัดไปไถลขึ้นมาทับอันของจอปัจจุบัน
- * fixed ตัวเดียวจึงเป็นสิ่งที่แบบหมายถึงจริง ๆ
+ * ถอดท่าจาก zoox.com (สามสถานะ — ดู .v3-nav ใน portfolio2026final.css):
+ *   top   บนสุดของหน้า: แถบโปร่งเต็มกว้าง ตัวหนังสือขาวบนฟ้า
+ *   down  เลื่อนลง: แถบไม่หาย แต่ clip-path หุบจากสองข้างเข้ากลาง เหลือก้อนขาวมนเล็ก ๆ ถือโลโก้ไว้กลางจอ
+ *   up    เลื่อนขึ้น: ก้อนกลางคลี่ออกเป็นแคปซูลขาว (เว้นขอบนิด ปุ่มสองข้างโดนตัดขอบ) · ชี้เมาส์ = คลี่เต็มกว้าง
+ *   ปุ่มเมนู = การ์ดขาวเลื่อนออกจากซ้าย ชื่อจอตัวใหญ่ + ปุ่มลูกศรกลม
  */
-function TopBar() {
-  /**
-   * เลื่อนลง = ซ่อน, เลื่อนขึ้น = โผล่กลับมา
-   *
-   * เทียบกับตำแหน่งครั้งก่อนไม่ใช่กับ "ทิศของ event" — สโครลนุ่มของ lenis ยิงหลายครั้งต่อ
-   * เฟรมและกลับทิศเล็ก ๆ ตอนหน่วง ถ้าดูแค่ทิศแถบจะกะพริบ จึงเก็บเฉพาะการขยับที่เกินระยะหนึ่ง
-   * ช่วงบนสุดของหน้าไม่ซ่อนเลย ไม่งั้นแค่ขยับนิดเดียวโลโก้ก็หาย
+function TopBar({ entered }: { entered: boolean }) {
+  /*
+   * เทียบกับตำแหน่งครั้งก่อนไม่ใช่กับ "ทิศของ event" — สโครลนุ่มของ lenis ยิงหลายครั้งต่อเฟรมและกลับทิศเล็ก ๆ
+   * ตอนหน่วง ถ้าดูแค่ทิศแถบจะกะพริบ จึงเก็บเฉพาะการขยับที่เกินระยะหนึ่ง
    */
-  const [hidden, setHidden] = useState(false)
+  const [mode, setMode] = useState<'top' | 'down' | 'up'>('top')
+  const [open, setOpen] = useState(false)
   const lastY = useRef(0)
+  const progress = useRef<((p: number) => void) | null>(null)
+  /**
+   * ลำดับการโผล่: pre (ซ่อน) → logo (โลโก้ประกอบตัว) → in (ที่เหลือกระเพื่อมจากกลางออกขอบ) → done
+   * ถอดแอนิเมชันออกเมื่อจบ (done) — ไม่งั้น fill-mode ค้างค่า opacity ทับการจางของสถานะ down
+   */
+  const [phase, setPhase] = useState<'pre' | 'logo' | 'in' | 'done'>('pre')
+  useEffect(() => {
+    if (entered && phase === 'pre') setPhase('logo')
+  }, [entered, phase])
+  useEffect(() => {
+    if (phase !== 'in') return
+    const t = window.setTimeout(() => setPhase('done'), 1400)
+    return () => window.clearTimeout(t)
+  }, [phase])
 
   useEffect(() => {
     lastY.current = window.scrollY
     const onScroll = () => {
       const y = window.scrollY
+      /* ความคืบหน้าทั้งหน้า → โลโก้ (เขียนตรงลง DOM ไม่ re-render ทุกเฟรมสโครล) */
+      const max = document.documentElement.scrollHeight - window.innerHeight
+      progress.current?.(max > 0 ? Math.min(1, y / max) : 0)
+      if (y < 40) {
+        lastY.current = y
+        setMode('top')
+        return
+      }
       const dy = y - lastY.current
       if (Math.abs(dy) < 6) return
       lastY.current = y
-      setHidden(y > 120 && dy > 0)
+      setMode(dy > 0 ? 'down' : 'up')
     }
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
+
   return (
-    /**
-     * แถบเมนูอยู่ในกรอบฉาก — ขยับเข้ามาจากขอบจอเท่าระยะเว้นขอบของกรอบ (--v3-frame-gap)
-     * บวกระยะหายใจของตัวเอง ไม่ใช่ยึดขอบจอตรง ๆ ไม่งั้นโลโก้จะไปนั่งคาบขอบกรอบ
-     *
-     * ระยะเว้นขอบอ่านจากตัวแปรชุดเดียวกับกรอบ ไม่ได้พิมพ์ตัวเลขซ้ำ — แก้ที่เดียวแล้วทั้งคู่ตาม
-     */
-    <header
-      className={`pointer-events-none fixed inset-x-0 top-0 z-30 flex h-[var(--v3-nav-h)] items-center justify-between transition-[transform,opacity] duration-300 ease-out ${
-        hidden ? '-translate-y-full opacity-0' : 'translate-y-0 opacity-100'
-      }`}
-      style={{
-        /* ระยะในต้องมากกว่ารัศมีมุมของกรอบ ไม่งั้นโลโก้ถูกเส้นโค้งที่มุมกินหาย (เจอมาแล้ว) */
-        paddingLeft: 'calc(var(--v3-frame-gap) + clamp(24px, 3.2vw, 52px))',
-        paddingRight: 'calc(var(--v3-frame-gap) + clamp(24px, 3.2vw, 52px))',
-        paddingTop: 'calc(var(--v3-frame-gap) + clamp(4px, 0.6vw, 10px))',
-      }}
-    >
-      <Logo
-        width={93}
-        height={32}
-        color="var(--v3-orange)"
-        className="v3-in shrink-0 [--v3-in-delay:60ms]"
+    <>
+      <header className="v3-nav" data-mode={mode} data-phase={phase}>
+        <div className="v3-nav-main">
+          <span className="v3-nav-shadow" aria-hidden />
+          <button type="button" aria-label="Open menu" aria-expanded={open} onClick={() => setOpen(true)} className="v3-nav-ham v3-nav-side v3-nav-enter" style={{ '--d': 3 } as CSSProperties}>
+            <span />
+            <span />
+          </button>
+          <ul className="v3-nav-routes">
+            <li>
+              <a href="#hero" aria-label="Joe — back to top" className="v3-nav-logo">
+                <ProgressLogo bind={progress} play={phase !== 'pre'} onBuilt={() => setPhase((p) => (p === 'logo' ? 'in' : p))} />
+              </a>
+            </li>
+            <li>
+              {NAV_L.map((n, i) => (
+                <a key={n.label} href={n.href} className="v3-nav-link v3-nav-enter" style={{ '--d': NAV_L.length - i } as CSSProperties}>
+                  {n.label}
+                </a>
+              ))}
+            </li>
+            <li>
+              {NAV_R.map((n, i) => (
+                <a key={n.label} href={n.href} className="v3-nav-link v3-nav-enter" style={{ '--d': i + 1 } as CSSProperties}>
+                  {n.label}
+                </a>
+              ))}
+            </li>
+          </ul>
+          <a href={SITE.resumeUrl} target="_blank" rel="noreferrer" className="v3-nav-cta v3-nav-side v3-nav-enter" style={{ '--d': 3 } as CSSProperties}>
+            <span className="v3-nav-cta-in">
+              <Chevron />
+            </span>
+            <span className="v3-nav-cta-text">Resume</span>
+            <span className="v3-nav-cta-out">
+              <Chevron />
+            </span>
+          </a>
+        </div>
+      </header>
+
+      {/* เมนูเต็ม: ม่านมืดจาง + การ์ดขาวเลื่อนออกจากซ้าย */}
+      <div
+        aria-hidden={!open}
+        onClick={() => setOpen(false)}
+        className={`fixed inset-0 z-40 bg-[#1d2433]/30 transition-opacity duration-300 ${open ? 'pointer-events-auto cursor-pointer opacity-100' : 'pointer-events-none opacity-0'}`}
       />
-      {/* เมนูกลาง — about/work พาไปจอของมันในหน้านี้ contact เปิดอีเมลจริง (ยังไม่มีจอติดต่อ) */}
-      <nav aria-label="Main" className="v3-in pointer-events-auto absolute left-1/2 -translate-x-1/2 [--v3-in-delay:100ms]">
-        <ul className="flex items-center gap-[clamp(20px,2.6vw,40px)] text-[clamp(13px,1.05vw,15px)] font-semibold text-white">
-          {NAV.map((n) => (
-            <li key={n.label}>
-              <a href={n.href} className="cursor-pointer opacity-90 transition-opacity duration-200 hover:opacity-100 hover:underline hover:underline-offset-4">
+      <aside
+        aria-label="Menu"
+        aria-hidden={!open}
+        inert={!open}
+        className={`fixed top-[calc(var(--v3-frame-gap)+12px)] bottom-[calc(var(--v3-frame-gap)+12px)] left-[calc(var(--v3-frame-gap)+12px)] z-50 flex w-[min(370px,calc(100vw-48px))] flex-col rounded-[20px] bg-white p-[clamp(24px,2.6vw,38px)] text-[#1d2433] shadow-[0_20px_60px_rgba(20,30,60,0.22)] transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          open ? 'translate-x-0 opacity-100' : '-translate-x-[110%] opacity-0'
+        }`}
+      >
+        <div className="flex items-center gap-[clamp(32px,4vw,60px)]">
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={() => setOpen(false)}
+            className="grid size-[44px] cursor-pointer place-items-center rounded-[12px] border border-[#1d2433]/15 transition-colors duration-200 hover:bg-[#1d2433]/5"
+          >
+            <svg viewBox="0 0 10 10" className="size-[10px]" fill="none" aria-hidden>
+              <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+          <Logo width={80} height={28} color="var(--v3-orange)" className="block" />
+        </div>
+        <ul className="mt-[clamp(28px,4svh,48px)] flex flex-col gap-[clamp(8px,1.4svh,16px)]">
+          {SECTION_LINKS.map((n) => (
+            <li key={n.id}>
+              <a href={`#${n.id}`} onClick={() => setOpen(false)} className="group flex cursor-pointer items-center justify-between py-[4px] text-[clamp(22px,2vw,28px)] font-medium tracking-[-0.01em]">
                 {n.label}
+                <span className="grid size-[32px] place-items-center rounded-full bg-[#1d2433] text-white transition-colors duration-200 group-hover:bg-[var(--v3-orange)]">
+                  <Chevron />
+                </span>
               </a>
             </li>
           ))}
         </ul>
-      </nav>
-      {/* มุมขวาเก็บไว้ให้สิ่งที่ราวจุดด้านซ้ายทำแทนไม่ได้: เรซูเม่ที่ลิงก์ออกนอกหน้า */}
-      <a
-        href={SITE.resumeUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="v3-in pointer-events-auto flex cursor-pointer items-center [--v3-in-delay:140ms] justify-center rounded-full bg-[var(--v3-orange)] px-[clamp(16px,1.6vw,24px)] py-[clamp(8px,1vw,11px)] text-[clamp(12px,1vw,14px)] font-bold whitespace-nowrap text-white transition-colors duration-200 hover:brightness-110"
-      >
-        Resume
-      </a>
-    </header>
+        <div className="mt-auto grid grid-cols-2 gap-y-[14px] border-t border-[#1d2433]/12 pt-[clamp(20px,3svh,32px)] text-[15px]">
+          <a href={SITE.resumeUrl} target="_blank" rel="noreferrer" className="flex cursor-pointer items-center gap-[8px] hover:text-[var(--v3-orange)]">
+            Resume <Chevron />
+          </a>
+          <a href={`mailto:${SITE.email}`} className="flex cursor-pointer items-center gap-[8px] hover:text-[var(--v3-orange)]">
+            Email <Chevron />
+          </a>
+        </div>
+      </aside>
+    </>
+  )
+}
+
+/**
+ * โลโก้ JOE ที่เป็นแถบความคืบหน้าของหน้าไปในตัว (เห็นชัดตอนแถบหุบเป็นก้อน — สถานะ down)
+ *   ตัวอักษรทั้งคำเป็นแก้วส้มจาง แล้วส้มเต็มไหลเติมจากซ้ายไปขวาตามระยะที่เลื่อน (J → ดอก → E)
+ *   ดอกสี่กลีบ (ตัว O) หมุนตามการเลื่อน — เลื่อนเร็วดอกหมุนเร็ว หยุดเลื่อนดอกหยุด
+ *   ถึงท้ายหน้า ดอกเด้งบานหนึ่งทีเป็นสัญญาณว่าอ่านจบ
+ * สถานะ top/up โลโก้เป็นสีเต็มตามปกติ (ชั้นจางกลายเป็นทึบ) — ดู .v3-logo-* ใน portfolio2026final.css
+ * รูปทรงเดียวกับ joespresso/Logo ทุกเส้น (mask ตัดมุม J กับช่องใน E) แต่ id ของ mask แยกของตัวเอง
+ */
+const FLOWER_C = '122.3 41.5'
+/** ปลายทางของกลีบตัว O (ตรงกับ joespresso/Logo) — ท่าโผล่: ทุกกลีบเริ่มซ้อนกันกลางตัว O แล้วแยกออก หมุนเข้ามุม */
+const PETALS = [
+  { cx: 117.717, cy: 62.9484, rx: 15.1684, ry: 18.4624, rot: 59.365 },
+  { cx: 126.342, cy: 20.4592, rx: 15.1684, ry: 18.4624, rot: 59.365 },
+  { cx: 99.732, cy: 41.2846, rx: 14.1752, ry: 19.4078, rot: 28.5804 },
+  { cx: 144.851, cy: 41.4516, rx: 14.1752, ry: 19.4078, rot: 28.5804 },
+]
+/** ทั้งคำไถลจากซ้ายระหว่างประกอบร่าง (หน่วย viewBox) — ค่าเดียวกับสปแลช */
+const SLIDE_FROM = -80
+
+function LogoShapes({ flower }: { flower?: React.Ref<SVGGElement> }) {
+  return (
+    <g className="v3p-slide">
+      {/* J: ตัวถังหล่นลงมา · mask อยู่ที่กลุ่มแม่ ไม่ขยับตามตัวถัง */}
+      <g mask="url(#v3p-j)">
+        <path className="v3p-j-body" d="M0 0H81V43.5C81 65.8675 62.8675 84 40.5 84V84C18.1325 84 0 65.8675 0 43.5V0Z" />
+      </g>
+      <g ref={flower}>
+        <g className="v3-logo-bloom">
+          {PETALS.map((p, i) => (
+            /* ไม่ใส่ transform ในมาร์กอัป — gsap อ่าน rotate(…) เดิมเป็นออฟเซ็ตค้าง กลีบจะเคลื่อนไปผิดที่ มุมกลีบเซ็ตใน effect */
+            <ellipse key={i} className="v3p-petal" cx={p.cx} cy={p.cy} rx={p.rx} ry={p.ry} />
+          ))}
+          <circle className="v3p-bullet" cx="122" cy="42" r="0" />
+        </g>
+      </g>
+      {/* E: เผยจากซ้ายไปขวาด้วย clip แล้วช่องกลาง/ปากตัว E ค่อยงอก (ใน mask) */}
+      <g clipPath="url(#v3p-e-reveal)">
+        <path d="M174 2H232V81H174V65H162V18H174Z" mask="url(#v3p-e)" />
+        <rect className="v3p-e-front" x="231" y="10" width="8" height="29" />
+      </g>
+    </g>
+  )
+}
+
+/**
+ * โลโก้ JOE ที่เป็นแถบความคืบหน้าของหน้าไปในตัว (เห็นชัดตอนแถบหุบเป็นก้อน — สถานะ down)
+ *   ตัวอักษรทั้งคำเป็นสีจาง แล้วสีเต็มไหลเติมจากซ้ายไปขวาตามระยะที่เลื่อน (J → ดอก → E)
+ *   ดอกสี่กลีบ (ตัว O) หมุนตามการเลื่อน · ถึงท้ายหน้า ดอกเด้งบานหนึ่งที
+ * สถานะ top/up โลโก้เป็นสีเต็มตามปกติ — ดู .v3-logo-* ใน portfolio2026final.css
+ *
+ * ท่าโผล่ (play) = ท่าประกอบตัวอักษรของสปแลช (components/JoeLettersSplash) ย่อมาไว้ในแถบ:
+ *   E เผยซ้ายไปขวา งอกช่องกลางกับปาก → จุดกลมวิ่งจากขอบ E มากลางตัว O แตกเป็นสี่กลีบหมุนเข้าที่
+ *   → J หล่นจากบน แล้วเปิดมุมซ้ายบนกับตะขอ · ทั้งคำถอยหน่วงแล้วไถลเข้าที่
+ * ต่างจากสปแลช: ช่องว่างในตัวอักษรเป็น mask (โปร่งจริง) ไม่ใช่ทาสีกระดาษทับ — แถบนี้อยู่บนฟ้า/บนพื้นขาวสลับกัน
+ */
+function ProgressLogo({ bind, play, onBuilt }: { bind: React.RefObject<((p: number) => void) | null>; play: boolean; onBuilt: () => void }) {
+  const fill = useRef<SVGRectElement>(null)
+  const ghost = useRef<SVGGElement>(null)
+  const solid = useRef<SVGGElement>(null)
+  const root = useRef<SVGSVGElement>(null)
+  const built = useRef(onBuilt)
+  built.current = onBuilt
+
+  useEffect(() => {
+    bind.current = (p) => {
+      /* เติมจากขอบซ้ายของ J (x −10) ถึงปลาย E (x 249) */
+      fill.current?.setAttribute('width', String(259 * p))
+      const rot = `rotate(${(p * 720).toFixed(2)} ${FLOWER_C})`
+      ghost.current?.setAttribute('transform', rot)
+      solid.current?.setAttribute('transform', rot)
+      root.current?.classList.toggle('is-done', p > 0.995)
+    }
+    return () => {
+      bind.current = null
+    }
+  }, [bind])
+
+  /* ท่าตั้งต้นต้องเซ็ตก่อนเบราว์เซอร์วาด (layout effect) ไม่งั้นโลโก้เต็มคำวาบหนึ่งเฟรมก่อนเริ่มประกอบ */
+  useLayoutEffect(() => {
+    const el = root.current
+    if (!el) return
+    const ctx = gsap.context(() => {
+      const petals = gsap.utils.toArray<SVGEllipseElement>('.v3p-petal')
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        petals.forEach((e, i) => {
+          const p = PETALS[i % 4]
+          gsap.set(e, { rotation: p.rot, svgOrigin: `${p.cx} ${p.cy}` })
+        })
+        if (play) built.current()
+        return
+      }
+      gsap.set('.v3p-e-reveal', { attr: { x: 174, width: 4 } })
+      gsap.set('.v3p-e-counter', { scaleX: 0, svgOrigin: '185 26' })
+      gsap.set('.v3p-e-opening', { x: 60 })
+      gsap.set('.v3p-e-front', { scaleX: 0, svgOrigin: '232 24.5' })
+      gsap.set('.v3p-bullet', { opacity: 0, attr: { cx: 173, r: 1 } })
+      petals.forEach((e) => gsap.set(e, { attr: { cx: 122, cy: 42 }, rotation: 0, opacity: 0 }))
+      gsap.set('.v3p-j-body', { y: -100 })
+      gsap.set('.v3p-j-hook', { scale: 0, svgOrigin: '34 31' })
+      gsap.set('.v3p-j-corner', { scale: 0, svgOrigin: '0 0' })
+      gsap.set('.v3p-slide', { x: SLIDE_FROM, opacity: 0 })
+      if (!play) return
+
+      /* จังหวะเดียวกับสปแลช เร่ง ×1.45 — ในแถบเล็ก ๆ ท่ายาวเท่าเต็มจอจะรู้สึกยืด */
+      const tl = gsap.timeline({ delay: 0.15, onComplete: () => built.current() })
+      tl.timeScale(1.45)
+      tl.to('.v3p-slide', { opacity: 1, duration: 0.3, ease: 'power1.out' }, 0)
+      tl.to('.v3p-slide', { x: SLIDE_FROM + 20, duration: 1.18, ease: 'power1.in' }, 0)
+      tl.to('.v3p-slide', { x: 0, duration: 2.06, ease: 'power1.out' }, 1.17)
+      // E
+      tl.to('.v3p-e-reveal', { attr: { width: 77 }, duration: 1.32, ease: 'power2.out' }, 0)
+      tl.to('.v3p-e-counter', { scaleX: 1, duration: 0.66, ease: 'power2.inOut' }, 0.4)
+      tl.to('.v3p-e-front', { scaleX: 1, duration: 0.4, ease: 'power2.inOut' }, 0.66)
+      tl.to('.v3p-e-opening', { x: 0, duration: 0.8, ease: 'power2.inOut' }, 0.46)
+      tl.to('.v3p-e-reveal', { attr: { x: 162 }, duration: 0.39, ease: 'power2.inOut' }, 0.93)
+      // O — จุดกลมวิ่งเข้ามาแล้วแตกเป็นกลีบ
+      tl.set('.v3p-bullet', { opacity: 1 }, 1.12)
+      tl.to('.v3p-bullet', { attr: { cx: 122, r: 20 }, duration: 0.51, ease: 'power2.out' }, 1.12)
+      tl.to(petals, { opacity: 1, duration: 0.15, ease: 'power2.inOut' }, 1.42)
+      tl.to('.v3p-bullet', { opacity: 0, duration: 0.2, ease: 'power2.inOut' }, 1.57)
+      petals.forEach((e, i) => {
+        const p = PETALS[i % 4]
+        tl.to(e, { attr: { cx: p.cx, cy: p.cy }, duration: 0.72, ease: 'power2.inOut' }, 1.32)
+        tl.to(e, { rotation: p.rot, svgOrigin: `${p.cx} ${p.cy}`, duration: 1.4, ease: 'power2.inOut' }, 1.42)
+      })
+      // J
+      tl.to('.v3p-j-body', { y: 0, duration: 1.74, ease: 'power2.inOut' }, 0.87)
+      tl.to('.v3p-j-corner', { scale: 1, duration: 1.45, ease: 'power2.inOut' }, 1.43)
+      tl.to('.v3p-j-hook', { scale: 1, duration: 1.4, ease: 'power2.inOut' }, 1.6)
+    }, el)
+    return () => ctx.revert()
+  }, [play])
+
+  return (
+    <svg ref={root} width={64} height={26} viewBox="-10 -10 259 104" className="v3-logo block" role="img" aria-label="Joe">
+      <defs>
+        <mask id="v3p-j" maskUnits="userSpaceOnUse" x="-10" y="-10" width="259" height="104">
+          <rect x="-10" y="-10" width="259" height="104" fill="white" />
+          <path className="v3p-j-hook" d="M41 55C36.5817 55 33 51.4183 33 47L33 30L49 30L49 47C49 51.4183 45.4183 55 41 55Z" fill="black" />
+          <rect className="v3p-j-corner" x="-1" y="-1" width="35" height="32" fill="black" />
+        </mask>
+        <mask id="v3p-e" maskUnits="userSpaceOnUse" x="-10" y="-10" width="259" height="104">
+          <rect x="-10" y="-10" width="259" height="104" fill="white" />
+          <rect className="v3p-e-counter" x="185" y="18" width="35" height="16" rx="8" fill="black" />
+          <path className="v3p-e-opening" d="M185 57C185 52.5817 188.582 49 193 49H239V65H193C188.582 65 185 61.4183 185 57Z" fill="black" />
+        </mask>
+        <clipPath id="v3p-e-reveal">
+          <rect className="v3p-e-reveal" x="162" y="0" width="89" height="84" />
+        </clipPath>
+        <clipPath id="v3p-fill">
+          <rect ref={fill} x="-10" y="-10" width="0" height="104" />
+        </clipPath>
+      </defs>
+      <g className="v3-logo-ghost">
+        <LogoShapes flower={ghost} />
+      </g>
+      <g className="v3-logo-solid" clipPath="url(#v3p-fill)">
+        <LogoShapes flower={solid} />
+      </g>
+    </svg>
+  )
+}
+
+function Chevron() {
+  return (
+    <svg viewBox="0 0 5 10" className="h-[9px] w-[5px]" fill="none" aria-hidden>
+      <path d="m1 9 2.384-2.384a2.286 2.286 0 0 0 0-3.232L1 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 
@@ -302,6 +551,8 @@ export function Portfolio2026FinalPage() {
   const [onHero, setOnHero] = useState(true)
   /** สปแลชส่งไม้ต่อแล้ว — ชิ้นส่วนของจอแรกไถลขึ้นมาเข้าที่ */
   const entered = useIntroDone()
+  /* แถบบนเล่นท่าโผล่หลังม่านโหลดถอดจริง ไม่ใช่ตอนเริ่มมอร์ฟ — ไม่งั้นโลโก้ประกอบเสร็จอยู่ใต้ม่าน */
+  const gateOpen = useGateOpen()
   /** ฉากสามมิติพังอยู่หรือเปล่า — คุมจากช่องแชทในหัวเรื่อง */
   /** โหมดคอมเมนต์ (เคอร์เซอร์เป็นหมุดทั้งจอแรก) + ตำแหน่งที่ปักช่องพิมพ์ไว้ */
   const [commenting, setCommenting] = useState(false)
@@ -508,7 +759,7 @@ export function Portfolio2026FinalPage() {
       {/* ฟองคำพูดของหัวเรื่องเดินทางลงไปเปิด What I do — ชั้นเหนือม่านเมฆ (ดู BubbleTraveler) */}
       <BubbleTraveler />
 
-      <TopBar />
+      <TopBar entered={gateOpen} />
       {/* ราวจุดนำสายตา — ตัวเดียวกับที่ใช้ในเวอร์ชัน Vue (branch `2026`)
           ในแบบมีทุกจอยกเว้นจอแรก จึงจางหายตอนอยู่ที่ hero */}
       <AnchorNav
