@@ -470,7 +470,13 @@ export function EchoTrail() {
      * กรองทิศและความเร็วแบบ low-pass — ค่าดิบต่อเฟรมกระตุกจากไหวของ idle (ตัวละครส่าย
      * อยู่กับที่) ถ้าไม่กรอง แนวเรียงของเงาจะสะบัดไปมาทุกเฟรม
      */
-    if (moved > 1e-5) {
+    /**
+     * ทิศของรอยตั้งจาก *การไถลเข้าฉาก* เท่านั้น — จอดแล้วล็อกไว้
+     *
+     * หลังจอด ตัวละครยังถูกเลื่อน/เอียงตามการเลื่อนหน้า (ล่องตามสโครล) ถ้ายังกรองทิศต่อ เลื่อนลงแล้วกลับขึ้นมา
+     * รอยจะชี้ไปคนละทางกับตอนแรก — ท่าสุดท้ายต้องเหมือนเดิมทุกครั้งที่กลับมาดู
+     */
+    if (moved > 1e-5 && ridePose.p < 1) {
       DIR.copy(TMP).normalize()
       path.dir.lerp(DIR, 0.12)
       if (path.dir.lengthSq() > 1e-6) path.dir.normalize()
@@ -494,6 +500,11 @@ export function EchoTrail() {
      */
     const gateMax = Math.max(0.08, t.enDur * POP_SPAN) + Math.max(0.05, t.enDur * POP_RISE_F)
     gate.current = Math.min(gateMax, Math.max(0, gate.current + (slid ? delta : -delta * 1.6)))
+    /*
+     * ฉากวาดตามคำสั่ง (demand) — ระหว่างรอยกำลังขึ้น/หุบ ต้องขอเฟรมต่อเอง ไม่งั้นนาฬิกาค้างกลางทาง
+     * (เลื่อนออกแล้วกลับมา รอยค้างจาง ๆ ครึ่งเดียวจนกว่าจะมีอย่างอื่นปลุกฉาก)
+     */
+    if ((slid && gate.current < gateMax) || (!slid && gate.current > 0)) invalidate()
     /** คาบทั้งหมด/ต่อใบ คิดจากความยาวการไถลของเฟรมนี้ — จูน enDur แล้วจังหวะนี้ตามไปเอง */
     const popAll = Math.max(0.08, t.enDur * POP_SPAN)
     const popRise = Math.max(0.05, t.enDur * POP_RISE_F)
