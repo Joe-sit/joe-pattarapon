@@ -34,6 +34,7 @@ import { portalRide } from './portalRide'
 import { entranceLift } from './entranceLift'
 import { ridePose } from './ridePose'
 import { cruiseGrow, cruisePull, useSceneOn } from './scrolly'
+import { WarmShaders } from '@/lib/WarmShaders'
 
 /**
  * ฉาก hero ใหม่ — "โต้คลื่นบนริบบิ้นหมากรุก" (คอมพ์ 12739:337)
@@ -3416,6 +3417,7 @@ export default function NewHeroScene({ bare = false, className = 'absolute inset
        */
       gl={{ antialias: !(DEFAULTS.fx > 0.5 || DEFAULTS.rimFx > 0.5), stencil: true, alpha: bare, toneMappingExposure: DEFAULTS.exposure }}
     >
+      <WarmShaders />
       <PerformanceMonitor onDecline={() => setDpr(minDpr)} onIncline={() => setDpr(maxDpr)} flipflops={3} onFallback={() => setDpr(minDpr)} />
       <Suspense fallback={null}>
         <Scene bare={bare} />

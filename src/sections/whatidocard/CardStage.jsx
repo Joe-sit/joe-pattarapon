@@ -10,6 +10,7 @@ import { useDisposable } from '@/joespresso/scene/utils'
 import { Magnifier } from './Magnifier'
 import { REPLICA_ORDER, Replica } from './Replica'
 import { CARD_H, CARD_W, SKIN, VIEW_H, stackCenter, stageIn, useStageTuner } from './stageTuner'
+import { WarmShaders } from '@/lib/WarmShaders'
 
 /**
  * จอ "สิ่งที่ทำ" — หน้าต่างโปรแกรมเป็นของสามมิติ เนื้อหน้าต่างเป็นพอร์ทัลทะลุไปอีกฉาก
@@ -199,6 +200,7 @@ export function CardStage() {
          alpha: การ์ดลอยบนพื้นไล่สีของ section ซึ่งเป็น CSS ไม่ใช่ของในฉาก */
       gl={{ antialias: true, alpha: true, stencil: true }}
     >
+      <WarmShaders />
       <Fit />
       <Suspense fallback={null}>
         <Scene />

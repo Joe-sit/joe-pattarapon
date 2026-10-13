@@ -5,6 +5,7 @@ import { SkyScene, type SkyState } from './SkyScene'
 import { BEAT, KEYCHAIN, SECTION_VH, TOTAL_VH, at } from './beats'
 import { cursorShow, cursorWake } from '@/cursorguide/morph'
 import './sky.css'
+import { WarmShaders } from '@/lib/WarmShaders'
 
 /**
  * What I do — เรื่องเล่าบนฟ้าต่อจาก hero (ดู SkyScene) ไม่มีข้อความบนจอ ของ 3D เล่าเอง
@@ -80,6 +81,7 @@ export function SkyStory({ id, className = '' }: { id?: string; className?: stri
             gl.toneMapping = THREE.NeutralToneMapping
           }}
         >
+          <WarmShaders />
           <SkyScene state={state} />
         </Canvas>
         )}

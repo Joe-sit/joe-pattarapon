@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { WarmShaders } from '@/lib/WarmShaders'
 import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js'
@@ -8,7 +9,7 @@ import bubbleSvg from '@/assets/v2final/hero-ideas-bubble.svg?raw'
 import penNibSvg from '@/assets/icons/pen-nib.svg?raw'
 import { useCursorStop } from '@/cursorguide/useCursorStop'
 import { BEAT, SKY_LEAVE, at } from '@/sections/skystory/beats'
-import { headOf, liquidGeo, skillBlobs, sproutShift } from './LiquidBento'
+import { headOf, liquidGeo, prepareBubbleGrid, skillBlobs, sproutShift } from './LiquidBento'
 import { FW, panelBox, panelLayout } from './ServiceTrack'
 import { IsoSkills } from './IsoSkills'
 import { FallSky } from './FallSky'
@@ -235,6 +236,8 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
   }, [])
   /** เส้นขอบฟองจากไฟล์ (พิกัด viewBox แกน y ชี้ลง) — ทรงตั้งต้นของสนามระยะ (ดู ./LiquidBento) */
   const outline = useMemo(() => new Float32Array(shapes[0].getPoints(48).flatMap((v) => [v.x, v.y])), [shapes])
+  /* ตารางระยะของทรงฟอง — ปั้นตอนนี้ (ด่านโหลดยังบังอยู่) ไม่ใช่เฟรมแรกที่ฟองขึ้นจอปลายอินโทร */
+  useEffect(() => prepareBubbleGrid(outline), [outline])
 
   /** ข้อความทุกความยาวของทั้งสองประโยค ปั้นไว้ครั้งเดียว — พิมพ์/ลบทีละตัวแค่สลับชิ้น */
   const texts = useMemo(() => {
@@ -609,6 +612,7 @@ export function BubbleTraveler() {
         gl={{ antialias: true, alpha: true }}
         style={{ pointerEvents: 'none' }}
       >
+        <WarmShaders />
         <ambientLight intensity={1.35} />
         <directionalLight position={[220, 320, 420]} intensity={1.75} />
         <directionalLight position={[-260, -140, 260]} intensity={0.6} />

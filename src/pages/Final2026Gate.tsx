@@ -7,6 +7,9 @@ import { setGateOpen, setIntroDone } from '@/stores/intro'
 import { headlineReady } from '@/sections/hero/headlineReady'
 import { useSceneProgress } from '@/stores/ready'
 import { preloadFinalAssets } from './final2026Assets'
+import { BlobReveal } from '@/components/BlobReveal'
+import { warmSettled } from '@/lib/WarmShaders'
+import type { BlobRevealHandle } from '@/components/BlobReveal'
 
 /**
  * ด่านโหลดของ /2026-final — จุดโหลดสามจุด *มอร์ฟ* เป็นบานพอร์ทัลของจอแรก
@@ -50,6 +53,12 @@ const MORPH = 1.6
 const STAGGER = 0.09
 /** ค้างอยู่ในท่าจุดก่อนออกตัวเท่าไร (สัดส่วนของ MORPH) — จังหวะ "รวมตัวแล้วค่อยคลี่" */
 const HOLD = 0.08
+/**
+ * ฉากจริงไหลออกจากปากบาน (ดู components/BlobReveal ขั้นที่ 2) — แต่ละบานเริ่มเมื่อเกือบลงล็อก ยาวเท่านี้ของ MORPH
+ * ด่านถอดตัวเมื่อบานสุดท้ายไหลจนเต็มจอ — ไม่มีการจางทั้งแผ่นตอนท้ายอีก
+ */
+const SPILL = 0.5
+const spillAt = (i: number) => HOLD + i * STAGGER + 0.74 * 0.85
 /** จำนวนจุด — "..." ของการโหลด แล้วกลายเป็นบาน */
 const DOTS = 3
 /** ขนาดจุดและระยะห่าง (พิกเซล) */
@@ -171,9 +180,12 @@ export function Final2026Gate() {
   const veil = useRef<HTMLDivElement>(null)
   /** ชั้นท้องฟ้าที่ค่อย ๆ ขึ้นมาทับพื้นขาว */
   const sky = useRef<HTMLDivElement>(null)
+  const blob = useRef<BlobRevealHandle>(null)
   /** เม็ดแก้ว — ทรงเดียวกับรูบนม่าน วาดทับรูให้เห็นเป็นแก้วใสตอนรอ แล้วละลายเผยฉากจริงตอนคลี่ */
   const glass = useRef<(SVGPathElement | null)[]>([])
   const glassSvg = useRef<SVGSVGElement>(null)
+  /** รูใสของแก้วแต่ละเม็ด (วงกลมขอบนุ่มในหน้ากาก) — แก้วละลายจากกลางบานออกไปหาขอบ ไม่จางทั้งแผ่น */
+  const iris = useRef<(SVGCircleElement | null)[]>([])
   /**
    * ที่ยืนของช่องในเฟรมล่าสุดของท่ารอ — จุดตั้งต้นของการมอร์ฟ
    *
@@ -221,6 +233,9 @@ export function Final2026Gate() {
    * บรรทัด (headlineReady) · และฉากฉายพิกัดบานออกมาแล้ว (panelScreen.ready — ไม่มีค่านี้
    * มอร์ฟก็ไม่มีเป้า ต้องตกไปทางถอยที่เป็นการจางออกเฉย ๆ)
    *
+   * ด่านที่ห้า: ทุกแคนวาสอุ่น shader/เท็กซ์เจอร์ครบแล้ว (warmSettled — ดู lib/WarmShaders) ไม่งั้นของที่ซ่อนไว้
+   * ถึงคิวโผล่กลางอินโทรแล้วค่อยคอมไพล์ = เฟรมกระตุกที่เห็น
+   *
    * สามตัวแรกเป็น state/ธง ตัวหลังเป็นสโตร์ที่เขียนจากลูปวาดของฉาก — เช็คด้วย rAF ไม่ใช่
    * setInterval เพื่อให้เห็นค่าในเฟรมเดียวกับที่ฉากเขียน
    */
@@ -228,7 +243,7 @@ export function Final2026Gate() {
     if (!assetsReady || !sceneReady || morphing) return undefined
     let raf = 0
     const look = () => {
-      if (panelScreen.ready && headlineReady.armed && headlineReady.pending === 0) {
+      if (panelScreen.ready && headlineReady.armed && headlineReady.pending === 0 && warmSettled()) {
         setMorphing(true)
         return
       }
@@ -320,12 +335,32 @@ export function Final2026Gate() {
     const lastOut = at.current.map((pts) => pts.map((q) => ({ ...q })))
     /** ตัวส่องทางเดินตอนพัฒนา — ว่างเปล่าในโปรดักชัน */
     const trace: number[][] = []
+    /** ขั้นที่ 2 ของม่าน: [กลาง x, กลาง y, รัศมีปากบาน, ความคืบหน้า] ต่อบาน (ดู BlobReveal) */
+    const wins = new Float32Array(DOTS * 4)
+    const end = spillAt(DOTS - 1) + SPILL
     let raf = 0
     const t0 = performance.now()
+    /** แก้วละลายจากกลางบาน: รัศมีรูใสโตจนพ้นมุมไกลสุด เริ่มตอนรูเกือบตรงบาน (ขอบเหลื่อมยังไม่ทันโผล่) */
+    const melt = (i: number, pts: Pt[], u: number) => {
+      const c = iris.current[i]
+      if (!c) return
+      let cx = 0
+      let cy = 0
+      for (const q of pts) {
+        cx += q.x / pts.length
+        cy += q.y / pts.length
+      }
+      let reach = 0
+      for (const q of pts) reach = Math.max(reach, Math.hypot(q.x - cx, q.y - cy))
+      c.setAttribute('cx', cx.toFixed(1))
+      c.setAttribute('cy', cy.toFixed(1))
+      c.setAttribute('r', (inOut((u - 0.8) / 0.2) * reach * 1.45).toFixed(1))
+    }
     const step = () => {
       const nowMs = performance.now()
       const now = (nowMs - t0) / 1000
-      const all = clamp01(now / MORPH)
+      const tt = now / MORPH
+      const all = clamp01(tt)
 
       /**
        * พื้นขาวกลายเป็นท้องฟ้า *ให้จบก่อนกลางท่า* แล้วจึงเปิดออกตอนท้ายสั้น ๆ
@@ -338,10 +373,6 @@ export function Final2026Gate() {
        * คนดูจึงไม่ได้เห็น "ขาวกลายเป็นฟ้า" เลย เห็นแค่ขาวแล้วเป็นฉาก ตอนนี้จบที่ 0.55
        * เหลือเวลาให้ฟ้าเต็มจออยู่จริงราวครึ่งวินาทีก่อนบานจะมาถึง
        */
-      if (sky.current) sky.current.style.opacity = inOut((all - 0.05) / 0.5).toFixed(3)
-      if (veil.current) veil.current.style.opacity = `${1 - inOut((all - 0.84) / 0.16)}`
-      /* ตอนรอเป็นเม็ดแก้วใสไม่มีสีข้างใน — สีของฉากในพอร์ทัลค่อยซึมเข้ามาตอนช่องเริ่มคลี่
-         แล้วแก้วจางทิ้งก่อนส่งไม้ต่อ บานจริงไม่มีขอบแก้วซ้อน */
 
       for (let i = 0; i < DOTS; i += 1) {
         const a = src[i]
@@ -351,8 +382,6 @@ export function Final2026Gate() {
          * แก้วของเม็ดนี้ค้างไว้จนรูเกือบลงล็อกกับบาน แล้วค่อยใส — ระหว่างทางรูยังไม่ตรงบาน
          * ถ้าใสเร็ว จะเห็นฟ้า/จุดเมฆรอบบานแทรกเข้ามาในรู พอใสตอนท้าย สิ่งที่เผยคือบานจริงพอดี
          */
-        const g = glass.current[i]
-        if (g) g.style.opacity = (1 - inOut((u - 0.72) / 0.28)).toFixed(3)
         if (idx === undefined) {
           /* จุดที่ไม่มีบานรองรับ (บานบนจอน้อยกว่าจำนวนจุด) — ยุบหายเข้าหาใจกลางตัวเอง */
           const k = 1 - clamp01(now / (MORPH * 0.28))
@@ -416,6 +445,8 @@ export function Final2026Gate() {
           })
           lastOut[i] = out
           putOutline(i, pts, out)
+          melt(i, out, u)
+          wins.set([b.x + b.w / 2, b.y + b.h / 2, Math.min(b.w, b.h) / 2, inOut((tt - spillAt(i)) / SPILL)], i * 4)
           continue
         }
         /* รัศมีปลายทางมาจากฉาก (พิกเซลจริง) ไม่ใช่ 0.17 ของด้านสั้นของกรอบบนจอ — ดู panelScreen */
@@ -423,6 +454,21 @@ export function Final2026Gate() {
         lastOut[i] = out
         /* วงกลม → มุมมนของบาน (สัดส่วนของด้านสั้น เหมือน Panel ในฉาก) */
         put(i, out, wantR)
+        melt(i, out, u)
+        wins.set([b.x + b.w / 2, b.y + b.h / 2, Math.min(b.w, b.h) / 2, inOut((tt - spillAt(i)) / SPILL)], i * 4)
+      }
+
+      /*
+       * ม่านเปิดด้วยหน้ากากทั้งหมด (ดู components/BlobReveal): ขาว → ฟ้า บานจากกลางจอ แล้วฉากจริงไหลออกจากปากบาน
+       * พื้นขาวของม่านถอดตอนบานแรกเริ่มไหล — จากนั้นนอกกรอบการ์ดคือขาวของหน้าเอง (สีเดียวกัน)
+       */
+      const gl = blob.current?.set(clamp01((all - 0.02) / 0.56), wins) ?? false
+      if (gl) {
+        if (veil.current && tt >= spillAt(0)) veil.current.style.background = 'transparent'
+      } else {
+        /* ไม่มี WebGL: ทางเดิม — ฟ้า CSS จางขึ้น แล้วม่านจางทิ้งตอนท้าย */
+        if (sky.current) sky.current.style.opacity = inOut((all - 0.05) / 0.5).toFixed(3)
+        if (veil.current) veil.current.style.opacity = `${1 - inOut((all - 0.84) / 0.16)}`
       }
 
 
@@ -437,7 +483,7 @@ export function Final2026Gate() {
           want: picked.map((idx) => panelScreen.quads[idx]?.map((c) => [Math.round(c.x), Math.round(c.y)])),
         }
       }
-      if (all < 1) {
+      if (gl ? tt < end : all < 1) {
         raf = requestAnimationFrame(step)
         return
       }
@@ -510,6 +556,8 @@ export function Final2026Gate() {
             style={{ background: SKY_GRAIN, opacity: 0.055, mixBlendMode: 'overlay' }}
           />
         </div>
+        {/* ม่านเชดเดอร์ (ขาว → ฟ้า → ฉากจริง) ตัดกรอบมุมมนเดียวกับการ์ดของฉาก — อยู่ใต้เม็ดแก้ว */}
+        <BlobReveal ref={blob} style={{ clipPath: 'inset(var(--v3-frame-gap) var(--v3-frame-gap) 0 round clamp(30px, 3.4vw, 56px))' }} />
       </div>
       {/* เม็ดแก้ว — ไล่ขาวใสบนซ้ายลงฟ้าหม่นล่างขวา ขอบบนสว่าง ขอบล่างเข้ม เงานุ่มใต้เม็ด */}
       <svg
@@ -519,15 +567,37 @@ export function Final2026Gate() {
         aria-hidden
       >
         <defs>
+          {/*
+            เนื้อแก้วทึบเต็ม — รูใต้เม็ดคือฉากจริง ถ้าแก้วโปร่งแม้ 5% บานจริงที่ยังไม่ตรงตำแหน่ง (หญ้า เมฆลายจุด)
+            จะทะลุขึ้นมาเป็นภาพซ้อนเหลื่อม ๆ ในเม็ดที่กำลังคลี่ — แก้วเปิดด้วยการละลายจากกลาง (ดู melt) แทน
+          */}
           <linearGradient id="v3-gate-glass" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#ffffff" stopOpacity="0.98" />
-            <stop offset="0.55" stopColor="#eef3f9" stopOpacity="0.92" />
-            <stop offset="1" stopColor="#cfdcee" stopOpacity="0.94" />
+            <stop offset="0" stopColor="#ffffff" />
+            <stop offset="0.55" stopColor="#eef3f9" />
+            <stop offset="1" stopColor="#cfdcee" />
           </linearGradient>
           <linearGradient id="v3-gate-rim" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="#ffffff" stopOpacity="1" />
             <stop offset="1" stopColor="#8fa6c6" stopOpacity="0.7" />
           </linearGradient>
+          {/* รูใสขอบนุ่ม: กลางดำ (ซ่อนแก้ว) ไล่เป็นขาวที่ขอบวง */}
+          <radialGradient id="v3-gate-iris">
+            <stop offset="0" stopColor="#000" />
+            <stop offset="0.7" stopColor="#000" />
+            <stop offset="1" stopColor="#fff" />
+          </radialGradient>
+          {Array.from({ length: DOTS }, (_, i) => (
+            <mask key={i} id={`v3-gate-melt-${i}`} maskUnits="userSpaceOnUse" x="0" y="0" width="100%" height="100%">
+              <rect width="100%" height="100%" fill="#fff" />
+              <circle
+                ref={(n) => {
+                  iris.current[i] = n
+                }}
+                r="0"
+                fill="url(#v3-gate-iris)"
+              />
+            </mask>
+          ))}
         </defs>
         {Array.from({ length: DOTS }, (_, i) => (
           <path
@@ -536,6 +606,7 @@ export function Final2026Gate() {
               glass.current[i] = n
             }}
             d=""
+            mask={`url(#v3-gate-melt-${i})`}
             fill="url(#v3-gate-glass)"
             stroke="url(#v3-gate-rim)"
             strokeWidth={1.2}

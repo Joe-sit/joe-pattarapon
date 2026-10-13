@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { JOURNEY } from '@/data/journey'
 import { roundedBoxGeo } from '@/newhero/geo'
 import { layout } from './portalLayout'
+import { WarmShaders } from '@/lib/WarmShaders'
 
 /**
  * ตัวละคร **ตัวเดียวกับ hero ของ /2026-final** — ไม่ใช่ Mascot เปล่า ๆ
@@ -725,6 +726,7 @@ export function ExperiencePortals({ id = 'experiences' }: { id?: string }) {
             gl={{ antialias: true, alpha: true, stencil: true }}
             camera={{ position: [0, 0, layout.camZ], fov: 42, near: 0.1, far: 140 }}
           >
+            <WarmShaders />
             <Scene />
           </Canvas>
 

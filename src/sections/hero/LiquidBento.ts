@@ -184,6 +184,13 @@ const VB_W = 211
 const SPLIT = 100
 const PADG = 48
 let grid: { nx: number; ny: number; v: Float32Array } | null = null
+/**
+ * ปั้นตารางระยะของฟองล่วงหน้า (ครั้งเดียวทั้งหน้า ~90ms บนเธรดหลัก) — เรียกตอน mount ใต้ผ้าคลุมของด่านโหลด
+ * ไม่งั้นมันไปตกในเฟรมแรกที่ฟองขึ้นจอ ซึ่งคือปลายอินโทรของ hero (เห็นเป็นกระตุกหนึ่งที)
+ */
+export function prepareBubbleGrid(outline: Float32Array) {
+  bubbleGrid(outline)
+}
 function bubbleGrid(outline: Float32Array) {
   if (grid) return grid
   const nx = VB_W + PADG * 2 + 1

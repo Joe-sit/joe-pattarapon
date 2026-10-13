@@ -20,6 +20,7 @@ import { headlineReady } from './headlineReady'
 import { BubbleCrowd, CHROME, chromeOutline } from './bubbleCrowd'
 import { useTuner } from '@/newhero/tuner'
 import { bubbleTravel, setHeadBubbleLive, subscribeBubbleAway } from './bubbleTravel'
+import { WarmShaders } from '@/lib/WarmShaders'
 
 /**
  * หัวเรื่องจอแรกเป็นตัวอักษรสามมิติจริง — เรขาคณิตอัดขึ้นรูปจากเส้นของฟอนต์เดียวกับหน้า
@@ -1817,6 +1818,7 @@ export function Headline3DField({
               camera={{ position: [0, 0, 400], zoom: 1, near: 1, far: 1200 }}
               gl={{ antialias: true, alpha: true }}
             >
+              <WarmShaders />
               <ambientLight intensity={1.35} />
               {/* คีย์จากบนขวาหน้า ให้สันที่ยืดออกมารับแสง อีกดวงจากล่างซ้ายกันด้านมืดตัน */}
               <directionalLight position={[220, 320, 420]} intensity={1.75} />
