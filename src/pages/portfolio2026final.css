@@ -424,15 +424,20 @@
   transform: translateX(-50%);
   pointer-events: none;
 }
+/*
+ * ก้อนตอนเลื่อนลง = ต้องไม่แย่งสายตาจากเรื่องในหน้า: เล็กลง (เตี้ยกว่าแถบ) แก้วฝ้าโปร่งแทนขาวทึบ ไม่มีเงา
+ * โลโก้หรี่ลงนิด — ยังอ่านความคืบหน้าออก แต่เป็นเสียงพื้นหลัง
+ */
 .v3-nav[data-mode='down'] {
   --nav-text: #1d2433;
-  --clip-x: calc(50% - 44px);
+  --clip-x: calc(50% - 34px);
+  --clip-y: 9px;
+  --clip-r: 14px;
 }
+/* แคปซูลตอนเลื่อนขึ้น = เต็มกว้างของแถบ ไม่ตัดข้าง (ตัด 40px เดิมเฉือนปุ่มเมนูกับ Resume ครึ่งชิ้น)
+ * มุมเท่า border-radius ของแถบ เส้นขอบ (.v3-nav-shadow) จึงทับขอบที่ตัดพอดี */
 .v3-nav[data-mode='up'] {
   --nav-text: #1d2433;
-  --clip-x: 40px;
-}
-.v3-nav[data-mode='up']:hover {
   --clip-x: 0px;
   --clip-r: 24px;
 }
@@ -445,7 +450,7 @@
   padding: 0 8px;
   border-radius: 24px;
   background-color: transparent;
-  clip-path: inset(0 var(--clip-x) 0 var(--clip-x) round var(--clip-r));
+  clip-path: inset(var(--clip-y, 0px) var(--clip-x) var(--clip-y, 0px) var(--clip-x) round var(--clip-r));
   pointer-events: auto;
   transition:
     clip-path 0.6s var(--nav-ease),
@@ -460,6 +465,11 @@
 .v3-nav:not([data-mode='top']) .v3-nav-main {
   background-color: #fff;
 }
+.v3-nav[data-mode='down'] .v3-nav-main {
+  background-color: rgb(255 255 255 / 0.5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+}
 /* เส้นขอบบาง + เงายาวจาง — โผล่เฉพาะตอนเป็นก้อน/แคปซูล */
 .v3-nav-shadow {
   position: absolute;
@@ -472,7 +482,7 @@
   pointer-events: none;
   transition: opacity 0.3s var(--nav-ease);
 }
-.v3-nav:not([data-mode='top']) .v3-nav-shadow {
+.v3-nav[data-mode='up'] .v3-nav-shadow {
   opacity: 1;
 }
 
@@ -632,7 +642,6 @@
  */
 .v3-logo {
   fill: var(--nav-text);
-  transition: fill 0.3s cubic-bezier(1, 0, 1, 0.6);
   overflow: hidden;
 }
 .v3-logo-ghost {
@@ -640,6 +649,16 @@
 }
 .v3-nav[data-mode='down'] .v3-logo-ghost {
   opacity: 0.22;
+}
+.v3-logo {
+  transition:
+    fill 0.3s cubic-bezier(1, 0, 1, 0.6),
+    opacity 0.4s var(--nav-ease),
+    scale 0.5s var(--nav-ease);
+}
+.v3-nav[data-mode='down'] .v3-logo {
+  opacity: 0.72;
+  scale: 0.82;
 }
 .v3-logo-bloom {
   transform-box: fill-box;

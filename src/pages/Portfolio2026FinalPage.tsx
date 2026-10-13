@@ -103,10 +103,21 @@ function TopBar({ entered }: { entered: boolean }) {
 
   useEffect(() => {
     lastY.current = window.scrollY
+    /*
+     * ความสูงที่เลื่อนได้ — วัดตอนผังเปลี่ยน (ResizeObserver) ไม่ใช่ทุก scroll: อ่าน scrollHeight ในตัวจัดการ scroll
+     * บังคับเบราว์เซอร์คิดผังใหม่ทุกครั้งที่สคริปต์อื่นเพิ่งเขียน style (ฟองแชตเขียนทุกเฟรม) = layout ซ้ำต่อเฟรม
+     */
+    let max = 1
+    const measure = () => {
+      max = document.documentElement.scrollHeight - window.innerHeight
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(document.body)
+    window.addEventListener('resize', measure)
     const onScroll = () => {
       const y = window.scrollY
       /* ความคืบหน้าทั้งหน้า → โลโก้ (เขียนตรงลง DOM ไม่ re-render ทุกเฟรมสโครล) */
-      const max = document.documentElement.scrollHeight - window.innerHeight
       progress.current?.(max > 0 ? Math.min(1, y / max) : 0)
       if (y < 40) {
         lastY.current = y
@@ -119,7 +130,11 @@ function TopBar({ entered }: { entered: boolean }) {
       setMode(dy > 0 ? 'down' : 'up')
     }
     window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('scroll', onScroll)
+    }
   }, [])
 
   useEffect(() => {
@@ -270,7 +285,7 @@ function LogoShapes({ flower }: { flower?: React.Ref<SVGGElement> }) {
 /**
  * โลโก้ JOE ที่เป็นแถบความคืบหน้าของหน้าไปในตัว (เห็นชัดตอนแถบหุบเป็นก้อน — สถานะ down)
  *   ตัวอักษรทั้งคำเป็นสีจาง แล้วสีเต็มไหลเติมจากซ้ายไปขวาตามระยะที่เลื่อน (J → ดอก → E)
- *   ดอกสี่กลีบ (ตัว O) หมุนตามการเลื่อน · ถึงท้ายหน้า ดอกเด้งบานหนึ่งที
+ *   ดอกสี่กลีบ (ตัว O) หมุนหนึ่งรอบตลอดหน้า · ถึงท้ายหน้า ดอกเด้งบานหนึ่งที
  * สถานะ top/up โลโก้เป็นสีเต็มตามปกติ — ดู .v3-logo-* ใน portfolio2026final.css
  *
  * ท่าโผล่ (play) = ท่าประกอบตัวอักษรของสปแลช (components/JoeLettersSplash) ย่อมาไว้ในแถบ:
@@ -290,7 +305,8 @@ function ProgressLogo({ bind, play, onBuilt }: { bind: React.RefObject<((p: numb
     bind.current = (p) => {
       /* เติมจากขอบซ้ายของ J (x −10) ถึงปลาย E (x 249) */
       fill.current?.setAttribute('width', String(259 * p))
-      const rot = `rotate(${(p * 720).toFixed(2)} ${FLOWER_C})`
+      /* หนึ่งรอบทั้งหน้า — สองรอบหมุนเร็วจนดึงสายตาตอนเลื่อน */
+      const rot = `rotate(${(p * 360).toFixed(2)} ${FLOWER_C})`
       ghost.current?.setAttribute('transform', rot)
       solid.current?.setAttribute('transform', rot)
       root.current?.classList.toggle('is-done', p > 0.995)
@@ -639,6 +655,8 @@ export function Portfolio2026FinalPage() {
     const sec = document.getElementById('hero')
     if (!sec) return
     let raf = 0
+    /** จอแรกเป็นเจ้าของค่า cursorShow อยู่ไหม (ดูท้ายลูป) */
+    let heroOwnsCursor = true
     const read = () => {
       raf = 0
       const r = sec.getBoundingClientRect()
@@ -687,8 +705,17 @@ export function Portfolio2026FinalPage() {
        * ไล่จบก่อนม่านเมฆถมเต็ม (WIPE_FULL) ลูกศรจึงหายตอนที่ยังเห็นมันอยู่ ไม่ใช่หายใต้ม่าน
        */
       if (sv < WIPE_FULL) {
+        heroOwnsCursor = true
         const g = Math.min(1, Math.max(0, (sv - 0.55) / 0.34))
         cursorShow.v = 1 - g * g * (3 - 2 * g)
+        cursorWake.fn()
+      } else if (heroOwnsCursor) {
+        /*
+         * เลื่อนเร็วข้ามช่วงย่อ เฟรมสุดท้ายที่อ่านได้อาจอยู่กลางทาง (ลูกศรค้างครึ่งตัวลอยผ่านขอบขวา
+         * ระหว่างม่านเมฆกับ What I do) — พ้นจอแรกแล้วปิดให้สนิทครั้งเดียว ไม่เขียนต่อ (จออื่นเป็นเจ้าของต่อ)
+         */
+        heroOwnsCursor = false
+        cursorShow.v = 0
         cursorWake.fn()
       }
     }

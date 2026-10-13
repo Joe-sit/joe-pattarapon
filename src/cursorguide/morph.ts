@@ -23,4 +23,9 @@ export const cursorHand = { v: 0 }
  */
 export const cursorShow = { v: 1 }
 export const cursorTip = { x: 0, y: 0, ok: false }
+/**
+ * จุดกำเนิดของลูกศร (ตำแหน่งที่จุดจอดวางมัน) เป็นพิกเซลบนจอ — คู่กับ `cursorTip`
+ * ของที่อยากให้ *ปลาย* ลูกศรไปลงตรงจุดหนึ่ง ลบระยะ (ปลาย − กำเนิด) ออกจากจุดนั้นก่อนเอาไปเป็นจุดจอด
+ */
+export const cursorRoot = { x: 0, y: 0 }
 export const cursorWake = { fn: () => {} }

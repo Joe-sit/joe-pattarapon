@@ -7,7 +7,7 @@ import { introTime } from '@/newhero/intro'
 import { useTuner } from '@/newhero/tuner'
 import { driveHeroPointer } from '@/sections/hero/Headline3D'
 import { heroCursor } from './heroCursor'
-import { cursorHand, cursorShow, cursorTip, cursorWake } from './morph'
+import { cursorHand, cursorRoot, cursorShow, cursorTip, cursorWake } from './morph'
 import { cursorPress } from './press'
 import { cursorPose } from './stops'
 
@@ -135,6 +135,8 @@ function Rig() {
     if (hand.current) hand.current.visible = asHand
     // พิกัดจอ (0,0 = ซ้ายบน) -> พิกัดกล้องออร์โธที่กลางจอเป็นศูนย์
     root.position.set(p.x - size.width / 2, size.height / 2 - p.y, 0)
+    cursorRoot.x = p.x
+    cursorRoot.y = p.y
     root.quaternion.copy(p.q)
     root.scale.setScalar(p.size)
     /**
