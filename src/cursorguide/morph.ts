@@ -29,3 +29,11 @@ export const cursorTip = { x: 0, y: 0, ok: false }
  */
 export const cursorRoot = { x: 0, y: 0 }
 export const cursorWake = { fn: () => {} }
+/**
+ * section ที่ต้องพาเคอร์เซอร์เองทั้งท่า (ลากกรอบเลือก วนเป็นเกลียว ถูกดูดหาย) — ไม่ใช่แค่จุดจอดบนเส้นทาง
+ *
+ * w = น้ำหนักที่ทับเส้นทางของ stops (0 = ตามจุดจอดตามปกติ, 1 = อยู่ที่นี่ทั้งตัว)
+ * x y = จุดกำเนิดบนจอ (px · ไม่ใช่ปลาย — ดู cursorRoot) · size = สูง (px) · tilt = เอียงรอบแกนลึก · spin = ควงรอบแกนตั้ง (rad)
+ * ใครเขียน w > 0 ต้องคืนเป็น 0 เองตอนพ้นช่วงของตัวเอง
+ */
+export const cursorLead = { w: 0, x: 0, y: 0, size: 54, tilt: 0, spin: 0 }

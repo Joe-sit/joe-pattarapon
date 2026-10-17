@@ -16,7 +16,7 @@ import * as THREE from 'three'
  *   3. อัปโหลดเท็กซ์เจอร์ทุกช่องของทุกวัสดุขึ้น GPU · อ่าน uniform ของทุกโปรแกรมไว้ก่อน (onFirstUse)
  * จำนวนโปรแกรมไม่เพิ่มติดกันพักหนึ่ง = ฉากนี้อุ่นครบ — ด่านโหลดรอทุกแคนวาสที่ลงทะเบียนไว้ (warmSettled)
  *
- * ใช้ compileAsync: รอโปรแกรมคอมไพล์เสร็จแบบไม่บล็อกเธรดหลัก (KHR_parallel_shader_compile) จุดโหลดยังเต้นลื่น
+ * ใช้ compile แล้วรอเองแบบไม่บล็อกเธรดหลัก (KHR_parallel_shader_compile — ดู settled) จุดโหลดยังเต้นลื่น
  * ปิด checkShaderErrors นอก dev — ค่าเริ่มต้นของ three เรียก getProgramInfoLog ทุกโปรแกรมใหม่ บังคับคอมไพล์จบเดี๋ยวนั้น
  */
 const pending = new Set<object>()
@@ -48,6 +48,25 @@ export function WarmShaders() {
     const target = new THREE.WebGLRenderTarget(1, 1)
     const uploaded = new WeakSet<THREE.Texture>()
     let alive = true
+    /**
+     * รอโปรแกรมคอมไพล์เสร็จแบบไม่บล็อก — ทำเองแทน compileAsync ของ three
+     *
+     * ตัวของ three ไล่เช็ค `currentProgram.isReady()` ของทุกวัสดุจนครบ ถ้าระหว่างรอมีวัสดุถูกทิ้ง (dispose) หรือถูกขอ
+     * โปรแกรมใหม่ ช่องนั้นว่าง แล้วมันพังใน setTimeout ของมันเอง (TypeError … reading 'isReady' — จับด้วย catch ไม่ได้)
+     * ที่นี่ข้ามวัสดุที่ไม่มีโปรแกรมแล้ว: ไม่มีอะไรให้รอ
+     */
+    const settled = (mats: Set<THREE.Material>) =>
+      new Promise<void>((done) => {
+        const tick = () => {
+          mats.forEach((m) => {
+            const pr = (gl.properties.get(m) as { currentProgram?: { isReady?: () => boolean } }).currentProgram
+            if (!pr?.isReady || pr.isReady()) mats.delete(m)
+          })
+          if (mats.size === 0 || !alive) done()
+          else window.setTimeout(tick, 10)
+        }
+        tick()
+      })
     let timer = 0
     let passes = 0
     let count = -1
@@ -65,12 +84,12 @@ export function WarmShaders() {
         const m = (o as THREE.Mesh).material
         if (m) (Array.isArray(m) ? m : [m]).forEach((x) => mats.add(x))
       })
-      let jobs: Promise<unknown>[] = []
+      const waiting = new Set<THREE.Material>()
       try {
-        jobs = [gl.compileAsync(scene, camera)]
+        gl.compile(scene, camera).forEach((m) => waiting.add(m))
         const prev = gl.getRenderTarget()
         gl.setRenderTarget(target)
-        jobs.push(gl.compileAsync(scene, camera))
+        gl.compile(scene, camera).forEach((m) => waiting.add(m))
         gl.setRenderTarget(prev)
       } finally {
         for (const o of hidden) o.visible = false
@@ -87,7 +106,7 @@ export function WarmShaders() {
           }
         })
       })
-      await Promise.all(jobs)
+      await settled(waiting)
       /*
        * ใช้ครั้งแรกของแต่ละโปรแกรม three ยังต้องอ่านรายชื่อ uniform จาก GPU (onFirstUse — dev ตรวจ log ด้วย)
        * ซึ่งเกิดในเฟรมแรกที่วาดจริง ไม่ใช่ตอนคอมไพล์ — เรียก getUniforms ให้มันเกิดตอนนี้ (ทั้งชุดจอและชุด render target)

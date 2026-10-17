@@ -7,7 +7,7 @@ import { introTime } from '@/newhero/intro'
 import { useTuner } from '@/newhero/tuner'
 import { driveHeroPointer } from '@/sections/hero/Headline3D'
 import { heroCursor } from './heroCursor'
-import { cursorHand, cursorRoot, cursorShow, cursorTip, cursorWake } from './morph'
+import { cursorHand, cursorLead, cursorRoot, cursorShow, cursorTip, cursorWake } from './morph'
 import { cursorPress } from './press'
 import { cursorPose } from './stops'
 
@@ -38,6 +38,8 @@ const RAD = Math.PI / 180
 
 /** ที่พักค่าระดับโมดูล — ฉายปลายนิ้วลงจอทุกเฟรม ห้ามจองอ็อบเจกต์ใหม่ในลูปวาด */
 const _tip = new THREE.Vector3()
+const _leadQ = new THREE.Quaternion()
+const _leadE = new THREE.Euler()
 
 export function CursorGuideLayer() {
   return (
@@ -114,9 +116,12 @@ function Rig() {
     const root = g.current
     if (!root) return
     const p = cursorPose()
-    root.visible = p.ok
-    cursorTip.ok = p.ok
-    if (!p.ok) return
+    /* section ที่พาเคอร์เซอร์เองทั้งท่า (ดู cursorLead) ทับเส้นทางของจุดจอดตามน้ำหนัก */
+    const lw = cursorLead.w
+    const ok = p.ok || lw > 0
+    root.visible = ok
+    cursorTip.ok = ok
+    if (!ok) return
     /**
      * สลับรูปทรงด้วยการซ่อน/โชว์ ไม่ใช่เปลี่ยน prop
      *
@@ -134,11 +139,19 @@ function Rig() {
     if (arrow.current) arrow.current.visible = !asHand
     if (hand.current) hand.current.visible = asHand
     // พิกัดจอ (0,0 = ซ้ายบน) -> พิกัดกล้องออร์โธที่กลางจอเป็นศูนย์
-    root.position.set(p.x - size.width / 2, size.height / 2 - p.y, 0)
-    cursorRoot.x = p.x
-    cursorRoot.y = p.y
+    const px = lw > 0 ? p.x + (cursorLead.x - p.x) * lw : p.x
+    const py = lw > 0 ? p.y + (cursorLead.y - p.y) * lw : p.y
+    root.position.set(px - size.width / 2, size.height / 2 - py, 0)
+    cursorRoot.x = px
+    cursorRoot.y = py
     root.quaternion.copy(p.q)
     root.scale.setScalar(p.size)
+    if (lw > 0) {
+      /* ควงรอบแกนตั้งก่อน แล้วเอียงรอบแกนลึก — ท่าถูกดูดเข้าพอร์ทัลหมุนรอบตัวเองโดยปลายยังชี้ทางเดิม */
+      _leadQ.setFromEuler(_leadE.set(0, cursorLead.spin, cursorLead.tilt, 'ZYX'))
+      root.quaternion.slerp(_leadQ, lw)
+      root.scale.setScalar(p.size + (cursorLead.size - p.size) * lw)
+    }
     /**
      * ชุดไฟหมุนกลับด้วยผกผันของทิศกล้องฉาก hero
      *

@@ -8,17 +8,17 @@ import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
 import bubbleSvg from '@/assets/v2final/hero-ideas-bubble.svg?raw'
 import penNibSvg from '@/assets/icons/pen-nib.svg?raw'
 import { useCursorStop } from '@/cursorguide/useCursorStop'
-import { BEAT, SKY_LEAVE, at } from '@/sections/skystory/beats'
+import { BEAT, SKY_LEAVE, at, endOf } from '@/sections/skystory/beats'
 import { headOf, liquidGeo, prepareBubbleGrid, skillBlobs, sproutShift } from './LiquidBento'
+import { rrect } from './shapes'
 import { FW, panelBox, panelLayout } from './ServiceTrack'
-import { IsoSkills } from './IsoSkills'
-import { FallSky } from './FallSky'
 import { ISO_Q, SIGN_H, magStart, signCenter } from './isoStage'
-import { SKILLS } from '@/sections/whatido/WhatIDo'
 import { makeLiquidGlass } from './liquidGlass'
 import { useTuner } from '@/newhero/tuner'
 import { StageLight } from './Headline3D'
 import { bubbleTravel, setBubbleAway, setHeadBubbleLive, subscribeBubbleAway } from './bubbleTravel'
+import { DEVICE, LAYOUT_H, WF, WF_HEAD, benchPose, camDist, caretSpot, deviceMat, deviceSpot, headPose, inOut as inOut3, researchPhase, wfK, workBeats } from './workMotion'
+import { outlineMat } from './shapes'
 
 /**
  * ฟองคำพูดของหัวเรื่องออกเดินทางลงไปเล่าต่อใน What I do — ใบเดียวกัน ไหลต่อเนื่องตามการเลื่อน
@@ -42,16 +42,10 @@ import { bubbleTravel, setBubbleAway, setHeadBubbleLive, subscribeBubbleAway } f
 export const NEXT_ID = 'what-i-do-windows'
 
 /**
- * จังหวะของฟอง: ทักทาย → บอกว่าจะพาไปดูอะไร → เป็นหัวพาเนล = ชื่อบริการของหน้าที่เปิดอยู่ (UX/UI, …)
- * เลื่อนข้ามหน้า หัวพาเนลลบชื่อเดิมแล้วพิมพ์ชื่อบริการถัดไป
+ * จังหวะของฟอง: ทักทาย → บอกว่าจะพาไปดูอะไร แล้วค้างประโยคนั้นไว้ — งานที่เข้ามาไม่หยุดล้อมรอบมัน (./WorkStory)
+ * ถูกกรอบเลือกกวาด แล้วหมุนยุบหายเข้ากลางจอพร้อมฟองอื่น
  */
-/** ชื่อสกิลบนป้าย ตามลำดับแผ่นในฉากไอโซ (ดู ./IsoSkills) */
-const NAMES = ['Research', 'UX/UI', 'Coding'] as const
-/** ชื่อใน WhatIDo ของแต่ละแผ่น — คำอธิบายจริงมาจากที่นั่น */
-const SKILL_OF = ['Research', 'Design', 'Coding'] as const
-/** คำอธิบายใต้ขวาของแต่ละแผ่น (Research ยังเป็น Lorem รอเขียน — ไม่แสดง) */
-const DESCS = SKILL_OF.map((t) => (t === 'Research' ? '' : (SKILLS.find((k) => k.title === t)?.desc ?? '')))
-const LINES = ["Hello, I'm Joe", 'Here is what I do', ...NAMES] as const
+const LINES = ["Hello, I'm Joe", 'Here is what I do'] as const
 /**
  * ข้อความในฟองน้ำหนักปกติ — Momo Trust Sans Regular (ครอบครัวเดียวกับ Momo Trust Display ของหัวเรื่อง
  * ซึ่งมีน้ำหนักเดียวคือหนา) แปลงจากไฟล์ static ของ Google Fonts — ไม่ใช่ไฟล์ variable: ตัวนั้นเส้นขอบตัวอักษร
@@ -72,6 +66,73 @@ const CARET_GAP = 10
 const INK = '#2052cd'
 /** หมึกบนป้าย — เส้นดำของฉากไอโซ */
 const SIGN_INK = new THREE.Color('#17171c')
+/** ถูกกรอบเลือกกวาด: เนื้อแก้วขาวขุ่น ตัวอักษรน้ำเงิน — แบบรายการที่ถูกไฮไลต์ */
+const SEL_INK = new THREE.Color('#2052cd')
+const CARET_P = new THREE.Vector3()
+/**
+ * เครื่องแก้ว (ชิ้นแยกจากฟอง — ดู devG) ปั้นครั้งเดียวด้วยกล่องมน · แท่น (ฟองแคปซูล) ลงจอดบนจอของมันในบท morph
+ */
+/** กล่องมนอัดขึ้นรูปแบบเดียวกับขั้นสุดท้ายของ liquidGeo (ขอบมนตามความหนา ร่นเส้นเข้าแล้วให้ bevel พองกลับ) */
+function boxGeo(b: { hw: number; hh: number; r: number; cx: number }, thick: number, round: number) {
+  const bev = thick * 0.499 * Math.min(1, Math.max(0, round))
+  const inset = bev * 0.5
+  const shape = rrect((b.hw - inset) * 2, (b.hh - inset) * 2, Math.max(0.5, b.r - inset))
+  const g = new THREE.ExtrudeGeometry(shape, {
+    depth: Math.max(1e-4, thick - bev * 2),
+    bevelEnabled: true,
+    bevelThickness: bev,
+    bevelSize: inset,
+    bevelSegments: 5,
+    curveSegments: 14,
+  })
+  g.translate(b.cx, 0, bev - thick / 2)
+  return g
+}
+/** สองคำของประโยคที่สอง — ตอนเป็นเครื่อง ข้อความไหลลงเป็นสองบรรทัดกลางจอ */
+const WORDS = ['Here is', 'what I do'] as const
+/** ระยะบรรทัดในเครื่อง · กลางก้อนข้อความต่ำกว่ากลางเครื่องนิด (ไอคอนอยู่บน) — หน่วย viewBox */
+const DEV_LINE = 42
+const DEV_TY = -14
+/**
+ * บท lift: ข้อความ (สองบรรทัด + ไอคอน + เคอร์เซอร์พิมพ์) ลอยออกจากเครื่องขึ้นไปข้างบน ตั้งหน้าหาคนดูตลอด
+ * แล้วตัวเครื่องแก้วค่อย ๆ หงายลง (หน้าจอหันขึ้นฟ้า) — ข้อความอยู่กลุ่มของตัวเอง ไม่หงายตาม
+ */
+const FLOAT_Y = 84
+/** ข้อความพุ่งเข้าหากล้องกี่หน่วย · ชั้นของแต่ละชิ้น (ไอคอน · บรรทัดหนึ่ง · บรรทัดสอง) ลึกไม่เท่ากัน = มีมิติ */
+const FLOAT_Z = 150
+const LAYER_Z = [70, 35, 0]
+/**
+ * แคนวาสนี้เป็นออร์โธ — เครื่องที่หงายจะเหลือแค่สี่เหลี่ยมเตี้ยลง ไม่อ่านว่าหงาย ใส่เทอมเพอร์สเปกทีฟลงในเมทริกซ์ของฟองเอง
+ * (w ขึ้นกับความลึกในโลก: ขอบที่หงายห่างออกไปหดเล็ก ขอบใกล้ขยาย) — ระยะโฟกัสเท่ากล้องของแคนวาสของบนจอ (./WorkStory)
+ * ภาพสองแคนวาสจึงทาบกันพอดี (ของบนจอวาดใต้แก้วเครื่อง)
+ */
+const PERSP = new THREE.Matrix4()
+const WF_P = new THREE.Vector3()
+/** แท่นลงจอดบนเครื่อง: ที่ลงบนจอ (หน่วยท้องถิ่นของเครื่อง = viewBox) · ขนาดแท่นเทียบเครื่อง (แคปซูลกว้างราว 330 → แถบหัว 84) */
+const PAD_Y = 150
+const PAD_S = 0.25
+const PAD_A = new THREE.Matrix4()
+const PAD_B = new THREE.Matrix4()
+const DEV_M = new THREE.Matrix4()
+const DEV_P = new THREE.Vector3()
+const DEV_S = new THREE.Vector3()
+const DEV_Q = new THREE.Quaternion()
+const PA_P = new THREE.Vector3()
+const PA_Q = new THREE.Quaternion()
+const PA_S = new THREE.Vector3()
+const PB_P = new THREE.Vector3()
+const PB_Q = new THREE.Quaternion()
+const PB_S = new THREE.Vector3()
+const PERSP_INV = new THREE.Matrix4()
+const WF_A = new THREE.Vector3()
+const WF_B = new THREE.Vector3()
+const WF_INV = new THREE.Matrix4()
+const BENCH_E = new THREE.Euler()
+const BENCH_Q = new THREE.Quaternion()
+const TILT_MAX = 1.08
+const AX_X = new THREE.Vector3(1, 0, 0)
+const TILT_Q = new THREE.Quaternion()
+const FLOAT_M = new THREE.Matrix4()
 
 const WHITE = new THREE.Color('#ffffff')
 const TMP_C = new THREE.Color()
@@ -91,37 +152,15 @@ const inOut01 = (x: number) => {
 }
 
 /** ท่าของเฟรมนี้ — คิดจากการเลื่อน อ่านในลูปเฟรม ไม่ผ่าน React */
-const POSE0 = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0, iso: 0, grow: 0, page: 0, mag: 0, tuck: 0, fall: 0, prog: 0, act: [0, 0, 0] }
-type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number; iso: number; grow: number; page: number; mag: number; tuck: number; fall: number; prog: number; act: number[] }
-
-/**
- * ป้ายตอนนี้ = ชื่อสกิลของแผ่นที่ใกล้ป้ายที่สุด พิมพ์เต็มตอนแผ่นอยู่ใต้ป้าย ลบหมดตอนเลื่อนถึงครึ่งทางไปแผ่นถัดไป
- * แล้วพิมพ์ชื่อถัดไป · ครั้งแรกพิมพ์ตาม BEAT.name
- */
-function skillTitle(name: number, page: number) {
-  const n = Math.round(page)
-  const near = clamp01((1 - 2 * Math.abs(page - n)) * 1.6)
-  const line = 2 + n
-  return { line, chars: Math.round(name * near * LINES[line].length) }
+/** ช่วงข้อความลอกจนหลุดพ้นจอ (0..1): ฟองเริ่มหงายนิด → ก่อนเครื่องเลื่อนขึ้นมาเต็ม */
+const textGo = (sv2: number) => at(sv2, [BEAT.lift[0] + 0.06, BEAT.research[0] + 0.6 - BEAT.lift[0] - 0.06])
+/** สุ่มคงที่ต่อชิ้น (0..1) — ตัวอักษรแต่ละตัวได้น้ำหนัก/ทิศของตัวเอง ทุกเฟรมเท่าเดิม */
+const rnd = (n: number, k: number) => {
+  const v = Math.sin(n * 12.9898 + k * 78.233) * 43758.5453
+  return v - Math.floor(v)
 }
-
-/**
- * ทัวร์สามแผ่น: แต่ละแผ่นจอดนิ่งใต้ป้ายให้เรื่องบนแผ่นเล่นจบ (act 0→1) แล้วค่อยไหลไปแผ่นถัดไป
- * t = ความคืบหน้าของ BEAT.tour · จอด 0.28 / ไหล 0.08 สลับกัน
- */
-function tourAt(t: number) {
-  const HOLD = 0.28
-  const MOVE = 0.08
-  const n = NAMES.length
-  let page = 0
-  const act: number[] = []
-  for (let i = 0; i < n; i += 1) {
-    const s = i * (HOLD + MOVE)
-    act.push(clamp01((t - s - 0.01) / (HOLD - 0.03)))
-    if (i < n - 1) page += smooth((t - s - HOLD) / MOVE)
-  }
-  return { page, act }
-}
+const POSE0 = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0, iso: 0, grow: 0, page: 0, mag: 0, tuck: 0, fall: 0, prog: 0, act: [0, 0, 0], sel: 0, gone: 0, whirl: 0, caretOut: 0, zoom: 1, dev: 0, float: 0, tilt: 0, bx: 0, by: 0, bk: 1, bt: 1, flat: 0, wire: 0, land: 0, away: 0, brx: 0, bry: 0, bspin: 0, hx: 0, hy: 0 }
+type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number; iso: number; grow: number; page: number; mag: number; tuck: number; fall: number; prog: number; act: number[]; sel: number; gone: number; whirl: number; caretOut: number; zoom: number; dev: number; float: number; tilt: number; bx: number; by: number; bk: number; bt: number; flat: number; wire: number; land: number; away: number; brx: number; bry: number; bspin: number; hx: number; hy: number }
 
 function readPose(): Pose {
   const off: Pose = { ...POSE0 }
@@ -146,6 +185,10 @@ function readPose(): Pose {
   const hand = clamp01(-glue / (vh * 0.12))
   /* ใบนี้คือฟองใบเดียวของหน้า — นั่งในหัวเรื่องตั้งแต่หัวเรื่องโผล่ (ใบในหัวเรื่องไม่วาด ดู Headline3D) */
   if (!bubbleTravel.live || rise >= 1 || hand >= 1 || r.height < 1) return off
+  /* เรื่องงานที่เข้ามา (./WorkStory): ถูกกรอบเลือก แล้วหมุนยุบเข้ากลางจอ — ยุบหมดแล้วชั้นนี้ปิด */
+  const wb = workBeats(sv2)
+  const bp = benchPose(wb, vw, vh)
+  const hp = headPose(vw, vh)
   const d = smooth((sv - 0.03) / 0.42)
   const h1 = Math.min(vh * 0.17, 150)
   /**
@@ -156,7 +199,6 @@ function readPose(): Pose {
   const h0 = el.offsetHeight * (r.width / Math.max(1, el.offsetWidth))
   /* พิมพ์จบ ปุ่มงอก แล้วฟองกับแถวปุ่มลอยขึ้นไปเป็นแถบบนสุด — ใต้แถบคือรางบริการ (ดู ./ServiceTrack) */
   const up = 0
-  const { page, act } = tourAt(at(sv2, BEAT.tour))
   const lift = Math.min(0, glue - vh)
   /**
    * ฟองขยายเป็นพาเนลแบบหน้าต่าง Spotlight กลางจอ (ดู panelLayout) — ตัวพาเนลคือฟองเอง:
@@ -181,27 +223,60 @@ function readPose(): Pose {
     /* ใน What I do: พิมพ์คำทักทาย → ค้างให้อ่าน → ลบทีละตัว → พิมพ์ประโยคที่สอง */
     ...(sv2 < BEAT.erase[0] + BEAT.erase[1]
       ? { line: 0, chars: Math.round(at(sv2, BEAT.greet) * (1 - at(sv2, BEAT.erase)) * LINES[0].length) }
-      : sv2 < BEAT.unsay[0] + BEAT.unsay[1]
-        ? { line: 1, chars: Math.round(at(sv2, BEAT.line2) * (1 - at(sv2, BEAT.unsay)) * LINES[1].length) }
-        : skillTitle(at(sv2, BEAT.name), page)),
+      : { line: 1, chars: Math.round(at(sv2, BEAT.line2) * LINES[1].length) }),
     /* พิมพ์จบแล้ว ปุ่มกลมหนึ่งปุ่มต่อสกิลงอกออกมาจากท้ายฟอง (ท่า Spotlight) */
     /* ลบคำทักทายเสร็จ ฟองคำพูดกลายเป็นช่องค้นหาแบบ Spotlight (หางหด ทรงแคปซูล แว่นขยาย เคอร์เซอร์) */
     search: smooth(at(sv2, BEAT.search)),
-    sprout: smooth(at(sv2, BEAT.sprout)),
+    /* ปุ่มงอก / ป้ายบนเวทีไอโซ / รางบริการ ของเรื่องเดิม — ปิดไว้ (ค่าเป็นศูนย์ ทางเดิมในฟองจึงนิ่ง) */
+    sprout: 0,
     head,
     paint: smooth((up - 0.6) / 0.4),
     stage: 0,
     slide: 0,
-    iso: smooth(at(sv2, BEAT.iso)),
-    grow: smooth(at(sv2, BEAT.grow)),
-    page,
-    act,
-    mag: at(sv2, [BEAT.iso[0] + 0.1, BEAT.iso[1] + 0.25]),
-    /* ปุ่มกลมหดกลับเข้าฟองตอนลบประโยคที่สอง — ป้ายเหลือฟองเดียว */
-    tuck: smooth(at(sv2, [BEAT.unsay[0], 0.55])),
-    /* ฉากหลังร่วงจากฟ้า (ดู ./FallSky): ระยะร่วงนับจากฟองเริ่มเอียง · ความคืบหน้าทั้งเรื่องของเวที */
-    fall: Math.max(0, sv2 - BEAT.iso[0]),
-    prog: smooth(at(sv2, [BEAT.iso[0], BEAT.tour[0] + BEAT.tour[1] - BEAT.iso[0]])),
+    iso: 0,
+    grow: 0,
+    page: 0,
+    act: [0, 0, 0],
+    mag: 0,
+    tuck: 0,
+    fall: 0,
+    prog: 0,
+    /* กรอบเลือกกวาดผ่านกลางฟอง (กลางจอ) */
+    sel: 0,
+    gone: 0,
+    /* หมุนทวนเข็มไปกับเกลียวของฟองอื่น */
+    whirl: 0,
+    /* เคอร์เซอร์ของหน้าออกมาจากเคอร์เซอร์พิมพ์ — ตัวพิมพ์หลบให้ */
+    caretOut: researchPhase(wb.research).emerge,
+    /* กล้องของฉากพอร์ทัล (./WorkStory) — ใบนี้อยู่กลางโลกเดียวกัน (z = 0) จึงย่อขยายตามระยะกล้อง */
+    zoom: 1,
+    /* โต๊ะทำงาน (./workMotion benchPose — ของบนจอในอีกแคนวาสวางตามค่าชุดเดียวกัน) · หัวเรื่องไปที่ headPose */
+    bx: bp.x,
+    by: bp.y,
+    bk: bp.k,
+    wire: wb.wire,
+    /**
+     * ข้อความลอกแล้วหลุดลอยพ้นจอเป็นการเคลื่อนเดียวต่อเนื่อง (TEXT_GO): ลอกค่อย ๆ ออกตัว แล้วแรงดึงขึ้นรับช่วงก่อนลอกจะชะลอ
+     * ความเร็วรวมจึงเพิ่มขึ้นตลอด ไม่มีช่วงหน่วงกลางทาง (เดิมสองช่วงเกลี่ยแยกกัน — ลอกชะลอจนเกือบหยุดก่อนเริ่มหลุด)
+     */
+    away: ((m) => (m <= 0 ? 0 : m ** 2.2))(clamp01((textGo(sv2) - 0.12) / 0.88)),
+    land: wb.morph,
+    /* บทค้นคว้า: ข้อความไปเป็นหัวเรื่องขวา แว่นขยายลงไปเป็นวัตถุหลักบนแท่น — กลับที่เดิมตอนท้ายบท (ก่อนคลี่เป็นเครื่อง) */
+    bt: bp.target,
+    flat: bp.flat,
+    brx: bp.rx,
+    bry: bp.ry,
+    bspin: bp.spin,
+    hx: hp.x,
+    hy: hp.y,
+    /* ช่องค้นหาคลี่เป็นทรงเครื่อง */
+    dev: inOut3(at(sv2, BEAT.morph)),
+    /* ข้อความลอยออกก่อน เครื่องหงายตาม */
+    /* หงายตั้งแต่ยังเป็นฟอง (คลี่เป็นเครื่องระหว่างทาง) · ข้อความลอกออกจากผิวทีหลัง */
+    /* ออกตัวทันที (เห็นฟองเริ่มหงายก่อนคลี่) แล้วชะลอเข้ามุมสุด */
+    tilt: 1 - (1 - at(sv2, BEAT.lift)) ** 2.2,
+    /* ข้อความลอกออกตั้งแต่ยังเป็นฟอง ก่อนคลี่เป็นเครื่อง — คลี่/จัดบรรทัดใหม่ระหว่างที่ลอยอยู่ */
+    float: smooth(textGo(sv2) / 0.45),
     hand,
     /* แถบกับรางติดท้าย section — จอถัดไปเลื่อนขึ้นมา ทั้งชุดก็เลื่อนขึ้นไปด้วย */
     lift,
@@ -259,6 +334,49 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
     )
   }, [font])
   useEffect(() => () => texts.flat().forEach((x) => x.geo?.dispose()), [texts])
+  /**
+   * สองคำของ "Here is what I do" แยกชิ้น — ตอนยังเป็นบรรทัดเดียวสองชิ้นวางต่อกันตรงตำแหน่งเดิมเป๊ะ (ระยะ = ความกว้าง
+   * ตัวอักษรรวมเว้นวรรคจากข้อมูลฟอนต์ แบบเดียวกับที่ three วางตัวอักษร) สลับมาใช้ชิ้นคู่นี้จึงไม่เห็นรอย แล้วค่อยไหลลงเป็นสองบรรทัด
+   */
+  const words = useMemo(() => {
+    const opts = { font, size: FS, depth: 3, curveSegments: 6, bevelEnabled: true, bevelThickness: 0.8, bevelSize: 0.5, bevelSegments: 2 }
+    const k = FS / font.data.resolution
+    const adv = (str: string) => [...str].reduce((n, c) => n + (font.data.glyphs[c]?.ha ?? 0) * k, 0)
+    return WORDS.map((wd, i) => {
+      const geo = new TextGeometry(wd, opts)
+      geo.computeBoundingBox()
+      const b = geo.boundingBox as THREE.Box3
+      return { geo, w: b.max.x - b.min.x, x0: i === 0 ? 0 : adv(`${WORDS[0]} `) }
+    })
+  }, [font])
+  useEffect(() => () => words.forEach((x) => x.geo.dispose()), [words])
+  /** ตัวอักษรรายตัวของสองคำ (ข้ามเว้นวรรค) — x = ระยะจากต้นคำตามข้อมูลฟอนต์ แบบเดียวกับที่ three วางตัวอักษร */
+  const letters = useMemo(() => {
+    const opts = { font, size: FS, depth: 3, curveSegments: 6, bevelEnabled: true, bevelThickness: 0.8, bevelSize: 0.5, bevelSegments: 2 }
+    const k = FS / font.data.resolution
+    const out: { geo: TextGeometry; x: number; w: number }[] = []
+    WORDS.forEach((wd, wi) => {
+      let x = 0
+      for (const c of wd) {
+        if (c !== ' ') out.push({ geo: new TextGeometry(c, opts), x, w: wi })
+        x += (font.data.glyphs[c]?.ha ?? 0) * k
+      }
+    })
+    return out
+  }, [font])
+  useEffect(() => () => letters.forEach((x) => x.geo.dispose()), [letters])
+  const letterRefs = useRef<(THREE.Mesh | null)[]>([])
+  /** กรอบ wireframe ที่ตัวอักษรกลายเป็น — ตัวละชิ้น วัสดุแยกชิ้น (ขนาดต่างกัน) */
+  const outlineRefs = useRef<(THREE.Mesh | null)[]>([])
+  const wfG = useRef<THREE.Group>(null)
+  const wfMesh = useMemo(() => ({ geo: new THREE.PlaneGeometry(1, 1), mats: WF.map(() => outlineMat()) }), [])
+  useEffect(
+    () => () => {
+      wfMesh.geo.dispose()
+      wfMesh.mats.forEach((m) => m.dispose())
+    },
+    [wfMesh],
+  )
 
   /**
    * หมึกไม่ผ่านตัวแมปโทน + เรืองในตัวครึ่งหนึ่ง — ไฟเวทีของแก้ว (Environment สว่างจัด) ล้างสีน้ำเงิน
@@ -316,6 +434,38 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
     [iconGeo, iconMat],
   )
   const dots = useRef<(THREE.Mesh | null)[]>([])
+  const wordRefs = useRef<(THREE.Mesh | null)[]>([])
+  const textG = useRef<THREE.Group>(null)
+  /** เครื่องแก้ว (ชิ้นแยกจากฟอง) — กล่องมนทรงจอมือถือ เนื้อแก้วชุดเดียวกับฟอง */
+  const devG = useRef<THREE.Group>(null)
+  const devGeo = useMemo(() => boxGeo({ hw: DEVICE.hw, hh: DEVICE.hh, r: DEVICE.r, cx: 0 }, t.bbThick, t.bbRound), [t.bbThick, t.bbRound])
+  useEffect(() => () => devGeo.dispose(), [devGeo])
+  /** เงานุ่มใต้ก้อนข้อความบนผิวเครื่อง — วงรีไล่จางจากแคนวาส (ไม่ใช่สำเนาตัวอักษร: สำเนาคมอ่านเป็นข้อความซ้อน) */
+  const shadow = useRef<THREE.Mesh>(null)
+  const shadowMat = useMemo(() => {
+    const c = document.createElement('canvas')
+    c.width = c.height = 128
+    const x = c.getContext('2d')
+    if (x) {
+      const gr = x.createRadialGradient(64, 64, 0, 64, 64, 64)
+      gr.addColorStop(0, 'rgba(8,30,90,1)')
+      gr.addColorStop(1, 'rgba(8,30,90,0)')
+      x.fillStyle = gr
+      x.fillRect(0, 0, 128, 128)
+    }
+    const tex = new THREE.CanvasTexture(c)
+    tex.colorSpace = THREE.SRGBColorSpace
+    return new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false, toneMapped: false })
+  }, [])
+  const shadowGeo = useMemo(() => new THREE.PlaneGeometry(1, 1), [])
+  useEffect(
+    () => () => {
+      shadowMat.map?.dispose()
+      shadowMat.dispose()
+      shadowGeo.dispose()
+    },
+    [shadowMat, shadowGeo],
+  )
   /** ความกว้างฟองตอนนี้ (หน่วย viewBox) — ไล่ตามความยาวข้อความ ไม่กระโดดทีละตัว */
   const width = useRef(VB_W)
   const built = useRef('')
@@ -414,15 +564,19 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
       }
       /* ฟองยุบหายเข้าไปในพาเนลที่พองจากมัน (หน่วย viewBox — 55 หายหมด) — เริ่มยุบหลังพาเนลพองพ้นตัวฟองแล้ว */
       const shrinkU = smooth((p.head - 0.15) / 0.6) * 55
-      const fullKey = `${wq.toFixed(1)}|${srch.toFixed(3)}|${shrinkU.toFixed(1)}|${liquid.k.toFixed(2)}|${liquid.blobs.map((o) => `${o.x.toFixed(1)},${o.y.toFixed(1)},${o.hw.toFixed(1)},${o.hh.toFixed(1)},${o.r.toFixed(1)}`).join('|')}|${t.bbThick}|${t.bbRound}`
+      /* ฟองคงเป็นแคปซูล (แท่น) — เครื่องเป็นอีกชิ้น (devG) ที่แท่นลงจอดบนจอของมัน */
+      const db = null as { hw: number; hh: number; r: number; cx: number } | null
+      const fullKey = db
+        ? `dev|${db.hw.toFixed(1)}|${db.hh.toFixed(1)}|${db.r.toFixed(1)}|${db.cx.toFixed(2)}|${t.bbThick}|${t.bbRound}`
+        : `${wq.toFixed(1)}|${srch.toFixed(3)}|${shrinkU.toFixed(1)}|${liquid.k.toFixed(2)}|${liquid.blobs.map((o) => `${o.x.toFixed(1)},${o.y.toFixed(1)},${o.hw.toFixed(1)},${o.hh.toFixed(1)},${o.r.toFixed(1)}`).join('|')}|${t.bbThick}|${t.bbRound}`
       if (!geo.current || built.current !== fullKey) {
         geo.current?.dispose()
-        geo.current = liquidGeo(outline, wq, liquid.blobs, liquid.k, t.bbThick, t.bbRound, shrinkU, srch)
+        geo.current = db ? boxGeo(db, t.bbThick, t.bbRound) : liquidGeo(outline, wq, liquid.blobs, liquid.k, t.bbThick, t.bbRound, shrinkU, srch)
         built.current = fullKey
         if (shell.current) shell.current.geometry = geo.current
       }
     }
-    g.scale.setScalar(s)
+    g.scale.setScalar(s * Math.max(1e-3, 1 - p.gone) * p.zoom)
     /**
      * หมุนแบบลอยตามลม ระหว่างม่านเมฆพาไปจอถัดไป — ควงหนึ่งรอบเต็มรอบแกนตั้งอย่างช้า ๆ
      * พร้อมเงยก้มกับเอียงเล็กน้อย มุมผูกกับระยะเลื่อน (หยุดเลื่อนหยุดหมุน) บวกการหายใจตามเวลา
@@ -432,7 +586,7 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
     g.rotation.set(
       (Math.sin(p.sv * 3.1 + 1) * 0.22 + Math.sin(tt * 0.7) * 0.04) * p.turn,
       p.spin * Math.PI * 2 + Math.sin(tt * 0.5) * 0.06 * p.turn,
-      Math.sin(p.sv * 2.3) * 0.1 * p.turn,
+      Math.sin(p.sv * 2.3) * 0.1 * p.turn + p.whirl,
     )
     /* เอียงลงเป็นป้ายในมุมไอโซ — หน้าป้ายหันไปทางขวาล่างแบบป้ายในภาพอ้างอิง */
     if (p.iso > 0) g.quaternion.slerp(ISO_Q, p.iso)
@@ -442,18 +596,221 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
      */
     g.updateMatrix()
     if (p.rot) g.matrix.multiply(SHEAR.makeShear(p.rot, 0, 0, 0, 0, 0))
+    /**
+     * ข้อความ: ตอนแรกติดผิวฟอง (หงายไปด้วย) แล้วลอกออก — มุมคลายกลับมาหันหาคนดู ลอยขึ้นและพุ่งเข้าหากล้อง
+     * ผ่านเพอร์สเปกทีฟเดียวกับตัวฟอง (ใกล้ขึ้น = ใหญ่ขึ้น · แต่ละชั้นลึกไม่เท่ากัน — ดู LAYER_Z)
+     */
+    const f = camDist(size.height)
+    PERSP.set(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -1 / f, 1)
+    PERSP_INV.copy(PERSP).invert()
+    const persp = p.tilt > 0 || p.flat > 0
+    /* ช่วงหงาย/ข้อความลอย ทั้งชุด (เครื่อง + ข้อความ) ลงมาจากกลางจอนิด · ตั้งเป็นโต๊ะทำงานแล้วไปตามท่าของมันเอง */
+    const dropY = size.height * 0.1 * smooth(p.tilt / 0.6) * (1 - p.flat)
+    const tg = textG.current
+    if (tg) {
+      tg.matrix.copy(g.matrix)
+      /* คงมุมหงายตามฟองไว้ตลอด — ลอยขึ้นทั้งที่ยังหงาย ไม่พลิกกลับมาหน้าตรง */
+      const ta = TILT_MAX * p.tilt
+      if (ta > 0) tg.matrix.multiply(FLOAT_M.makeRotationX(-ta))
+      if (p.float > 0) tg.matrix.multiply(FLOAT_M.makeTranslation(0, FLOAT_Y * p.float, FLOAT_Z * p.float))
+      /* โต๊ะทำงาน: ก้อนข้อความเลื่อนไปเป็นหัวเรื่อง (กลางก้อนตอนลอยอยู่ ≈ เหนือกลางจอ (FLOAT_Y + 20) หน่วย) */
+      /* โต๊ะทำงาน: ก้อนข้อความตามเครื่องไป ค้างลอยหน้าจอเครื่อง · ช่วงหงาย ทั้งชุดลดลงไม่ให้ไอคอนชนโลโก้บนสุด */
+      if (p.flat > 0 || dropY) tg.matrix.premultiply(FLOAT_M.makeTranslation(p.bx, -p.by - dropY, 0))
+      /**
+       * ลอยหลุดไป: ออกตัวช้าแล้วเร่ง (ยกกำลัง — ของมีน้ำหนักค่อย ๆ ถูกดึงขึ้น ไม่ใช่พุ่งทันที) ลอยเข้าหากล้องนิด
+       * เอียงตัวเล็กน้อยตามแรงดึง จนพ้นขอบบนของจอ
+       */
+      if (p.away > 0) {
+        const a = p.away ** 2.4
+        tg.matrix.premultiply(FLOAT_M.makeRotationZ(-0.12 * a))
+        tg.matrix.premultiply(FLOAT_M.makeTranslation(size.width * 0.03 * a, size.height * 1.15 * a, size.height * 0.25 * a))
+      }
+      tg.visible = p.away < 1
+      if (persp) tg.matrix.premultiply(PERSP)
+      tg.matrixWorldNeedsUpdate = true
+    }
+    /* ตัวฟอง/เครื่องหงาย: หมุนรอบแกนนอนของมันเอง หน้าหันขึ้นฟ้า */
+    const dg = devG.current
+    if (persp) {
+      /* แท่น (ฟองที่หงาย) ท่าของตัวเองก่อนลงจอด */
+      g.position.y -= dropY
+      g.quaternion.multiply(TILT_Q.setFromAxisAngle(AX_X, -TILT_MAX * p.tilt))
+      g.updateMatrix()
+      PAD_A.copy(g.matrix)
+      /**
+       * เครื่อง: ตอนแท่นเริ่มลงจอด เครื่องอยู่ใกล้จนจอเต็มเฟรม (ซูมเข้า) จุดลงจอด (แถบหัวของแอป) อยู่กลางภาพ
+       * แล้วซูมออกจนเห็นทั้งเครื่อง → ตั้งหน้าตรงเป็นโต๊ะทำงาน เลื่อนไปขวา เอนตอนโค้ด ควงตอนส่งของ
+       */
+      const z0 = (size.height * 2.3) / (DEVICE.hh * 2 * s)
+      /**
+       * จังหวะลงจอด (ความคืบหน้าดิบของบท — ไม่เกลี่ยซ้อน):
+       *   0–0.42    เครื่องเลื่อนขึ้นมาจากใต้ขอบจอ (ลึกเข้าไปด้านหลังนิด — ค่อย ๆ ลอยเข้าหากล้อง) ออกตัวนุ่ม ชะลอเข้าที่ใต้แท่น
+       *   0.3–0.6   แท่นลอยลงจอดราบบนจอ (ไม่ตีลังกา) — ลงแล้วติดไปกับเครื่อง
+       *   0.6–1     ลงแล้วค่อยซูมออก (ไม่ซูมระหว่างลง — จุดลงจอดต้องนิ่ง)
+       */
+      const L = p.land
+      const zk = inOut01(clamp01((L - 0.6) / 0.4))
+      const zoom = lerp(z0, 1, zk)
+      const zf = (zoom - 1) / Math.max(1e-3, z0 - 1)
+      DEV_Q.identity()
+      if (p.brx || p.bry || p.bspin) DEV_Q.multiply(BENCH_Q.setFromEuler(BENCH_E.set(p.brx, p.bry + p.bspin, 0, 'YXZ')))
+      DEV_Q.multiply(TILT_Q.setFromAxisAngle(AX_X, -TILT_MAX * p.tilt * (1 - p.flat)))
+      const ds = s * zoom * lerp(1, p.bt / (DEVICE.hh * s), p.flat)
+      /* โผล่: เลื่อนขึ้นมาจากใต้ขอบจอ (นอนเอียงรับมุมเดียวกับแท่น) มาอยู่ใต้แท่นพอดีก่อนแท่นลงจอด */
+      const rise = inOut01(clamp01(L / 0.42))
+      DEV_M.compose(DEV_P.set(gx - size.width / 2 + p.bx, size.height / 2 - p.y - p.by - dropY - (1 - rise) * size.height * 0.85, -(1 - rise) * size.height * 0.6), DEV_Q, DEV_S.setScalar(ds))
+      DEV_M.multiply(FLOAT_M.makeTranslation(0, -PAD_Y * zf, 0))
+      DEV_M.toArray(deviceMat.e)
+      deviceMat.ok = L > 0
+      if (dg) {
+        dg.visible = L > 0
+        dg.matrix.copy(DEV_M).premultiply(PERSP)
+        dg.matrixWorldNeedsUpdate = true
+      }
+      if (L > 0) {
+        /* จุดลงจอดบนจอเครื่อง: แถบหัวของแอป (แท่นกลายเป็นช่องค้นหา) */
+        PAD_B.copy(DEV_M).multiply(FLOAT_M.makeTranslation(0, PAD_Y, t.bbThick / 2 + 2)).multiply(FLOAT_M.makeScale(PAD_S, PAD_S, PAD_S))
+        PAD_A.decompose(PA_P, PA_Q, PA_S)
+        PAD_B.decompose(PB_P, PB_Q, PB_S)
+        const hop = clamp01((L - 0.3) / 0.3)
+        const kl = inOut01(hop)
+        const arc = Math.sin(Math.PI * hop)
+        PA_P.lerp(PB_P, kl)
+        /* ลงตรง ๆ โค้งเล็กน้อย ไม่ตีลังกา — ลงแล้วเป็นส่วนหนึ่งของเครื่อง (ตามเครื่องไปทุกท่า ไม่ขยับเอง) */
+        PA_P.z += arc * size.height * 0.05
+        PA_Q.slerp(PB_Q, kl)
+        PA_S.lerp(PB_S, kl)
+        g.matrix.compose(PA_P, PA_Q, PA_S)
+      }
+      g.matrix.premultiply(PERSP)
+    }
+    /* เงานุ่มบนผิวใต้ข้อความที่ลอกออก — ชัดตอนเพิ่งลอก กว้างและจางลงตามระยะที่ลอยห่าง */
+    shadowMat.opacity = 0.32 * smooth(p.float / 0.25) * (1 - 0.5 * p.float) * (1 - p.flat) * (1 - smooth(p.away / 0.6))
+    const sb = shadow.current
+    if (sb) {
+      sb.visible = shadowMat.opacity > 0.003
+      const spread = 1 + 0.35 * p.float
+      /* ใต้บรรทัดในฟอง → ใต้ก้อนข้อความในเครื่อง */
+      sb.position.set(0, lerp(0, DEV_TY + 18, p.dev), t.bbThick / 2 + 0.6)
+      sb.scale.set(lerp(w * 0.85, DEVICE.hw * 1.9, p.dev) * spread, lerp(70, DEVICE.hh * 0.75, p.dev) * spread, 1)
+    }
     /* จบที่สีเทาแบนตามแบบ Figma — ทาผิวเมชเดิม (ดู ./liquidGlass) */
     glass.uniforms.uPaint.value = p.paint
+    /* ร่างเครื่องขุ่นกว่าฟองนิด (แผ่นจอ) · ถูกเลือก = แก้วขาวขุ่น */
+    glass.uniforms.uFill.value = Math.min(0.9, 0.1 + 0.07 * p.dev + 0.74 * p.sel)
+    /* ทรงเครื่องบนจอ — แสงรอบเครื่อง (./DeviceHalo) กับกรอบเลือก (./workMotion) อ่านค่านี้ */
+    deviceSpot.hw = DEVICE.hw * s
+    deviceSpot.hh = DEVICE.hh * s
+    deviceSpot.r = DEVICE.r * s
+    deviceSpot.k = p.dev
+    deviceSpot.tilt = p.tilt
+    deviceSpot.bench = p.flat
 
     /* หมึกน้ำเงิน → ขาวบนฟ้า — หน้าบริการพื้นยังเป็นฟ้าเดิม หัวข้อจึงขาวต่อ */
-    TMP_C.set(INK).lerp(WHITE, p.white).lerp(SIGN_INK, p.iso)
+    TMP_C.set(INK).lerp(WHITE, p.white).lerp(SIGN_INK, p.iso).lerp(SEL_INK, p.sel)
     inkMat.color.copy(TMP_C)
     inkMat.emissive.copy(TMP_C)
     iconMat.color.copy(TMP_C)
+    /**
+     * ร่างเครื่อง: ประโยคที่สองไหลจากบรรทัดเดียวลงเป็นสองบรรทัดกลางเครื่อง ย่อลงพอดีความกว้างจอ (คำหลังตามคำแรกนิด)
+     * ช่วงนี้ใช้สองชิ้นแยกคำแทนชิ้นทั้งประโยค
+     */
+    /* ข้อความลอยหลุดไปทั้งบรรทัดเดียว — ไม่แตกเป็นสองบรรทัดระหว่างลอย (เคยแตกตอนเครื่องเริ่มมา = จังหวะกระตุก) */
+    const asWords = p.dev > 0 && p.away >= 1 && p.line === 1 && p.chars === LINES[1].length
+    const TS = Math.min(0.94, (DEVICE.hw * 2 - 36) / Math.max(words[0].w, words[1].w))
+    /* แยกบรรทัดก่อน (คำแรกขึ้น คำหลังลง — ไม่ไถลทับกัน) แล้วค่อยเข้ากลาง */
+    const kv = inOut01(clamp01(p.dev * 1.7))
+    const kh = inOut01(clamp01((p.dev - 0.22) * 1.45))
+    const k2 = kh
+    const leftA = -w / 2 + PAD_L + lead
+    const midY = tx.midY
+    words.forEach((wd, i) => {
+      const wm = wordRefs.current[i]
+      if (!wm) return
+      wm.visible = asWords
+      if (!asWords) return
+      const bx = (-wd.w * TS) / 2
+      const by = (i === 0 ? DEV_LINE / 2 : -DEV_LINE / 2) + DEV_TY
+      const sc = lerp(1, TS, kh)
+      wm.position.set(lerp(leftA + wd.x0, bx, kh), lerp(2, by, kv) - midY * sc, t.bbThick / 2 + 1 + LAYER_Z[i + 1] * p.float)
+      wm.scale.setScalar(sc)
+      /* บินเป็นหัวเรื่อง: ชิ้นทั้งคำหลบ ตัวอักษรรายตัว (ตำแหน่งเดิมเป๊ะตอนเริ่ม) บินแทน */
+      wm.visible = p.flat <= 0
+
+    })
+    /**
+     * บท wire: ตัวอักษรแต่ละตัวหดหายกลางอากาศ กรอบ wireframe งอกจากที่เดียวกันแทน แล้วลอยโค้งลงไปประกอบเป็นหน้าแอป
+     * ในจอเครื่อง (ผัง WF) ไล่จากตัวแรก · ลงถึงจอแล้วส่งไม้ให้กรอบชุดเดียวกันในแคนวาสของบนจอ (./BenchScreen — ใต้แก้ว
+     * จึงอยู่ใต้โน้ตและวิดเจ็ต) · พิกัดกรอบเป็นโลกของแคนวาสนี้ (px กลางจอ) ผ่านเพอร์สเปกทีฟเดียวกัน
+     */
+    const hhNow = lerp(DEVICE.hh * s, p.bt, p.flat)
+    const u = (hhNow * 2) / LAYOUT_H
+    const wiring = asWords && p.flat > 0
+    /**
+     * ลอยหลุด: ประโยคแตกเป็นตัวอักษรรายตัว (ตำแหน่งเดิมเป๊ะของชิ้นทั้งประโยค) แต่ละตัวน้ำหนักไม่เท่ากัน —
+     * ตัวเบานำขึ้นไปก่อน ตัวหนักรั้งท้าย ลอยห่างจากผิวไม่เท่ากัน โยกเบา ๆ คนละจังหวะ แล้วเอียงตัวคนละทางตอนถูกดึงขึ้น
+     */
+    const flying = !asWords && !!tx.geo && p.head <= 0 && p.float > 0 && p.line === 1 && p.chars === LINES[1].length
+    const fk = smooth(p.float)
+    const fLeft = -w / 2 + PAD_L + lead
+    letters.forEach((lt, n) => {
+      if (flying) {
+        const lm = letterRefs.current[n]
+        if (!lm) return
+        const wgt = rnd(n, 1)
+        const pull = p.away ** 1.6
+        lm.visible = true
+        lm.position.set(
+          fLeft + words[lt.w].x0 + lt.x,
+          -tx.midY + 2 + (wgt - 0.5) * 22 * fk + wgt * 300 * pull + Math.sin(tt * 1.6 + n * 0.9) * 3 * fk,
+          t.bbThick / 2 + 1 + rnd(n, 2) * 34 * fk + wgt * 140 * pull,
+        )
+        lm.rotation.set((rnd(n, 3) - 0.5) * 0.6 * pull, (rnd(n, 4) - 0.5) * 0.4 * pull, (rnd(n, 5) - 0.5) * 0.5 * pull + (rnd(n, 6) - 0.5) * 0.08 * fk)
+        lm.scale.setScalar(1)
+        return
+      }
+      const lm = letterRefs.current[n]
+      const om = outlineRefs.current[n]
+      const k = wfK(p.wire, n)
+      const wd = words[lt.w]
+      const x0 = (-wd.w * TS) / 2 + lt.x * TS
+      const y0 = (lt.w === 0 ? DEV_LINE / 2 : -DEV_LINE / 2) + DEV_TY - midY * TS
+      const z0 = t.bbThick / 2 + 1 + LAYER_Z[lt.w + 1] * p.float
+      const shrink = smooth(k / 0.3)
+      if (lm) {
+        lm.visible = wiring && shrink < 1
+        lm.position.set(x0, y0, z0)
+        lm.rotation.set(0, shrink * 1.2, 0)
+        lm.scale.setScalar(Math.max(1e-3, TS * (1 - shrink)))
+      }
+      if (!om) return
+      om.visible = wiring && k > 0.02 && k < 1
+      if (!om.visible) return
+      /* จุดเริ่ม = กลางตัวอักษรบนจอ (ผ่านท่าของกลุ่มข้อความ) */
+      WF_P.set(x0 + FS * TS * 0.3, y0 + FS * TS * 0.35, z0).applyMatrix4(tg ? tg.matrix : g.matrix)
+      const [X, Y, Wd, Ht, R] = WF[n]
+      const arc = Math.sin(Math.PI * k)
+      const mm = om.material as THREE.ShaderMaterial
+      om.position.set(lerp(WF_P.x, p.bx + X * u, k), lerp(WF_P.y, -p.by + Y * u, k) + arc * 26, arc * 120)
+      om.rotation.set(arc * 0.5, arc * (n % 2 ? 0.7 : -0.7), 0)
+      const g0 = smooth(k / 0.3)
+      mm.uniforms.uSize.value.set(lerp(FS * TS * 0.6 * s, Wd * u, k) * g0, lerp(FS * TS * 0.8 * s, Ht * u, k) * g0)
+      mm.uniforms.uR.value = R * u * k
+      mm.uniforms.uW.value = 2.2
+    })
+    if (wfG.current) {
+      wfG.current.matrix.copy(PERSP)
+      wfG.current.matrixWorldNeedsUpdate = true
+    }
+    /* ปลายทางของแว่นขยาย/caret ในพิกัดกลุ่มข้อความ: หัวแถบ wireframe (ซ้าย/ขวา) */
+    const [HXw, HYw, HWw] = WF[WF_HEAD]
+    WF_INV.copy(tg ? tg.matrix : g.matrix).invert()
+    WF_A.set(p.bx + (HXw - HWw / 2 + 16) * u, -p.by + HYw * u, 0).applyMatrix4(WF_INV)
+    WF_B.set(p.bx + (HXw + HWw / 2 + 12) * u, -p.by + HYw * u, 0).applyMatrix4(WF_INV)
     const m = ink.current
     if (m) {
       m.material = inkMat
-      m.visible = !!tx.geo
+      m.visible = !!tx.geo && !asWords && !flying
       if (tx.geo) {
         m.geometry = tx.geo
         /* ข้อความลอยไปเป็นหัวพาเนล: เริ่มที่ x textX กลางแนวตั้งที่ headY (ตำแหน่ง "Applications" ใน Spotlight) */
@@ -474,18 +831,40 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
       const k = p.search * (1 - clamp01(p.head * 3))
       /* แว่นยักษ์ของฉากรับไม้ต่อ ณ ท่านี้ (ตำแหน่ง/หมุน/ขนาดเดียวกัน) แล้วใบในฟองซ่อน */
       mg.visible = k > 0.01 && p.mag <= 0
-      mg.position.set(-w / 2 + PAD_L + 14, 0, t.bbThick / 2 + 1)
-      mg.scale.setScalar(Math.max(1e-3, k))
-      magStart.p.set(-w / 2 + PAD_L + 14 - 2.5, 3, t.bbThick / 2 + 1).applyMatrix4(g.matrix)
+      /* ร่างเครื่อง: แว่นขยายขึ้นไปเป็นไอคอนแอปเหนือข้อความ */
+      /* ขึ้นก่อนข้อความ (ไม่ชนคำแรกที่กำลังยกขึ้น) แล้วค่อยเข้ากลาง */
+      const kdv = inOut01(clamp01(p.dev * 2.4))
+      const kdh = inOut01(clamp01((p.dev - 0.2) * 1.5))
+      /* บท wire: แว่นขยายบินนำลงไปเป็นไอคอนหัวแถบค้นหาของแอปในจอ */
+      const km = asWords ? inOut01(clamp01(p.wire / 0.45)) : 0
+      const am = Math.sin(Math.PI * km)
+      const mx = lerp(-w / 2 + PAD_L + 14, 0, kdh)
+      const my = lerp(0, DEVICE.hh * 0.42, kdv)
+      const mz = t.bbThick / 2 + 1 + LAYER_Z[0] * p.float
+      mg.position.set(lerp(mx, WF_A.x, km), lerp(my, WF_A.y, km) + am * 20, lerp(mz, WF_A.z, km) + am * 80)
+      mg.rotation.set(0, am * 1.2, 0)
+      mg.scale.setScalar(Math.max(1e-3, k * lerp(lerp(1, 1.9, kdh), 0.9, km)))
+      magStart.p.set(-w / 2 + PAD_L + 14 - 2.5, 3, t.bbThick / 2 + 1).applyMatrix4(tg ? tg.matrix : g.matrix)
       magStart.q.copy(g.quaternion)
       magStart.s = 12.2 * s
     }
     const cr = caret.current
-    const caretOn = srch > 0.6 && p.head < 0.05
+    const caretOn = srch > 0.6 && p.head < 0.05 && p.caretOut < 0.3
+    /* ร่างเครื่อง: เคอร์เซอร์พิมพ์ตามไปท้ายบรรทัดที่สอง */
+    /* บท wire: caret ตามลงไปกะพริบท้ายแถบค้นหาในจอ (เคอร์เซอร์ของหน้าโผล่จากตรงนั้นในบทค้นคว้า) */
+    const kc = asWords ? wfK(p.wire, WF.length - 1) : 0
+    const caretX = lerp(lerp(-w / 2 + PAD_L + lead + tx.w + CARET_GAP * 0.5, (words[1].w * TS) / 2 + 10, asWords ? k2 : 0), WF_B.x, kc)
+    const caretY = lerp(asWords ? lerp(0, -DEV_LINE / 2 + DEV_TY + 2, kv) : 0, WF_B.y, kc)
     if (cr) {
       cr.visible = caretOn && clock.elapsedTime % 1.06 < 0.56
-      cr.position.set(-w / 2 + PAD_L + lead + tx.w + CARET_GAP * 0.5, 0, t.bbThick / 2 + 1)
+      cr.position.set(caretX, caretY, lerp(t.bbThick / 2 + 1 + LAYER_Z[2] * p.float, WF_B.z, kc))
+      cr.scale.setScalar(asWords ? lerp(1, TS, k2) : 1)
     }
+    /* ที่ของเคอร์เซอร์พิมพ์บนจอ — เคอร์เซอร์ของหน้าโผล่จากตรงนี้ (./workMotion) */
+    CARET_P.set(caretX, caretY, lerp(t.bbThick / 2 + 1 + LAYER_Z[2] * p.float, WF_B.z, kc)).applyMatrix4(tg ? tg.matrix : g.matrix)
+    caretSpot.x = size.width / 2 + CARET_P.x
+    caretSpot.y = size.height / 2 - CARET_P.y
+    caretSpot.ok = true
     const inner = (PAD_L - PAD_R) / 2
     dots.current.forEach((d, i) => {
       if (!d) return
@@ -502,10 +881,58 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
     <>
       <group ref={root} matrixAutoUpdate={false}>
         {/* แก้วแบบ Liquid Glass (ดู ./liquidGlass) — ตัวอักษรวาดหลังแก้ว (renderOrder) จึงคมทับผิวแก้ว */}
-        <mesh ref={shell} material={glass} />
-        <mesh ref={ink} material={inkMat} renderOrder={2} />
+        <mesh ref={shell} material={glass} frustumCulled={false} />
         {/* ไอคอนของบริการแรก (UX/UI — ปากกาออกแบบ) บนหน้าวงกลมแรก */}
         <mesh ref={icon} geometry={iconGeo} material={iconMat} renderOrder={3} visible={false} />
+        {/* เงานุ่มบนผิวเครื่อง (หงายตามเครื่อง) — ข้อความจริงลอยอยู่ในกลุ่มข้างล่าง */}
+        <mesh ref={shadow} geometry={shadowGeo} material={shadowMat} renderOrder={1} visible={false} />
+      </group>
+      <group ref={devG} matrixAutoUpdate={false} visible={false}>
+        <mesh geometry={devGeo} material={glass} frustumCulled={false} />
+      </group>
+      {/* กรอบ wireframe ระหว่างบินลงจอ — พิกัดโลก ผ่านเพอร์สเปกทีฟ (matrix ตั้งในลูปเฟรม) */}
+      <group ref={wfG} matrixAutoUpdate={false}>
+        {wfMesh.mats.map((m, n) => (
+          <mesh
+            key={n}
+            geometry={wfMesh.geo}
+            material={m}
+            renderOrder={4}
+            visible={false}
+            frustumCulled={false}
+            ref={(el) => {
+              outlineRefs.current[n] = el
+            }}
+          />
+        ))}
+      </group>
+      {/* ข้อความ ไอคอน เคอร์เซอร์พิมพ์ — กลุ่มแยก ตามท่าฟองแต่ไม่หงายตามเครื่อง (ดู FLOAT_Y) */}
+      <group ref={textG} matrixAutoUpdate={false}>
+        <mesh ref={ink} material={inkMat} renderOrder={2} />
+        {letters.map((lt, n) => (
+          <mesh
+            key={n}
+            geometry={lt.geo}
+            material={inkMat}
+            renderOrder={2}
+            visible={false}
+            ref={(el) => {
+              letterRefs.current[n] = el
+            }}
+          />
+        ))}
+        {words.map((wd, i) => (
+          <mesh
+            key={i}
+            geometry={wd.geo}
+            material={inkMat}
+            renderOrder={2}
+            visible={false}
+            ref={(el) => {
+              wordRefs.current[i] = el
+            }}
+          />
+        ))}
         <group ref={magnifier} visible={false}>
           <mesh geometry={searchGeo.ring} material={iconMat} renderOrder={3} />
           <mesh geometry={searchGeo.handle} material={iconMat} renderOrder={3} />
@@ -547,11 +974,10 @@ export function BubbleTraveler() {
    */
   const park = { x: 0.9, y: 1.12 }
   useCursorStop(null, { id: 'bubble-park-in', at: park, keyVh: top === undefined ? undefined : top + 0.5, size: 54, tilt: -14 })
-  useCursorStop(null, { id: 'bubble-park-after', at: park, keyVh: top === undefined ? undefined : top + BEAT.tour[0] + BEAT.tour[1] + 0.5, size: 54, tilt: -14 })
+  useCursorStop(null, { id: 'bubble-park-after', at: park, keyVh: top === undefined ? undefined : top + endOf(BEAT.ship) + 0.5, size: 54, tilt: -14 })
   const pose = useRef<Pose>({ ...POSE0 })
   const [on, setOn] = useState(false)
   const wake = useRef<() => void>(() => {})
-  const notes = useRef<(HTMLDivElement | null)[]>([])
 
   /* อ่านท่าทุกเฟรมที่มีการเลื่อน/ปรับขนาด — setState เฉพาะตอนเปิด/ปิดชั้น ไม่ใช่ทุกเฟรม */
   useEffect(() => {
@@ -566,16 +992,8 @@ export function BubbleTraveler() {
         was = p.on
         setOn(was)
       }
-      /* คำอธิบายของแผ่นที่อยู่ใต้ป้าย — เผยจากล่างขึ้นบน (ตัดกรอบ) ตามระยะของแผ่น ไม่จางเข้า */
-      notes.current.forEach((d, i) => {
-        if (!d) return
-        const k = p.on ? clamp01(1.4 - Math.abs(p.page - i) * 2.6) * clamp01((p.grow - 0.6) / 0.4) : 0
-        d.style.clipPath = `inset(${((1 - k) * 100).toFixed(1)}% 0 0 0)`
-        d.style.transform = `translateY(${((1 - k) * 18).toFixed(1)}px)`
-        d.style.visibility = k > 0.001 ? 'visible' : 'hidden'
-      })
       /* เปลี่ยนจริงค่อยวาด — ตอนนิ่งในหัวเรื่องไม่วาดซ้ำ */
-      const sig = `${p.on}|${p.x.toFixed(1)}|${p.y.toFixed(1)}|${p.h.toFixed(1)}|${p.sv.toFixed(4)}`
+      const sig = `${p.on}|${p.x.toFixed(1)}|${p.y.toFixed(1)}|${p.h.toFixed(1)}|${p.sv.toFixed(4)}|${p.sel.toFixed(3)}|${p.zoom.toFixed(4)}`
       if (sig !== last) {
         last = sig
         wake.current()
@@ -619,27 +1037,8 @@ export function BubbleTraveler() {
         <StageLight gain={t.bbGlow} />
         <Suspense fallback={null}>
           <Bubble pose={pose} wake={wake} />
-          {/* เวทีสกิลมุมไอโซ — ฟองลงไปยืนเป็นป้ายบนแผ่น */}
-          <FallSky pose={pose} />
-          <IsoSkills pose={pose} />
         </Suspense>
       </Canvas>
-      {/* คำอธิบายสกิล มุมขวาล่างแบบภาพอ้างอิง */}
-      {DESCS.map((d, i) => (
-        <div
-          key={SKILL_OF[i]}
-          ref={(el) => {
-            notes.current[i] = el
-          }}
-          className="absolute right-[clamp(20px,5vw,80px)] bottom-[clamp(28px,8svh,90px)] w-[min(78vw,330px)] text-[clamp(14px,1.15vw,17px)] leading-snug text-white [text-shadow:0_1px_12px_rgba(20,60,160,0.55)]"
-          style={{ visibility: 'hidden' }}
-        >
-          <div className="mb-2 font-mono text-[11px] tracking-[0.22em] text-white/70 uppercase">
-            0{i + 1} / 0{DESCS.length} · {NAMES[i]}
-          </div>
-          {d}
-        </div>
-      ))}
     </div>
   )
 }

@@ -29,6 +29,8 @@ import { heroView } from '@/newhero/heroView'
 import { ExperiencePortals } from '@/sections/portals/ExperiencePortals'
 import { fadeToArt, Headline3D, Headline3DField, useHeadlineArt } from '@/sections/hero/Headline3D'
 import { BubbleTraveler } from '@/sections/hero/BubbleTraveler'
+import { WorkStory } from '@/sections/hero/WorkStory'
+import { ScrollMouse } from '@/sections/hero/ScrollMouse'
 
 import heroLife from '@/assets/v2final/hero-life.svg'
 import heroBubble from '@/assets/v2final/hero-ideas-bubble.svg'
@@ -785,6 +787,8 @@ export function Portfolio2026FinalPage() {
 
       {/* ฟองคำพูดของหัวเรื่องเดินทางลงไปเปิด What I do — ชั้นเหนือม่านเมฆ (ดู BubbleTraveler) */}
       <BubbleTraveler />
+      {/* งานที่เข้ามาไม่หยุด → พอร์ทัล → มือถือ — ต่อจาก "Here is what I do" ในฟองนั้น (ดู WorkStory) */}
+      <WorkStory />
 
       <TopBar entered={gateOpen} />
       {/* ราวจุดนำสายตา — ตัวเดียวกับที่ใช้ในเวอร์ชัน Vue (branch `2026`)
@@ -888,6 +892,9 @@ export function Portfolio2026FinalPage() {
           {/* ประโยคปิดย้ายออกไปเป็นชั้นเล่าเรื่องตามการเลื่อน (ดู sections/hero/ScrollTell)
               มันต้องค้างอยู่บนจอข้ามช่วงที่ม่านเมฆถม ซึ่งอยู่ในโฟลว์ของจอแรกไม่ได้ */}
         </div>
+
+        {/* ตัวชวนเลื่อน กลางล่างของจอแรก — โผล่ตามจังหวะเปิดตัว หลบทันทีที่เลื่อน */}
+        <ScrollMouse className="v3-in absolute inset-x-0 bottom-[clamp(20px,4.5svh,44px)] z-10 text-[var(--v3-hero-ink)] [--v3-in-delay:1100ms]" />
 
         {/* โหมดคอมเมนต์เปิด/ปิดด้วยฟองคำพูดในฉาก ซึ่ง screen reader อ่านไม่ได้ —
             ปุ่มคู่นี้คือทางเดียวกันในแบบที่คีย์บอร์ดกับ AT ใช้ได้จริง */}

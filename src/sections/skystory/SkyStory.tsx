@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import * as THREE from 'three'
 import { SkyScene, type SkyState } from './SkyScene'
-import { BEAT, KEYCHAIN, SECTION_VH, TOTAL_VH, at } from './beats'
-import { cursorShow, cursorWake } from '@/cursorguide/morph'
+import { KEYCHAIN, SECTION_VH } from './beats'
 import './sky.css'
 import { WarmShaders } from '@/lib/WarmShaders'
 
@@ -17,8 +16,6 @@ export function SkyStory({ id, className = '' }: { id?: string; className?: stri
   const root = useRef<HTMLElement>(null)
   const state = useRef<SkyState>({ p: 0 })
   const [near, setNear] = useState(false)
-  /** ค่า cursorShow ล่าสุดที่ section นี้เขียน — เขียนคืนเป็น 1 ครั้งเดียวตอนพ้นช่วง */
-  const shown = useRef(1)
 
   useEffect(() => {
     const el = root.current
@@ -34,18 +31,7 @@ export function SkyStory({ id, className = '' }: { id?: string; className?: stri
       const p = Math.min(1, Math.max(0, -r.top / Math.max(1, r.height - vh)))
       state.current.p = p
       el.style.setProperty('--ss-veil', String(Math.max(0, 1 - p / 0.05)))
-      const sv2 = p * TOTAL_VH
-      /**
-       * ปุ่มเริ่มงอก = เคอร์เซอร์นำสายตาย่อหายไปตลอดที่เหลือของ section (หน้าต่างพอร์ทัลกับเรื่องข้างล่าง
-       * ไม่มีอะไรให้มันชี้) — จุดจอดถัดไปอยู่ไกลใน section อื่น ระหว่างทางมันจะลอยผ่านกลางฉาก
-       * พ้น section แล้วคืนค่าให้ section ถัดไปคุมเอง
-       */
-      const gone = r.top <= 0 && r.bottom > vh ? at(sv2, [BEAT.sprout[0], 0.25]) : 0
-      if (gone > 0 || shown.current < 1) {
-        cursorShow.v = 1 - gone
-        shown.current = cursorShow.v
-        cursorWake.fn()
-      }
+      /* เคอร์เซอร์ของหน้าในช่วงนี้เป็นของเรื่องงานที่เข้ามา (hero/WorkStory) — section นี้ไม่แตะ */
     }
     const onScroll = () => {
       if (!raf) raf = requestAnimationFrame(read)

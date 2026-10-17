@@ -40,6 +40,14 @@
     font-family: var(--font-sans);
   }
 
+  /* ซ่อนแถบเลื่อนของเบราว์เซอร์ — ยังเลื่อนได้ตามปกติ (ล้อ ทัชแพด คีย์บอร์ด) */
+  html {
+    scrollbar-width: none;
+  }
+  html::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Hard rule: anything clickable shows a pointer. */
   a[href],
   button,
