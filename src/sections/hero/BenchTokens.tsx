@@ -72,7 +72,8 @@ export function BenchTokens({ api }: { api: Ref<TokensApi> }) {
         SLOTS.forEach((sl, i) => {
           const el = boxes.current[i]
           if (!el) return
-          const k = live && b.bench >= 0.98 ? b[sl.beat] : 0
+          /* ของลอยรอบเครื่องโผล่ได้ตั้งแต่เครื่องลงจอดเสร็จ (เครื่องค้างมุมหงาย ไม่รอตั้งตรง) */
+          const k = live && b.morph >= 0.98 ? b[sl.beat] : 0
           /* เด้งออกต้นบท (ชิ้นที่สองตามนิด) หดกลับตอนท้าย — บทส่งของค้างจนจบ */
           const lag = i % 2 ? 0.05 : 0
           const inK = clamp01((k - 0.04 - lag) / 0.14)

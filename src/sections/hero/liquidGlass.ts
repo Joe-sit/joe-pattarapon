@@ -116,6 +116,7 @@ export function makeLiquidGlass() {
         tc += vec3(spec * 0.6 + line * 0.5);
         col = mix(col, tc, uTile);
         a = mix(a, 1.0, uTile);
+        /* ย้อมม่วง: กลางแผ่นม่วงเข้ม ขอบที่หันออกข้างจางขาวฟุ้ง (แก้วฝ้าม่วงแบบภาพอ้างอิง) */
         gl_FragColor = vec4(col, a);
         // สีเทาของแบบเป็น sRGB — three แปลงเป็นเชิงเส้นตอนตั้งค่า ต้องแปลงกลับตอนออก ไม่งั้นเทาเข้มกว่าแบบ
         #include <colorspace_fragment>

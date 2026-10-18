@@ -16,8 +16,9 @@ import { ISO_Q, SIGN_H, magStart, signCenter } from './isoStage'
 import { makeLiquidGlass } from './liquidGlass'
 import { useTuner } from '@/newhero/tuner'
 import { StageLight } from './Headline3D'
+import { BAR_AT, BASE_Y as ISLE_Y, ISLAND, ISLAND_CARD, K as ISLE_K, PadIsland, blockFlight, blockY, padIsland, type IslandApi } from './ResearchPlatform'
 import { bubbleTravel, setBubbleAway, setHeadBubbleLive, subscribeBubbleAway } from './bubbleTravel'
-import { DEVICE, LAYOUT_H, WF, WF_HEAD, benchPose, camDist, caretSpot, deviceMat, deviceSpot, headPose, inOut as inOut3, researchPhase, wfK, workBeats } from './workMotion'
+import { DEVICE, LAYOUT_H, WF, WF_HEAD, benchPose, camDist, barLayout, caretSpot, deviceMat, devScreen, groundMat, deviceSpot, headPose, inOut as inOut3, researchPhase, wfK, workBeats } from './workMotion'
 import { outlineMat } from './shapes'
 
 /**
@@ -113,6 +114,20 @@ const PAD_Y = 150
 const PAD_S = 0.25
 const PAD_A = new THREE.Matrix4()
 const PAD_B = new THREE.Matrix4()
+/** research island: ท่าบนฟอง (A) → ท่าบนการ์ดล่างของเครื่อง (B) */
+/** quintic smootherstep — ออกตัว/เข้าที่นุ่มสุด (ความเร่งเป็นศูนย์ทั้งสองปลาย) */
+const soft5 = (x: number) => {
+  const t = Math.min(1, Math.max(0, x))
+  return t * t * t * (t * (t * 6 - 15) + 10)
+}
+const ISL_A = new THREE.Matrix4()
+const ISL_B = new THREE.Matrix4()
+const IA_P = new THREE.Vector3()
+const IA_Q = new THREE.Quaternion()
+const IA_S = new THREE.Vector3()
+const IB_P = new THREE.Vector3()
+const IB_Q = new THREE.Quaternion()
+const IB_S = new THREE.Vector3()
 const DEV_M = new THREE.Matrix4()
 const DEV_P = new THREE.Vector3()
 const DEV_S = new THREE.Vector3()
@@ -130,6 +145,10 @@ const WF_INV = new THREE.Matrix4()
 const BENCH_E = new THREE.Euler()
 const BENCH_Q = new THREE.Quaternion()
 const TILT_MAX = 1.08
+/** ระยะเลื่อน (หน่วยจอ) ที่ใช้ซูมออกหลังลงจอด — เดิม 0.42 จอ เร็วเกิน */
+const ZOOM_LEN = 1.3
+/** มุมหงายเพิ่มตอน island งอกครบ — รวม ~82° เกือบราบ มองหน้าตรง */
+const SIDE_FLAT = 0.35
 const AX_X = new THREE.Vector3(1, 0, 0)
 const TILT_Q = new THREE.Quaternion()
 const FLOAT_M = new THREE.Matrix4()
@@ -159,8 +178,8 @@ const rnd = (n: number, k: number) => {
   const v = Math.sin(n * 12.9898 + k * 78.233) * 43758.5453
   return v - Math.floor(v)
 }
-const POSE0 = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0, iso: 0, grow: 0, page: 0, mag: 0, tuck: 0, fall: 0, prog: 0, act: [0, 0, 0], sel: 0, gone: 0, whirl: 0, caretOut: 0, zoom: 1, dev: 0, float: 0, tilt: 0, bx: 0, by: 0, bk: 1, bt: 1, flat: 0, wire: 0, land: 0, away: 0, brx: 0, bry: 0, bspin: 0, hx: 0, hy: 0 }
-type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number; iso: number; grow: number; page: number; mag: number; tuck: number; fall: number; prog: number; act: number[]; sel: number; gone: number; whirl: number; caretOut: number; zoom: number; dev: number; float: number; tilt: number; bx: number; by: number; bk: number; bt: number; flat: number; wire: number; land: number; away: number; brx: number; bry: number; bspin: number; hx: number; hy: number }
+const POSE0 = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0, iso: 0, grow: 0, page: 0, mag: 0, tuck: 0, fall: 0, prog: 0, act: [0, 0, 0], sel: 0, gone: 0, whirl: 0, caretOut: 0, zoom: 1, dev: 0, float: 0, tilt: 0, bx: 0, by: 0, bk: 1, bt: 1, flat: 0, wire: 0, land: 0, away: 0, brx: 0, bry: 0, bspin: 0, hx: 0, hy: 0, isle: 0, flip: 0, flatK: 0, sv2v: 0 }
+type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number; iso: number; grow: number; page: number; mag: number; tuck: number; fall: number; prog: number; act: number[]; sel: number; gone: number; whirl: number; caretOut: number; zoom: number; dev: number; float: number; tilt: number; bx: number; by: number; bk: number; bt: number; flat: number; wire: number; land: number; away: number; brx: number; bry: number; bspin: number; hx: number; hy: number; isle: number; flip: number; flatK: number; sv2v: number }
 
 function readPose(): Pose {
   const off: Pose = { ...POSE0 }
@@ -261,6 +280,14 @@ function readPose(): Pose {
      */
     away: ((m) => (m <= 0 ? 0 : m ** 2.2))(clamp01((textGo(sv2) - 0.12) / 0.88)),
     land: wb.morph,
+    /* research island งอกบนฟองหงายตอนข้อความลอยออก (./ResearchPlatform) */
+    isle: at(sv2, ISLAND.grow),
+    /* ฟองพลิกครั้งเดียว (ครึ่งรอบ) รอบแกนยาวก่อนของงอก — ช้าและนุ่ม (quintic: ออกตัวและเข้าที่ละมุนกว่า cubic) */
+    flip: soft5(at(sv2, ISLAND.flip)),
+    /* ระยะเลื่อนของเรื่อง — จังหวะบล็อกบินออกจากแท่ง (blockFlight) */
+    sv2v: sv2,
+    /* ของงอกใกล้ครบ: หงายต่อจนเกือบราบ (มองหน้าตรง ของตั้งตรง ไม่เงยหลัง) ค้างไว้ คืนมุมตอนเครื่องมา */
+    flatK: soft5((at(sv2, ISLAND.grow) - 0.55) / 0.45) * (1 - soft5(wb.morph / 0.3)),
     /* บทค้นคว้า: ข้อความไปเป็นหัวเรื่องขวา แว่นขยายลงไปเป็นวัตถุหลักบนแท่น — กลับที่เดิมตอนท้ายบท (ก่อนคลี่เป็นเครื่อง) */
     bt: bp.target,
     flat: bp.flat,
@@ -274,7 +301,8 @@ function readPose(): Pose {
     /* ข้อความลอยออกก่อน เครื่องหงายตาม */
     /* หงายตั้งแต่ยังเป็นฟอง (คลี่เป็นเครื่องระหว่างทาง) · ข้อความลอกออกจากผิวทีหลัง */
     /* ออกตัวทันที (เห็นฟองเริ่มหงายก่อนคลี่) แล้วชะลอเข้ามุมสุด */
-    tilt: 1 - (1 - at(sv2, BEAT.lift)) ** 2.2,
+    /* หงายให้เสร็จก่อนพลิก (ISLAND.flip เริ่มตอนหงายจบ) — ช่วงหงายสั้นกว่าบท lift ทั้งบท */
+    tilt: 1 - (1 - at(sv2, [BEAT.lift[0], ISLAND.flip[0] - BEAT.lift[0]])) ** 2.2,
     /* ข้อความลอกออกตั้งแต่ยังเป็นฟอง ก่อนคลี่เป็นเครื่อง — คลี่/จัดบรรทัดใหม่ระหว่างที่ลอยอยู่ */
     float: smooth(textGo(sv2) / 0.45),
     hand,
@@ -438,6 +466,8 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
   const textG = useRef<THREE.Group>(null)
   /** เครื่องแก้ว (ชิ้นแยกจากฟอง) — กล่องมนทรงจอมือถือ เนื้อแก้วชุดเดียวกับฟอง */
   const devG = useRef<THREE.Group>(null)
+  const islandG = useRef<THREE.Group>(null)
+  const islandApi = useRef<IslandApi>(null)
   const devGeo = useMemo(() => boxGeo({ hw: DEVICE.hw, hh: DEVICE.hh, r: DEVICE.r, cx: 0 }, t.bbThick, t.bbRound), [t.bbThick, t.bbRound])
   useEffect(() => () => devGeo.dispose(), [devGeo])
   /** เงานุ่มใต้ก้อนข้อความบนผิวเครื่อง — วงรีไล่จางจากแคนวาส (ไม่ใช่สำเนาตัวอักษร: สำเนาคมอ่านเป็นข้อความซ้อน) */
@@ -634,9 +664,16 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
     if (persp) {
       /* แท่น (ฟองที่หงาย) ท่าของตัวเองก่อนลงจอด */
       g.position.y -= dropY
-      g.quaternion.multiply(TILT_Q.setFromAxisAngle(AX_X, -TILT_MAX * p.tilt))
+      /* ของงอกครบ: หงายต่อจนเกือบราบ มองระดับสายตา ของบน island ตั้งตรงหน้าตรง (เห็นผิวบนแท่นนิดเดียว) · กลับมุมเดิมตอนกลับกลางไปลงจอด */
+      g.quaternion.multiply(TILT_Q.setFromAxisAngle(AX_X, -TILT_MAX * p.tilt - SIDE_FLAT * p.flatK))
       g.updateMatrix()
       PAD_A.copy(g.matrix)
+      /* พื้นกระเบื้อง (บท ground — ./GroundStage): ระนาบเดียวกับหน้าฟองที่หงาย ใต้ผิวล่างของฟองพอดี ฟองจึงนั่งบนพื้น */
+      FLOAT_M.makeTranslation(0, 0, -t.bbThick / 2)
+      ISL_B.copy(PAD_A).multiply(FLOAT_M)
+      ISL_B.toArray(groundMat.e)
+      groundMat.ok = true
+      groundMat.k = w
       /**
        * เครื่อง: ตอนแท่นเริ่มลงจอด เครื่องอยู่ใกล้จนจอเต็มเฟรม (ซูมเข้า) จุดลงจอด (แถบหัวของแอป) อยู่กลางภาพ
        * แล้วซูมออกจนเห็นทั้งเครื่อง → ตั้งหน้าตรงเป็นโต๊ะทำงาน เลื่อนไปขวา เอนตอนโค้ด ควงตอนส่งของ
@@ -649,18 +686,36 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
        *   0.6–1     ลงแล้วค่อยซูมออก (ไม่ซูมระหว่างลง — จุดลงจอดต้องนิ่ง)
        */
       const L = p.land
-      const zk = inOut01(clamp01((L - 0.6) / 0.4))
-      const zoom = lerp(z0, 1, zk)
-      const zf = (zoom - 1) / Math.max(1e-3, z0 - 1)
+      /*
+       * ซูมออกหลังลงจอด: จบที่ขนาดของโต๊ะทำงาน (bench) เลย — เดิมย่อลงถึงขนาดตั้งต้นที่เล็กมากแล้ว bench ค่อยขยายกลับ
+       * = ซูมออกไกลและเร็วเกิน แล้วเด้งกลับ · ผ่อนนุ่มทั้งสองปลาย (quintic)
+       */
+      const zEnd = p.bt / (DEVICE.hh * s)
+      /* ซูมออกช้า ๆ: นับจากตอนฟองแตะหัวเครื่อง (บทลงจอด 0.6) ยาว ZOOM_LEN จอ — ไหลเลยบทลงจอดเข้าบท Design ได้ */
+      const zk = soft5((p.sv2v - (BEAT.morph[0] + BEAT.morph[1] * 0.6)) / ZOOM_LEN)
+      const zoom = lerp(z0, zEnd, zk)
+      const zf = (zoom - zEnd) / Math.max(1e-3, z0 - zEnd)
       DEV_Q.identity()
       if (p.brx || p.bry || p.bspin) DEV_Q.multiply(BENCH_Q.setFromEuler(BENCH_E.set(p.brx, p.bry + p.bspin, 0, 'YXZ')))
       DEV_Q.multiply(TILT_Q.setFromAxisAngle(AX_X, -TILT_MAX * p.tilt * (1 - p.flat)))
-      const ds = s * zoom * lerp(1, p.bt / (DEVICE.hh * s), p.flat)
+      const ds = s * zoom
       /* โผล่: เลื่อนขึ้นมาจากใต้ขอบจอ (นอนเอียงรับมุมเดียวกับแท่น) มาอยู่ใต้แท่นพอดีก่อนแท่นลงจอด */
       const rise = inOut01(clamp01(L / 0.42))
       DEV_M.compose(DEV_P.set(gx - size.width / 2 + p.bx, size.height / 2 - p.y - p.by - dropY - (1 - rise) * size.height * 0.85, -(1 - rise) * size.height * 0.6), DEV_Q, DEV_S.setScalar(ds))
       DEV_M.multiply(FLOAT_M.makeTranslation(0, -PAD_Y * zf, 0))
       DEV_M.toArray(deviceMat.e)
+      /* กรอบเครื่องบนจอ (เพอร์สเปกทีฟจากความลึกของกลางเครื่อง · มุมเอียงหงายย่อความสูงตามจริง) */
+      {
+        const e = DEV_M.elements
+        const wd = Math.max(0.05, 1 - e[14] / camDist(size.height))
+        const sy = Math.hypot(e[4], e[5]) / Math.max(1e-6, Math.hypot(e[4], e[5], e[6]))
+        devScreen.cx = size.width / 2 + e[12] / wd
+        devScreen.cy = size.height / 2 - e[13] / wd
+        devScreen.hw = (DEVICE.hw * ds) / wd
+        devScreen.hh = (DEVICE.hh * ds * sy) / wd
+        devScreen.r = (DEVICE.r * ds) / wd
+        devScreen.ok = L > 0
+      }
       deviceMat.ok = L > 0
       if (dg) {
         dg.visible = L > 0
@@ -681,6 +736,70 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
         PA_Q.slerp(PB_Q, kl)
         PA_S.lerp(PB_S, kl)
         g.matrix.compose(PA_P, PA_Q, PA_S)
+      }
+      /**
+       * research island: ยืนบนผิวฟอง (แกนตั้งของแท่น = แกนหน้าฟอง) ไปกับฟองทุกท่า รวมตอนลงจอดเป็นหัวเครื่อง
+       * แล้วเลื่อนลงไปการ์ดล่างของจอเครื่อง (ท่าเดียวกับตัวใต้แก้วใน ./BenchScreen เป๊ะ) — ถึงแล้วตัวนั้นรับไม้ต่อ
+       */
+      /* พลิกเฉพาะตัวฟอง (ข้อความคัดลอกท่าฟองไปก่อนหน้านี้แล้ว จึงไม่พลิกตาม) */
+      /* ครึ่งรอบ — ฟองหน้า/หลังเหมือนกัน ท่าจบจึงตรงกับท่าเดิมพอดี (ลงจอดต่อได้ไม่มีรอยกระโดด) */
+      if (p.flip > 0 && p.flip < 1) {
+        /* ยกลอยขึ้นหาคนดูนิดระหว่างพลิก แล้ววางกลับที่เดิม — ของมีน้ำหนักถูกยกขึ้นพลิก ไม่ใช่หมุนอยู่กับที่ */
+        const arc = Math.sin(Math.PI * p.flip)
+        /* พลิกทิศเดียวกับที่หงาย (ขอบบนไปหลังต่อ) — ไม่ย้อนทิศกับการหงาย · ครึ่งรอบทิศไหนก็ได้ท่าจบเดียวกัน ของบนหน้าหลังจึงยังถูก */
+        g.matrix.multiply(FLOAT_M.makeRotationX(-Math.PI * p.flip))
+        g.matrix.premultiply(FLOAT_M.makeTranslation(0, size.height * 0.025 * arc, size.height * 0.06 * arc))
+      }
+      const isl = islandG.current
+      if (isl) {
+        const tr = inOut01(clamp01((p.land - ISLAND.handFrom) / (ISLAND.handTo - ISLAND.handFrom)))
+        isl.visible = p.isle > 0 && p.land < ISLAND.handTo
+        padIsland.show = isl.visible
+        if (isl.visible) {
+          const k = (w * 0.46) / 470
+          /*
+           * ระหว่างพลิก ของงอกบน *หน้าหลัง* ของฟอง (หน้าที่กำลังพลิกขึ้นมาเป็นด้านบน) แล้วหมุนขึ้นมากับฟอง
+           * หมุนครึ่งรอบ (x,y,z)→(x,−y,−z) จึงใช้ y z กลับด้าน + เอียง −90° — ตอนพลิกครบตรงกับท่าหน้าบนของฟองที่ไม่พลิกพอดี
+           * ของจึงงอกต่อเนื่องได้ตั้งแต่ยังพลิกไม่จบ ไม่มีรอยกระโดดตอนพลิกเสร็จ
+           */
+          const back = p.flip > 0 && p.flip < 1
+          ISL_A.copy(g.matrix)
+            /* ผิวบนของฟองพองกลางแผ่น (ทรงแก้วเหลว) สูงกว่าครึ่งความหนา — ยกฐานขึ้นพ้นผิวจริง ไม่งั้นของจมในแก้ว */
+            .multiply(FLOAT_M.makeTranslation(0, back ? 4 : -4, (back ? -1 : 1) * (t.bbThick * 0.95 + 2)))
+            .multiply(FLOAT_M.makeRotationX(back ? -Math.PI / 2 : Math.PI / 2))
+            .multiply(FLOAT_M.makeScale(k, k, k))
+          if (tr > 0 && deviceMat.ok) {
+            const lk = (DEVICE.hh * 2) / LAYOUT_H
+            ISL_B.fromArray(deviceMat.e)
+              .multiply(FLOAT_M.makeScale(lk, lk, lk))
+              .multiply(FLOAT_M.makeTranslation(ISLAND_CARD.x, ISLAND_CARD.y + ISLE_Y, 4 + ISLAND_CARD.top + 1))
+              .multiply(FLOAT_M.makeScale(ISLE_K, ISLE_K, ISLE_K))
+            ISL_A.decompose(IA_P, IA_Q, IA_S)
+            ISL_B.decompose(IB_P, IB_Q, IB_S)
+            IA_P.lerp(IB_P, tr)
+            IA_P.z += Math.sin(Math.PI * tr) * size.height * 0.04
+            IA_Q.slerp(IB_Q, tr)
+            IA_S.lerp(IB_S, tr)
+            ISL_A.compose(IA_P, IA_Q, IA_S)
+          }
+          /* บล็อกในแท่ง → พิกัดผังจอเครื่อง (ให้ ./BenchScreen บินออกจากจุดจริง) · ก้อนที่ออกตัวแล้วหายจากแท่ง */
+          if (deviceMat.ok) {
+            const lk = (DEVICE.hh * 2) / LAYOUT_H
+            ISL_B.fromArray(deviceMat.e).multiply(FLOAT_M.makeScale(lk, lk, lk)).invert()
+            for (let j = 0; j < 4; j += 1) {
+              IA_P.set(BAR_AT[0], blockY(j) + 23, BAR_AT[2]).applyMatrix4(ISL_A).applyMatrix4(ISL_B)
+              IA_P.toArray(barLayout.e, j * 3)
+            }
+            barLayout.ok = true
+          }
+          for (let j = 0; j < 4; j += 1) padIsland.gone[j] = blockFlight(p.sv2v, j) > 0 ? 1 : 0
+          isl.matrix.copy(ISL_A).premultiply(PERSP)
+          isl.matrixWorldNeedsUpdate = true
+          padIsland.grow = p.isle
+          padIsland.lean = 0.32 * tr
+        }
+        /* อัปเดตตัวบนฟองหลังเขียนค่าเฟรมนี้ (ไม่รอ useFrame ของมัน — ลำดับไม่แน่นอน ค่าจะช้าไปหนึ่งเฟรม) */
+        islandApi.current?.update(clock.elapsedTime)
       }
       g.matrix.premultiply(PERSP)
     }
@@ -849,7 +968,8 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
       magStart.s = 12.2 * s
     }
     const cr = caret.current
-    const caretOn = srch > 0.6 && p.head < 0.05 && p.caretOut < 0.3
+    /* พิมพ์จบแล้วข้อความลอกลอยออก — เคอร์เซอร์พิมพ์หมดหน้าที่ ไม่ตามข้อความขึ้นไป */
+    const caretOn = srch > 0.6 && p.head < 0.05 && p.caretOut < 0.3 && p.float <= 0
     /* ร่างเครื่อง: เคอร์เซอร์พิมพ์ตามไปท้ายบรรทัดที่สอง */
     /* บท wire: caret ตามลงไปกะพริบท้ายแถบค้นหาในจอ (เคอร์เซอร์ของหน้าโผล่จากตรงนั้นในบทค้นคว้า) */
     const kc = asWords ? wfK(p.wire, WF.length - 1) : 0
@@ -886,6 +1006,10 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
         <mesh ref={icon} geometry={iconGeo} material={iconMat} renderOrder={3} visible={false} />
         {/* เงานุ่มบนผิวเครื่อง (หงายตามเครื่อง) — ข้อความจริงลอยอยู่ในกลุ่มข้างล่าง */}
         <mesh ref={shadow} geometry={shadowGeo} material={shadowMat} renderOrder={1} visible={false} />
+      </group>
+      {/* research island บนฟองหงาย → การ์ดล่างของเครื่อง (เมทริกซ์ตั้งในลูปเฟรม) */}
+      <group ref={islandG} matrixAutoUpdate={false} visible={false}>
+        <PadIsland api={islandApi} />
       </group>
       <group ref={devG} matrixAutoUpdate={false} visible={false}>
         <mesh geometry={devGeo} material={glass} frustumCulled={false} />

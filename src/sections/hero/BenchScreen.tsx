@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { makeTintGlass } from './liquidGlass'
-import { ResearchIsland } from './ResearchPlatform'
+import { K as ISLE_K, ResearchIsland, blockFlight } from './ResearchPlatform'
 import { outlineMat, rrect } from './shapes'
 import {
   DEVICE,
   LAYOUT_H,
   WF,
+  barLayout,
   deviceMat,
   wfK,
   clamp01,
@@ -84,7 +85,8 @@ const CODE: [number, [number, number][]][] = [
 const CODE_TOTAL = CODE.reduce((n, [, segs]) => n + segs.reduce((m, [w]) => m + w, 0), 0)
 
 function slab(t: { w: number; h: number; r: number }, depth: number) {
-  const bev = Math.min(t.h, t.w) * 0.14
+  /* ขอบมนบาง ๆ — เดิม 14% ของด้านสั้น (การ์ดใหญ่หนาราว 70 หน่วย ดูเป็นก้อน) · ตอนนี้แผ่นบางแบบการ์ด UI */
+  const bev = Math.min(8, Math.min(t.h, t.w) * 0.1)
   const g = new THREE.ExtrudeGeometry(rrect(t.w - bev * 2, t.h - bev * 2, Math.max(1, t.r - bev)), {
     depth,
     bevelEnabled: true,
@@ -162,7 +164,7 @@ function rippleMat() {
     transparent: true,
     depthWrite: false,
     toneMapped: false,
-    uniforms: { uT: { value: 0 }, uAA: { value: 1 } },
+    uniforms: { uT: { value: 0 }, uAA: { value: 1 }, uC: { value: new THREE.Vector2(0, 357) } },
     vertexShader: /* glsl */ `
       varying vec2 vP;
       void main() {
@@ -172,6 +174,7 @@ function rippleMat() {
     fragmentShader: /* glsl */ `
       uniform float uT;
       uniform float uAA;
+      uniform vec2 uC;
       varying vec2 vP;
       float box(vec2 p, vec2 h, float r) {
         vec2 q = abs(p) - (h - r);
@@ -182,7 +185,7 @@ function rippleMat() {
         float inside = 1.0 - smoothstep(-14.0, 0.0, box(vP, vec2(200.0, 400.0), 80.0));
         if (inside <= 0.0) discard;
         /* ระยะจากขอบแท่น (แคปซูลที่แถบหัว) — ช่วงตรงหดตามเวลา วงจึงกลมขึ้น */
-        vec2 p = vP - vec2(0.0, 357.0);
+        vec2 p = vP - uC;
         float seg = 70.0 * (1.0 - smoothstep(0.0, 0.8, uT));
         float d = length(vec2(max(abs(p.x) - seg, 0.0), p.y)) - 30.0;
         if (d < 0.0) discard;
@@ -217,6 +220,19 @@ function rippleMat() {
  * วิดเจ็ตเริ่มประกอบหลังระลอกน้ำตอนแท่นแตะจอขยายไปแล้ว ระหว่างเครื่องซูมออก (บท morph) — ใบละจังหวะ ของในใบเด้งตาม
  * จบภายในบท (ใบสุดท้ายลงพอดีตอนซูมออกเสร็จ)
  */
+/**
+ * บล็อกในแท่งแก้วของ island → กระเบื้องของ widget: [การ์ด, กระเบื้อง] ต่อบล็อก (ล่าง → บน)
+ * ออกตัวตั้งแต่ฟองลงจอดบนหัวเครื่อง (blockFlight) — กระเบื้องเหล่านี้คือบล็อกที่บินมาเป็น
+ */
+const BLOCK_TO: [number, number][] = [
+  [0, 0],
+  [1, 0],
+  [1, 1],
+  [1, 2],
+]
+const CARD_INV = new THREE.Matrix4()
+const BS = new THREE.Vector3()
+
 const cardIn = (b: WorkBeats, i: number) => clamp01((b.morph - (0.66 + i * 0.07)) / 0.2)
 const tileIn = (b: WorkBeats, i: number, j: number) => clamp01((b.morph - (0.74 + i * 0.05 + j * 0.02)) / 0.12)
 /** หน่วยผังจอ (สูง 820) → หน่วยท้องถิ่นของเครื่อง (viewBox ของฟอง สูง 2 × DEVICE.hh) */
@@ -374,11 +390,12 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
     })
 
     /*
-     * ── ระลอกน้ำ: แท่นแตะจอตอนบทลงจอดถึงราว 0.6 (ดู BubbleTraveler) ที่แถบหัวของแอป ──
+     * ── ระลอกน้ำ: ฟอง (แท่นที่มี island) แตะหัวเครื่องตอนบทลงจอดถึงราว 0.6 (ดู BubbleTraveler) ศูนย์กลางที่แถบหัวของแอป ──
      */
     const dm = dropRef.current
     if (dm) {
       const e = clamp01((b.morph - 0.58) / 0.42)
+      drop.mat.uniforms.uC.value.set(0, 357)
       dm.visible = e > 0 && e < 1
       if (dm.visible) {
         drop.mat.uniforms.uT.value = e
@@ -404,6 +421,23 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
       pc.tiles.forEach((pt, j) => {
         const tm = tileRefs.current[i]?.[j]
         if (!tm) return
+        const bj = BLOCK_TO.findIndex(([ci, ti]) => ci === i && ti === j)
+        if (bj >= 0) {
+          /* บล็อกจากแท่งแก้วบินมาเป็นกระเบื้องนี้: โค้งขึ้นหาคนดู หมุนนิด ขยายจากขนาดบล็อกเป็นขนาดกระเบื้อง */
+          const f = smooth(blockFlight(b.sv2, bj))
+          tm.visible = f > 0 && barLayout.ok
+          if (!tm.visible) return
+          /* จุดออกตัว = ที่บล็อกอยู่จริงในแท่งตอนนี้ (ผังจอเครื่อง) → พิกัดท้องถิ่นของการ์ดที่กำลังประกอบอยู่ */
+          cg.updateMatrix()
+          CARD_INV.copy(cg.matrix).invert()
+          BS.fromArray(barLayout.e, bj * 3).applyMatrix4(CARD_INV)
+          const arc = Math.sin(Math.PI * f)
+          tm.position.set(lerp(BS.x, pt.t.x, f), lerp(BS.y, pt.t.y, f), lerp(BS.z, pc.top, f) + arc * 300)
+          tm.rotation.set(arc * 0.7, arc * 0.6, (1 - f) * 1.2)
+          /* ขยายใหญ่กลางทาง (ลอยเข้าหาคนดู) แล้วหดลงเข้าที่ — มองเห็นชัดว่าบล็อกเดินทางไปเป็นกระเบื้อง */
+          tm.scale.setScalar(Math.max(1e-3, lerp((62 * ISLE_K) / pt.t.w, 1, f) * (1 + arc * 0.9)))
+          return
+        }
         const k = tileIn(b, i, j)
         tm.visible = k > 0
         tm.scale.setScalar(Math.max(1e-3, outBack(k, 2.2)))

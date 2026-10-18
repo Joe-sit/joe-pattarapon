@@ -41,6 +41,10 @@ export type WorkBeats = {
   research: number
   /** บท Research จริง (island แท่นบนจอเครื่อง — ./ResearchPlatform) — คนละอันกับ research ที่เป็นช่วงข้อความหลุดลอย */
   study: number
+  /** บทพื้นกระเบื้อง (./GroundStage) */
+  ground: number
+  /** island ค้างบนฟอง ข้อความใหญ่พื้นหลังเผยทีละคำ (./WorkStory) */
+  tell: number
   design: number
   code: number
   ship: number
@@ -56,6 +60,8 @@ export function workBeats(sv2: number): WorkBeats {
     wire: 0,
     research: at(sv2, BEAT.research),
     study: at(sv2, BEAT.study),
+    ground: at(sv2, BEAT.ground),
+    tell: at(sv2, BEAT.tell),
     design: at(sv2, BEAT.design),
     code: at(sv2, BEAT.code),
     ship: at(sv2, BEAT.ship),
@@ -78,6 +84,13 @@ export const deviceSpot = { hw: 0, hh: 0, r: 0, k: 0, tilt: 0, bench: 0 }
  * ของบนจอในแคนวาสเพอร์สเปกทีฟ (./BenchScreen) วางด้วยเมทริกซ์นี้ตรง ๆ จึงติดเครื่องทุกท่า (ซูม เอียง เลื่อน เอน ควง)
  */
 export const deviceMat = { e: new Float32Array(16), ok: false }
+/**
+ * ท่าของพื้นกระเบื้อง (บท ground) — เมทริกซ์ 4×4 พิกัดโลก px ก่อนเพอร์สเปกทีฟ แบบเดียวกับ deviceMat
+ * = ท่าฟองหงายก่อนลงจอด เลื่อนลงใต้ผิวฟอง: ระนาบ xy ของพื้นคือระนาบหน้าฟอง หน่วยท้องถิ่น = viewBox ของฟอง
+ * ฟองเขียนทุกเฟรม (./BubbleTraveler) · พื้นอ่านไปวาดในแคนวาสเพอร์สเปกทีฟ (./GroundStage)
+ */
+/** k = กว้างของฟองในหน่วยท้องถิ่น — ขนาดกระเบื้อง/หมุดคิดจากนี้ */
+export const groundMat = { e: new Float32Array(16), ok: false, k: 300 }
 /** ทรงเครื่องในหน่วย viewBox ของฟอง (ครึ่งกว้าง · ครึ่งสูง · รัศมีมุม) — สัดส่วนจอมือถือ */
 export const DEVICE = { hw: 88, hh: 172, r: 36 }
 
@@ -98,14 +111,17 @@ export function benchPose(b: WorkBeats, W: number, H: number): Bench {
   const target = tall ? H * 0.28 : H * 0.37
   BENCH.target = target
   BENCH.k = lerp(1, target / base, e)
-  BENCH.x = lerp(0, tall ? 0 : W * 0.2, e)
-  BENCH.y = lerp(0, tall ? H * 0.13 : H * 0.01, e)
-  BENCH.flat = e
+  /* อยู่กลางจอเต็มตัว — คำใหญ่ของแต่ละบท (Research / Design / Code) เป็นพื้นหลังข้างหลัง (./WorkStory) */
+  BENCH.x = 0
+  BENCH.y = lerp(0, tall ? H * 0.04 : H * 0.03, e)
+  /* ไม่ตั้งหน้าตรง — เครื่องค้างมุมหงายหลังลงจอด เล่าทุกบท (Research → Design → Code → Ship) ในมุมนี้ */
+  BENCH.flat = 0
   BENCH.spin = Math.PI * 2 * inOut((b.ship - 0.15) / 0.5)
   /* บทโค้ด: เครื่องเอนหงายเฉียงให้เห็นวิดเจ็ตที่ยกลอยเป็นชั้น แล้วกลับหน้าตรง (สองแคนวาสเอนพร้อมกัน) */
   const lean = inOut(b.code / 0.2) - inOut((b.code - 0.8) / 0.2)
-  BENCH.rx = -0.62 * lean
-  BENCH.ry = 0.32 * lean
+  /* เครื่องหงายอยู่แล้ว (เห็นชั้นที่ยกลอยได้เลย) — ไม่เอนหงายเพิ่ม ไม่งั้นเหลือแต่สันเครื่อง · หมุนเฉียงนิดพอเห็นความลึก */
+  BENCH.rx = 0
+  BENCH.ry = 0.28 * lean
   return BENCH
 }
 
@@ -169,3 +185,15 @@ export const WF: readonly (readonly [number, number, number, number, number])[] 
 export const wfK = (wire: number, n: number) => inOut(clamp01((wire - (n / WF.length) * 0.45) / 0.55))
 /** หัวแถบ wireframe (ช่องค้นหาของแอป) — แว่นขยายไปลงหัวแถบ caret กะพริบท้ายแถบ (เคอร์เซอร์ของหน้าโผล่จากตรงนี้) */
 export const WF_HEAD = 9
+
+/**
+ * กรอบเครื่องบนจอเฟรมนี้ (px · y ลง · กลาง + ครึ่งกว้าง/สูง + รัศมีมุม) — ฟองเขียนทุกเฟรม (./BubbleTraveler)
+ * คำใหญ่ของบท (./WorkStory) เจาะตัวทึบตรงกรอบนี้ ตรงที่เครื่องบังจึงเหลือแต่เส้นขอบ
+ */
+export const devScreen = { cx: 0, cy: 0, hw: 0, hh: 0, r: 0, ok: false }
+
+/**
+ * ตำแหน่งบล็อกในแท่งแก้วของ island ในพิกัดผังจอเครื่อง (หน่วยผัง · 4 ก้อน × xyz) — ฟองเขียนทุกเฟรม (./BubbleTraveler)
+ * บล็อกบินจากจุดนี้ไปเป็นกระเบื้องของ widget (./BenchScreen) ตั้งแต่ฟองลงจอดบนหัวเครื่อง
+ */
+export const barLayout = { e: new Float32Array(12), ok: false }

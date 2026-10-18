@@ -9,7 +9,8 @@ import { BenchScreen } from './BenchScreen'
 import { BenchTokens, type TokensApi } from './BenchTokens'
 import { FallSky, type FallPose } from './FallSky'
 import { BEAT, endOf } from '@/sections/skystory/beats'
-import { FOV, camDist, clamp01, headPose, isTall, smooth, workBeats, type WorkBeats } from './workMotion'
+import { ISLAND } from './ResearchPlatform'
+import { FOV, camDist, clamp01, devScreen, headPose, isTall, smooth, workBeats, type WorkBeats } from './workMotion'
 
 /**
  * เครื่องแก้วเป็นโต๊ะทำงาน — เรื่องต่อจาก "Here is what I do"
@@ -73,12 +74,28 @@ function Pump({ frame }: { frame: React.RefObject<Frame> }) {
 const FALL_FROM = BEAT.lift[0]
 const FALL_TO = endOf(BEAT.ship)
 
+/**
+ * คำใหญ่พื้นหลังทีละบท — เครื่องอยู่กลางจอเต็มตัวข้างหน้า (แทนป้ายขั้นตอนซ้าย) · แบบหน้า Apple: ตัวหนาแน่น ระยะชิด
+ * เข้า = ลอยขึ้นจากต่ำนิด เบลอ → ชัด · ออก = จางขยายออก ก่อนคำถัดไปเข้า
+ */
+const SKILL_WORDS: { key: 'study' | 'design' | 'code'; w: string }[] = [
+  { key: 'study', w: 'Research' },
+  { key: 'design', w: 'Design' },
+  { key: 'code', w: 'Code' },
+]
+
 export function WorkStory() {
   const frame = useRef<Frame>({ on: false, b: workBeats(0) })
   const fall = useRef<FallPose>({ on: false, iso: 0, fall: 0, prog: 0, lift: 0 })
   const [on, setOn] = useState(false)
   const layer = useRef<HTMLDivElement>(null)
   const steps = useRef<HTMLDivElement>(null)
+  const bigWords = useRef<(HTMLDivElement | null)[]>([])
+  /** ชั้นเส้นขอบหน้าวัตถุ — ตรงที่เครื่อง/island บังตัวทึบ คำยังอ่านได้เป็นเส้นขอบ */
+  const bigLines = useRef<(HTMLDivElement | null)[]>([])
+  const bigFront = useRef<HTMLDivElement>(null)
+  /** ตัวทึบทั้งชุด — เจาะรูตามกรอบเครื่อง (clip-path) ตรงที่เครื่องบังเหลือแต่เส้นขอบ */
+  const bigSolid = useRef<HTMLDivElement>(null)
   const chips = useRef<(HTMLSpanElement | null)[]>([])
   const bodies = useRef<(HTMLParagraphElement | null)[]>([])
   const tokens = useRef<TokensApi>(null)
@@ -114,6 +131,42 @@ export function WorkStory() {
       }
       if (layer.current) layer.current.style.transform = lift ? `translate3d(0, ${lift.toFixed(1)}px, 0)` : ''
 
+      /* ── คำใหญ่พื้นหลังของบท (Research / Design / Code) ── */
+      const bs = bigSolid.current
+      if (bs) {
+        if (devScreen.ok && devScreen.hw > 1) {
+          const { cx, cy, hw, hh } = devScreen
+          const r = Math.min(devScreen.r, hw, hh)
+          const x0 = cx - hw
+          const y0 = cy - hh - lift
+          const w = hw * 2
+          const h = hh * 2
+          const hole = `M${(x0 + r).toFixed(1)} ${y0.toFixed(1)}h${(w - 2 * r).toFixed(1)}a${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 ${r.toFixed(1)} ${r.toFixed(1)}v${(h - 2 * r).toFixed(1)}a${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 -${r.toFixed(1)} ${r.toFixed(1)}h-${(w - 2 * r).toFixed(1)}a${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 -${r.toFixed(1)} -${r.toFixed(1)}v-${(h - 2 * r).toFixed(1)}a${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 ${r.toFixed(1)} -${r.toFixed(1)}z`
+          bs.style.clipPath = `path(evenodd, "M0 0H${vw}V${vh}H0Z ${hole}")`
+        } else bs.style.clipPath = ''
+      }
+      SKILL_WORDS.forEach((sw, i) => {
+        const el = bigWords.current[i]
+        const ln = bigLines.current[i]
+        if (!el || !ln) return
+        const k = b[sw.key]
+        /* Research ขึ้นตั้งแต่ island งอกเสร็จบนฟอง (ก่อนเครื่องมา) ค้างยาวจนจบบท study */
+        const inK = sw.key === 'study' ? smooth((b.sv2 - (ISLAND.grow[0] + ISLAND.grow[1] - 0.05)) / 0.3) : smooth(k / 0.16)
+        const outK = smooth((k - 0.86) / 0.14)
+        const v = live && (sw.key === 'study' ? inK > 0 && k < 1 : k > 0 && k < 1) ? inK * (1 - outK) : 0
+        const vis = v > 0.002 ? 'visible' : 'hidden'
+        el.style.visibility = vis
+        ln.style.visibility = vis
+        if (v <= 0.002) return
+        const tf = `translate(-50%, -50%) translate3d(0, ${((1 - inK) * 6).toFixed(2)}vh, 0) scale(${(1 + outK * 0.06).toFixed(4)})`
+        const bl = inK < 0.999 ? `blur(${((1 - inK) * 14).toFixed(1)}px)` : ''
+        for (const d of [el, ln]) {
+          d.style.opacity = v.toFixed(3)
+          d.style.transform = tf
+          d.style.filter = bl
+        }
+      })
+
       /* ── ของลอยรอบเครื่อง ── */
       tokens.current?.update(b, vw, vh, live, lift)
 
@@ -122,7 +175,8 @@ export function WorkStory() {
       if (st) {
         const hp = headPose(vw, vh)
         const tall = isTall(vw, vh)
-        const k = live ? smooth((b.bench - 0.5) / 0.5) : 0
+        /* ป้ายขั้นตอนซ่อนไว้ — คำใหญ่พื้นหลังทีละบทเล่าแทนแล้ว (เครื่องอยู่กลางจอ) */
+        const k: number = 0
         st.style.visibility = k > 0.001 ? 'visible' : 'hidden'
         st.style.left = `${(vw / 2 + hp.x).toFixed(1)}px`
         /* ใต้ก้อนหัวเรื่อง (สองบรรทัด + ไอคอน — สูงราว 18% ของจอ) */
@@ -177,6 +231,22 @@ export function WorkStory() {
           <WarmShaders />
           <FallSky pose={fall} />
         </Canvas>
+        {/* คำใหญ่ของแต่ละบท (ตัวทึบ) — เหนือฟ้า ใต้ของบนจอ · เจาะรูตามกรอบเครื่อง: ในกรอบเครื่องเหลือแต่เส้นขอบ */}
+        <div ref={bigSolid} className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+        {SKILL_WORDS.map((sw, i) => (
+          <div
+            key={sw.key}
+            ref={(el) => {
+              bigWords.current[i] = el
+            }}
+            className="absolute top-[28%] left-1/2 text-[clamp(110px,23vw,420px)] leading-none font-bold tracking-[-0.055em] whitespace-nowrap text-white will-change-[transform,opacity,filter]"
+            style={{ visibility: 'hidden', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, "Helvetica Neue", sans-serif' }}
+            aria-hidden
+          >
+            {sw.w}
+          </div>
+        ))}
+        </div>
         <Canvas className="!absolute inset-0" frameloop="demand" dpr={[1, 1.75]} camera={{ fov: FOV, position: [0, 0, 1700] }} gl={{ antialias: true, alpha: true }} style={{ pointerEvents: 'none' }}
           /* ขาวต้องเป็นขาว: ตัวแมปโทนตั้งต้น (ACES) กดขาวลงเป็นเทาหม่น */
           onCreated={({ gl }) => {
@@ -195,6 +265,22 @@ export function WorkStory() {
             <BenchScreen frame={frame} />
           </Suspense>
         </Canvas>
+        {/* คำใหญ่ชั้นเส้นขอบ — เหนือ widget/island บนจอเครื่อง แต่ใต้ตัวเครื่องแก้ว (แคนวาสของฟอง) — คำจึงอยู่หลังเครื่องเสมอ
+            ตรงที่ของบนจอบังตัวทึบ ยังเห็นรูปตัวอักษรเป็นเส้นขอบ */}
+        <div ref={bigFront} className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+          {SKILL_WORDS.map((sw, i) => (
+            <div
+              key={sw.key}
+              ref={(el) => {
+                bigLines.current[i] = el
+              }}
+              className="absolute top-[28%] left-1/2 text-[clamp(110px,23vw,420px)] leading-none font-bold tracking-[-0.055em] whitespace-nowrap text-transparent [-webkit-text-stroke:2px_rgba(255,255,255,0.9)] will-change-[transform,opacity,filter]"
+              style={{ visibility: 'hidden', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, "Helvetica Neue", sans-serif' }}
+            >
+              {sw.w}
+            </div>
+          ))}
+        </div>
       </div>
       <BenchTokens api={tokens} />
       {/* ป้ายขั้นตอนใต้หัวเรื่อง — เหนือเครื่อง ใต้เคอร์เซอร์ */}
