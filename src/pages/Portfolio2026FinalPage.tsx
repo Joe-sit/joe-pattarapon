@@ -80,7 +80,21 @@ const SECTION_LINKS: { id: SectionId; label: string }[] = [
  *   up    เลื่อนขึ้น: ก้อนกลางคลี่ออกเป็นแคปซูลขาว (เว้นขอบนิด ปุ่มสองข้างโดนตัดขอบ) · ชี้เมาส์ = คลี่เต็มกว้าง
  *   ปุ่มเมนู = การ์ดขาวเลื่อนออกจากซ้าย ชื่อจอตัวใหญ่ + ปุ่มลูกศรกลม
  */
-function TopBar({ entered }: { entered: boolean }) {
+/**
+ * ใส่คลาส v3-entered ที่รากของหน้าเมื่อเริ่มมอร์ฟ — เขียน classList ตรง ไม่ผ่าน state ของหน้า
+ * เดิมหน้าฟัง useIntroDone เอง: ทั้งหน้า render ใหม่ (ฉาก 3D ทุกชิ้น) ตรงเฟรมที่จุดโหลดเริ่มคลี่ วัดได้ ~80ms
+ */
+function EnteredClass({ target }: { target: React.RefObject<HTMLDivElement | null> }) {
+  const entered = useIntroDone()
+  useEffect(() => {
+    target.current?.classList.toggle('v3-entered', entered)
+  }, [entered, target])
+  return null
+}
+
+function TopBar() {
+  /* ฟังสโตร์เองที่นี่ ไม่รับจากหน้า — ม่านถอดแล้วหน้าทั้งหน้า (ฉาก 3D ทั้งต้น) จะไม่ render ใหม่กลางอินโทร */
+  const entered = useGateOpen()
   /*
    * เทียบกับตำแหน่งครั้งก่อนไม่ใช่กับ "ทิศของ event" — สโครลนุ่มของ lenis ยิงหลายครั้งต่อเฟรมและกลับทิศเล็ก ๆ
    * ตอนหน่วง ถ้าดูแค่ทิศแถบจะกะพริบ จึงเก็บเฉพาะการขยับที่เกินระยะหนึ่ง
@@ -568,9 +582,7 @@ const CameraTuner = lazy(() =>
 export function Portfolio2026FinalPage() {
   const [onHero, setOnHero] = useState(true)
   /** สปแลชส่งไม้ต่อแล้ว — ชิ้นส่วนของจอแรกไถลขึ้นมาเข้าที่ */
-  const entered = useIntroDone()
   /* แถบบนเล่นท่าโผล่หลังม่านโหลดถอดจริง ไม่ใช่ตอนเริ่มมอร์ฟ — ไม่งั้นโลโก้ประกอบเสร็จอยู่ใต้ม่าน */
-  const gateOpen = useGateOpen()
   /** ฉากสามมิติพังอยู่หรือเปล่า — คุมจากช่องแชทในหัวเรื่อง */
   /** โหมดคอมเมนต์ (เคอร์เซอร์เป็นหมุดทั้งจอแรก) + ตำแหน่งที่ปักช่องพิมพ์ไว้ */
   const [commenting, setCommenting] = useState(false)
@@ -737,7 +749,8 @@ export function Portfolio2026FinalPage() {
   }, [])
 
   return (
-    <div ref={rootRef} className={`v3 relative w-full${entered ? ' v3-entered' : ''}`}>
+    <div ref={rootRef} className="v3 relative w-full">
+      <EnteredClass target={rootRef} />
       {/* ด่านโหลด — บังไว้จนไฟล์ของหน้าครบและฉากวาดได้จริง (ดู ./Final2026Gate) */}
       <Final2026Gate />
       {/**
@@ -790,7 +803,7 @@ export function Portfolio2026FinalPage() {
       {/* งานที่เข้ามาไม่หยุด → พอร์ทัล → มือถือ — ต่อจาก "Here is what I do" ในฟองนั้น (ดู WorkStory) */}
       <WorkStory />
 
-      <TopBar entered={gateOpen} />
+      <TopBar />
       {/* ราวจุดนำสายตา — ตัวเดียวกับที่ใช้ในเวอร์ชัน Vue (branch `2026`)
           ในแบบมีทุกจอยกเว้นจอแรก จึงจางหายตอนอยู่ที่ hero */}
       <AnchorNav

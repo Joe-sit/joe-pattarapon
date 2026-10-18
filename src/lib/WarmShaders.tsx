@@ -117,6 +117,46 @@ export function WarmShaders() {
       })
     }
 
+    /**
+     * วาดจริงหนึ่งเฟรมโดยเปิดของที่ซ่อน/อยู่นอกกล้องทั้งหมด — ผ่านเส้นทางวาดปกติของแคนวาส (CameraFX, transmission …)
+     *
+     * compile อย่างเดียวไม่พอ: geometry ของชิ้นที่ยังไม่เคยถูกวาดยังไม่ขึ้น GPU และ Metal (ANGLE) สร้าง pipeline
+     * ตอนวาดครั้งแรกด้วยรูปแบบบัฟเฟอร์ปลายทางจริง — ของที่โผล่ตอนกล้องอินโทรถอยออกจึงจ่ายตรงนั้น = กระตุกเหมือนโหลดของ
+     * เปิดใน onBeforeRender ของฉาก (หลัง useFrame ที่ซ่อนของตามจังหวะ) ปิดคืนใน onAfterRender · ใต้ม่านโหลด ไม่มีใครเห็น
+     */
+    const drawAll = () =>
+      new Promise<void>((done) => {
+        const before = scene.onBeforeRender
+        const after = scene.onAfterRender
+        const forced: [THREE.Object3D, boolean, boolean][] = []
+        scene.onBeforeRender = function (...a) {
+          before.apply(this, a)
+          scene.traverse((o) => {
+            if (o.visible && !o.frustumCulled) return
+            forced.push([o, o.visible, o.frustumCulled])
+            o.visible = true
+            o.frustumCulled = false
+          })
+        }
+        scene.onAfterRender = function (...a) {
+          after.apply(this, a)
+          for (const [o, v, c] of forced) {
+            o.visible = v
+            o.frustumCulled = c
+          }
+          forced.length = 0
+        }
+        invalidate()
+        /* สองเฟรม: เฟรมหน้าแคนวาสวาด แล้วค่อยถอดตัวดัก */
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            scene.onBeforeRender = before
+            scene.onAfterRender = after
+            done()
+          }),
+        )
+      })
+
     /* Safari ไม่มี requestIdleCallback — ตกไปที่ setTimeout */
     const ric = (window as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback
     const idle = (fn: () => void) => (ric ? ric(fn, { timeout: 400 }) : window.setTimeout(fn, 0))
@@ -126,6 +166,8 @@ export function WarmShaders() {
       idle(async () => {
         if (!alive) return
         await warm().catch(() => {})
+        if (!alive) return
+        await drawAll()
         if (!alive) return
         passes += 1
         const now = performance.now()

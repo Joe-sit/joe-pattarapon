@@ -1,6 +1,7 @@
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame, useThree } from '@react-three/fiber'
+import { introSince } from './intro'
 
 /**
  * เอฟเฟกต์กล้อง — วาดฉากลงบัฟเฟอร์ก่อน แล้วค่อยเอามาบิดตอนพ่นลงจอ
@@ -38,6 +39,8 @@ const FRAG = /* glsl */ `
   uniform float uNear;
   uniform float uFar;
   uniform vec2 uTexel;
+  /** ส่วนของบัฟเฟอร์ที่วาดจริงเฟรมนี้ (ความละเอียดยืดหยุ่น — ดู dyn) */
+  uniform vec2 uScale;
   uniform float uRim;
   uniform float uRimW;
   uniform float uRimSoft;
@@ -134,9 +137,14 @@ const FRAG = /* glsl */ `
     return clamp(color, 0.0, 1.0);
   }
 
+  /** uv ของจอ → uv ในมุมบัฟเฟอร์ที่วาดจริง (หดไม่ให้ดึงสีนอกส่วนที่วาดเข้ามาที่ขอบ) */
+  vec2 sc(vec2 uv) {
+    return min(clamp(uv, 0.0, 1.0) * uScale, uScale - uTexel * 0.5);
+  }
+
   /** depth buffer (0..1, ไม่เชิงเส้น) -> ระยะจริงจากกล้อง (หน่วยโลก) */
   float linDepth(vec2 uv) {
-    float z = texture2D(uDepth, uv).x * 2.0 - 1.0;
+    float z = texture2D(uDepth, sc(uv)).x * 2.0 - 1.0;
     return (2.0 * uNear * uFar) / (uFar + uNear - z * (uFar - uNear));
   }
 
@@ -204,12 +212,12 @@ const FRAG = /* glsl */ `
     if (uChroma > 0.0001) {
       vec2 uvR = warp(vUv, uFish * (1.0 + uChroma));
       vec2 uvB = warp(vUv, uFish * (1.0 - uChroma));
-      col = vec3(texture2D(uTex, uvR).r, texture2D(uTex, uvG).g, texture2D(uTex, uvB).b);
+      col = vec3(texture2D(uTex, sc(uvR)).r, texture2D(uTex, sc(uvG)).g, texture2D(uTex, sc(uvB)).b);
     } else {
-      col = texture2D(uTex, uvG).rgb;
+      col = texture2D(uTex, sc(uvG)).rgb;
     }
     // ความทึบของฉาก — ผ้าใบโปร่ง (hero แบบการ์ด) ที่ว่างต้องโปร่งตาม ไม่ใช่ดำ
-    float alpha = texture2D(uTex, uvG).a;
+    float alpha = texture2D(uTex, sc(uvG)).a;
     if (uRim > 0.0001) {
       // ผสมแบบ screen ไม่ใช่บวกตรง ๆ — ที่สว่างอยู่แล้วไม่กลายเป็นขาวตัน เนื้อสียังอยู่
       vec3 r = uRimColor * (rimGlow(uvG) * uRim);
@@ -304,6 +312,7 @@ export function CameraFX({
         uNear: { value: 0.1 },
         uFar: { value: 100 },
         uTexel: { value: new THREE.Vector2(1 / 1024, 1 / 1024) },
+        uScale: { value: new THREE.Vector2(1, 1) },
         uRim: { value: 0 },
         uRimW: { value: 2 },
         uRimSoft: { value: 0.5 },
@@ -326,11 +335,31 @@ export function CameraFX({
   useMemo(() => () => target.dispose(), [target])
 
   /**
+   * ความละเอียดยืดหยุ่นช่วงอินโทร — ตอนกล้องเพิ่งไถลออกจากพอร์ทัล ของในฉากเต็มจอ ทุกพิกเซลแพง เฟรมตก (M1: ~15–20fps)
+   * แล้วพอถอยออกเกือบสุดกลับเป็น 60fps = ท่าเดียวกันแต่ความเร็วกระชาก
+   * วาดฉากลงแค่มุมหนึ่งของบัฟเฟอร์เดิม (viewport) แล้วยืดขึ้นจอ — ปรับได้ทุกเฟรมโดยไม่จองบัฟเฟอร์ใหม่ (ต่างจากเปลี่ยน dpr)
+   * ลดเฉพาะตอนอินโทรเล่นและเฟรมช้าจริง (เฉลี่ยหลายเฟรม) · อินโทรจบค่อย ๆ คมกลับเต็ม — ภาพนิ่งไม่เคยถูกลด
+   */
+  const dyn = useRef({ k: 1, ema: 1 / 60 })
+
+  /**
    * priority 1 = เข้ามาแทนลูปวาดปกติของ r3f ทั้งหมด
    * ต้องสั่งวาดเองทั้งสองรอบ: รอบแรกลงบัฟเฟอร์ รอบสองพ่น quad ลงจอ
    */
-  useFrame(() => {
+  useFrame((_, delta) => {
     const m = post.mat.uniforms
+    const dn = dyn.current
+    dn.ema += (Math.min(delta, 0.1) - dn.ema) * 0.15
+    const since = introSince()
+    const playing = Number.isFinite(since) && since < 0
+    if (playing && dn.ema > 1 / 48) dn.k = Math.max(0.6, dn.k - 0.03)
+    else if (!playing || dn.ema < 1 / 57) dn.k = Math.min(1, dn.k + (playing ? 0.008 : 0.02))
+    const vw = Math.max(1, Math.round(target.width * dn.k))
+    const vh = Math.max(1, Math.round(target.height * dn.k))
+    target.viewport.set(0, 0, vw, vh)
+    target.scissor.set(0, 0, vw, vh)
+    target.scissorTest = dn.k < 1
+    m.uScale.value.set(vw / target.width, vh / target.height)
     m.uFish.value = fish
     m.uSkewX.value = skewX
     m.uSkewY.value = skewY

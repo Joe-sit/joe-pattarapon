@@ -27,7 +27,7 @@ import { heroView } from './heroView'
 import { CardClip } from './cardClip'
 import { SLAB_CURVE, WaveSlab, slabFrame } from './WaveSlab'
 import { heroPointer, holdHeroPointer } from './heroPointer'
-import { IntroClock, introSet, introSkip, introTime, outBack as introBack, ribbonStart } from './intro'
+import { IntroClock, introSet, introSince, introSkip, introTime, outBack as introBack, ribbonStart } from './intro'
 import { setNewHeroReady } from './ready'
 import { Entrance, entranceBlend, entranceSample, entranceU } from './Entrance'
 import { portalRide } from './portalRide'
@@ -3373,6 +3373,21 @@ function SceneReady() {
  * bare: ผ้าใบโปร่ง ฟ้าอยู่แค่ในการ์ด ไม่มีเมฆขอบ (hero แบบการ์ด ตาม ref
  * creativecruise.nl: ของ 3D ล้นออกนอกขอบการ์ดได้ เพราะการ์ดเป็น DOM อยู่หลังผ้าใบ)
  */
+/**
+ * ของที่ต้องรออินโทรเล่นจบ (+ พักครึ่งวิ) ก่อนค่อย mount — PerformanceMonitor ของ dpr
+ *
+ * มันวัดเฟรมตั้งแต่ mount: ช่วงหลังม่านโหลดเฟรมหนัก (อุ่น shader อบ env map) แล้วต่อด้วยอินโทร
+ * มันจึงสั่งลด dpr กลางอินโทรพอดี — ผ้าใบกับบัฟเฟอร์ของ CameraFX จองใหม่ทั้งชุด ~170ms (วัดได้
+ * 640ms หลังม่านเริ่มเปิด) = จังหวะกระตุกตอนจุดโหลดคลี่เป็นจอแรก · วัดหลังอินโทรจบ = วัดเฟรมปกติจริง
+ */
+function AfterIntro({ children }) {
+  const [ready, setReady] = useState(false)
+  useFrame(() => {
+    if (!ready && introSince() >= 0.5) setReady(true)
+  })
+  return ready ? children : null
+}
+
 export default function NewHeroScene({ bare = false, className = 'absolute inset-0' }) {
   // เลื่อนพ้นไปไกลจนไม่มีใครเห็นแล้ว = หยุดวาด (ดู setSceneOn ใน scrolly.js)
   const on = useSceneOn()
@@ -3418,7 +3433,9 @@ export default function NewHeroScene({ bare = false, className = 'absolute inset
       gl={{ antialias: !(DEFAULTS.fx > 0.5 || DEFAULTS.rimFx > 0.5), stencil: true, alpha: bare, toneMappingExposure: DEFAULTS.exposure }}
     >
       <WarmShaders />
-      <PerformanceMonitor onDecline={() => setDpr(minDpr)} onIncline={() => setDpr(maxDpr)} flipflops={3} onFallback={() => setDpr(minDpr)} />
+      <AfterIntro>
+        <PerformanceMonitor onDecline={() => setDpr(minDpr)} onIncline={() => setDpr(maxDpr)} flipflops={3} onFallback={() => setDpr(minDpr)} />
+      </AfterIntro>
       <Suspense fallback={null}>
         <Scene bare={bare} />
       </Suspense>
