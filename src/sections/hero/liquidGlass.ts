@@ -122,3 +122,50 @@ export function makeLiquidGlass() {
       }`,
   })
 }
+
+/**
+ * แก้วเดียวกับฟอง แต่ย้อมสี — วิดเจ็ตบนจอเครื่อง (./BenchScreen) ให้คุณภาพผิวเท่าฟองหัวเรื่อง
+ *
+ * แสงที่ขอบชุดเดียวกับ makeLiquidGlass ทุกตัวเลข (ขอบสะท้อนฝั่งไฟซ้ายบน แสงทะลุฝั่งตรงข้าม เส้นขอบบาง แถบเลนส์)
+ * ต่างแค่เนื้อ: ย้อมสีของวิดเจ็ต และหนากว่าฟอง (body) จึงอ่านเป็นแผ่นสีพาสเทลใส ไม่ใช่พลาสติกทึบ
+ * เนื้อหนาขึ้นนิดที่ขอบ (แก้วหนาตามความโค้ง) · โปร่งจริงผ่านอัลฟาของแคนวาส ฟ้าข้างหลังจึงทะลุมา
+ */
+export function makeTintGlass(color: THREE.ColorRepresentation, body: number) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false,
+    uniforms: { uTint: { value: new THREE.Color(color) }, uBody: { value: body } },
+    vertexShader: /* glsl */ `
+      varying vec3 vN;
+      void main() {
+        vN = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uTint;
+      uniform float uBody;
+      varying vec3 vN;
+      void main() {
+        vec3 n = normalize(vN);
+        float rim = clamp(1.0 - n.z, 0.0, 1.0);
+        vec2 side = length(n.xy) > 1e-4 ? normalize(n.xy) : vec2(0.0);
+        vec2 L = normalize(vec2(-0.55, 0.83));
+        float toward = max(dot(side, L), 0.0);
+        float away = max(dot(side, -L), 0.0);
+        float spec = pow(rim, 2.2) * (pow(toward, 2.5) * 0.95 + pow(away, 2.5) * 0.5);
+        float line = smoothstep(0.82, 0.98, rim) * 0.35;
+        float lens = smoothstep(0.08, 0.45, rim) * (1.0 - smoothstep(0.45, 0.9, rim)) * 0.1;
+
+        float a = uBody * (0.85 + 0.3 * smoothstep(0.0, 0.6, rim));
+        vec3 col = uTint;
+        float hl = clamp(spec + line, 0.0, 1.0);
+        col = mix(col, vec3(1.0), hl / max(a + hl, 1e-4));
+        a += hl;
+        col = mix(col, uTint * 0.5, lens / max(a + lens, 1e-4));
+        a = clamp(a + lens, 0.0, 1.0);
+        gl_FragColor = vec4(col, a);
+        #include <colorspace_fragment>
+      }`,
+  })
+}

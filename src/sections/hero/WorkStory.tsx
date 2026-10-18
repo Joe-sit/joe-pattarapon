@@ -129,7 +129,7 @@ export function WorkStory() {
         /* หัวเรื่องลงไปเป็น wireframe ในจอแล้ว — ป้ายขึ้นมาอยู่ที่ของหัวเรื่องแทน */
         st.style.top = `${(vh / 2 + hp.y + vh * (tall ? 0.02 : 0.04)).toFixed(1)}px`
         st.style.clipPath = `inset(${((1 - k) * 100).toFixed(1)}% 0 0 0)`
-        const ks = [b.research, b.design, b.code, b.ship]
+        const ks = [b.study, b.design, b.code, b.ship]
         /* ขั้นปัจจุบัน = ขั้นท้ายสุดที่เริ่มแล้ว */
         let cur = -1
         ks.forEach((x, i) => {

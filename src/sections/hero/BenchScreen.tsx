@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
+import { makeTintGlass } from './liquidGlass'
+import { ResearchIsland } from './ResearchPlatform'
 import { outlineMat, rrect } from './shapes'
 import {
   DEVICE,
@@ -55,10 +57,8 @@ export const CARDS: Card[] = [
     h: 236,
     r: 38,
     color: '#f4ebe7',
-    tiles: [
-      { x: -38, y: -34, w: 28, h: 28, r: 8, color: '#ead6cd' },
-      { x: 6, y: 8, w: 28, h: 28, r: 8, color: '#ead6cd' },
-    ],
+    /* ใบนี้เป็น island ของบท Research — แท่นจำลองยืนบนการ์ด (./ResearchPlatform) แทนกระเบื้อง */
+    tiles: [],
   },
 ]
 
@@ -238,10 +238,8 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
       const k = `${c}|${tile}`
       let m = cache.get(k)
       if (!m) {
-        const col = new THREE.Color(c)
-        m = tile
-          ? new THREE.MeshPhysicalMaterial({ color: col, roughness: 0.14, clearcoat: 1, clearcoatRoughness: 0.06, emissive: col, emissiveIntensity: 0.16, envMapIntensity: 1.1 })
-          : new THREE.MeshPhysicalMaterial({ color: col, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.16, envMapIntensity: 0.95 })
+        /* แก้วย้อมสีชุดเดียวกับฟองหัวเรื่อง — การ์ดใสกว่า ของในการ์ดเนื้อแน่นกว่า (อ่านเป็นชั้นบนการ์ด) */
+        m = tile ? makeTintGlass(c, 0.78) : makeTintGlass(c, 0.4)
         cache.set(k, m)
       }
       return m
@@ -506,12 +504,14 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
           }}
           visible={false}
         >
-          <mesh geometry={pc.geo} material={pc.mat} />
+          <mesh geometry={pc.geo} material={pc.mat} renderOrder={2} />
+          {i === 2 && <ResearchIsland frame={frame} top={pc.top} />}
           {pc.tiles.map((pt, j) => (
             <mesh
               key={j}
               geometry={pt.geo}
               material={pt.mat}
+              renderOrder={3}
               ref={(el) => {
                 ;(tileRefs.current[i] ||= [])[j] = el
               }}

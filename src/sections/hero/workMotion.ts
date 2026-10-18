@@ -39,6 +39,8 @@ export type WorkBeats = {
   bench: number
   wire: number
   research: number
+  /** บท Research จริง (island แท่นบนจอเครื่อง — ./ResearchPlatform) — คนละอันกับ research ที่เป็นช่วงข้อความหลุดลอย */
+  study: number
   design: number
   code: number
   ship: number
@@ -53,6 +55,7 @@ export function workBeats(sv2: number): WorkBeats {
     /* บท wire (ตัวอักษรกลายเป็นกรอบลงจอ) ปิดแล้ว — ข้อความลอยพ้นจอไปก่อนเครื่องมา ไม่ได้เล่าต่อ */
     wire: 0,
     research: at(sv2, BEAT.research),
+    study: at(sv2, BEAT.study),
     design: at(sv2, BEAT.design),
     code: at(sv2, BEAT.code),
     ship: at(sv2, BEAT.ship),
