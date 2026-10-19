@@ -28,6 +28,7 @@ const VERT = /* glsl */ `
 const FRAG = /* glsl */ `
   uniform float uFall;
   uniform float uProg;
+  uniform float uIn;
   uniform float uAspect;
   uniform float uDot;
   varying vec2 vUv;
@@ -107,20 +108,20 @@ const FRAG = /* glsl */ `
       float mass = fbm(p * 0.35 + near * 9.0, 2);
       float n = fbm(p + near * 4.0, 3) * 0.6 + mass * 0.55;
       /* หนาที่ขอบซ้ายขวา โปร่งกลางจอ (ก้อนใหญ่จริง ๆ ล้ำเข้ามาได้บ้าง) */
-      float side = smoothstep(0.22, 0.5, abs(uv.x - 0.5));
+      float side = smoothstep(0.18, 0.46, abs(uv.x - 0.5));
       side = max(side, smoothstep(0.62, 0.95, mass) * 0.55);
-      /* หน้าคลื่นเมฆไหลขึ้นจากขอบล่างตามระยะร่วง — ก่อนร่วงไม่มีเมฆ */
-      float front = uFall * speed * 1.1 - 0.05;
+      /* หน้าคลื่นเมฆไหลขึ้นจากขอบล่างเร็ว ๆ ตั้งแต่ข้อความ What I do เริ่มลอย (uIn) — ก่อนนั้นไม่มีเมฆ · ชั้นใกล้นำนิด */
+      float front = uIn * mix(1.35, 1.5, near) - 0.05;
       float enter = smoothstep(front, front - 0.25, uv.y);
       /*
        * ก้อนฟุ้งแบบม่านเมฆของ hero (components/CloudWipe): ขอบนุ่ม ชั้นไกลฟุ้งกว่าและจางกว่า
        * ท้องก้อนอมฟ้าเทา (ปริมาตร) ยอดขาว — ไม่ใช่จุดครึ่งโทน: ฉากหลังต้องไม่แย่งสายตาจากเวที
        */
       float soft = mix(0.32, 0.2, near);
-      float dens = smoothstep(0.5, 0.5 + soft, n) * side * enter;
+      float dens = smoothstep(0.44, 0.44 + soft, n) * side * enter;
       float lit = smoothstep(0.55, 0.85, fbm(p + vec2(0.0, 0.18) + near * 4.0, 3) * 0.6 + mass * 0.55);
       vec3 c = mix(vec3(0.80, 0.87, 0.97), vec3(0.98, 0.99, 1.0), lit);
-      float a = dens * mix(0.38, 0.68, near);
+      float a = dens * mix(0.5, 0.8, near);
       pm = c * a + pm * (1.0 - a);
       alpha = a + alpha * (1.0 - a);
     }
@@ -139,7 +140,7 @@ export function FallSky({ pose }: { pose: React.RefObject<FallPose> }) {
       new THREE.ShaderMaterial({
         vertexShader: VERT,
         fragmentShader: FRAG,
-        uniforms: { uFall: { value: 0 }, uProg: { value: 0 }, uAspect: { value: 1 }, uDot: { value: 9 } },
+        uniforms: { uFall: { value: 0 }, uProg: { value: 0 }, uIn: { value: 0 }, uAspect: { value: 1 }, uDot: { value: 9 } },
         transparent: true,
         depthWrite: false,
         toneMapped: false,
@@ -174,6 +175,7 @@ export function FallSky({ pose }: { pose: React.RefObject<FallPose> }) {
     const u = mat.uniforms
     u.uFall.value = p.fall * 0.55 + drift.current
     u.uProg.value = p.prog
+    u.uIn.value = p.iso
     u.uAspect.value = W / H
     /* จุดขนาดเดียวกับฟ้าของ hero (~9 px CSS) — gl_FragCoord เป็นพิกเซลจริง คูณ dpr */
     u.uDot.value = 9 * viewport.dpr

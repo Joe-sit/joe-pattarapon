@@ -568,7 +568,7 @@ export const DEFAULTS = {
   wtWarm: 0,
   wtDbg: 0,
   /** รอยเงาซิลูเอตต์ท้ายตัวละคร — ความเข้ม, จำนวนใบ, ระยะห่าง (หน่วยฉาก), ยกสูง, จาง, ย่อ */
-  etAmt: 0,
+  etAmt: 1,
   etCount: 6,
   etStep: 0.14,
   etY: 0.05,
@@ -844,7 +844,7 @@ const KEY = 'newhero.tuner.v258'
  * เอาค่าใหม่ไปได้เลย ถ้าต่าง = เขาตั้งไว้เอง เก็บของเขาไว้ (ยกเว้น etSoft ที่หน่วยเปลี่ยน
  * ไปเลย ค่านอกช่วง 0–1 ไม่มีความหมายในหน่วยใหม่)
  */
-const STALE = { etCount: 4, etStep: 0.42, etFade: 0.12, etShrink: 0.16, etSoft: 3 }
+const STALE = { etAmt: 0, etCount: 4, etStep: 0.42, etFade: 0.12, etShrink: 0.16, etSoft: 3 }
 
 function load() {
   /**

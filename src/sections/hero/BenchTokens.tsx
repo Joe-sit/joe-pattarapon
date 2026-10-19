@@ -1,6 +1,6 @@
 import { useImperativeHandle, useRef, type ReactNode, type Ref } from 'react'
 import { CARDS, designPick } from './BenchScreen'
-import { clamp01, isTall, outBack, screenRect, smooth, type WorkBeats } from './workMotion'
+import { clamp01, codeDark, isTall, outBack, screenRect, smooth, type WorkBeats } from './workMotion'
 
 /**
  * ของลอยรอบเครื่อง (แบบวิดีโอของ eddie.eco: ของหลักชิ้นเดียว มี UI แบน 2–3 ชิ้นลอยรอบตัว — การ์ดขาวมุมมน ไอคอนเข้ม
@@ -80,6 +80,8 @@ export function BenchTokens({ api }: { api: Ref<TokensApi> }) {
           const outK = sl.beat === 'ship' ? 0 : smooth((k - 0.88) / 0.1)
           const g = outBack(inK, 1.7) * (1 - outK)
           el.style.visibility = g > 0.01 ? 'visible' : 'hidden'
+          /* บท Code โหมดมืด: ชิ้นลอยเป็นกระจกดำขอบม่วง */
+          el.dataset.dark = String(codeDark(b) > 0.5)
           if (g <= 0.01) return
           /* ออกจากขอบเครื่อง → มุมของมัน (จอตั้งเข้ามาเกาะขอบเครื่อง ไม่หลุดจอ) */
           /* จอตั้ง: ป้ายขั้นตอนอยู่เหนือเครื่อง — เกาะคร่อมขอบข้างเครื่องแทนมุมบน/ล่าง */
@@ -106,7 +108,7 @@ export function BenchTokens({ api }: { api: Ref<TokensApi> }) {
     [],
   )
 
-  const card = 'flex items-center gap-2.5 rounded-[18px] bg-white px-3.5 py-3 text-[#16213e] shadow-[0_10px_30px_rgba(16,40,110,0.18)]'
+  const card = 'flex items-center gap-2.5 rounded-[18px] bg-white px-3.5 py-3 text-[#16213e] shadow-[0_10px_30px_rgba(16,40,110,0.18)] transition-colors duration-300 group-data-[dark=true]:bg-[#141220] group-data-[dark=true]:text-[#ece8ff] group-data-[dark=true]:shadow-[0_0_0_1px_rgba(170,150,255,0.28),0_12px_34px_rgba(90,50,220,0.45)]'
   return (
     <div className="pointer-events-none fixed inset-0 z-[53] overflow-hidden" aria-hidden>
       {SLOTS.map((sl, i) => (
@@ -115,13 +117,13 @@ export function BenchTokens({ api }: { api: Ref<TokensApi> }) {
           ref={(el) => {
             boxes.current[i] = el
           }}
-          className="absolute top-0 left-0"
+          className="group absolute top-0 left-0"
           style={{ visibility: 'hidden' }}
         >
           {/* ลอยขึ้นลงเบา ๆ ตามเวลา (CSS — ไม่ต้องวาดใหม่ทุกเฟรม) เฟสต่างกันต่อชิ้น */}
           <div className="animate-[v3-token-float_3.2s_ease-in-out_infinite]" style={{ animationDelay: `${-i * 0.7}s` }}>
             {sl.kind === 'icon' && sl.icon && (
-              <div className="grid size-[54px] place-items-center rounded-[18px] bg-white text-[#16213e] shadow-[0_10px_30px_rgba(16,40,110,0.18)]">
+              <div className="grid size-[54px] place-items-center rounded-[18px] bg-white text-[#16213e] shadow-[0_10px_30px_rgba(16,40,110,0.18)] transition-colors duration-300 group-data-[dark=true]:bg-[#141220] group-data-[dark=true]:text-[#ece8ff] group-data-[dark=true]:shadow-[0_0_0_1px_rgba(170,150,255,0.28),0_12px_34px_rgba(90,50,220,0.45)]">
                 <Icon d={ICONS[sl.icon]} />
               </div>
             )}
@@ -157,8 +159,8 @@ export function BenchTokens({ api }: { api: Ref<TokensApi> }) {
             )}
             {sl.kind === 'build' && (
               <div className={card}>
-                <span className="h-2.5 w-28 overflow-hidden rounded-full bg-[#e3e8f2]">
-                  <span ref={bar} className="block h-full origin-left rounded-full bg-[#2f6bff]" style={{ transform: 'scaleX(0)' }} />
+                <span className="h-2.5 w-28 overflow-hidden rounded-full bg-[#e3e8f2] group-data-[dark=true]:bg-white/12">
+                  <span ref={bar} className="block h-full origin-left rounded-full bg-[#2f6bff] group-data-[dark=true]:bg-[#9b7bff]" style={{ transform: 'scaleX(0)' }} />
                 </span>
               </div>
             )}

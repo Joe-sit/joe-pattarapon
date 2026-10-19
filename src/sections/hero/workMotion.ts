@@ -114,16 +114,17 @@ export function benchPose(b: WorkBeats, W: number, H: number): Bench {
   /* อยู่กลางจอเต็มตัว — คำใหญ่ของแต่ละบท (Research / Design / Code) เป็นพื้นหลังข้างหลัง (./WorkStory) */
   BENCH.x = 0
   BENCH.y = lerp(0, tall ? H * 0.04 : H * 0.03, e)
-  /* ไม่ตั้งหน้าตรง — เครื่องค้างมุมหงายหลังลงจอด เล่าทุกบท (Research → Design → Code → Ship) ในมุมนี้ */
-  BENCH.flat = 0
+  /* Research กับ Design เล่าในมุมหงายหลังลงจอด */
+  /* บทโค้ด: เครื่องค่อย ๆ ตั้งจากมุมหงายขึ้นเป็นหน้าตรง = แอปที่ขัดเกลาเสร็จแล้ว ค้างหน้าตรงไปจนจบ */
+  BENCH.flat = inOut((b.code - 0.04) / 0.4)
   BENCH.spin = Math.PI * 2 * inOut((b.ship - 0.15) / 0.5)
-  /* บทโค้ด: เครื่องเอนหงายเฉียงให้เห็นวิดเจ็ตที่ยกลอยเป็นชั้น แล้วกลับหน้าตรง (สองแคนวาสเอนพร้อมกัน) */
-  const lean = inOut(b.code / 0.2) - inOut((b.code - 0.8) / 0.2)
-  /* เครื่องหงายอยู่แล้ว (เห็นชั้นที่ยกลอยได้เลย) — ไม่เอนหงายเพิ่ม ไม่งั้นเหลือแต่สันเครื่อง · หมุนเฉียงนิดพอเห็นความลึก */
   BENCH.rx = 0
-  BENCH.ry = 0.28 * lean
+  BENCH.ry = 0
   return BENCH
 }
+
+/** บท Code เป็นโหมดมืด 0..1 — พื้นหลัง (./WorkStory) แก้วเครื่อง (./BubbleTraveler) การ์ด (./BenchScreen) ใช้ค่าเดียวกัน */
+export const codeDark = (b: WorkBeats) => smooth(b.code / 0.15) * (1 - smooth((b.code - 0.88) / 0.12))
 
 /** กรอบจอของเครื่องบนจอ (px) ณ ท่าโต๊ะทำงาน — ใช้ซ้ำ */
 const SCREEN = { cx: 0, cy: 0, hw: 0, hh: 0 }

@@ -8,7 +8,7 @@ import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
 import bubbleSvg from '@/assets/v2final/hero-ideas-bubble.svg?raw'
 import penNibSvg from '@/assets/icons/pen-nib.svg?raw'
 import { useCursorStop } from '@/cursorguide/useCursorStop'
-import { BEAT, SKY_LEAVE, at, endOf } from '@/sections/skystory/beats'
+import { BEAT, SKY_LEAVE, at, endOf, storySv2 } from '@/sections/skystory/beats'
 import { headOf, liquidGeo, prepareBubbleGrid, skillBlobs, sproutShift } from './LiquidBento'
 import { rrect } from './shapes'
 import { FW, panelBox, panelLayout } from './ServiceTrack'
@@ -18,7 +18,7 @@ import { useTuner } from '@/newhero/tuner'
 import { StageLight } from './Headline3D'
 import { BAR_AT, BASE_Y as ISLE_Y, ISLAND, ISLAND_CARD, K as ISLE_K, PadIsland, blockFlight, blockY, padIsland, type IslandApi } from './ResearchPlatform'
 import { bubbleTravel, setBubbleAway, setHeadBubbleLive, subscribeBubbleAway } from './bubbleTravel'
-import { DEVICE, LAYOUT_H, WF, WF_HEAD, benchPose, camDist, barLayout, caretSpot, deviceMat, devScreen, groundMat, deviceSpot, headPose, inOut as inOut3, researchPhase, wfK, workBeats } from './workMotion'
+import { DEVICE, LAYOUT_H, WF, WF_HEAD, benchPose, camDist, codeDark, barLayout, caretSpot, deviceMat, devScreen, groundMat, deviceSpot, headPose, inOut as inOut3, researchPhase, wfK, workBeats } from './workMotion'
 import { outlineMat } from './shapes'
 
 /**
@@ -178,8 +178,8 @@ const rnd = (n: number, k: number) => {
   const v = Math.sin(n * 12.9898 + k * 78.233) * 43758.5453
   return v - Math.floor(v)
 }
-const POSE0 = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0, iso: 0, grow: 0, page: 0, mag: 0, tuck: 0, fall: 0, prog: 0, act: [0, 0, 0], sel: 0, gone: 0, whirl: 0, caretOut: 0, zoom: 1, dev: 0, float: 0, tilt: 0, bx: 0, by: 0, bk: 1, bt: 1, flat: 0, wire: 0, land: 0, away: 0, brx: 0, bry: 0, bspin: 0, hx: 0, hy: 0, isle: 0, flip: 0, flatK: 0, sv2v: 0 }
-type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number; iso: number; grow: number; page: number; mag: number; tuck: number; fall: number; prog: number; act: number[]; sel: number; gone: number; whirl: number; caretOut: number; zoom: number; dev: number; float: number; tilt: number; bx: number; by: number; bk: number; bt: number; flat: number; wire: number; land: number; away: number; brx: number; bry: number; bspin: number; hx: number; hy: number; isle: number; flip: number; flatK: number; sv2v: number }
+const POSE0 = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0, iso: 0, grow: 0, page: 0, mag: 0, tuck: 0, fall: 0, prog: 0, act: [0, 0, 0], sel: 0, gone: 0, whirl: 0, caretOut: 0, zoom: 1, dev: 0, float: 0, tilt: 0, bx: 0, by: 0, bk: 1, bt: 1, flat: 0, wire: 0, land: 0, away: 0, brx: 0, bry: 0, bspin: 0, hx: 0, hy: 0, isle: 0, flip: 0, flatK: 0, sv2v: 0, dark: 0 }
+type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number; iso: number; grow: number; page: number; mag: number; tuck: number; fall: number; prog: number; act: number[]; sel: number; gone: number; whirl: number; caretOut: number; zoom: number; dev: number; float: number; tilt: number; bx: number; by: number; bk: number; bt: number; flat: number; wire: number; land: number; away: number; brx: number; bry: number; bspin: number; hx: number; hy: number; isle: number; flip: number; flatK: number; sv2v: number; dark: number }
 
 function readPose(): Pose {
   const off: Pose = { ...POSE0 }
@@ -192,7 +192,7 @@ function readPose(): Pose {
   const r = el.getBoundingClientRect()
   const sr = story.getBoundingClientRect()
   /** ระยะที่เลื่อนเข้ามาใน What I do แล้ว (หน่วยความสูงจอ) — จังหวะที่สองของฟองนับจากตรงนี้ */
-  const sv2 = Math.max(0, -sr.top / vh)
+  const sv2 = storySv2(Math.max(0, -sr.top / vh))
   /* กล้องร่วงลงหมอก (เมื่อเปิดเรื่องพวงกุญแจ) หรือส่งไม้ให้หน้าต่างใบจริงเสร็จ = ชั้นนี้ปิด */
   const p2 = Math.min(1, Math.max(0, -sr.top / Math.max(1, sr.height - vh)))
   const rise = smooth((p2 - SKY_LEAVE) / 0.06)
@@ -286,6 +286,7 @@ function readPose(): Pose {
     flip: soft5(at(sv2, ISLAND.flip)),
     /* ระยะเลื่อนของเรื่อง — จังหวะบล็อกบินออกจากแท่ง (blockFlight) */
     sv2v: sv2,
+    dark: codeDark(wb),
     /* ของงอกใกล้ครบ: หงายต่อจนเกือบราบ (มองหน้าตรง ของตั้งตรง ไม่เงยหลัง) ค้างไว้ คืนมุมตอนเครื่องมา */
     flatK: soft5((at(sv2, ISLAND.grow) - 0.55) / 0.45) * (1 - soft5(wb.morph / 0.3)),
     /* บทค้นคว้า: ข้อความไปเป็นหัวเรื่องขวา แว่นขยายลงไปเป็นวัตถุหลักบนแท่น — กลับที่เดิมตอนท้ายบท (ก่อนคลี่เป็นเครื่อง) */
@@ -563,6 +564,7 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
       else glass.uniforms.uPanel.value.set(1e5, 0, 0, 0)
       glass.uniforms.uPanelR.value = pb ? pb.r : 0
       glass.uniforms.uPanelTint.value = smooth((p.head - 0.2) / 0.6)
+      glass.uniforms.uDark.value = p.dark
       /* กรอบเนื้อหาให้ฉากบริการ — เปิดเมื่อพาเนลขยายเต็มแล้ว ตามการเลื่อนขึ้นตอนจบ section */
       panelBox.on = p.head > 0.98
       panelBox.x = pl.content.x
@@ -711,9 +713,11 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
         const sy = Math.hypot(e[4], e[5]) / Math.max(1e-6, Math.hypot(e[4], e[5], e[6]))
         devScreen.cx = size.width / 2 + e[12] / wd
         devScreen.cy = size.height / 2 - e[13] / wd
-        devScreen.hw = (DEVICE.hw * ds) / wd
+        /* กว้างตามมุมพลิก (บทโค้ดพลิกเห็นด้านหลัง — สันเครื่องแคบลง) */
+        const cw = Math.abs(e[0]) / Math.max(1e-6, ds)
+        devScreen.hw = (DEVICE.hw * ds * cw) / wd
         devScreen.hh = (DEVICE.hh * ds * sy) / wd
-        devScreen.r = (DEVICE.r * ds) / wd
+        devScreen.r = (DEVICE.r * ds * cw) / wd
         devScreen.ok = L > 0
       }
       deviceMat.ok = L > 0

@@ -38,6 +38,8 @@ export function makeLiquidGlass() {
       uTileA: { value: new THREE.Color('#38e3c4') },
       uTileB: { value: new THREE.Color('#3d6bff') },
       uTileSpan: { value: 100 },
+      /* โหมดมืด (บท Code): เนื้อแก้วเป็นกระจกดำเงา ขอบสะท้อนขาวอมม่วงคมขึ้น */
+      uDark: { value: 0 },
     },
     vertexShader: /* glsl */ `
       varying vec3 vN;
@@ -63,6 +65,7 @@ export function makeLiquidGlass() {
       uniform vec3 uTileA;
       uniform vec3 uTileB;
       uniform float uTileSpan;
+      uniform float uDark;
       varying vec3 vN;
       varying vec2 vLocal;
       // อยู่ในจุด/แคปซูลไหม (กล่องมนรัศมีเท่าครึ่งด้านสั้น) — เผื่อขอบมนของเมชนิดหน่อย
@@ -91,6 +94,10 @@ export function makeLiquidGlass() {
         // แถบเลนส์ผสมเป็นเงาน้ำเงินเข้มบาง ๆ
         col = mix(col, vec3(0.08, 0.18, 0.42), lens / max(a + lens, 1e-4));
         a = clamp(a + lens, 0.0, 1.0);
+        /* โหมดมืด: เนื้อแก้วใสเกือบหมด เหลือแต่ขอบสะท้อนขาวอมม่วงคม — แก้วนี้วาดทับของบนจอ เนื้อทึบ/ย้อมดำทำให้ของในจอหม่นและสีเพี้ยนระหว่างเปลี่ยน */
+        float hl = clamp(spec * 1.3 + line * 1.4, 0.0, 1.0);
+        col = mix(col, vec3(0.94, 0.92, 1.0), uDark);
+        a = mix(a, clamp(0.03 + hl, 0.0, 1.0), uDark);
 
         float i0 = inPill(uC0);
         float i1 = inPill(uC1);
@@ -136,17 +143,26 @@ export function makeTintGlass(color: THREE.ColorRepresentation, body: number) {
     transparent: true,
     depthWrite: false,
     toneMapped: false,
-    uniforms: { uTint: { value: new THREE.Color(color) }, uBody: { value: body } },
+    /* uFill: ระดับสีที่เติมขึ้นจากล่าง (หน่วยท้องถิ่นของแผ่น y) · uSpan ครึ่งความสูงแผ่น — บท Code วิดเจ็ตเติมสีเต็มใบ */
+    uniforms: { uTint: { value: new THREE.Color(color) }, uBody: { value: body }, uDark: { value: 0 }, uFill: { value: -1e5 }, uSpan: { value: 1 }, uFillTop: { value: new THREE.Color(color) }, uFillBot: { value: new THREE.Color(color) } },
     vertexShader: /* glsl */ `
       varying vec3 vN;
+      varying float vY;
       void main() {
         vN = normalize(normalMatrix * normal);
+        vY = position.y;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }`,
     fragmentShader: /* glsl */ `
       uniform vec3 uTint;
       uniform float uBody;
+      uniform float uDark;
+      uniform float uFill;
+      uniform float uSpan;
+      uniform vec3 uFillTop;
+      uniform vec3 uFillBot;
       varying vec3 vN;
+      varying float vY;
       void main() {
         vec3 n = normalize(vN);
         float rim = clamp(1.0 - n.z, 0.0, 1.0);
@@ -165,6 +181,19 @@ export function makeTintGlass(color: THREE.ColorRepresentation, body: number) {
         a += hl;
         col = mix(col, uTint * 0.5, lens / max(a + lens, 1e-4));
         a = clamp(a + lens, 0.0, 1.0);
+        /* โหมดมืด: การ์ดกระจกดำย้อมสีจาง ๆ ขอบเรืองสีของมันเอง */
+        vec3 dk = mix(vec3(0.07, 0.065, 0.11) + uTint * 0.07, mix(uTint, vec3(1.0), 0.45), clamp(hl * 1.2, 0.0, 1.0));
+        col = mix(col, dk, uDark);
+        a = mix(a, clamp(0.45 + hl, 0.0, 1.0), uDark);
+        /* เติมสี: ใต้ระดับเป็นสีไล่ของวิดเจ็ต (บน → ล่าง) ขอบยังสะท้อนแสง · ผิวน้ำสีเป็นเส้นสว่างนุ่ม */
+        vec3 vivid = mix(uFillBot, uFillTop, smoothstep(-uSpan, uSpan, vY));
+        float under = 1.0 - smoothstep(uFill - 1.5, uFill + 1.5, vY);
+        vec3 fc = mix(vivid, vec3(1.0), clamp(hl * 0.9, 0.0, 1.0));
+        col = mix(col, fc, under);
+        a = mix(a, 0.97, under);
+        float lip = exp(-(vY - uFill) * (vY - uFill) / 18.0) * step(-uSpan, uFill) * step(uFill, uSpan);
+        col = mix(col, vec3(1.0), lip * 0.7);
+        a = max(a, lip * 0.8);
         gl_FragColor = vec4(col, a);
         #include <colorspace_fragment>
       }`,

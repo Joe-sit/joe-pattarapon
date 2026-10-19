@@ -8,9 +8,9 @@ import { DeviceHalo } from './DeviceHalo'
 import { BenchScreen } from './BenchScreen'
 import { BenchTokens, type TokensApi } from './BenchTokens'
 import { FallSky, type FallPose } from './FallSky'
-import { BEAT, endOf } from '@/sections/skystory/beats'
+import { BEAT, endOf, storySv2 } from '@/sections/skystory/beats'
 import { ISLAND } from './ResearchPlatform'
-import { FOV, camDist, clamp01, devScreen, headPose, isTall, smooth, workBeats, type WorkBeats } from './workMotion'
+import { FOV, camDist, clamp01, codeDark, devScreen, headPose, isTall, smooth, workBeats, type WorkBeats } from './workMotion'
 
 /**
  * เครื่องแก้วเป็นโต๊ะทำงาน — เรื่องต่อจาก "Here is what I do"
@@ -78,6 +78,29 @@ const FALL_TO = endOf(BEAT.ship)
  * คำใหญ่พื้นหลังทีละบท — เครื่องอยู่กลางจอเต็มตัวข้างหน้า (แทนป้ายขั้นตอนซ้าย) · แบบหน้า Apple: ตัวหนาแน่น ระยะชิด
  * เข้า = ลอยขึ้นจากต่ำนิด เบลอ → ชัด · ออก = จางขยายออก ก่อนคำถัดไปเข้า
  */
+/**
+ * พื้นหลังบท Code: ดำด้านบน แสงม่วงไล่ขึ้นจากมุมล่าง (ซ้ายม่วงน้ำเงิน · ขวาชมพูลาเวนเดอร์สว่าง)
+ * สัญลักษณ์ ASCII ห่าง ๆ (* + # : .) ลอยบนแสง สลับตัวตามระยะเลื่อน — ตำแหน่งตายตัว (สุ่มแบบกำหนดผล) ไม่เปลี่ยนทุกครั้งที่โหลด
+ */
+const GLYPHS = '*+#:.'
+const hash1 = (n: number) => {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453
+  return x - Math.floor(x)
+}
+const ASCII_DOTS = (() => {
+  const out: { x: number; y: number; seed: number }[] = []
+  for (let r = 0; r < 6; r++)
+    for (let c = 0; c < 16; c++) {
+      const n = r * 16 + c
+      const x = 3 + c * 6.2 + (hash1(n) - 0.5) * 2.4
+      const y = 52 + r * 8 + (hash1(n + 99) - 0.5) * 3
+      /* กลางจอเป็นที่ของเครื่อง · ห่าง ๆ ไม่เต็มตาราง */
+      if (Math.abs(x - 50) < 16 || hash1(n + 7) < 0.45) continue
+      out.push({ x, y, seed: n })
+    }
+  return out
+})()
+
 const SKILL_WORDS: { key: 'study' | 'design' | 'code'; w: string }[] = [
   { key: 'study', w: 'Research' },
   { key: 'design', w: 'Design' },
@@ -96,6 +119,33 @@ export function WorkStory() {
   const bigFront = useRef<HTMLDivElement>(null)
   /** ตัวทึบทั้งชุด — เจาะรูตามกรอบเครื่อง (clip-path) ตรงที่เครื่องบังเหลือแต่เส้นขอบ */
   const bigSolid = useRef<HTMLDivElement>(null)
+  const dark = useRef<HTMLDivElement>(null)
+  const liftNow = useRef(0)
+  const glyphs = useRef<(HTMLSpanElement | null)[]>([])
+  /* รูของคำใหญ่ตามกรอบเครื่องทุกเฟรม (เครื่องขยับเองตามเวลาด้วย — อ่านตอนเลื่อนอย่างเดียวไม่พอ) */
+  useEffect(() => {
+    let raf = 0
+    const tick = () => {
+      raf = requestAnimationFrame(tick)
+      if (!frame.current.on) return
+      /* เจาะรูคำใหญ่ตามกรอบเครื่องทุกเฟรม (เครื่องขยับเองตามเวลา ไม่ใช่แค่ตอนเลื่อน) */
+      const bs = bigSolid.current
+      if (bs) {
+        if (devScreen.ok && devScreen.hw > 1) {
+          const { cx, cy, hw, hh } = devScreen
+          const r = Math.min(devScreen.r, hw, hh)
+          const x0 = cx - hw
+          const y0 = cy - hh - liftNow.current
+          const w = hw * 2
+          const h = hh * 2
+          const hole = `M${(x0 + r).toFixed(1)} ${y0.toFixed(1)}h${(w - 2 * r).toFixed(1)}a${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 ${r.toFixed(1)} ${r.toFixed(1)}v${(h - 2 * r).toFixed(1)}a${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 -${r.toFixed(1)} ${r.toFixed(1)}h-${(w - 2 * r).toFixed(1)}a${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 -${r.toFixed(1)} -${r.toFixed(1)}v-${(h - 2 * r).toFixed(1)}a${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 ${r.toFixed(1)} -${r.toFixed(1)}z`
+          bs.style.clipPath = `path(evenodd, "M0 0H${innerWidth}V${innerHeight}H0Z ${hole}")`
+        } else bs.style.clipPath = ''
+      }
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [])
   const chips = useRef<(HTMLSpanElement | null)[]>([])
   const bodies = useRef<(HTMLParagraphElement | null)[]>([])
   const tokens = useRef<TokensApi>(null)
@@ -110,7 +160,7 @@ export function WorkStory() {
       const vw = window.innerWidth
       const vh = window.innerHeight || 1
       const sr = story.getBoundingClientRect()
-      const b = workBeats(Math.max(0, -sr.top / vh))
+      const b = workBeats(storySv2(Math.max(0, -sr.top / vh)))
       const next = document.getElementById(NEXT_ID)
       const glue = next ? next.getBoundingClientRect().top : vh
       const hand = clamp01(-glue / (vh * 0.12))
@@ -122,7 +172,7 @@ export function WorkStory() {
       /* ทั้งชั้นเลื่อนขึ้นด้วย CSS ตอนจอถัดไปดันขึ้นมาแล้ว — ฟ้าไม่ต้องยกเอง (lift 0) */
       const fp = fall.current
       fp.on = live
-      fp.iso = smooth((b.sv2 - FALL_FROM) / 0.35)
+      fp.iso = smooth((b.sv2 - FALL_FROM) / 0.4)
       fp.fall = Math.max(0, b.sv2 - FALL_FROM)
       fp.prog = clamp01((b.sv2 - FALL_FROM) / (FALL_TO - FALL_FROM))
       if (live !== was) {
@@ -131,20 +181,24 @@ export function WorkStory() {
       }
       if (layer.current) layer.current.style.transform = lift ? `translate3d(0, ${lift.toFixed(1)}px, 0)` : ''
 
-      /* ── คำใหญ่พื้นหลังของบท (Research / Design / Code) ── */
-      const bs = bigSolid.current
-      if (bs) {
-        if (devScreen.ok && devScreen.hw > 1) {
-          const { cx, cy, hw, hh } = devScreen
-          const r = Math.min(devScreen.r, hw, hh)
-          const x0 = cx - hw
-          const y0 = cy - hh - lift
-          const w = hw * 2
-          const h = hh * 2
-          const hole = `M${(x0 + r).toFixed(1)} ${y0.toFixed(1)}h${(w - 2 * r).toFixed(1)}a${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 ${r.toFixed(1)} ${r.toFixed(1)}v${(h - 2 * r).toFixed(1)}a${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 -${r.toFixed(1)} ${r.toFixed(1)}h-${(w - 2 * r).toFixed(1)}a${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 -${r.toFixed(1)} -${r.toFixed(1)}v-${(h - 2 * r).toFixed(1)}a${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 ${r.toFixed(1)} -${r.toFixed(1)}z`
-          bs.style.clipPath = `path(evenodd, "M0 0H${vw}V${vh}H0Z ${hole}")`
-        } else bs.style.clipPath = ''
+      /* ── บท Code: ฉากมืดลง (ทับฟ้ากับเมฆ) แสงออร่าม่วงที่ขอบบนกับขอบล่างของเครื่อง · กลับสว่างตอนจบบท ── */
+      const dk = dark.current
+      if (dk) {
+        const k = live ? codeDark(b) : 0
+        dk.style.visibility = k > 0.002 ? 'visible' : 'hidden'
+        if (k > 0.002) {
+          dk.style.opacity = k.toFixed(3)
+          /* สัญลักษณ์สลับตัวตามระยะเลื่อน (คนละจังหวะ) */
+          const step = Math.floor(b.code * 40)
+          ASCII_DOTS.forEach((d, n) => {
+            const el = glyphs.current[n]
+            if (el) el.textContent = GLYPHS[Math.floor(hash1(d.seed * 3.1 + Math.floor((step + d.seed) / 3)) * GLYPHS.length)]
+          })
+        }
       }
+
+      /* ── คำใหญ่พื้นหลังของบท (Research / Design / Code) ── */
+      liftNow.current = lift
       SKILL_WORDS.forEach((sw, i) => {
         const el = bigWords.current[i]
         const ln = bigLines.current[i]
@@ -229,8 +283,40 @@ export function WorkStory() {
           style={{ pointerEvents: 'none' }}
         >
           <WarmShaders />
+          {/* frameloop demand: ต้องปลุกเอง — ไม่งั้นรอบแรกที่เปิด useFrame ของฟ้าไม่ได้วิ่ง เมฆไม่ขึ้น */}
+          <Pump frame={frame} />
           <FallSky pose={fall} />
         </Canvas>
+        {/* บท Code: ดำ + แสงม่วงจากมุมล่าง + สัญลักษณ์ ASCII — เหนือฟ้า ใต้คำใหญ่กับเครื่อง */}
+        <div
+          ref={dark}
+          className="pointer-events-none absolute inset-0 overflow-hidden"
+          style={{
+            visibility: 'hidden',
+            background:
+              'radial-gradient(70% 62% at 96% 104%, rgba(255,236,255,0.95), rgba(226,150,240,0.75) 28%, rgba(170,90,220,0.35) 55%, rgba(0,0,0,0) 78%), radial-gradient(62% 58% at 6% 100%, rgba(200,160,255,0.85), rgba(110,60,240,0.7) 30%, rgba(60,30,170,0.3) 58%, rgba(0,0,0,0) 80%), #000',
+          }}
+          aria-hidden
+        >
+          {ASCII_DOTS.map((d, n) => (
+            <span
+              key={n}
+              ref={(el) => {
+                glyphs.current[n] = el
+              }}
+              className="absolute font-mono text-[17px] leading-none"
+              style={{
+                left: `${d.x}vw`,
+                top: `${d.y}vh`,
+                /* สีตามแสงที่อยู่ใต้: ซ้ายม่วงน้ำเงิน ขวาชมพู · จางไม่เท่ากัน */
+                color: d.x < 50 ? '#7b4dff' : '#d77cf0',
+                opacity: (0.35 + hash1(n + 41) * 0.55).toFixed(2),
+              }}
+            >
+              {GLYPHS[n % GLYPHS.length]}
+            </span>
+          ))}
+        </div>
         {/* คำใหญ่ของแต่ละบท (ตัวทึบ) — เหนือฟ้า ใต้ของบนจอ · เจาะรูตามกรอบเครื่อง: ในกรอบเครื่องเหลือแต่เส้นขอบ */}
         <div ref={bigSolid} className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
         {SKILL_WORDS.map((sw, i) => (
