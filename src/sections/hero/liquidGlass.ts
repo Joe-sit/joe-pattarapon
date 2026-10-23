@@ -40,6 +40,8 @@ export function makeLiquidGlass() {
       uTileSpan: { value: 100 },
       /* โหมดมืด (บท Code): เนื้อแก้วเป็นกระจกดำเงา ขอบสะท้อนขาวอมม่วงคมขึ้น */
       uDark: { value: 0 },
+      /* จางทั้งแผ่น (ปลายบท Code: เครื่องหลบให้วิดเจ็ตฟ้าเต็มจอ — ขอบแก้วไม่พาดทับ) */
+      uFade: { value: 1 },
     },
     vertexShader: /* glsl */ `
       varying vec3 vN;
@@ -66,6 +68,7 @@ export function makeLiquidGlass() {
       uniform vec3 uTileB;
       uniform float uTileSpan;
       uniform float uDark;
+      uniform float uFade;
       varying vec3 vN;
       varying vec2 vLocal;
       // อยู่ในจุด/แคปซูลไหม (กล่องมนรัศมีเท่าครึ่งด้านสั้น) — เผื่อขอบมนของเมชนิดหน่อย
@@ -124,7 +127,7 @@ export function makeLiquidGlass() {
         col = mix(col, tc, uTile);
         a = mix(a, 1.0, uTile);
         /* ย้อมม่วง: กลางแผ่นม่วงเข้ม ขอบที่หันออกข้างจางขาวฟุ้ง (แก้วฝ้าม่วงแบบภาพอ้างอิง) */
-        gl_FragColor = vec4(col, a);
+        gl_FragColor = vec4(col, a * uFade);
         // สีเทาของแบบเป็น sRGB — three แปลงเป็นเชิงเส้นตอนตั้งค่า ต้องแปลงกลับตอนออก ไม่งั้นเทาเข้มกว่าแบบ
         #include <colorspace_fragment>
       }`,
@@ -143,8 +146,8 @@ export function makeTintGlass(color: THREE.ColorRepresentation, body: number) {
     transparent: true,
     depthWrite: false,
     toneMapped: false,
-    /* uFill: ระดับสีที่เติมขึ้นจากล่าง (หน่วยท้องถิ่นของแผ่น y) · uSpan ครึ่งความสูงแผ่น — บท Code วิดเจ็ตเติมสีเต็มใบ */
-    uniforms: { uTint: { value: new THREE.Color(color) }, uBody: { value: body }, uDark: { value: 0 }, uFill: { value: -1e5 }, uSpan: { value: 1 }, uFillTop: { value: new THREE.Color(color) }, uFillBot: { value: new THREE.Color(color) } },
+    /* uFill: ระดับสี — เหนือระดับเติมแล้ว (หน่วยท้องถิ่นของแผ่น y · ไหลลงตามลำแสงสแกน) · uSpan ครึ่งความสูงแผ่น — บท Code วิดเจ็ตเติมสีเต็มใบ */
+    uniforms: { uTint: { value: new THREE.Color(color) }, uBody: { value: body }, uDark: { value: 0 }, uFill: { value: 1e5 }, uSpan: { value: 1 }, uFillTop: { value: new THREE.Color(color) }, uFillBot: { value: new THREE.Color(color) }, uAlpha: { value: 1 } },
     vertexShader: /* glsl */ `
       varying vec3 vN;
       varying float vY;
@@ -161,6 +164,7 @@ export function makeTintGlass(color: THREE.ColorRepresentation, body: number) {
       uniform float uSpan;
       uniform vec3 uFillTop;
       uniform vec3 uFillBot;
+      uniform float uAlpha;
       varying vec3 vN;
       varying float vY;
       void main() {
@@ -187,13 +191,93 @@ export function makeTintGlass(color: THREE.ColorRepresentation, body: number) {
         a = mix(a, clamp(0.45 + hl, 0.0, 1.0), uDark);
         /* เติมสี: ใต้ระดับเป็นสีไล่ของวิดเจ็ต (บน → ล่าง) ขอบยังสะท้อนแสง · ผิวน้ำสีเป็นเส้นสว่างนุ่ม */
         vec3 vivid = mix(uFillBot, uFillTop, smoothstep(-uSpan, uSpan, vY));
-        float under = 1.0 - smoothstep(uFill - 1.5, uFill + 1.5, vY);
+        /* เติมจากบนลงล่าง: เหนือระดับ = เติมแล้ว (ระดับเลื่อนลงตามลำแสงสแกน) */
+        float under = smoothstep(uFill - 1.5, uFill + 1.5, vY);
         vec3 fc = mix(vivid, vec3(1.0), clamp(hl * 0.9, 0.0, 1.0));
         col = mix(col, fc, under);
-        a = mix(a, 0.97, under);
+        a = mix(a, 1.0, under);
         float lip = exp(-(vY - uFill) * (vY - uFill) / 18.0) * step(-uSpan, uFill) * step(uFill, uSpan);
         col = mix(col, vec3(1.0), lip * 0.7);
-        a = max(a, lip * 0.8);
+        a = max(a, lip * 0.8) * uAlpha;
+        gl_FragColor = vec4(col, a);
+        #include <colorspace_fragment>
+      }`,
+  })
+}
+
+/**
+ * วิดเจ็ตแบบภาพประกอบ macOS Sonoma (Shortcuts) — แผ่นหนาทึบ หน้าไล่สีพ่นนุ่มหลายโทน เกรนฟิล์ม ขอบข้างเรืองเขียวมะนาว
+ *
+ * uniform ชุดเดียวกับ makeTintGlass (uDark · uFill · uSpan · uFillTop · uFillBot · uAlpha) — บท Code ใช้ต่อได้ไม่ต้องแก้
+ * หน้าโหมดสว่างไล่จาก uFillBot → uFillTop (แนวทแยง) แทนแก้วใส
+ */
+export function makeChunkyTile(color: THREE.ColorRepresentation) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    toneMapped: false,
+    uniforms: { uTint: { value: new THREE.Color(color) }, uDark: { value: 0 }, uFill: { value: 1e5 }, uSpan: { value: 1 }, uFillTop: { value: new THREE.Color(color) }, uFillBot: { value: new THREE.Color(color) }, uAlpha: { value: 1 }, uFaceTop: { value: new THREE.Color(color) }, uFaceBot: { value: new THREE.Color(color) }, uMap: { value: null as THREE.Texture | null }, uHasMap: { value: 0 }, uVivid: { value: 0 }, uHalf: { value: new THREE.Vector2(1, 1) } },
+    vertexShader: /* glsl */ `
+      varying vec3 vN;
+      varying vec3 vO;
+      varying vec3 vP;
+      void main() {
+        vN = normalize(normalMatrix * normal);
+        vO = normal;
+        vP = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uTint;
+      uniform float uDark;
+      uniform float uFill;
+      uniform float uSpan;
+      uniform vec3 uFillTop;
+      uniform vec3 uFillBot;
+      uniform float uAlpha;
+      uniform vec3 uFaceTop;
+      uniform vec3 uFaceBot;
+      uniform sampler2D uMap;
+      uniform float uHasMap;
+      uniform float uVivid;
+      uniform vec2 uHalf;
+      varying vec3 vN;
+      varying vec3 vO;
+      varying vec3 vP;
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+      void main() {
+        /* ขอบข้าง = ผิวที่ไม่หันหน้า (normal ท้องถิ่นแกน z ต่ำ) — นับส่วนโค้งของ bevel ด้วย */
+        float side = 1.0 - smoothstep(0.35, 0.85, abs(normalize(vO).z));
+        float t = clamp(vP.y / max(uSpan, 1.0) * 0.5 + 0.5, 0.0, 1.0);
+        float d = clamp((vP.y - vP.x * 0.55) / max(uSpan, 1.0) * 0.5 + 0.5, 0.0, 1.0);
+        /* หน้า: ไล่ทแยง + ก้อนสีพ่นนุ่ม (แสงจากซ้ายบน) */
+        /* สีเติมของบท Code (คงเดิม) กับหน้าโหมดสว่าง (สีภาพประกอบ / ภาพวาดบนแคนวาส) แยกกัน */
+        vec3 vivid = mix(uFillBot, uFillTop, smoothstep(0.0, 1.0, d));
+        vec3 face = mix(uFaceBot, uFaceTop, smoothstep(0.0, 1.0, d));
+        if (uHasMap > 0.5) face = texture2D(uMap, clamp(vP.xy / (uHalf * 2.0) + 0.5, 0.0, 1.0)).rgb;
+        float glow = exp(-dot(vP.xy - vec2(-0.5, 0.6) * uSpan, vP.xy - vec2(-0.5, 0.6) * uSpan) / (uSpan * uSpan * 1.4));
+        face = mix(face, vec3(1.0), glow * 0.12);
+        face *= 0.9 + 0.1 * t;
+        /* ขอบข้าง: เขียวมะนาวเรือง ไล่ชมพูนิด ๆ ตามแนว */
+        vec3 lime = mix(vec3(0.86, 0.97, 0.45), vec3(1.0, 0.86, 0.72), smoothstep(-1.0, 1.0, vP.x / max(uSpan, 1.0)));
+        vec3 col = mix(face, lime, side);
+        /* แสงขอบบนบาง ๆ */
+        vec3 n = normalize(vN);
+        col += vec3(0.12) * smoothstep(0.6, 1.0, n.y) * side;
+        /* เกรนฟิล์ม (พิกเซลจอ) */
+        col += (hash(floor(gl_FragCoord.xy)) - 0.5) * 0.12;
+        float a = 1.0;
+        /* โหมดมืด: แผ่นมืดย้อมสีจาง ขอบเรือง (บท Code ก่อนสแกนเติมสี) */
+        vec3 dk = mix(vec3(0.02, 0.018, 0.035) + uTint * 0.03, mix(uTint, vec3(1.0), 0.45), side * 0.8);
+        col = mix(col, dk, uDark);
+        a = mix(a, 0.5 + side * 0.4, uDark);
+        /* เติมสี (บท Code): เหนือระดับ = หน้าไล่สีเต็ม */
+        float under = smoothstep(uFill - 1.5, uFill + 1.5, vP.y);
+        /* เติมแล้ว = หน้าแบบโหมดสว่าง (widget ชุดเดียวกัน) · uVivid → สีเติมล้วน (การ์ดฟ้าตอนขยายเต็มจอ ต่อเป็นท้องฟ้า) */
+        col = mix(col, mix(mix(face, vivid, uVivid), lime, side * (1.0 - uVivid)), under * uDark);
+        a = mix(a, 1.0, under);
+        float lip = exp(-(vP.y - uFill) * (vP.y - uFill) / 18.0) * step(-uSpan, uFill) * step(uFill, uSpan);
+        col = mix(col, vec3(1.0), lip * 0.7 * uDark);
+        a = max(a, lip * 0.8) * uAlpha;
         gl_FragColor = vec4(col, a);
         #include <colorspace_fragment>
       }`,

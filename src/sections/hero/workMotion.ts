@@ -47,6 +47,7 @@ export type WorkBeats = {
   tell: number
   design: number
   code: number
+  works: number
   ship: number
 }
 
@@ -64,6 +65,7 @@ export function workBeats(sv2: number): WorkBeats {
     tell: at(sv2, BEAT.tell),
     design: at(sv2, BEAT.design),
     code: at(sv2, BEAT.code),
+    works: at(sv2, BEAT.works),
     ship: at(sv2, BEAT.ship),
   }
 }
@@ -124,7 +126,7 @@ export function benchPose(b: WorkBeats, W: number, H: number): Bench {
 }
 
 /** บท Code เป็นโหมดมืด 0..1 — พื้นหลัง (./WorkStory) แก้วเครื่อง (./BubbleTraveler) การ์ด (./BenchScreen) ใช้ค่าเดียวกัน */
-export const codeDark = (b: WorkBeats) => smooth(b.code / 0.15) * (1 - smooth((b.code - 0.88) / 0.12))
+export const codeDark = (b: WorkBeats) => smooth(b.code / 0.1) * (1 - smooth((b.code - 0.93) / 0.07))
 
 /** กรอบจอของเครื่องบนจอ (px) ณ ท่าโต๊ะทำงาน — ใช้ซ้ำ */
 const SCREEN = { cx: 0, cy: 0, hw: 0, hh: 0 }
@@ -192,6 +194,63 @@ export const WF_HEAD = 9
  * คำใหญ่ของบท (./WorkStory) เจาะตัวทึบตรงกรอบนี้ ตรงที่เครื่องบังจึงเหลือแต่เส้นขอบ
  */
 export const devScreen = { cx: 0, cy: 0, hw: 0, hh: 0, r: 0, ok: false }
+/**
+ * เรียกทันทีหลังเครื่องได้ท่าใหม่ในเฟรมนั้น (BubbleTraveler) — ผู้ที่ต้องตามกรอบเครื่องเป๊ะ (รูของคำใหญ่ใน WorkStory)
+ * ไม่ต้องรอรอบ rAF ของตัวเอง ซึ่งอาจมาก่อน/หลังกันหนึ่งเฟรม (รูเลยเหลื่อมกับเครื่อง เห็นเป็นแถบดำกระพริบตอนเครื่องขยาย)
+ */
+export const devHook: { fn: null | (() => void) } = { fn: null }
+/**
+ * ปลายบท Code: เครื่องลอยเข้าหากล้องเบา ๆ แล้ว "ชน" คำ Code ตอน CODE_HIT — คำแตกเป็น ASCII เป็นคลื่นจากจุดชน (WorkStory)
+ * วิดเจ็ตกระจายออกแรงตอนชน (BenchScreen) · เครื่องลอยเริ่มก่อนชน HIT_FLY
+ */
+export const CODE_HIT = 0.62
+export const HIT_FLY = 0.14
+/**
+ * ช่วงเล่มงาน (My Works) หลังวิดเจ็ตฟ้าเต็มจอ — นับเป็นหน่วยสกรอลล์ (sv2) ข้ามท้าย Code เข้าต้น Ship
+ * 0 ≈ ฟ้าเต็มจอ · คลี่ 0.04–0.38 · ซูม 0.24–0.54 · ระเบิด WORKS_BOOM (BenchScreen) · คำพื้นหลัง My Works (WorkStory)
+ */
+/**
+ * ผังคำพื้นหลัง "My Works" บนจอ (WorkStory วัดจาก DOM — px) · ตัวอักษร 3D ที่บินจากป้ายในวิดเจ็ต (BenchScreen)
+ * ลงจอดตรงตำแหน่ง/ขนาดนี้แล้วส่งต่อให้คำ DOM · left = ขอบซ้ายคำ · cy = กลางบรรทัด · ox = ระยะจากซ้ายของตัวอักษร (ไม่นับช่องว่าง)
+ */
+export const worksWordLayout = { ok: false, left: 0, cy: 0, font: 0, ox: [] as number[] }
+/** ช่วงตัวอักษรบิน (worksPost): เริ่ม · ยาว · ส่งต่อให้คำ DOM (เริ่ม · ยาว) — หลังวิดเจ็ตฟ้าจางหมด */
+export const WORKS_FLY = [-0.2, 0.3] as const
+export const WORKS_HAND = [0.24, 0.08] as const
+export const WORKS_TEXT = 'My Works'
+/** ระเบิดของเล่มงาน (worksPost): เริ่ม · ยาว — เล่มกระเด็น (BenchScreen) + แสงพุ่ง/พื้นเหลือง (WorkStory) */
+export const WORKS_BOOM = [0.52, 0.36] as const
+/** worksPost แบบหน่วงแล้ว (BenchScreen ตั้งทุกเฟรม) — คำ DOM ใช้ค่าเดียวกัน ส่งต่อตรงจังหวะตัวอักษร 3D */
+export const worksPostSm = { v: -9 }
+/**
+ * section My Works ค้าง: ช่องวางไทล์งานบนจอ (แบบภาพประกอบ Essential coding apps — ไทล์ใหญ่ล้นขอบจอ กระจายรอบ ๆ
+ * เว้นกลางให้ตัวละคร) — กลางไทล์ x, y (สัดส่วนจอ) · กว้าง (สัดส่วนด้านสั้นจอ) · เอียง (องศา) · ช่อง 0 = ไทล์ที่ตัวละครห้อยดึง
+ */
+export const TILE_SLOTS: readonly (readonly [number, number, number, number])[] = [
+  [0.6, 0.17, 0.13, -8],
+  [0.07, 0.48, 0.42, -6],
+  [0.9, 0.02, 0.42, 5],
+  [0.33, 0.93, 0.44, 3],
+  [0.95, 0.86, 0.36, -10],
+  [0.04, 0.03, 0.3, 9],
+  [0.99, 0.42, 0.26, 12],
+  [0.83, 0.6, 0.17, -14],
+  [0.2, 0.22, 0.15, 10],
+  [0.14, 0.76, 0.19, -12],
+]
+/** สัดส่วนไทล์งาน (กว้าง : สูง) — ตามปก showcase หน้า Fastwork (258 × 322) */
+export const TILE_ASPECT = 322 / 258
+/** กล่องไทล์ช่อง i บนจอ (px) — ใช้ทั้งวางไทล์ 3D และปุ่มกด DOM */
+export function slotRect(i: number, vw: number, vh: number) {
+  const [x, y, w, r] = TILE_SLOTS[i]
+  const ww = w * Math.min(vw, vh)
+  return { cx: x * vw, cy: y * vh, w: ww, h: ww * TILE_ASPECT, rot: r }
+}
+/** สถานะโต้ตอบของ section My Works — DOM (WorkStory) ตั้ง hover/open · 3D (BenchScreen) วาดตาม */
+export const worksUI = { hover: -1, open: -1, hold: 0 }
+export const worksPost = (b: { code: number; works: number }) => (b.code - 0.86) * BEAT.code[1] + b.works * BEAT.works[1]
+/** ช่วงค้างของ section My Works (worksPost): เริ่มค้าง (ไทล์ลงที่ครบ) · เริ่มออก · จบ (= ต้น Ship) */
+export const WORKS_HOLD = [0.9, 2.45, (1 - 0.86) * BEAT.code[1] + BEAT.works[1]] as const
 
 /**
  * ตำแหน่งบล็อกในแท่งแก้วของ island ในพิกัดผังจอเครื่อง (หน่วยผัง · 4 ก้อน × xyz) — ฟองเขียนทุกเฟรม (./BubbleTraveler)

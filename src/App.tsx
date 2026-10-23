@@ -37,6 +37,7 @@ const CheckerScene = lazy(() => import('@/joespresso/CheckerScene'))
 const RigExportPage = lazy(() => import('@/pages/RigExportPage'))
 const FaviconLab = lazy(() => import('@/pages/FaviconLab'))
 const BubbleBlocks = lazy(() => import('@/pages/BubbleBlocks'))
+const FastworkProfile = lazy(() => import('@/pages/FastworkProfile'))
 import { SITE } from '@/config/site'
 import { setEyeOpen, setIntroDone } from '@/stores/intro'
 import { useSceneReady } from '@/stores/ready'
@@ -133,6 +134,8 @@ export function App() {
   const isFavLab = import.meta.env.DEV && location.pathname === '/favicon-lab'
   /** ฉากทดลองแท่นเรียง + ฟอง (แบบ eddie.eco) — dev เท่านั้น */
   const isBlocks = import.meta.env.DEV && location.pathname === '/bubble-blocks'
+  /* ปกโปรไฟล์ Fastwork — ทำภาพปก (dev) */
+  const isFastwork = import.meta.env.DEV && location.pathname === '/fastwork-profile'
 
   // Which splash plays is decided by where the visitor landed, not by where
   // they are now — it runs once, on load, and reading `location` live would
@@ -307,7 +310,7 @@ export function App() {
           opens onto the hero's own scene, and the mascot page has no such scene
           to open onto. */}
       {/* /new-hero เป็นหน้าเปล่าไว้ทดลอง — สปแลชของเว็บบังของที่กำลังจูนอยู่เปล่า ๆ */}
-      {showSplash && !isIntroLab && !isNewHero && !isRigExport && !isFavLab && !isBlocks &&
+      {showSplash && !isIntroLab && !isNewHero && !isRigExport && !isFavLab && !isBlocks && !isFastwork &&
         (landedOn === '/2026' ? (
           /* /2026 มีอินโทรของตัวเอง (เศษโค้ด -> สนาม ASCII -> เวิร์ดมาร์ก)
              หน้าอื่นยังใช้สปแลชเดิม — คนละภาษาภาพกัน ไม่ควรบังคับให้เหมือน */
@@ -340,6 +343,10 @@ export function App() {
       ) : isBlocks ? (
         <Suspense fallback={null}>
           <BubbleBlocks />
+        </Suspense>
+      ) : isFastwork ? (
+        <Suspense fallback={null}>
+          <FastworkProfile />
         </Suspense>
       ) : isV3 ? (
         <Portfolio2026FinalPage />

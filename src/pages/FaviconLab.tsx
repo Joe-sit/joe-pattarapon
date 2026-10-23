@@ -416,6 +416,10 @@ function Echo({ s }: { s: S }) {
   u.uPivot.value.set(s.cx, s.cy)
   s.colors.slice(0, 8).forEach((c, i) => u.uCol.value[i].set(c))
   useFrame(({ scene, camera }) => {
+    /* อ่านจำนวนชั้น สี และเฟสคลื่นทุกเฟรมด้วย — ผู้ใช้ภายนอก (ปก Fastwork) ไล่ชั้นโผล่/ไหลสีโดยแก้ค่าใน s ตรง ๆ ไม่ re-render */
+    u.uN.value = Math.round(Math.min(8, s.echoN, s.colors.length))
+    s.colors.slice(0, 8).forEach((c, i) => u.uCol.value[i].set(c))
+    u.uPhase.value = s.phase
     const me = self.current
     if (!me) return
     me.visible = s.bgMode < 0.5
@@ -668,6 +672,58 @@ const GROUPS: { title: string; rows: [Num, string, number, number, number][] }[]
   { title: 'กรอบ', rows: [['radius', 'มุมมน', 0, 0.5, 0.005]] },
 ]
 
+/**
+ * ฉาก favicon ทั้งชุด (กล้อง เส้นแสง พื้น เงาซ้อน ไฟ ตัวละคร) — ใช้ในหน้านี้ และปกโปรไฟล์ Fastwork (pages/FastworkHead3D)
+ * ให้หัวในปกตรงกับ favicon ที่จูนไว้ทุกค่า
+ */
+export function FaviconScene({ s, spin }: { s: S; spin?: React.Ref<THREE.Group> }) {
+  const follow = useMemo(
+    /* headFollow 0 = ไม่หันตามเมาส์เลย (ภาพ favicon ต้องนิ่งตามที่จูน) — เหลือแค่มุมหัวจากสไลเดอร์ */
+    () => ({ headBaseYaw: s.headYaw, headBasePitch: s.headPitch, headBaseRoll: s.headRoll, headYaw: 0, headPitch: 0, headFollow: 0 }),
+    [s.headYaw, s.headPitch, s.headRoll],
+  )
+  return (
+    <>
+      <Rig s={s} />
+      {/* วาดฉากลงบัฟเฟอร์ แล้วไล่เส้นแสงตามเงาตัวจากความลึก — ตัวเดียวกับ hero (ภาพ export มีเส้นนี้ด้วย) */}
+      <CameraFX
+        rim={s.fxRim}
+        rimW={s.fxW}
+        rimSoft={s.fxSoft}
+        rimThresh={s.fxThresh}
+        rimAngle={s.fxAngle}
+        rimFall={s.fxFall}
+        rimShade={s.fxShade}
+        rimBack={s.fxBack}
+        rimColor={s.fxColor}
+        tone={0}
+      />
+      {s.bgMode > 0.5 ? <Bands s={s} /> : <Flat s={s} />}
+      <Echo s={s} />
+      <ambientLight intensity={0.9 * s.light} />
+      <directionalLight position={[2, 5, 4]} intensity={1.3 * s.light} />
+      <directionalLight position={[-4, 2, 2]} intensity={0.45 * s.light} color="#FFDFC8" />
+      {/* ไฟหลังตัวแบบ hero (heroLights: rimIntensity) */}
+      <directionalLight position={[2, 6, -9]} intensity={s.backLight} />
+      <RimDriver s={s} />
+      <Suspense fallback={null}>
+        {/* spin: กลุ่มหมุนรอบจุดเล็งของกล้อง (กลางหัว) — ให้ผู้ใช้ภายนอกหมุนหัวได้ (ท่าเข้าของปก Fastwork) */}
+        <group position={[s.tx, s.ty, s.tz]}>
+          <group ref={spin}>
+            <group position={[-s.tx, -s.ty, -s.tz]}>
+              <Mascot isolated noIdle rotation={[0, s.bodyYaw, 0]} followOverride={follow as never} />
+            </group>
+          </group>
+        </group>
+      </Suspense>
+    </>
+  )
+}
+
+/** ค่าที่จูนไว้ในหน้านี้ (localStorage) — ไม่มีก็ค่าตั้งต้น */
+export const loadFaviconSettings = (): S => load()
+export type FaviconSettings = S
+
 export default function FaviconLab() {
   const [s, setS] = useState<S>(load)
   const glRef = useRef<HTMLCanvasElement | null>(null)
@@ -693,11 +749,6 @@ export default function FaviconLab() {
   }, [ver, s.radius])
 
   const set = (k: Num, v: number) => setS((o) => ({ ...o, [k]: v }))
-  const follow = useMemo(
-    /* headFollow 0 = ไม่หันตามเมาส์เลย (ภาพ favicon ต้องนิ่งตามที่จูน) — เหลือแค่มุมหัวจากสไลเดอร์ */
-    () => ({ headBaseYaw: s.headYaw, headBasePitch: s.headPitch, headBaseRoll: s.headRoll, headYaw: 0, headPitch: 0, headFollow: 0 }),
-    [s.headYaw, s.headPitch, s.headRoll],
-  )
 
   return (
     /* สูงเท่าจอพอดี ไม่เลื่อนทั้งหน้า — แผงปรับค่าเลื่อนในตัวเอง พรีวิวจึงอยู่กับที่ระหว่างลากสไลเดอร์ */
@@ -717,36 +768,7 @@ export default function FaviconLab() {
               glRef.current = gl.domElement
             }}
           >
-            <Rig s={s} />
-            {/* วาดฉากลงบัฟเฟอร์ แล้วไล่เส้นแสงตามเงาตัวจากความลึก — ตัวเดียวกับ hero (ภาพ export มีเส้นนี้ด้วย) */}
-            <CameraFX
-              rim={s.fxRim}
-              rimW={s.fxW}
-              rimSoft={s.fxSoft}
-              rimThresh={s.fxThresh}
-              rimAngle={s.fxAngle}
-              rimFall={s.fxFall}
-              rimShade={s.fxShade}
-              rimBack={s.fxBack}
-              rimColor={s.fxColor}
-              tone={0}
-            />
-            {s.bgMode > 0.5 ? <Bands s={s} /> : <Flat s={s} />}
-            <Echo s={s} />
-            <ambientLight intensity={0.9 * s.light} />
-            <directionalLight position={[2, 5, 4]} intensity={1.3 * s.light} />
-            <directionalLight position={[-4, 2, 2]} intensity={0.45 * s.light} color="#FFDFC8" />
-            {/* ไฟหลังตัวแบบ hero (heroLights: rimIntensity) */}
-            <directionalLight position={[2, 6, -9]} intensity={s.backLight} />
-            <RimDriver s={s} />
-            <Suspense fallback={null}>
-              <Mascot
-                isolated
-                noIdle
-                rotation={[0, s.bodyYaw, 0]}
-                followOverride={follow as never}
-              />
-            </Suspense>
+            <FaviconScene s={s} />
           </Canvas>
         </div>
           {/* อ้างอิง — ขยายจาก 48 จริง (ภาพนุ่ม) ไว้เทียบองค์ประกอบ/สี */}

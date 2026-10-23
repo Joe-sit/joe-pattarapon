@@ -723,3 +723,15 @@
     transform: translateY(7px);
   }
 }
+
+/* section My Works (hero/WorkStory): แผงรายละเอียดงานโผล่หลังไทล์ขยายเต็มจอ */
+@keyframes ws-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

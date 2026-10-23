@@ -18,7 +18,7 @@ import { useTuner } from '@/newhero/tuner'
 import { StageLight } from './Headline3D'
 import { BAR_AT, BASE_Y as ISLE_Y, ISLAND, ISLAND_CARD, K as ISLE_K, PadIsland, blockFlight, blockY, padIsland, type IslandApi } from './ResearchPlatform'
 import { bubbleTravel, setBubbleAway, setHeadBubbleLive, subscribeBubbleAway } from './bubbleTravel'
-import { DEVICE, LAYOUT_H, WF, WF_HEAD, benchPose, camDist, codeDark, barLayout, caretSpot, deviceMat, devScreen, groundMat, deviceSpot, headPose, inOut as inOut3, researchPhase, wfK, workBeats } from './workMotion'
+import { DEVICE, LAYOUT_H, WF, WF_HEAD, benchPose, camDist, codeDark, devHook, CODE_HIT, HIT_FLY, barLayout, caretSpot, deviceMat, devScreen, groundMat, deviceSpot, headPose, inOut as inOut3, researchPhase, wfK, workBeats } from './workMotion'
 import { outlineMat } from './shapes'
 
 /**
@@ -178,8 +178,8 @@ const rnd = (n: number, k: number) => {
   const v = Math.sin(n * 12.9898 + k * 78.233) * 43758.5453
   return v - Math.floor(v)
 }
-const POSE0 = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0, iso: 0, grow: 0, page: 0, mag: 0, tuck: 0, fall: 0, prog: 0, act: [0, 0, 0], sel: 0, gone: 0, whirl: 0, caretOut: 0, zoom: 1, dev: 0, float: 0, tilt: 0, bx: 0, by: 0, bk: 1, bt: 1, flat: 0, wire: 0, land: 0, away: 0, brx: 0, bry: 0, bspin: 0, hx: 0, hy: 0, isle: 0, flip: 0, flatK: 0, sv2v: 0, dark: 0 }
-type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number; iso: number; grow: number; page: number; mag: number; tuck: number; fall: number; prog: number; act: number[]; sel: number; gone: number; whirl: number; caretOut: number; zoom: number; dev: number; float: number; tilt: number; bx: number; by: number; bk: number; bt: number; flat: number; wire: number; land: number; away: number; brx: number; bry: number; bspin: number; hx: number; hy: number; isle: number; flip: number; flatK: number; sv2v: number; dark: number }
+const POSE0 = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0, iso: 0, grow: 0, page: 0, mag: 0, tuck: 0, fall: 0, prog: 0, act: [0, 0, 0], sel: 0, gone: 0, whirl: 0, caretOut: 0, zoom: 1, dev: 0, float: 0, tilt: 0, bx: 0, by: 0, bk: 1, bt: 1, flat: 0, wire: 0, land: 0, away: 0, brx: 0, bry: 0, bspin: 0, hx: 0, hy: 0, isle: 0, flip: 0, flatK: 0, sv2v: 0, dark: 0, push: 0, devFade: 1 }
+type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number; iso: number; grow: number; page: number; mag: number; tuck: number; fall: number; prog: number; act: number[]; sel: number; gone: number; whirl: number; caretOut: number; zoom: number; dev: number; float: number; tilt: number; bx: number; by: number; bk: number; bt: number; flat: number; wire: number; land: number; away: number; brx: number; bry: number; bspin: number; hx: number; hy: number; isle: number; flip: number; flatK: number; sv2v: number; dark: number; push: number; devFade: number }
 
 function readPose(): Pose {
   const off: Pose = { ...POSE0 }
@@ -287,6 +287,24 @@ function readPose(): Pose {
     /* ระยะเลื่อนของเรื่อง — จังหวะบล็อกบินออกจากแท่ง (blockFlight) */
     sv2v: sv2,
     dark: codeDark(wb),
+    /*
+     * ปลายบท Code: เครื่องลอยเข้าหากล้องเบา ๆ (ชนคำ Code ตอน CODE_HIT) แล้วเลื่อนตามวิดเจ็ตฟ้าเข้ากล้องช้า ๆ
+     * (ฟ้าเป็นตัวหลัก — เครื่องตามห่าง ๆ) · ถอยกลับที่ช่วงต้นบท Ship
+     */
+    /*
+     * ก่อนชน: เร่งเข้าหาคำ (ease-in — เห็นชัดว่ากำลังพุ่งมา) · ชน: ความเร็วหายวูบ + เด้งถอยนิด (แรงกระแทก)
+     * หลังชน: ไหลตามวิดเจ็ตฟ้าเข้ากล้องช้า ๆ ต่อเนื่อง · ถอยกลับที่ช่วงต้นบท Ship
+     */
+    /* เครื่อง (แก้ว) จางหลบตอนวิดเจ็ตฟ้าขยายเต็มจอ แล้วกลับมาช่วงต้นบท Ship (พร้อมหดกลับที่) */
+    /* เครื่องกลับมาต้น Ship — หลัง section My Works (BEAT.works) จบ */
+    devFade: 1 - smooth((wb.code - 0.78) / 0.1) * (1 - smooth(wb.ship / 0.25)),
+    push: (() => {
+      const a = Math.min(1, Math.max(0, (wb.code - (CODE_HIT - HIT_FLY)) / HIT_FLY))
+      const pre = 0.32 * a * a
+      const post = wb.code > CODE_HIT ? 0.8 * soft5((wb.code - CODE_HIT) / (1 - CODE_HIT)) : 0
+      const recoil = 0.06 * Math.sin(Math.PI * Math.min(1, Math.max(0, (wb.code - CODE_HIT) / 0.05)))
+      return (pre + post - recoil) * (1 - soft5(wb.ship / 0.3))
+    })(),
     /* ของงอกใกล้ครบ: หงายต่อจนเกือบราบ (มองหน้าตรง ของตั้งตรง ไม่เงยหลัง) ค้างไว้ คืนมุมตอนเครื่องมา */
     flatK: soft5((at(sv2, ISLAND.grow) - 0.55) / 0.45) * (1 - soft5(wb.morph / 0.3)),
     /* บทค้นคว้า: ข้อความไปเป็นหัวเรื่องขวา แว่นขยายลงไปเป็นวัตถุหลักบนแท่น — กลับที่เดิมตอนท้ายบท (ก่อนคลี่เป็นเครื่อง) */
@@ -565,6 +583,7 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
       glass.uniforms.uPanelR.value = pb ? pb.r : 0
       glass.uniforms.uPanelTint.value = smooth((p.head - 0.2) / 0.6)
       glass.uniforms.uDark.value = p.dark
+      glass.uniforms.uFade.value = p.devFade
       /* กรอบเนื้อหาให้ฉากบริการ — เปิดเมื่อพาเนลขยายเต็มแล้ว ตามการเลื่อนขึ้นตอนจบ section */
       panelBox.on = p.head > 0.98
       panelBox.x = pl.content.x
@@ -700,7 +719,8 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
       DEV_Q.identity()
       if (p.brx || p.bry || p.bspin) DEV_Q.multiply(BENCH_Q.setFromEuler(BENCH_E.set(p.brx, p.bry + p.bspin, 0, 'YXZ')))
       DEV_Q.multiply(TILT_Q.setFromAxisAngle(AX_X, -TILT_MAX * p.tilt * (1 - p.flat)))
-      const ds = s * zoom
+      /* พุ่งเข้ากล้อง = ขยายรอบกลางเครื่อง (กล้องของฉากนี้เป็นออร์โธ + เพอร์สเปกทีฟเทียม — ขนาดคือระยะ) */
+      const ds = s * zoom * (1 + p.push)
       /* โผล่: เลื่อนขึ้นมาจากใต้ขอบจอ (นอนเอียงรับมุมเดียวกับแท่น) มาอยู่ใต้แท่นพอดีก่อนแท่นลงจอด */
       const rise = inOut01(clamp01(L / 0.42))
       DEV_M.compose(DEV_P.set(gx - size.width / 2 + p.bx, size.height / 2 - p.y - p.by - dropY - (1 - rise) * size.height * 0.85, -(1 - rise) * size.height * 0.6), DEV_Q, DEV_S.setScalar(ds))
@@ -719,6 +739,7 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
         devScreen.hh = (DEVICE.hh * ds * sy) / wd
         devScreen.r = (DEVICE.r * ds * cw) / wd
         devScreen.ok = L > 0
+        devHook.fn?.()
       }
       deviceMat.ok = L > 0
       if (dg) {
@@ -819,8 +840,8 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
     }
     /* จบที่สีเทาแบนตามแบบ Figma — ทาผิวเมชเดิม (ดู ./liquidGlass) */
     glass.uniforms.uPaint.value = p.paint
-    /* ร่างเครื่องขุ่นกว่าฟองนิด (แผ่นจอ) · ถูกเลือก = แก้วขาวขุ่น */
-    glass.uniforms.uFill.value = Math.min(0.9, 0.1 + 0.07 * p.dev + 0.74 * p.sel)
+    /* ร่างเครื่อง = แก้วใสเกือบหมด (ไม่ให้ม่านขาวทับวิดเจ็ตสีสด) · ถูกเลือก = แก้วขาวขุ่น */
+    glass.uniforms.uFill.value = Math.min(0.9, 0.1 - 0.08 * p.dev + 0.74 * p.sel)
     /* ทรงเครื่องบนจอ — แสงรอบเครื่อง (./DeviceHalo) กับกรอบเลือก (./workMotion) อ่านค่านี้ */
     deviceSpot.hw = DEVICE.hw * s
     deviceSpot.hh = DEVICE.hh * s
