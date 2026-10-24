@@ -15,8 +15,10 @@ import { WORKS_BOOM, WORKS_HOLD, clamp01, slotRect, smooth, worksPostSm, worksUI
  */
 
 /** ความสูงตัวละครบนจอ (สัดส่วนความสูงจอ) · ระนาบโลกที่วาง (หน้าไทล์) */
-const BODY_VH = 0.52
+const BODY_VH = 0.66
 const PLANE_Z = 1440
+/** เอียงเท้าเข้าหากล้อง (องศา) — ยิ่งมาก ขายิ่งยาวตามเพอร์สเปกทีฟ */
+const LOW_ANGLE = -56
 
 const RAD = Math.PI / 180
 /* HeroRider เป็น JSX — ค่าเริ่มต้น null ทำให้ TS อนุมานชนิด prop เป็น null · ท่ามีรูปร่างตาม SKATE_ARM / SKATE_LEG / SKATE_TORSO ใน joespresso Mascot */
@@ -87,14 +89,15 @@ export function WorksHanger() {
   )
   const legPose = useMemo(
     () => ({
-      L: { hipX: -1.55, hipY: 0.25, hipZ: 0.3, knee: 1.9, ankle: 0.45 },
-      R: { hipX: 0.75, hipY: -0.15, hipZ: -0.25, knee: 0.95, ankle: 0.3 },
-      spread: 0.04,
+      /* ขาเหยียดยาวทั้งสองข้าง (แบบภาพ ref) — ข้างหน้างอเข่านิด ข้างหลังเหยียดเฉียงออก */
+      L: { hipX: -0.45, hipY: 0.15, hipZ: 0.28, knee: 0.4, ankle: 0.15 },
+      R: { hipX: 0.3, hipY: -0.1, hipZ: -0.22, knee: 0.2, ankle: 0.1 },
+      spread: 0.1,
       stagger: 0,
     }),
     [],
   )
-  const torsoPose = useMemo(() => ({ leanX: 0.12, leanZ: 0, foldX: 0, foldY: 0, foldZ: 0, headX: -0.25 }), [])
+  const torsoPose = useMemo(() => ({ leanX: 0.12, leanZ: 0, foldX: 0, foldY: 0, foldZ: 0, headX: 0.45 }), [])
 
   useFrame(({ clock }, delta) => {
     const gg = g.current
@@ -153,6 +156,11 @@ export function WorksHanger() {
     const t = clock.elapsedTime
     const sw = swing.current
     if (sw) {
+      /*
+       * มุมกล้องช้อนล่าง: เอียงตัวรอบมือ (แกน x) ให้เท้าพุ่งเข้าหากล้อง — กล้องอยู่ใกล้ (ระยะราว 1/3 ของความสูงจอ)
+       * perspective จึงยืดขาให้ยาว เท้าใหญ่ หัวกับไทล์เล็กลงไกลออกไป
+       */
+      sw.rotation.x = LOW_ANGLE * RAD
       sw.rotation.z = (-24 + Math.sin(t * 1.3) * 4 + pull.current * 10) * RAD
       sw.rotation.y = (-18 + Math.sin(t * 0.9) * 6) * RAD
     }

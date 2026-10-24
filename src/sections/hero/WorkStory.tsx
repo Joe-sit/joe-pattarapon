@@ -2,6 +2,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { gsap } from 'gsap'
+import { frameDue } from '@/lib/FrameCap'
 import { WarmShaders } from '@/lib/WarmShaders'
 import { SKILLS } from '@/sections/whatido/WhatIDo'
 import { StageLight } from './Headline3D'
@@ -11,7 +12,7 @@ import { FallSky, type FallPose } from './FallSky'
 import { BEAT, endOf, storySv2 } from '@/sections/skystory/beats'
 import { AsciiClouds, type CloudBlob } from '@/components/AsciiClouds'
 import { ISLAND } from './ResearchPlatform'
-import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, slotRect, TILE_SLOTS, WORKS_BOOM, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, type WorkBeats } from './workMotion'
+import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, slotRect, TILE_SLOTS, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, type WorkBeats } from './workMotion'
 
 /**
  * เครื่องแก้วเป็นโต๊ะทำงาน — เรื่องต่อจาก "Here is what I do"
@@ -65,12 +66,15 @@ function TickPump({ frame }: { frame: React.RefObject<Frame> }) {
   const advance = useThree((s) => s.advance)
   useEffect(() => {
     let tail = 0
+    const cap = { last: 0 }
     const tick = () => {
       if (frame.current?.on) tail = 3
       else if (tail > 0) tail--
       else return
-      /* microtask = หลัง callback ทั้งรอบของ ticker (รวม lenis.raf) จบ — ไม่ขึ้นกับลำดับที่ลงทะเบียน */
-      queueMicrotask(() => advance(performance.now()))
+      /* เพดาน 60 fps (ticker เดินตามรอบจอ — จอ 144 Hz ขึ้นไปวาดเกินเท่าตัว) */
+      if (!frameDue(cap, performance.now())) return
+      /* microtask = หลัง callback ทั้งรอบของ ticker (รวม lenis.raf) จบ — ไม่ขึ้นกับลำดับที่ลงทะเบียน · advance รับวินาที */
+      queueMicrotask(() => advance(performance.now() / 1000))
     }
     gsap.ticker.add(tick)
     return () => gsap.ticker.remove(tick)
@@ -83,8 +87,10 @@ function Pump({ frame }: { frame: React.RefObject<Frame> }) {
   const { invalidate } = useThree()
   useEffect(() => {
     let raf = 0
-    const tick = () => {
-      if (frame.current?.on) invalidate()
+    const cap = { last: 0 }
+    const tick = (now: number) => {
+      /* เพดาน 60 fps — invalidate ทุกรอบจอ = วาดตามรอบรีเฟรช (144 Hz ขึ้นไปเกินเท่าตัว) */
+      if (frame.current?.on && frameDue(cap, now)) invalidate()
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -170,43 +176,6 @@ function disMask(el: HTMLElement, text: string, prev: DisMask | null): DisMask |
   return { w, h, font, cov, cols, rows }
 }
 
-/**
- * beat ระเบิดของเล่มงาน (แบบภาพประกอบ Essential coding apps): พื้นเหลืองสด · แสงขาวจ้ากลางเล่ม · ลำแสงเรียวขาวขอบดำพุ่งออก
- * · วงกลมกากบาทลอยออก · เกรนพ่นทั้งจอ — มุมลำแสง (องศา) · ยาว (เท่าของเส้นทแยงจอ) · กว้างปลาย (px)
- */
-const BURST_RAYS: readonly (readonly [number, number, number])[] = [
-  [-158, 1.0, 16],
-  [-118, 0.9, 10],
-  [-64, 1.1, 22],
-  [-30, 0.85, 9],
-  [6, 1.05, 18],
-  [40, 0.95, 12],
-  [84, 1.1, 20],
-  [126, 0.9, 11],
-  [168, 1.0, 15],
-]
-/** วงกลมกากบาท: มุม (องศา) · ระยะ (เท่าของด้านสั้นจอ) · รัศมี (px) */
-const BURST_X: readonly (readonly [number, number, number])[] = [
-  [-140, 0.42, 34],
-  [-20, 0.5, 26],
-  [70, 0.38, 30],
-  [150, 0.46, 24],
-]
-/** เกรนพ่น (แคนวาสสุ่มครั้งเดียว ปูซ้ำ) */
-function grainUrl() {
-  const c = document.createElement('canvas')
-  c.width = c.height = 160
-  const g = c.getContext('2d')!
-  const im = g.createImageData(160, 160)
-  for (let n = 0; n < im.data.length; n += 4) {
-    const v = Math.random() * 255
-    im.data[n] = im.data[n + 1] = im.data[n + 2] = v
-    im.data[n + 3] = 255
-  }
-  g.putImageData(im, 0, 0)
-  return c.toDataURL()
-}
-
 const SKILL_WORDS: { key: 'study' | 'design' | 'code'; w: string }[] = [
   { key: 'study', w: 'Research' },
   { key: 'design', w: 'Design' },
@@ -225,16 +194,10 @@ export function WorkStory() {
   /* คำพื้นหลัง My Works — ขึ้นตอนเล่มงานกำลังคลี่ (BenchScreen) */
   const worksWord = useRef<HTMLDivElement>(null)
   const wwSize = useRef('')
-  /* beat ระเบิด: ชั้นพื้นเหลือง/แสง/ลำแสง/กากบาท */
-  const burst = useRef<HTMLDivElement>(null)
   /* ไทล์งานที่เปิดเต็มจออยู่ (−1 = ไม่มี) — ซิงก์เข้า worksUI ให้ฝั่ง 3D */
   const [openTile, setOpenTile] = useState(-1)
   const tilesBox = useRef<HTMLDivElement>(null)
   const tileBtns = useRef<(HTMLButtonElement | null)[]>([])
-  const burstGlow = useRef<HTMLDivElement>(null)
-  const burstG = useRef<SVGGElement>(null)
-  const rayRefs = useRef<(SVGPolygonElement | null)[]>([])
-  const xRefs = useRef<(SVGGElement | null)[]>([])
   useEffect(() => {
     worksUI.open = openTile
     if (openTile < 0) return
@@ -253,7 +216,6 @@ export function WorkStory() {
       window.removeEventListener('scroll', scroll)
     }
   }, [openTile])
-  const [grain] = useState(() => (typeof document === 'undefined' ? '' : grainUrl()))
   const bigFront = useRef<HTMLDivElement>(null)
   /* ปลายบท Code: คำสลายเป็น ASCII (แคนวาสในชั้นตัวทึบ) */
   const disCanvas = useRef<HTMLCanvasElement>(null)
@@ -486,7 +448,8 @@ export function WorkStory() {
       const wp = worksPostSm.v
       /* ขึ้นเต็มทันทีข้างใต้ตัวอักษร 3D (ซึ่งค่อยจางทับ) — จางสวนกันจะซีดกลางทาง */
       const inW = wp >= WORKS_HAND[0] ? 1 : 0
-      const outW = smooth((wp - 0.5) / 0.16)
+      /* ค้างเป็นพื้นหลังตลอด section My Works · ออกพร้อมไทล์ท้ายบท */
+      const outW = smooth((wp - WORKS_HOLD[1]) / (WORKS_HOLD[2] - WORKS_HOLD[1]))
       const vw2 = frame.current.on ? inW * (1 - outW) : 0
       ww.style.visibility = vw2 > 0.002 ? 'visible' : 'hidden'
       ww.style.opacity = vw2.toFixed(3)
@@ -508,45 +471,6 @@ export function WorkStory() {
       }
       if (!hold && openTile !== -1) setOpenTile(-1)
     }
-    /* ── beat ระเบิดของเล่มงาน: ค่าหน่วงเดียวกับเล่ม (worksPostSm) ── */
-    const bu = burst.current
-    if (bu) {
-      const wpB = worksPostSm.v
-      const bk = clamp01((wpB - WORKS_BOOM[0]) / WORKS_BOOM[1])
-      /* ค้างตลอด section (ช่วงค้าง) · ออกท้ายบท พร้อมไทล์ */
-      const exB = smooth((wpB - WORKS_HOLD[1]) / (WORKS_HOLD[2] - WORKS_HOLD[1]))
-      const onB = frame.current.on && bk > 0 && exB < 1
-      bu.style.visibility = onB ? 'visible' : 'hidden'
-      if (onB) {
-        const oc = (x: number) => 1 - Math.pow(1 - clamp01(x), 3)
-        /* พื้นเหลืองวาบขึ้นเร็ว ค้าง แล้วจางกลับเป็นฟ้าช่วงท้าย */
-        const bgA = smooth(bk / 0.1) * (1 - exB)
-        bu.style.opacity = bgA.toFixed(3)
-        const gl = burstGlow.current
-        if (gl) gl.style.transform = `translate(-50%, -50%) scale(${(0.2 + 0.9 * oc(bk / 0.35)).toFixed(3)})`
-        burstG.current?.setAttribute('transform', `translate(${(vw / 2).toFixed(1)} ${(vh / 2).toFixed(1)}) rotate(${(bk * 10).toFixed(2)})`)
-        const diag = Math.hypot(vw, vh)
-        const grow = oc((bk - 0.03) / 0.4)
-        BURST_RAYS.forEach(([a, l, w], n) => {
-          const el = rayRefs.current[n]
-          if (!el) return
-          const L = Math.max(1, grow * l * diag * 0.62)
-          const r0 = L * 0.06
-          el.setAttribute('points', `${r0.toFixed(1)},-1 ${L.toFixed(1)},${(-w * 2.2).toFixed(1)} ${L.toFixed(1)},${(w * 2.2).toFixed(1)} ${r0.toFixed(1)},1`)
-          el.setAttribute('transform', `rotate(${a})`)
-        })
-        const vmin = Math.min(vw, vh)
-        BURST_X.forEach(([a, d, r], n) => {
-          const el = xRefs.current[n]
-          if (!el) return
-          const k = oc((bk - 0.05 - n * 0.03) / 0.6)
-          const rr = (d * vmin + 40) * k
-          const ar = (a * Math.PI) / 180
-          el.setAttribute('transform', `translate(${(Math.cos(ar) * rr).toFixed(1)} ${(Math.sin(ar) * rr).toFixed(1)}) rotate(${(-bk * 40).toFixed(1)}) scale(${(r * (0.4 + 0.6 * k)).toFixed(2)})`)
-        })
-      }
-    }
-      if (!frame.current.on) return
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
@@ -740,42 +664,6 @@ export function WorkStory() {
           <AsciiClouds blobs={CODE_CLOUDS} mask={CODE_CLOUD_MASK} rgb="214,190,255" alpha={[0.14, 0.5]} />
         </div>
         {/* คำใหญ่ของแต่ละบท (ตัวทึบ) — เหนือฟ้า ใต้ของบนจอ · เจาะรูตามกรอบเครื่อง: ในกรอบเครื่องเหลือแต่เส้นขอบ */}
-        {/* beat ระเบิดของเล่มงาน — เหนือฟ้า ใต้เล่มกระดาษ (แคนวาสของบนจอ) */}
-        <div ref={burst} className="pointer-events-none absolute inset-0 overflow-hidden" style={{ visibility: 'hidden', background: '#f9e000' }} aria-hidden>
-          <div
-            ref={burstGlow}
-            className="absolute top-1/2 left-1/2 size-[110vmax] rounded-full"
-            style={{ background: 'radial-gradient(circle, #fffef6 0%, #fffbd6 9%, rgba(255,248,170,0.7) 20%, rgba(253,232,40,0) 46%)' }}
-          />
-          <svg className="absolute inset-0 size-full overflow-visible">
-            <g ref={burstG}>
-              {BURST_RAYS.map((_, n) => (
-                <polygon
-                  key={n}
-                  ref={(el) => {
-                    rayRefs.current[n] = el
-                  }}
-                  fill="#f7f2e3"
-                  stroke="#1c1820"
-                  strokeWidth={2}
-                  strokeLinejoin="round"
-                />
-              ))}
-              {BURST_X.map((_, n) => (
-                <g
-                  key={`x${n}`}
-                  ref={(el) => {
-                    xRefs.current[n] = el
-                  }}
-                >
-                  <circle r={1} fill="#f7f2e3" stroke="#1c1820" strokeWidth={2} vectorEffect="non-scaling-stroke" />
-                  <path d="M-0.42 -0.42L0.42 0.42M0.42 -0.42L-0.42 0.42" stroke="#1c1820" strokeWidth={2} vectorEffect="non-scaling-stroke" />
-                </g>
-              ))}
-            </g>
-          </svg>
-          <div className="absolute inset-0 mix-blend-multiply" style={{ backgroundImage: grain ? `url(${grain})` : undefined, opacity: 0.16 }} />
-        </div>
         <div ref={bigSolid} className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
         <canvas ref={disCanvas} className="absolute inset-0 size-full" />
         <div ref={wordsClip} className="absolute inset-0">

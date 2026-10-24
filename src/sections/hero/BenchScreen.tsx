@@ -1027,7 +1027,8 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
           u.uTh.value = th
           u.uCurl.value = curl
           u.uGutter.value = sp * (1 - boomE)
-          u.uPop.value = smooth(clamp01(boom / 0.18))
+          /* ไทล์ธีมเรา (placeholder เทาบนฟ้า) — ไม่เอาสีสด/ขอบดำของภาพ ref */
+          u.uPop.value = 0
           cm.visible = j < STACK.length || sp > 0.001
           /*
            * ลงช่อง (land): จากท่าระเบิด → ไทล์แบนหันหน้าเข้าหาคนดูตามช่องบนจอ (TILE_SLOTS) · hover = ยกขึ้นนิด
@@ -1045,8 +1046,8 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
             /* เปิด: กลางจอ กว้าง 92% สูง 88% */
             const tw = lerp(rc.w * (1 + hk2[j] * 0.06), W * 0.92, ok)
             const ty = lerp(rc.h, H * 0.88, ok)
-            /* ช่อง 0 (ไทล์ที่ตัวละครจับ) อยู่หน้าสุด ไม่ให้ไทล์ใหญ่บัง */
-            toLocal(lerp(cx, W / 2, ok), lerp(cy, H / 2, ok), (j === 0 ? 1.5 : 0) + hk2[j] * 0.6 + ok * 1.2, SLOT_P)
+            /* ช่อง 0 (ไทล์ที่ตัวละครจับ) อยู่หลังตัวละครนิด — มือจับจากด้านหน้า ไม่บังหน้า */
+            toLocal(lerp(cx, W / 2, ok), lerp(cy, H / 2, ok), (j === 0 ? -0.6 : 0) + hk2[j] * 0.6 + ok * 1.2, SLOT_P)
             const sc = (tw * upp) / CW
             SLOT_Q.copy(BQ).multiply(QZ.setFromAxisAngle(ZAX, (-lerp(rc.rot, 0, Math.max(ok, hk2[j] * 0.5)) * Math.PI) / 180))
             /* จุดกำเนิดเมชอยู่ที่สัน (ขอบซ้ายกลาง) → เลื่อนให้กลางไทล์อยู่ที่ช่อง */

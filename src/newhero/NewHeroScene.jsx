@@ -1,3 +1,4 @@
+import { FrameCap } from '@/lib/FrameCap'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Grid, MeshTransmissionMaterial, PerformanceMonitor } from '@react-three/drei'
@@ -785,6 +786,26 @@ function ShadowFlags({ on }) {
       for (const c of o.children) walk(c, within)
     }
     walk(scene, false)
+  })
+  return null
+}
+
+/**
+ * อัปเดตเงาทุก 2 เฟรม — shadow map คือการวาดของที่ยิงเงาทั้งฉากซ้ำอีกรอบ (วัดที่ 1440×900: ~4ms/เฟรม
+ * จากฉากราว 10ms) ของในฉากขยับช้า (ตัวละครไถ/ไหว) เงาช้ากว่าตัวหนึ่งเฟรมตามองไม่ออก ประหยัดครึ่งหนึ่ง
+ */
+function ShadowThrottle({ on }) {
+  const gl = useThree((s) => s.gl)
+  const n = useRef(0)
+  useEffect(() => {
+    gl.shadowMap.autoUpdate = !on
+    gl.shadowMap.needsUpdate = true
+    return () => {
+      gl.shadowMap.autoUpdate = true
+    }
+  }, [gl, on])
+  useFrame(() => {
+    if (on && (n.current++ & 1) === 0) gl.shadowMap.needsUpdate = true
   })
   return null
 }
@@ -2888,6 +2909,7 @@ function Scene({ bare = false }) {
         <Backdrop clay={clay} clip={bare} />
       )}
       <ShadowFlags on={t.sh > 0.5 && !clay} />
+      <ShadowThrottle on={t.sh > 0.5 && !clay} />
       {/**
        * ริกกล้องต้องขยับกล้อง "ก่อน" ของที่เกาะกรอบภาพจะคำนวณตำแหน่งตัวเอง
        *
@@ -3406,14 +3428,19 @@ export default function NewHeroScene({ bare = false, className = 'absolute inset
   return (
     <Canvas
       shadows="soft"
-      frameloop={on ? 'always' : 'never'}
+      /* วาดผ่าน FrameCap (เพดาน 60 fps) — always วาดตามรอบจอ จอ 144 Hz ขึ้นไป GPU ทำงานเกินเท่าตัว */
+      frameloop="never"
       className={className}
       /**
        * dpr สูงสุด 1.5 ไม่ใช่ 2 — ฉากนี้ติดคอขวดที่จำนวนพิกเซล (ฟ้า fbm, พาส rim ของ CameraFX
        * เต็มจอ) ไม่ใช่ draw call: ปิดเงา/พอร์ทัลแล้ว fps แทบไม่ขยับ แต่พิกเซลลด 44% ที่ 1.5
        * ตัวอักษรในฉากไม่มี ขอบที่นุ่มลงนิดเดียวแลกกับเฟรมที่ลื่นขึ้นเกือบเท่าตัว (วัดแล้ว)
        */
-      dpr={dpr}
+      /*
+       * ไม่เกินความละเอียดจริงของจอ — r3f ใช้ dpr แบบตัวเลขตรง ๆ ไม่ clamp (แบบ [min, max] ถึงจะ clamp)
+       * จอ dpr 1 (จอ Windows ทั่วไป) เดิมเรนเดอร์ 1.5 เท่า = พิกเซล 2.25 เท่าของที่จอแสดงได้ ทิ้งเปล่า ๆ
+       */
+      dpr={Math.min(dpr, typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1)}
       camera={{
         position: [DEFAULTS.camX, DEFAULTS.camY, DEFAULTS.camZ],
         fov: DEFAULTS.fov,
@@ -3432,6 +3459,7 @@ export default function NewHeroScene({ bare = false, className = 'absolute inset
        */
       gl={{ antialias: !(DEFAULTS.fx > 0.5 || DEFAULTS.rimFx > 0.5), stencil: true, alpha: bare, toneMappingExposure: DEFAULTS.exposure }}
     >
+      <FrameCap on={on} />
       <WarmShaders />
       <AfterIntro>
         <PerformanceMonitor onDecline={() => setDpr(minDpr)} onIncline={() => setDpr(maxDpr)} flipflops={3} onFallback={() => setDpr(minDpr)} />
