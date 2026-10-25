@@ -1,11 +1,11 @@
-import { Suspense, useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { makeChunkyTile } from './liquidGlass'
 import { K as ISLE_K, ResearchIsland, blockFlight } from './ResearchPlatform'
 import { outlineMat, rrect } from './shapes'
 import { storySv2 } from '@/sections/skystory/beats'
-import { WorksHanger } from './WorksHanger'
+import { WORKS } from './WorksGallery'
 import {
   DEVICE,
   LAYOUT_H,
@@ -26,14 +26,13 @@ import {
   worksPost,
   worksWordLayout,
   worksPostSm,
-  WORKS_BOOM,
   WORKS_HOLD,
   TILE_SLOTS,
-  slotRect,
   worksUI,
   WORKS_FLY,
   WORKS_HAND,
   WORKS_TEXT,
+  STORY_FONT,
 } from './workMotion'
 
 /**
@@ -48,13 +47,20 @@ import {
  * หน่วยเป็นหน่วยผังจอ (สูง 780 กว้าง 380 — ชุดเดียวกับผังวิดเจ็ตเดิม) คูณเข้าขนาดจอเครื่องบนจอเฟรมนี้
  */
 
+/** กระดาษในวิดเจ็ต Selected Work ยกขึ้นจากกลางการ์ด (หน่วยผังจอ) — ครึ่งบนโผล่พ้นฝาโฟลเดอร์ */
+const PAPER_UP = 18
+
 type Tile = { x: number; y: number; w: number; h: number; r: number; color: string }
 type Card = Tile & { tiles: Tile[] }
 
 /** ผังวิดเจ็ต — ตามภาพอ้างอิง (กลางจอเป็น 0 แกน y ขึ้น) */
 export const CARDS: Card[] = [
-  /* ฟ้า = ภาพอากาศ: เมฆ (กระเบื้องขาวทรงแคปซูล) ทับดวงอาทิตย์ */
-  { x: -81, y: 236, w: 150, h: 150, r: 34, color: '#d3eff6', tiles: [{ x: 12, y: 4, w: 96, h: 50, r: 25, color: '#44c4de' }] },
+  /*
+   * ฟ้า = widget My Works (ประตูไป section ผลงาน): กองหน้ากระดาษเทา + ป้าย My Works บนหน้าฟ้าเรียบ ตั้งแต่บท Design
+   * กระเบื้องใบเดียวของการ์ด = หน้าบนสุดของกอง (ตำแหน่ง/ขนาดเดียวกับหน้าที่ j = 3 ของอัลบั้ม ที่ cs = 1) —
+   * บล็อกจากแท่ง Research บินลงมาเป็นหน้านี้ แล้วหน้ากระดาษจริงรับช่วงต่อ (ดู ALBUM_TOP)
+   */
+  { x: -81, y: 236, w: 150, h: 150, r: 34, color: '#d3eff6', tiles: [{ x: 0, y: -12.5 + PAPER_UP, w: 62, h: 77, r: 8, color: '#44c4de' }] },
   {
     x: 0,
     y: 16,
@@ -115,20 +121,6 @@ const CW = 62
 const CH = (62 * 322) / 258
 const CR = (14 * 62) / 258
 /**
- * placeholder การ์ดงาน: พื้นเทา + ก้อนมนเทาอ่อน (แบบหน้าจอแอปย่อ ๆ) · 4 แบบวนกัน สลับเทาเข้ม/อ่อนให้แยกใบออก
- * ตำแหน่งเป็นสัดส่วนของการ์ด [x, y, w, h, r(สัดส่วนของด้านสั้น)]
- */
-const PH_TONE = [
-  ['#4b4f56', '#767b83', '#62666e'],
-  ['#8a8f97', '#b4b9c0', '#9fa4ab'],
-] as const
-const PH_LAYOUT: readonly (readonly [number, number, number, number, number, number])[][] = [
-  [[0.12, 0.07, 0.76, 0.34, 0.3, 1], [0.2, 0.47, 0.3, 0.17, 0.5, 2], [0.12, 0.7, 0.76, 0.22, 0.35, 1]],
-  [[0.1, 0.08, 0.42, 0.52, 0.3, 1], [0.6, 0.12, 0.3, 0.17, 0.5, 2], [0.6, 0.34, 0.3, 0.17, 0.5, 1], [0.1, 0.68, 0.8, 0.24, 0.4, 2]],
-  [[0.14, 0.1, 0.36, 0.2, 0.5, 2], [0.14, 0.34, 0.72, 0.3, 0.3, 1], [0.5, 0.7, 0.36, 0.2, 0.5, 1], [0.14, 0.72, 0.28, 0.17, 0.5, 2]],
-  [[0.12, 0.08, 0.76, 0.2, 0.4, 2], [0.12, 0.34, 0.34, 0.2, 0.5, 1], [0.54, 0.34, 0.34, 0.2, 0.5, 1], [0.12, 0.6, 0.76, 0.32, 0.3, 1]],
-]
-/**
  * หน้ากระดาษของเล่มงาน: แผ่นบางโค้งงอได้ (โค้งใน vertex shader — ไม่ใช่แผ่นแข็ง)
  *   เรขาคณิต x 0..1 = ระยะจากสัน (แบ่งถี่) · y −0.5..0.5 = ตามแนวสัน
  *   uTh = มุมโคนหน้าที่สัน (0 = ราบไปขวา หันเข้าหาคนดู · π = ราบไปซ้าย) · uCurl = มุมที่เพิ่มจากโคนถึงปลาย (กระดาษโค้ง)
@@ -140,11 +132,12 @@ function makeWorkCard(map: THREE.Texture, pop: readonly [string, string]) {
     transparent: true,
     side: THREE.DoubleSide,
     toneMapped: false,
-    uniforms: { uMap: { value: map }, uOpacity: { value: 0 }, uSize: { value: new THREE.Vector2(CW, CH) }, uTh: { value: 0 }, uCurl: { value: 0 }, uGutter: { value: 0 }, uR: { value: CR }, uPop: { value: 0 }, uDim: { value: 1 }, uEdge: { value: 1 }, uPopA: { value: new THREE.Color(pop[0]) }, uPopB: { value: new THREE.Color(pop[1]) } },
+    uniforms: { uMap: { value: map }, uOpacity: { value: 0 }, uSize: { value: new THREE.Vector2(CW, CH) }, uTh: { value: 0 }, uCurl: { value: 0 }, uGutter: { value: 0 }, uR: { value: CR }, uPop: { value: 0 }, uDim: { value: 1 }, uEdge: { value: 1 }, uPopA: { value: new THREE.Color(pop[0]) }, uPopB: { value: new THREE.Color(pop[1]) }, uShear: { value: 0 }, uPhoto: { value: null as THREE.Texture | null }, uReal: { value: 0 }, uCrop: { value: new THREE.Vector2(1, 1) } },
     vertexShader: /* glsl */ `
       uniform vec2 uSize;
       uniform float uTh;
       uniform float uCurl;
+      uniform float uShear;
       varying vec2 vUv;
       varying vec3 vN;
       void main() {
@@ -154,6 +147,8 @@ function makeWorkCard(map: THREE.Texture, pop: readonly [string, string]) {
           ? vec2(cos(uTh), sin(uTh)) * u * uSize.x
           : vec2(sin(phi) - sin(uTh), cos(uTh) - cos(phi)) * uSize.x / uCurl;
         vec3 p = vec3(xz.x, position.y * uSize.y, xz.y);
+        /* ทรงขนานเอียง (แถว My Works แบบภาพ ref): ขอบขวายกสูงกว่าซ้าย — เฉือนแนวตั้งรอบกลางแผ่น */
+        p.y += (u - 0.5) * uShear * uSize.x;
         vN = normalize(normalMatrix * vec3(-sin(phi), 0.0, cos(phi)));
         vUv = vec2(u, position.y + 0.5);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
@@ -169,6 +164,9 @@ function makeWorkCard(map: THREE.Texture, pop: readonly [string, string]) {
       uniform float uEdge;
       uniform vec3 uPopA;
       uniform vec3 uPopB;
+      uniform sampler2D uPhoto;
+      uniform float uReal;
+      uniform vec2 uCrop;
       varying vec2 vUv;
       varying vec3 vN;
       float hash(vec2 q) { return fract(sin(dot(q, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -190,6 +188,11 @@ function makeWorkCard(map: THREE.Texture, pop: readonly [string, string]) {
         float gt = clamp(vUv.y * 0.75 + (1.0 - vUv.x) * 0.25, 0.0, 1.0);
         vec3 pop = mix(uPopB, uPopA, smoothstep(0.1, 0.9, gt + (hash(floor(gl_FragCoord.xy * 0.5)) - 0.5) * 0.35));
         col = mix(col, pop * (0.85 + 0.15 * max(dot(n, L), 0.0)), uPop);
+        /* ลงแถวแล้ว = ภาพผลงานจริง (ครอปกลางเต็มใบ · uCrop = สัดส่วนการ์ดต่อภาพ) แสงเบาลง ไม่ให้ภาพหม่น */
+        if (uReal > 0.001) {
+          vec3 ph = texture2D(uPhoto, 0.5 + (uv - 0.5) * uCrop).rgb * (0.88 + 0.14 * max(dot(n, L), 0.0));
+          col = mix(col, ph, uReal);
+        }
         /* เส้นขอบหนาคงที่บนจอ: ไทล์ขยายเต็มจอ (uEdge เล็กลง) เส้นไม่หนาตาม */
         col = mix(col, vec3(0.1, 0.09, 0.12), uPop * smoothstep(-2.4 * uEdge, -1.4 * uEdge, d));
         col += (hash(floor(gl_FragCoord.xy)) - 0.5) * (0.035 + 0.05 * uPop);
@@ -199,6 +202,9 @@ function makeWorkCard(map: THREE.Texture, pop: readonly [string, string]) {
   })
 }
 
+/**
+ * หน้าการ์ดก่อนขึ้นภาพผลงาน = กระดาษในโฟลเดอร์ (แบบไอคอน Files): ขาวนวล เส้นบรรทัดฟ้าจาง · ใบคี่ขาวอมฟ้านิดให้แยกใบในกอง
+ */
 function paintPlaceholder(n: number) {
   const W = 200
   const H = Math.round((W * CH) / CW)
@@ -206,29 +212,21 @@ function paintPlaceholder(n: number) {
   cv.width = W
   cv.height = H
   const g = cv.getContext('2d')!
-  const tone = PH_TONE[n % 2]
-  g.fillStyle = tone[0]
+  g.fillStyle = n % 2 ? '#eef3fa' : '#fbfcfe'
   g.fillRect(0, 0, W, H)
-  for (const [x, y, w, h, r, c] of PH_LAYOUT[n % PH_LAYOUT.length]) {
-    g.fillStyle = tone[c]
-    g.beginPath()
-    g.roundRect(x * W, y * H, w * W, h * H, r * Math.min(w * W, h * H))
-    g.fill()
-  }
+  g.fillStyle = '#c9dcf3'
+  for (let y = H * 0.12; y < H * 0.95; y += H * 0.045) g.fillRect(W * 0.08, y, W * 0.84, Math.max(1, H * 0.006))
   const t = new THREE.CanvasTexture(cv)
   t.colorSpace = THREE.SRGBColorSpace
   t.anisotropy = 4
   return t
 }
 /** ท่าซ้อน [x, y, หมุน z] ต่อใบ (ใบท้าย = บนสุด) · หน่วยผังจอในการ์ด */
-/** แถวงานตอนฟ้าเต็มจอ: จำนวนใบ (ปกวนซ้ำ) · เอียงแกน · ระยะห่าง (เท่าของปก) · ขนาด */
-const FAN_N = 10
-/** แกนแถว: ขึ้นขวา */
-const FAN_TILT = 0.45
-/** มุมคลี่ของหน้าแรก → หน้าสุดท้าย (rad) */
-const FAN_OPEN = [0.22, Math.PI - 0.22] as const
-/** หน่วงออกตัวของหน้าสุดท้าย (สัดส่วนของช่วงคลี่) */
-const FAN_STAGGER = 0.5
+/** จำนวนการ์ดงาน (ปกวนซ้ำ) */
+const FAN_N = 7
+/** แจกการ์ดจากกองลงแถว [เริ่ม, ยาว] (worksPost) · หน่วงออกตัวของใบสุดท้าย (สัดส่วนของช่วงแจก) */
+const DEAL = [0.04, 0.7] as const
+const DEAL_STAG = 0.45
 /** สีไทล์ตอนระเบิด (บน · ล่าง) วนตามหน้า — แดงส้ม · เขียวฟ้า · ส้มเหลือง · ฟ้าม่วง · ครีม */
 const POP: readonly (readonly [string, string])[] = [
   ['#ff2a1a', '#ff9a1f'],
@@ -274,8 +272,40 @@ const LE2 = new THREE.Vector3()
 const SLOT_P = new THREE.Vector3()
 const SLOT_Q = new THREE.Quaternion()
 const QZ = new THREE.Quaternion()
-const ZAX = new THREE.Vector3(0, 0, 1)
 const OFF = new THREE.Vector3()
+const RB = new THREE.Vector3()
+const RD = new THREE.Vector3()
+const PC = new THREE.Vector3()
+/**
+ * แถวการ์ดยืน: กลางใบใกล้สุด (สัดส่วนจอ) · ระยะจากกล้อง (เท่าของระยะถึงระนาบกอง) · กว้างใบใกล้ (สัดส่วนจอ)
+ * หมุนทุกใบ (rad — y บวก = ขอบขวาถอยลึก) · ก้าวระหว่างใบ [ไปขวาตามแกนการ์ด, ถอยหลังการ์ด] (เท่าของความกว้าง)
+ */
+const DECK_NEAR = [0.2, 0.52] as const
+const DECK_DIST = 0.42
+const DECK_W = 0.25
+const DECK_ROT = [0.05, 0.5, -0.03] as const
+const DECK_STEP = [1.02, 0.42] as const
+/** ความหนาการ์ด (หน่วยการ์ด) */
+const CARD_T = 4.5
+const DECK_Q = new THREE.Quaternion()
+const RN = new THREE.Vector3()
+const STK_P = new THREE.Vector3()
+/** กล่องบนจอ (px) ของการ์ดหน้าแบน — มุมสี่มุมของแผ่นในพิกัดเมช (x 0..CW จากสัน · y ±CH/2) */
+function projRect(m: THREE.Object3D, cam: THREE.Camera, W: number, H: number, out: { x0: number; y0: number; x1: number; y1: number }) {
+  out.x0 = Infinity
+  out.y0 = Infinity
+  out.x1 = -Infinity
+  out.y1 = -Infinity
+  for (const [x, y] of [[0, -CH / 2], [CW, -CH / 2], [0, CH / 2], [CW, CH / 2]]) {
+    PC.set(x, y, 0).applyMatrix4(m.matrixWorld).project(cam)
+    const sx = (PC.x * 0.5 + 0.5) * W
+    const sy = (-PC.y * 0.5 + 0.5) * H
+    out.x0 = Math.min(out.x0, sx)
+    out.x1 = Math.max(out.x1, sx)
+    out.y0 = Math.min(out.y0, sy)
+    out.y1 = Math.max(out.y1, sy)
+  }
+}
 /** ทิศระเบิดของวิดเจ็ตตอนเครื่องชน [x, y, หมุน x, หมุน y, หมุน z] (ใบ 1 = ม่วง, 2 = พีช) */
 const BURST: Record<number, readonly [number, number, number, number, number]> = {
   1: [1, 0.35, -0.6, 1, 0.5],
@@ -290,43 +320,21 @@ const FILL_CARD: readonly (readonly [string, string])[] = [
 const FILL_TILE = ['#ffffff', '#e9e4ff'] as const
 /**
  * หน้าโหมดสว่าง (บน → ล่าง) ตามภาพประกอบ Sonoma Shortcuts — แยกจากสีเติมของบท Code
- * การ์ดฟ้า = ภาพอากาศ (วาดบนแคนวาส paintWeather) · การ์ดกลาง = การ์ดแชทเขียวมะนาว แถบส้ม · การ์ดล่าง = ส้มแซลมอน
+ * การ์ดฟ้า = widget My Works (ไล่ฟ้าเรียบ · กองงานอยู่บน) · การ์ดกลาง = การ์ดแชทเขียวมะนาว แถบส้ม · การ์ดล่าง = ส้มแซลมอน
  */
-const FACE_CARD: readonly (readonly [string, string])[] = [
-  ['#3f7ff0', '#5aa85a'],
-  ['#e4f59a', '#c3dd5c'],
-  ['#ff9f7a', '#ee5a6e'],
+const FACE_CARD: readonly (readonly [string, string, string])[] = [
+  /* บน · แถบกลาง · ล่าง — แถบกลางเป็นสีตัดแบบภาพ ref (ฟ้า→คราม · มะนาว→เขียวอ่อน · ส้มพีช→ชมพูแดง) */
+  ['#4f9bf8', '#2f80f0', '#1f69dd'],
+  ['#f2f8c2', '#dcef98', '#b9d968'],
+  ['#ffc994', '#ff8f78', '#ec5f86'],
 ]
-const FACE_TILE: Record<string, readonly [string, string]> = {
-  '#44c4de': ['#ffffff', '#b9c6ff'],
-  '#a696f1': ['#ff9a4a', '#ff6a2a'],
-  '#b3a5f4': ['#e39a4e', '#cf7d36'],
+const FACE_TILE: Record<string, readonly [string, string, string]> = {
+  /* หน้าบนสุดของกองงาน — ขาวกระดาษเดียวกับ paintPlaceholder */
+  '#44c4de': ['#ffffff', '#f6f9fd', '#e9f0f8'],
+  '#a696f1': ['#ffa45a', '#ff7f3c', '#f15a2c'],
+  '#b3a5f4': ['#eaa75e', '#db8f48', '#c97834'],
 }
 
-/** ภาพอากาศแบบพ่นสี: ฟ้าไล่ลง ดวงอาทิตย์เหลืองเบลอ ขอบฟ้าแดงอมส้ม พื้นเขียว */
-function paintWeather() {
-  const S = 256
-  const cv = document.createElement('canvas')
-  cv.width = cv.height = S
-  const g = cv.getContext('2d')!
-  const sky = g.createLinearGradient(0, 0, 0, S)
-  sky.addColorStop(0, '#2f6fe8')
-  sky.addColorStop(0.5, '#6fb2ff')
-  sky.addColorStop(0.6, '#f0605a')
-  sky.addColorStop(0.7, '#4fa04f')
-  sky.addColorStop(1, '#3f8a44')
-  g.fillStyle = sky
-  g.fillRect(0, 0, S, S)
-  g.filter = 'blur(10px)'
-  g.fillStyle = '#ffd84a'
-  g.beginPath()
-  g.arc(S * 0.4, S * 0.36, S * 0.17, 0, Math.PI * 2)
-  g.fill()
-  g.filter = 'none'
-  const t = new THREE.CanvasTexture(cv)
-  t.colorSpace = THREE.SRGBColorSpace
-  return t
-}
 /** สีปุ่ม + ต่อการ์ด (ใบ 3 เป็นเกาะ Research — ไม่มีปุ่ม) */
 const BADGE = ['#3d5bd9', '#f2564b'] as const
 /** วินาทีต่อการแตะหนึ่งครั้ง (บท Code — แอปมีชีวิต) */
@@ -541,17 +549,13 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
       }
       return m
     }
-    const weather = paintWeather()
     const list = CARDS.map((c, i) => {
-      const sl = slab(c, 16)
+      const sl = slab(c, 8)
       const cm = mat(c.color, false) as THREE.ShaderMaterial
       cm.uniforms.uFaceTop.value.set(FACE_CARD[i][0])
-      cm.uniforms.uFaceBot.value.set(FACE_CARD[i][1])
+      cm.uniforms.uFaceMid.value.set(FACE_CARD[i][1])
+      cm.uniforms.uFaceBot.value.set(FACE_CARD[i][2])
       cm.uniforms.uHalf.value.set(c.w / 2, c.h / 2)
-      if (i === 0) {
-        cm.uniforms.uMap.value = weather
-        cm.uniforms.uHasMap.value = 1
-      }
       c.tiles.forEach((t) => {
         const f = FACE_TILE[t.color]
         const tm = mat(t.color, true) as THREE.ShaderMaterial
@@ -559,10 +563,11 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
         tm.depthWrite = false
         if (f) {
           tm.uniforms.uFaceTop.value.set(f[0])
-          tm.uniforms.uFaceBot.value.set(f[1])
+          tm.uniforms.uFaceMid.value.set(f[1])
+          tm.uniforms.uFaceBot.value.set(f[2])
         }
       })
-      return { c, geo: sl.g, top: sl.top, mat: cm, tiles: c.tiles.map((t) => ({ t, geo: slab(t, 6).g, mat: mat(t.color, true) })) }
+      return { c, geo: sl.g, top: sl.top, mat: cm, tiles: c.tiles.map((t) => ({ t, geo: slab(t, 4).g, mat: mat(t.color, true) })) }
     })
     /* วัสดุ → การ์ดที่มันอยู่ (ลำดับเติมสี) กับครึ่งความสูง — สีเดียวกันในการ์ดเดียวกันขนาดเท่ากัน ใช้วัสดุร่วมได้ */
     const fillOf = new Map<THREE.Material, { card: number; span: number; cy: number }>()
@@ -658,17 +663,132 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
     const geo = new THREE.PlaneGeometry(1, 1, 32, 1)
     geo.translate(0.5, 0, 0)
     const covers = Array.from({ length: FAN_N }, (_, n) => makeWorkCard(paintPlaceholder(n), POP[n % POP.length]))
+    /* ภาพผลงานจริง (ชุดเดียวกับ WorksGallery) — ใส่หน้าการ์ดตอนลงแถว · ครอปกลางให้เต็มการ์ดทรงตั้ง */
+    const loader = new THREE.TextureLoader()
+    covers.forEach((m, n) => {
+      const w = WORKS[n % WORKS.length]
+      const t = loader.load(w.img, (tex) => {
+        const img = tex.image as { width: number; height: number }
+        const ia = img.width / Math.max(1, img.height)
+        const ca = CW / CH
+        m.uniforms.uCrop.value.set(ia > ca ? ca / ia : 1, ia > ca ? 1 : ia / ca)
+      })
+      t.colorSpace = THREE.SRGBColorSpace
+      t.anisotropy = 4
+      m.uniforms.uPhoto.value = t
+    })
     /*
-     * ป้าย "My Works" = ตัวอักษรแยกทีละตัว (แคนวาสต่อตัว ฟอนต์/น้ำหนักเดียวกับคำพื้นหลัง DOM)
+     * ตัวการ์ดหนา (แบบ ref): แผ่นมนสีขาวนวลหลังหน้าการ์ด — ลูกของเมชหน้า จุดกำเนิดเดียวกัน (ขอบซ้ายกลาง)
+     * หน้าบนของแผ่นอยู่หลังหน้าการ์ดนิด (z −0.3) ไม่ให้ชนหน้า · scale z ย่อตอนอยู่ในกอง
+     */
+    const bev = 1.6
+    const bodyGeo = new THREE.ExtrudeGeometry(rrect(CW - bev * 2, CH - bev * 2, Math.max(1, CR - bev)), {
+      depth: CARD_T - bev * 2,
+      bevelEnabled: true,
+      bevelThickness: bev,
+      bevelSize: bev,
+      bevelSegments: 4,
+      curveSegments: 14,
+    })
+    bodyGeo.translate(CW / 2, 0, -CARD_T + bev - 0.3)
+    const bodies = covers.map(
+      () =>
+        new THREE.ShaderMaterial({
+          transparent: true,
+          toneMapped: false,
+          uniforms: { uOpacity: { value: 0 }, uDim: { value: 1 } },
+          vertexShader: /* glsl */ `
+            varying vec3 vN;
+            void main() { vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+          fragmentShader: /* glsl */ `
+            uniform float uOpacity;
+            uniform float uDim;
+            varying vec3 vN;
+            void main() {
+              vec3 L = normalize(vec3(-0.4, 0.55, 0.75));
+              vec3 col = vec3(0.9, 0.92, 0.95) * (0.66 + 0.38 * max(dot(normalize(vN), L), 0.0));
+              gl_FragColor = vec4(col * uDim, uOpacity);
+              #include <colorspace_fragment>
+            }`,
+        }),
+    )
+    /*
+     * ฝาโฟลเดอร์ (แบบไอคอน Files): แผ่นฟ้าอ่อนบังครึ่งล่างของกองกระดาษ แท็บยกซ้ายบน ลาดลงหาขอบบน · พิกัดการ์ด (กลาง 0)
+     */
+    const fs = new THREE.Shape()
+    const [fx0, fx1, fy0, fy1, ftab, ftx, fr] = [-66, 66, -62, 4, 17, -16, 10]
+    fs.moveTo(fx0 + fr, fy0)
+    fs.lineTo(fx1 - fr, fy0)
+    fs.quadraticCurveTo(fx1, fy0, fx1, fy0 + fr)
+    fs.lineTo(fx1, fy1 - 6)
+    fs.quadraticCurveTo(fx1, fy1, fx1 - 6, fy1)
+    fs.lineTo(ftx + 14, fy1)
+    fs.bezierCurveTo(ftx + 6, fy1, ftx + 6, ftab, ftx - 2, ftab)
+    fs.lineTo(fx0 + 7, ftab)
+    fs.quadraticCurveTo(fx0, ftab, fx0, ftab - 7)
+    fs.lineTo(fx0, fy0 + fr)
+    fs.quadraticCurveTo(fx0, fy0, fx0 + fr, fy0)
+    const folderGeo = new THREE.ShapeGeometry(fs, 16)
+    const folder = new THREE.ShaderMaterial({
+      transparent: true,
+      toneMapped: false,
+      uniforms: { uOpacity: { value: 0 } },
+      vertexShader: /* glsl */ `
+        varying float vY;
+        void main() { vY = position.y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: /* glsl */ `
+        uniform float uOpacity;
+        varying float vY;
+        void main() {
+          float t = clamp((vY + 62.0) / 79.0, 0.0, 1.0);
+          vec3 col = mix(vec3(0.42, 0.71, 0.97), vec3(0.6, 0.83, 1.0), t);
+          /* ขอบบนสว่าง (แสงรับสันฝา) */
+          col += smoothstep(0.9, 1.0, t) * 0.06;
+          gl_FragColor = vec4(col, uOpacity);
+          #include <colorspace_fragment>
+        }`,
+    })
+    return { geo, covers, bodyGeo, bodies, folderGeo, folder }
+  }, [])
+  useEffect(
+    () => () => {
+      works.geo.dispose()
+      works.bodyGeo.dispose()
+      works.bodies.forEach((m) => m.dispose())
+      works.folderGeo.dispose()
+      works.folder.dispose()
+      works.covers.forEach((m) => {
+        m.uniforms.uMap.value.dispose()
+        m.uniforms.uPhoto.value?.dispose()
+        m.dispose()
+      })
+    },
+    [works],
+  )
+  /*
+   * วาดตัวอักษรใหม่เมื่อฟอนต์ของหน้าโหลดเสร็จ — แคนวาสวาดด้วยฟอนต์สำรองถ้าวาดก่อน (คำ DOM ใช้ฟอนต์จริง = ตอนส่งต่อตัวไม่ตรง)
+   */
+  const [fontOk, setFontOk] = useState(0)
+  useEffect(() => {
+    let live = true
+    document.fonts.load(`700 160px ${STORY_FONT}`).then(() => live && setFontOk((v) => v + 1), () => {})
+    return () => {
+      live = false
+    }
+  }, [])
+  const ltr = useMemo(() => {
+    void fontOk
+    /*
+     * ป้าย Selected Work = ตัวอักษรแยกทีละตัว (แคนวาสต่อตัว ฟอนต์/น้ำหนักเดียวกับคำพื้นหลัง DOM)
      * อยู่ในวิดเจ็ตเป็นป้าย → บินไล่ทีละตัวไปลงจอดเป็นคำพื้นหลัง (ดู WORKS_FLY) · เรขาคณิตหน่วย em: จุดกำเนิด = ซ้ายตัวอักษร กลางบรรทัด
      */
     const FS = 160
-    const font = `700 ${FS}px -apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, "Helvetica Neue", sans-serif`
+    const font = `700 ${FS}px ${STORY_FONT}`
     const mc = document.createElement('canvas').getContext('2d')!
     mc.font = font
     const chars = [...WORKS_TEXT].map((ch, n) => ({ ch, n })).filter((c) => c.ch !== ' ')
     /* ระยะ em จากซ้ายคำ (สำรอง ถ้ายังไม่ได้ผังจาก DOM) — ช่องไฟ −0.055em แบบคำ DOM */
-    const fm = mc.measureText('My Works')
+    const fm = mc.measureText(WORKS_TEXT)
     const em0 = chars.map((c) => mc.measureText(WORKS_TEXT.slice(0, c.n)).width / FS - 0.055 * c.n)
     const letters = chars.map(({ ch }) => {
       const pad = FS * 0.2
@@ -693,28 +813,25 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
       geo.translate(w / FS / 2 - pad / FS, 0, 0)
       return { geo, mat: new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, toneMapped: false, opacity: 0 }) }
     })
-    return { geo, covers, letters, em0 }
-  }, [])
+    return { letters, em0 }
+  }, [fontOk])
   useEffect(
-    () => () => {
-      works.geo.dispose()
-      works.letters.forEach((l) => {
+    () => () =>
+      ltr.letters.forEach((l) => {
         l.geo.dispose()
         l.mat.map?.dispose()
         l.mat.dispose()
-      })
-      works.covers.forEach((m) => {
-        m.uniforms.uMap.value.dispose()
-        m.dispose()
-      })
-    },
-    [works],
+      }),
+    [ltr],
   )
   const worksRef = useRef<THREE.Group>(null)
+  const folderRef = useRef<THREE.Mesh>(null)
   const coverRefs = useRef<(THREE.Mesh | null)[]>([])
   const letterRefs = useRef<(THREE.Mesh | null)[]>([])
   /** ความคืบหน้าช่วง My Works แบบหน่วงแล้ว (ดู worksPost) */
   const postSm = useRef(-9)
+  /** บล็อกลงการ์ดฟ้าเสร็จแล้ว (หน้าบนสุดของกองงานโผล่แทนกระเบื้อง) — อ่านเฟรมถัดไป */
+  const landedRef = useRef(false)
   /** ไทล์งาน: ความคืบหน้าเปิดเต็มจอ / hover (หน่วงตามเวลา) */
   const tileOpenK = useRef<number[]>(Array(FAN_N).fill(0))
   const tileHoverK = useRef<number[]>(Array(FAN_N).fill(0))
@@ -759,10 +876,13 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
     if (!g.visible) return
     /* บท Code โหมดมืด: การ์ดเป็นกระจกดำ ขอบเรืองสีของมัน */
     const dk = codeDark(b)
+    /* บล็อกจากแท่งลงการ์ดฟ้าเสร็จหรือยัง (ตั้งในลูปกระเบื้องของการ์ด 0 — ก่อนลูปหน้าอัลบั้มของเฟรมถัดไปใช้) */
+    const album0Landed = landedRef.current
     /* ปุ่ม + : จางตอนเข้าโหมดมืด กลับมาหลังสแกนเติมสีครบ · ใบฟ้าจางตอนเริ่มลอยเข้าจอ */
     const bo = Math.max(1 - smooth(clamp01(b.code / 0.08)), smooth(clamp01((b.code - SCAN[1]) / 0.06)))
     badge.mats.forEach((m, n) => {
-      const o = bo * (n === 0 ? 1 - smooth(clamp01((b.code - 0.7) / 0.05)) : 1)
+      /* การ์ดฟ้า (My Works) ไม่มีปุ่ม + — กองงานกับป้ายเต็มการ์ดแล้ว */
+      const o = n === 0 ? 0 : bo
       m.opacity = o
       badge.whites[n].opacity = o
     })
@@ -927,16 +1047,16 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
         /* ทั้งเล่มเอียงเข้าท่า ease-out (เร็วก่อน นุ่มตอนจบ) */
         const tk = outCubic(clamp01(spRaw / 0.7))
         const zm = smooth(clamp01((post - 0.24) / 0.3))
-        const boom = clamp01((post - WORKS_BOOM[0]) / WORKS_BOOM[1])
-        const boomE = 1 - Math.pow(1 - boom, 2)
-        /* section ค้าง: ไทล์ลงช่องหลังระเบิด · ท้ายบทไทล์ออก (ex) */
-        const land = smooth(clamp01((boom - 0.12) / 0.62))
+        /* ท้ายบทการ์ดออก (ex) */
         const ex = smooth(clamp01((post - WORKS_HOLD[1]) / (WORKS_HOLD[2] - WORKS_HOLD[1])))
         worksUI.hold = post > WORKS_HOLD[0] && post < WORKS_HOLD[1] ? 1 : 0
         if (!worksUI.hold) worksUI.open = -1
-        const wk = smooth(clamp01((k - 0.08) / 0.25)) * (1 - ex)
+        /* กองงาน + ป้ายมาพร้อมการ์ด (บท Design) — ไม่ใช่โผล่ตอนลอย */
+        const wk = a * (1 - ex)
         wkv = wk
-        const roll = (b.code - 0.9) * 2.4 + b.ship * 1.2
+        /* ฝาโฟลเดอร์จางตอนวิดเจ็ตเริ่มขยายเต็มจอ (ก่อนแจกการ์ด) — ไม่โตเป็นก้อนฟ้าบังจอ */
+        works.folder.uniforms.uOpacity.value = wk * (1 - smooth(clamp01((k - 0.1) / 0.3)))
+        if (folderRef.current) folderRef.current.visible = works.folder.uniforms.uOpacity.value > 0.002
         /* ขนาดในพิกัดการ์ด: หาร grow ออก ให้แถวไม่โตตามการ์ด */
         let wgScale = 1
         const wg = worksRef.current
@@ -971,7 +1091,11 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
          * WORKS_CARD = ขนาดโลกของการ์ดตอนเป็นหนังสือ (จอสูง 900)
          */
         const r = (wgScale / (WORKS_CARD * (H / 900))) / (1 + zm * 0.35)
-        const cs = 1 / Math.pow(1 + Math.pow(r, 4), 0.25)
+        /*
+         * ขนาดคงที่เทียบการ์ดตอนอยู่ในวิดเจ็ต (cs = 1 — หน้าบนสุดตรงกระเบื้องที่บล็อกลง) → ค่อยเป็นโหมดคุมขนาดบนจอตอนลอย
+         * (ขนาดโลกของเครื่องเปลี่ยนตามบท — ใช้คุมตั้งแต่แรก กองจะโต/หดเองระหว่างบท)
+         */
+        const cs = lerp(1, 1 / Math.pow(1 + Math.pow(r, 4), 0.25), smooth(clamp01(k / 0.45)))
         /* จอ → พิกัดกลุ่มอัลบั้ม (ระนาบ z ที่ให้) · หันหน้าเข้ากล้อง (billboard) — ใช้วางไทล์ลงช่อง/เปิดเต็มจอ */
         if (wg) {
           LM3.copy(wg.matrixWorld).invert()
@@ -986,88 +1110,82 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
         toLocal(W / 2, H / 2, 0, LA)
         toLocal(W / 2 + 100, H / 2, 0, LB)
         const upp = LA.distanceTo(LB) / 100
+        /* ระยะกล้องถึงระนาบเล่ม (พิกัดกลุ่ม) */
+        const camZ = RO.copy(camera.position).applyMatrix4(LM3).z
         const dt = Math.min(0.1, delta)
         const openAny = tileOpenK.current.reduce((m, v) => Math.max(m, v), 0)
+        /*
+         * แถวการ์ดยืน (แบบภาพ ref): การ์ดหนามุมมนขนานกันทุกใบ เรียงลึกเข้าจอไปทางขวา — ใบใกล้สุดซ้าย ใบถัดไปเหลื่อมไปขวาและถอยหลัง
+         * ขนาดที่หด / การบังกัน / ทรงเอียง มาจาก perspective ล้วน · ทุกใบหมุนเท่ากัน (DECK_ROT) ขอบขวาถอยลึก เห็นสันหนาฝั่งซ้าย
+         * ใบใกล้สุด: กลางที่ DECK_NEAR (สัดส่วนจอ) ระยะ DECK_DIST (เท่าของระยะกล้องถึงระนาบกอง) กว้าง DECK_W ของจอ
+         */
+        const zN = camZ * (1 - DECK_DIST)
+        toLocal(W * DECK_NEAR[0], H * DECK_NEAR[1], zN, RB)
+        toLocal(W / 2, H / 2, zN, LA)
+        toLocal(W / 2 + 100, H / 2, zN, LB)
+        const dSc = (W * DECK_W * LA.distanceTo(LB)) / 100 / CW
+        DECK_Q.copy(BQ).multiply(QZ.setFromEuler(LE.set(DECK_ROT[0], DECK_ROT[1], DECK_ROT[2])))
+        RD.set(DECK_STEP[0], 0, -DECK_STEP[1]).applyQuaternion(DECK_Q)
+        RN.set(0, 0, 1).applyQuaternion(DECK_Q)
+        /* เปิด (คลิก): กลางจอ กว้าง 92% สูง 88% หันตรง */
+        const tw = W * 0.92
+        const tho = H * 0.88
+        toLocal(W / 2, H / 2, 1.2, PC)
+        /* แจกการ์ด: กองในวิดเจ็ต → ช่องในแถว ทีละใบ (ใบใกล้ออกก่อน) */
+        const deal = clamp01((post - DEAL[0]) / DEAL[1])
         coverRefs.current.forEach((cm, j) => {
           if (!cm) return
           const [sx0, sy0] = STACK[j % STACK.length]
-          /*
-           * หนังสือคลี่หน้า: ทุกใบยึดสันเดียวกัน (ด้านยาวของการ์ด ที่กลางแถว) แล้วพับรอบสันไปคนละมุม
-           * มุม 0 = ราบหันหน้าเข้าหาคนดู ขวาของสัน · 90° = ชี้เข้ากล้อง (เห็นแต่สัน) · 180° = ราบไปทางซ้าย
-           * กองในวิดเจ็ต = หนังสือปิด (ทุกใบมุม 0) → คลี่ออกตามสกรอลล์ (มุมเป้า × sp) · roll = พลิกต่อช้า ๆ
-           */
           const f = j / (FAN_N - 1)
-          /*
-           * พลิกไล่ทีละหน้า (หน้าที่ไปไกลสุดออกตัวก่อน) ease เข้า-ออก · มุมไล่ลำดับเสมอ ไม่มีหน้าไหนแซงกัน = ไม่ทับมั่ว
-           * ระหว่างพลิก ปลายกระดาษถ่วงตามหลังโคน (โค้ง) แล้วคลายเกือบตรงตอนวาง · ระเบิด = กระดาษสะบัด
-           */
-          const pj = clamp01((spRaw - (1 - f) * FAN_STAGGER) / (1 - FAN_STAGGER))
+          const pj = clamp01((deal - f * DEAL_STAG) / (1 - DEAL_STAG))
           const pe = pj < 0.5 ? 4 * pj * pj * pj : 1 - Math.pow(-2 * pj + 2, 3) / 2
-          /*
-           * ระเบิดแบบเป็นระเบียบ: พัดกางกว้างขึ้นรอบกลางเล่ม (มุมยังไล่ลำดับ) แล้วทุกหน้าพุ่งออกตามทิศที่ตัวเองชี้
-           * — หน้าแต่ละใบชี้คนละมุม จึงแยกห่างกันเสมอ ไม่สวนกัน · ไม่สุ่มมุม/โค้ง/หมุนต่อใบ
-           */
-          const th0 = pe * (FAN_OPEN[0] + (FAN_OPEN[1] - FAN_OPEN[0]) * f) + sp * roll * 0.15
-          const th = Math.PI / 2 + (th0 - Math.PI / 2) * (1 + boomE * 0.35)
-          /* ปลายกระดาษสะบัดตามหลังทิศพุ่ง (โค้งทางเดียวกันทุกใบ ขนาดตามระยะห่างจากกลาง) */
-          const curl = -Math.sin(Math.PI * pj) * 0.95 - 0.12 * sp * Math.cos(th) - boomE * 0.5 * Math.cos(th)
-          const tz = FAN_TILT * tk
-          /* สันหนังสือ: ปิด = สันอยู่ซ้ายของหน้า (หน้าอยู่กลาง) → เปิด = สันกลางจอ · หน้าเหลื่อมกันนิดตามความหนาสัน */
-          const ax0 = -CW * 0.5 * cs * (1 - sp) + (f - 0.5) * 2.5 * cs * sp
-          const ay0 = (sy0 - 12) * cs * (1 - sp)
-          const az0 = (j < STACK.length ? j * 0.6 : (j % STACK.length) * 0.6 - 0.3) * cs * (1 - sp)
-          /* ระเบิด: ออกตามทิศหน้า + กระจายตามแนวสัน + พุ่งเข้ากล้อง */
-          const out = boomE * 110 * cs
-          const ax = ax0 + Math.cos(th) * out + sx0 * cs
-          const ay = ay0
-          cm.position.set(Math.cos(tz) * ax - Math.sin(tz) * ay, Math.sin(tz) * ax + Math.cos(tz) * ay, az0 + Math.sin(th) * out + boomE * 40 * cs)
-          cm.rotation.set(0, 0, tz, 'ZYX')
-          cm.scale.setScalar(cs)
+          /* กองในวิดเจ็ต: หน้าตรงเรียบ ซ้อนเหลื่อมลงทีละนิด (จุดกำเนิดเมช = ขอบซ้ายกลาง) */
+          STK_P.set(-CW * 0.5 * cs + sx0 * cs, (sy0 - 12 + PAPER_UP) * cs, (j < STACK.length ? j * 0.6 : (j % STACK.length) * 0.6 - 0.3) * cs)
+          const ok2 = tileOpenK.current
+          const hk2 = tileHoverK.current
+          ok2[j] += ((worksUI.open === j ? 1 : 0) - ok2[j]) * (1 - Math.exp(-dt * 7))
+          hk2[j] += ((worksUI.hover === j && worksUI.open < 0 ? 1 : 0) - hk2[j]) * (1 - Math.exp(-dt * 10))
+          const ok = smooth(ok2[j])
+          /* ช่องในแถว · hover = ยกเข้าหาคนดู · ท้ายบทไหลออกตามแนวแถวเข้าหากล้อง */
+          SLOT_P.copy(RB)
+            .addScaledVector(RD, CW * dSc * (j - 4 * ex))
+            .addScaledVector(RN, CW * dSc * 0.14 * hk2[j])
+          SLOT_P.lerp(PC, ok)
+          SLOT_Q.copy(DECK_Q).slerp(BQ, ok)
+          const sc = lerp(dSc * (1 + hk2[j] * 0.04), (tw * upp) / CW, ok)
+          /* จุดกำเนิดเมชอยู่ที่ขอบซ้าย → เลื่อนให้กลางการ์ดอยู่ที่ช่อง */
+          SLOT_P.sub(OFF.set(CW * 0.5 * sc, 0, 0).applyQuaternion(SLOT_Q))
+          /* ระหว่างทาง: โค้งเข้าหาคนดูนิด ไม่ลากเป็นเส้นตรงทะลุใบอื่น */
+          SLOT_P.addScaledVector(RN, Math.sin(Math.PI * pe) * CW * dSc * 0.5)
+          cm.position.copy(STK_P).lerp(SLOT_P, pe)
+          cm.quaternion.identity().slerp(SLOT_Q, pe)
+          cm.scale.setScalar(lerp(cs, sc, pe))
+          /* ตัวการ์ดหนา: บางแนบกระเบื้องตอนอยู่ในกอง → หนาเต็มตอนออกแถว */
+          const body = cm.children[0]
+          if (body) body.scale.set(1, 1, lerp(0.15, 1, pe))
           const u = works.covers[j].uniforms
-          u.uTh.value = th
-          u.uCurl.value = curl
-          u.uGutter.value = sp * (1 - boomE)
-          /* ไทล์ธีมเรา (placeholder เทาบนฟ้า) — ไม่เอาสีสด/ขอบดำของภาพ ref */
+          u.uTh.value = 0
+          u.uCurl.value = 0
+          u.uGutter.value = 0
           u.uPop.value = 0
-          cm.visible = j < STACK.length || sp > 0.001
-          /*
-           * ลงช่อง (land): จากท่าระเบิด → ไทล์แบนหันหน้าเข้าหาคนดูตามช่องบนจอ (TILE_SLOTS) · hover = ยกขึ้นนิด
-           * เปิด (คลิก) = ไทล์ไหลเข้ากลางจอ ขยายเต็มจอ (รูปทรงยืดเป็นสัดส่วนจอ) · ใบอื่นหรี่ · ท้ายบทไทล์พุ่งออกนอกจอ
-           */
-          if (land > 0 && j < TILE_SLOTS.length) {
-            const ok2 = tileOpenK.current
-            const hk2 = tileHoverK.current
-            ok2[j] += ((worksUI.open === j ? 1 : 0) - ok2[j]) * (1 - Math.exp(-dt * 7))
-            hk2[j] += ((worksUI.hover === j && worksUI.open < 0 ? 1 : 0) - hk2[j]) * (1 - Math.exp(-dt * 10))
-            const ok = smooth(ok2[j])
-            const rc = slotRect(j, W, H)
-            const cx = W / 2 + (rc.cx - W / 2) * (1 + ex * 1.3)
-            const cy = H / 2 + (rc.cy - H / 2) * (1 + ex * 1.3)
-            /* เปิด: กลางจอ กว้าง 92% สูง 88% */
-            const tw = lerp(rc.w * (1 + hk2[j] * 0.06), W * 0.92, ok)
-            const ty = lerp(rc.h, H * 0.88, ok)
-            /* ช่อง 0 (ไทล์ที่ตัวละครจับ) อยู่หลังตัวละครนิด — มือจับจากด้านหน้า ไม่บังหน้า */
-            toLocal(lerp(cx, W / 2, ok), lerp(cy, H / 2, ok), (j === 0 ? -0.6 : 0) + hk2[j] * 0.6 + ok * 1.2, SLOT_P)
-            const sc = (tw * upp) / CW
-            SLOT_Q.copy(BQ).multiply(QZ.setFromAxisAngle(ZAX, (-lerp(rc.rot, 0, Math.max(ok, hk2[j] * 0.5)) * Math.PI) / 180))
-            /* จุดกำเนิดเมชอยู่ที่สัน (ขอบซ้ายกลาง) → เลื่อนให้กลางไทล์อยู่ที่ช่อง */
-            SLOT_P.sub(OFF.set(CW * 0.5 * sc, 0, 0).applyQuaternion(SLOT_Q))
-            cm.position.lerp(SLOT_P, land)
-            cm.quaternion.slerp(SLOT_Q, land)
-            cm.scale.setScalar(lerp(cs, sc, land))
-            u.uTh.value = lerp(th, 0, land)
-            u.uCurl.value = lerp(curl, 0, land)
-            u.uSize.value.set(CW, lerp(CH, (CW * ty) / tw, ok))
-            u.uDim.value = 1 - 0.75 * Math.max(0, openAny - ok)
-            u.uEdge.value = Math.min(1, (rc.w / tw) * 1.2)
-          } else {
-            u.uSize.value.set(CW, CH)
-            u.uDim.value = 1
-            u.uEdge.value = 1
+          u.uShear.value = 0
+          u.uSize.value.set(CW, lerp(CH, (CW * tho) / tw, ok))
+          u.uDim.value = 1 - 0.75 * Math.max(0, openAny - ok)
+          u.uEdge.value = 1
+          /* ภาพผลงานจริงขึ้นหน้าการ์ดระหว่างออกแถว */
+          u.uReal.value = smooth(clamp01((pe - 0.2) / 0.6))
+          works.bodies[j].uniforms.uDim.value = u.uDim.value
+          /* หน้าบนสุด (j % 4 = 3) = ที่บล็อกลง — โผล่เมื่อบล็อกลงเสร็จ (ก่อนหน้านั้นคือกระเบื้องที่กำลังบิน) */
+          cm.visible = (j < STACK.length || pe > 0.001) && (j % STACK.length !== 3 || album0Landed || deal > 0.001)
+          /* กล่องบนจอของการ์ด (ให้ปุ่มกด DOM) — มุมทั้งสี่ฉายลงจอ */
+          if (pe > 0 && j < TILE_SLOTS.length) {
+            cm.updateMatrixWorld()
+            projRect(cm, camera, W, H, worksUI.rects[j] ||= { x0: 0, y0: 0, x1: 0, y1: 0 })
           }
         })
-        works.covers.forEach((m) => {
+        works.covers.forEach((m, j) => {
           m.uniforms.uOpacity.value = wkv
+          works.bodies[j].uniforms.uOpacity.value = wkv
         })
         /*
          * ตัวอักษร My Works: ป้ายในวิดเจ็ต → บินไล่ทีละตัว (โค้งขึ้นนิด หันหน้าเข้ากล้อง) ไปลงจอดตรงคำพื้นหลัง DOM
@@ -1088,8 +1206,8 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
           }
           const fl = clamp01((post - WORKS_FLY[0]) / WORKS_FLY[1])
           const hand = smooth(clamp01((post - WORKS_HAND[0]) / WORKS_HAND[1]))
-          const show = smooth(clamp01((k - 0.08) / 0.25)) * (1 - hand)
-          const n = works.letters.length
+          const show = a * (1 - hand)
+          const n = ltr.letters.length
           const ok = ly.ok && ly.ox.length === n
           let fLocal = 0
           if (ok) {
@@ -1097,12 +1215,12 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
             toLocal(ly.left + 100, ly.cy, LETTER_Z, LB)
             fLocal = (LA.distanceTo(LB) / 100) * ly.font
           }
-          works.letters.forEach((l, j) => {
+          ltr.letters.forEach((l, j) => {
             const lm = letterRefs.current[j]
             if (!lm) return
             l.mat.opacity = show
             lm.visible = show > 0.002
-            const emX = ok ? ly.ox[j] / ly.font : works.em0[j]
+            const emX = ok ? ly.ox[j] / ly.font : ltr.em0[j]
             const st = LABEL0[2]
             /* ไล่ออกตัวทีละตัว (M ก่อน) · ease เข้า-ออก */
             const q = ok ? clamp01((fl - j * LETTER_STAG) / (1 - LETTER_STAG * (n - 1))) : 0
@@ -1143,12 +1261,19 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
           const f = smooth(blockFlight(b.sv2, bj))
           /* ลงที่แล้ว = ไม่ต้องอิงแท่ง (แท่งหายไปหลังบล็อกออกหมด — เดิมกระเบื้องหายตามไปด้วย) */
           if (f >= 1) {
+            /* การ์ดฟ้า: บล็อกลงแล้วกลายเป็นหน้าบนสุดของกองงานจริง (อัลบั้ม) — ซ่อนกระเบื้อง */
+            if (i === 0) {
+              landedRef.current = true
+              tm.visible = false
+              return
+            }
             tm.visible = true
             tm.position.set(pt.t.x, pt.t.y, pc.top)
             tm.rotation.set(0, 0, 0)
             tm.scale.setScalar(1)
             return
           }
+          if (i === 0) landedRef.current = false
           tm.visible = f > 0 && barLayout.ok
           if (!tm.visible) return
           /* จุดออกตัว = ที่บล็อกอยู่จริงในแท่งตอนนี้ (ผังจอเครื่อง) → พิกัดท้องถิ่นของการ์ดที่กำลังประกอบอยู่ */
@@ -1276,6 +1401,8 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
           {i === 2 && <ResearchIsland frame={frame} top={pc.top} />}
           {i === 0 && (
             <group ref={worksRef} visible={false}>
+              {/* ฝาโฟลเดอร์: หน้ากองกระดาษ (z 2.4) หลังป้ายตัวอักษร (z 3) */}
+              <mesh ref={folderRef} geometry={works.folderGeo} material={works.folder} position={[0, 0, 2.4]} renderOrder={3.4} />
               {works.covers.map((m, j) => (
                 <mesh
                   key={j}
@@ -1286,9 +1413,11 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
                   material={m}
                   renderOrder={4}
                   frustumCulled={false}
-                />
+                >
+                  <mesh geometry={works.bodyGeo} material={works.bodies[j]} renderOrder={4} frustumCulled={false} />
+                </mesh>
               ))}
-              {works.letters.map((l, j) => (
+              {ltr.letters.map((l, j) => (
                 <mesh
                   key={`l${j}`}
                   ref={(el) => {
@@ -1355,10 +1484,6 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
         />
       ))}
     </group>
-    {/* ตัวละครห้อยดึงไทล์ใน section My Works — พิกัดโลก (ไม่ผูกกับเครื่อง) */}
-    <Suspense fallback={null}>
-      <WorksHanger />
-    </Suspense>
     </>
   )
 }

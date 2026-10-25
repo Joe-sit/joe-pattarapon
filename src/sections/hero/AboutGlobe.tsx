@@ -157,7 +157,7 @@ const ORBS = [
 
 export function AboutGlobe() {
   const { size, camera } = useThree()
-  const font = useLoader(FontLoader, '/fonts/momo-trust-sans.json')
+  const font = useLoader(FontLoader, '/fonts/open-runde/open-runde-regular.json')
   const W = size.width
   const H = size.height
   /* รัศมีตามความกว้างจอ — ขอบฟ้าโค้งกว้างแบบภาพอ้างอิง */

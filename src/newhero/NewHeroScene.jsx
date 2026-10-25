@@ -870,6 +870,7 @@ function Backdrop({ clay, clip = false }) {
       uCloud: { value: 0.9 },
       uCloudScale: { value: 2.6 },
       uCloudCut: { value: 0.52 },
+      uCloudIn: { value: 1 },
       uCloudDot: { value: 9 },
       uTime: { value: 0 },
       /* การ์ด: x, y (ล่างซ้าย), กว้าง, สูง เป็นพิกเซลบัฟเฟอร์ · รัศมีมุม (ติดลบ = ไม่ตัด) */
@@ -924,6 +925,13 @@ function Backdrop({ clay, clip = false }) {
     u.uCloud.value = t.skyCloud
     u.uCloudScale.value = t.skyCloudScale
     u.uCloudCut.value = t.skyCloudCut
+    /*
+     * เมฆงอกตอนเปิดฉาก: ฟ้าของด่านโหลด (BlobReveal) ไม่มีเมฆ ฉากจริงไหลออกจากปากบานแล้วเมฆเต็มก้อนโผล่ตามขอบรู
+     * = ภาพกระโดด · ให้เมฆโตจากแกนก้อน (จุดใหญ่สุดก่อน) หลังฉากไหลออกมาแล้ว · ไม่มีอินโทร = เต็มเลย
+     */
+    const it = introTime()
+    const ci = it < 0 ? 1 : Math.min(1, Math.max(0, (it - 0.8) / 1.6))
+    u.uCloudIn.value = ci * ci * (3 - 2 * ci)
     u.uCloudDot.value = t.skyCloudDot
     /* เมฆลอยด้วยนาฬิกาของฉาก ไม่ใช่ตามระยะเลื่อน — ฟ้าต้องมีชีวิตแม้คนดูไม่ขยับ */
     u.uTime.value = clock.elapsedTime * t.skyCloudDrift
@@ -968,6 +976,7 @@ function Backdrop({ clay, clip = false }) {
           uniform float uCloud;
           uniform float uCloudScale;
           uniform float uCloudCut;
+          uniform float uCloudIn;
           uniform float uCloudDot;
           uniform float uTime;
           uniform vec4 uClip;
@@ -1085,9 +1094,11 @@ function Backdrop({ clay, clip = false }) {
                */
               float mass = fbmN(flow * 0.3, 2);
               float n = fbmN(flow, 3) * 0.62 + mass * 0.52;
-              float dens = smoothstep(uCloudCut, uCloudCut + 0.2, n) * band;
+              /* uCloudIn < 1 = เกณฑ์สูงขึ้น เหลือแต่แกนก้อน → ก้อนบานออกหาขอบ (ดู uCloudIn ในลูปเฟรม) */
+              float cutIn = uCloudCut + (1.0 - uCloudIn) * 0.34;
+              float dens = smoothstep(cutIn, cutIn + 0.2, n) * band;
               /* รัศมีจุด: √ความหนาแน่น เพื่อให้ *พื้นที่* ของจุดโตเป็นเส้นตรงตามความหนาแน่น */
-              float rad = sqrt(dens) * 0.62;
+              float rad = sqrt(dens) * 0.62 * (0.55 + 0.45 * uCloudIn);
               vec2 cell = fract(gl_FragCoord.xy / max(2.0, uCloudDot)) - 0.5;
               float dotv = 1.0 - smoothstep(rad - 0.05, rad + 0.02, length(cell));
               /* ท้องเมฆขาวจัด ขอบเมฆอมสีฟ้าของฟ้าเอง — ไม่ใช่ขาวเท่ากันทั้งก้อน */

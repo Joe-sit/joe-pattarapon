@@ -6,6 +6,7 @@ import { HeroLights } from '@/newhero/heroLights'
 import { introTime } from '@/newhero/intro'
 import { useTuner } from '@/newhero/tuner'
 import { driveHeroPointer } from '@/sections/hero/Headline3D'
+import { WarmShaders } from '@/lib/WarmShaders'
 import { heroCursor } from './heroCursor'
 import { cursorHand, cursorLead, cursorRoot, cursorShow, cursorTip, cursorWake } from './morph'
 import { cursorPress } from './press'
@@ -53,6 +54,8 @@ export function CursorGuideLayer() {
         dpr={[1, 2]}
         gl={{ alpha: true, antialias: true }}
       >
+        {/* ลูกศรซ่อนอยู่จนถึงคิวของอินโทร — ไม่อุ่นไว้ env map กับเชดเดอร์จะไปคอมไพล์ตอนมันโผล่ = ค้าง ~100ms ท้ายท่าคลี่บาน */}
+        <WarmShaders />
         {/* รูปทรงของเคอร์เซอร์มาจากไฟล์โมเดล — โหลดอยู่ก็ยังไม่มีอะไรให้โชว์ ปล่อยว่างไว้ */}
         <Suspense fallback={null}>
           <Rig />

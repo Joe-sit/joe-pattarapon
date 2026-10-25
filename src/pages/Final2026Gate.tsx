@@ -65,6 +65,14 @@ const DOTS = 3
 const DOT = 28
 const DOT_GAP = 18
 /**
+ * สีเม็ด: ดำตอนรอ → แก้วขาวตอนคลี่ — บานดำทึบที่คลี่เต็มฟ้าหนักเกินไป จึงดำแค่ตอนเป็นจุด
+ * สต็อปตามลำดับ: เนื้อแก้ว 3 สต็อป แล้วขอบ 2 สต็อป · [r,g,b,opacity]
+ */
+const GLASS_DARK = [[58, 58, 62, 1], [21, 21, 23, 1], [5, 5, 6, 1], [255, 255, 255, 0.35], [0, 0, 0, 0.6]]
+const GLASS_LIGHT = [[255, 255, 255, 1], [238, 243, 249, 1], [207, 220, 238, 1], [255, 255, 255, 1], [143, 166, 198, 0.7]]
+/** สีกลับเป็นแก้วขาวภายในเท่านี้ของ MORPH แรก (≈0.3s) */
+const GLASS_TURN = 0.19
+/**
  * พื้นของด่าน = **ขาว** แล้วค่อยกลายเป็นท้องฟ้าของ hero
  *
  * ฟ้าของฉากคิดต่อพิกเซลในเชดเดอร์ (ดู Backdrop ใน NewHeroScene) เอามาทำซ้ำใน CSS ตรง ๆ
@@ -184,6 +192,8 @@ export function Final2026Gate() {
   /** เม็ดแก้ว — ทรงเดียวกับรูบนม่าน วาดทับรูให้เห็นเป็นแก้วใสตอนรอ แล้วละลายเผยฉากจริงตอนคลี่ */
   const glass = useRef<(SVGPathElement | null)[]>([])
   const glassSvg = useRef<SVGSVGElement>(null)
+  /** สต็อปสีของเม็ด (ลำดับเดียวกับ GLASS_DARK) — ไล่ดำ → ขาวตอนเริ่มคลี่ */
+  const stops = useRef<(SVGStopElement | null)[]>([])
   /** รูใสของแก้วแต่ละเม็ด (วงกลมขอบนุ่มในหน้ากาก) — แก้วละลายจากกลางบานออกไปหาขอบ ไม่จางทั้งแผ่น */
   const iris = useRef<(SVGCircleElement | null)[]>([])
   /**
@@ -352,15 +362,53 @@ export function Final2026Gate() {
       }
       let reach = 0
       for (const q of pts) reach = Math.max(reach, Math.hypot(q.x - cx, q.y - cy))
+      const r = inOut((u - 0.8) / 0.2) * reach * 1.45
+      /*
+       * หน้ากากผูกกับเม็ดเฉพาะตอนละลายจริง และกรอบหน้ากากแคบแค่รอบบาน — หน้ากากเต็มจอสามใบ
+       * แรสเตอร์ใหม่ทุกเฟรมตลอดท่ารอ+คลี่ วัดได้ 30fps คงที่ (ถอดหน้ากาก = 60fps)
+       */
+      const g = glass.current[i]
+      if (r <= 0) {
+        g?.removeAttribute('mask')
+        return
+      }
+      const m = c.parentElement
+      if (m) {
+        let x0 = Infinity
+        let y0 = Infinity
+        let x1 = -Infinity
+        let y1 = -Infinity
+        for (const q of pts) {
+          x0 = Math.min(x0, q.x)
+          y0 = Math.min(y0, q.y)
+          x1 = Math.max(x1, q.x)
+          y1 = Math.max(y1, q.y)
+        }
+        m.setAttribute('x', (x0 - 4).toFixed(0))
+        m.setAttribute('y', (y0 - 4).toFixed(0))
+        m.setAttribute('width', (x1 - x0 + 8).toFixed(0))
+        m.setAttribute('height', (y1 - y0 + 8).toFixed(0))
+      }
+      if (g && !g.hasAttribute('mask')) g.setAttribute('mask', `url(#v3-gate-melt-${i})`)
       c.setAttribute('cx', cx.toFixed(1))
       c.setAttribute('cy', cy.toFixed(1))
-      c.setAttribute('r', (inOut((u - 0.8) / 0.2) * reach * 1.45).toFixed(1))
+      c.setAttribute('r', r.toFixed(1))
     }
     const step = () => {
       const nowMs = performance.now()
       const now = (nowMs - t0) / 1000
       const tt = now / MORPH
       const all = clamp01(tt)
+      const turn = inOut(tt / GLASS_TURN)
+      if (tt < GLASS_TURN + 0.05) {
+        stops.current.forEach((el, k) => {
+          if (!el) return
+          const [a, b] = [GLASS_DARK[k], GLASS_LIGHT[k]]
+          const c = a.map((v, m) => v + (b[m] - v) * turn)
+          el.setAttribute('stop-color', `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`)
+          el.setAttribute('stop-opacity', c[3].toFixed(3))
+        })
+      }
 
       /**
        * พื้นขาวกลายเป็นท้องฟ้า *ให้จบก่อนกลางท่า* แล้วจึงเปิดออกตอนท้ายสั้น ๆ
@@ -559,11 +607,10 @@ export function Final2026Gate() {
         {/* ม่านเชดเดอร์ (ขาว → ฟ้า → ฉากจริง) ตัดกรอบมุมมนเดียวกับการ์ดของฉาก — อยู่ใต้เม็ดแก้ว */}
         <BlobReveal ref={blob} style={{ clipPath: 'inset(var(--v3-frame-gap) var(--v3-frame-gap) 0 round clamp(30px, 3.4vw, 56px))' }} />
       </div>
-      {/* เม็ดแก้ว — ไล่ขาวใสบนซ้ายลงฟ้าหม่นล่างขวา ขอบบนสว่าง ขอบล่างเข้ม เงานุ่มใต้เม็ด */}
+      {/* เม็ดแก้ว — ตอนรอเป็นดำ (ไล่ดำเทาบนซ้ายลงดำสนิท) พอคลี่ไล่กลับเป็นแก้วขาวใส ขอบบนสว่าง ไม่มีเงา */}
       <svg
         ref={glassSvg}
         className="absolute inset-0 h-full w-full"
-        style={{ filter: 'drop-shadow(0 6px 10px rgba(29, 70, 140, 0.16))' }}
         aria-hidden
       >
         <defs>
@@ -572,13 +619,13 @@ export function Final2026Gate() {
             จะทะลุขึ้นมาเป็นภาพซ้อนเหลื่อม ๆ ในเม็ดที่กำลังคลี่ — แก้วเปิดด้วยการละลายจากกลาง (ดู melt) แทน
           */}
           <linearGradient id="v3-gate-glass" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#ffffff" />
-            <stop offset="0.55" stopColor="#eef3f9" />
-            <stop offset="1" stopColor="#cfdcee" />
+            <stop ref={(n) => { stops.current[0] = n }} offset="0" stopColor="#3a3a3e" />
+            <stop ref={(n) => { stops.current[1] = n }} offset="0.55" stopColor="#151517" />
+            <stop ref={(n) => { stops.current[2] = n }} offset="1" stopColor="#050506" />
           </linearGradient>
           <linearGradient id="v3-gate-rim" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#ffffff" stopOpacity="1" />
-            <stop offset="1" stopColor="#8fa6c6" stopOpacity="0.7" />
+            <stop ref={(n) => { stops.current[3] = n }} offset="0" stopColor="#ffffff" stopOpacity="0.35" />
+            <stop ref={(n) => { stops.current[4] = n }} offset="1" stopColor="#000000" stopOpacity="0.6" />
           </linearGradient>
           {/* รูใสขอบนุ่ม: กลางดำ (ซ่อนแก้ว) ไล่เป็นขาวที่ขอบวง */}
           <radialGradient id="v3-gate-iris">
@@ -606,7 +653,6 @@ export function Final2026Gate() {
               glass.current[i] = n
             }}
             d=""
-            mask={`url(#v3-gate-melt-${i})`}
             fill="url(#v3-gate-glass)"
             stroke="url(#v3-gate-rim)"
             strokeWidth={1.2}

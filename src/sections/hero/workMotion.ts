@@ -217,9 +217,18 @@ export const worksWordLayout = { ok: false, left: 0, cy: 0, font: 0, ox: [] as n
 /** ช่วงตัวอักษรบิน (worksPost): เริ่ม · ยาว · ส่งต่อให้คำ DOM (เริ่ม · ยาว) — หลังวิดเจ็ตฟ้าจางหมด */
 export const WORKS_FLY = [-0.2, 0.3] as const
 export const WORKS_HAND = [0.24, 0.08] as const
-export const WORKS_TEXT = 'My Works'
+export const WORKS_TEXT = 'Selected Work'
+/** ฟอนต์คำใหญ่ของเรื่อง (Research/Design/Code/Selected Work) — คำ DOM กับตัวอักษร 3D ที่บินมาต้องใช้ชุดเดียวกัน */
+export const STORY_FONT = "'Open Runde', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif"
 /** ระเบิดของเล่มงาน (worksPost): เริ่ม · ยาว — เล่มกระเด็น (BenchScreen) + แสงพุ่ง/พื้นเหลือง (WorkStory) */
 export const WORKS_BOOM = [0.52, 0.36] as const
+/**
+ * เคอร์เซอร์ + ตัวละครโผล่จากแสงตรงสันหนังสือ (worksPost): เริ่ม · ยาว — แสงเรืองขึ้นก่อนหน้านี้ (BenchScreen WORKS_GLOW)
+ * แล้วลอยโค้งไปค้างจุดห้อย (WORKS_HANG — สัดส่วนจอ: มือที่จับหางเคอร์เซอร์) ก่อนไทล์ระเบิด
+ */
+export const WORKS_EMERGE = [0.3, 0.3] as const
+export const WORKS_GLOW = [0.16, 0.2, 0.52, 0.22] as const
+export const WORKS_HANG = [0.78, 0.38] as const
 /** worksPost แบบหน่วงแล้ว (BenchScreen ตั้งทุกเฟรม) — คำ DOM ใช้ค่าเดียวกัน ส่งต่อตรงจังหวะตัวอักษร 3D */
 export const worksPostSm = { v: -9 }
 /**
@@ -227,20 +236,14 @@ export const worksPostSm = { v: -9 }
  * เว้นกลางให้ตัวละคร) — กลางไทล์ x, y (สัดส่วนจอ) · กว้าง (สัดส่วนด้านสั้นจอ) · เอียง (องศา) · ช่อง 0 = ไทล์ที่ตัวละครห้อยดึง
  */
 export const TILE_SLOTS: readonly (readonly [number, number, number, number])[] = [
-  /* ไทล์ที่ตัวละครห้อย — กลางจอ เหนือคำ My Works */
-  [0.5, 0.14, 0.14, -6],
-  /* ใหญ่ ล้นมุมทแยงกัน (ซ้ายบน · ขวาล่าง) */
-  [0.05, 0.1, 0.36, 8],
-  [0.95, 0.92, 0.38, -8],
-  /* กลาง มุมที่เหลือ (ขวาบน · ซ้ายล่าง) */
-  [0.88, 0.2, 0.22, 10],
-  [0.11, 0.86, 0.24, -10],
-  /* เล็ก ลอยรอบ ๆ เว้นตัวคำ */
-  [0.07, 0.5, 0.12, -14],
-  [0.93, 0.55, 0.13, 12],
-  [0.36, 0.9, 0.11, 6],
-  [0.68, 0.07, 0.1, -10],
-  [0.65, 0.88, 0.12, -4],
+  /* แถวทแยงขึ้นขวา ใหญ่ขึ้นทีละใบ (แบบภาพ ref ปกรายงาน) — ใบท้ายล้นขอบขวา */
+  [0.1, 0.72, 0.09, 0],
+  [0.2, 0.66, 0.115, 0],
+  [0.315, 0.59, 0.14, 0],
+  [0.445, 0.51, 0.165, 0],
+  [0.59, 0.43, 0.19, 0],
+  [0.755, 0.34, 0.22, 0],
+  [0.935, 0.24, 0.25, 0],
 ]
 /** สัดส่วนไทล์งาน (กว้าง : สูง) — ตามปก showcase หน้า Fastwork (258 × 322) */
 export const TILE_ASPECT = 322 / 258
@@ -251,10 +254,10 @@ export function slotRect(i: number, vw: number, vh: number) {
   return { cx: x * vw, cy: y * vh, w: ww, h: ww * TILE_ASPECT, rot: r }
 }
 /** สถานะโต้ตอบของ section My Works — DOM (WorkStory) ตั้ง hover/open · 3D (BenchScreen) วาดตาม */
-export const worksUI = { hover: -1, open: -1, hold: 0 }
+export const worksUI = { hover: -1, open: -1, hold: 0, rects: [] as { x0: number; y0: number; x1: number; y1: number }[] }
 export const worksPost = (b: { code: number; works: number }) => (b.code - 0.86) * BEAT.code[1] + b.works * BEAT.works[1]
 /** ช่วงค้างของ section My Works (worksPost): เริ่มค้าง (ไทล์ลงที่ครบ) · เริ่มออก · จบ (= ต้น Ship) */
-export const WORKS_HOLD = [0.9, 2.45, (1 - 0.86) * BEAT.code[1] + BEAT.works[1]] as const
+export const WORKS_HOLD = [0.9, 2.3, 2.85] as const
 
 /**
  * ตำแหน่งบล็อกในแท่งแก้วของ island ในพิกัดผังจอเครื่อง (หน่วยผัง · 4 ก้อน × xyz) — ฟองเขียนทุกเฟรม (./BubbleTraveler)

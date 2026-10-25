@@ -30,6 +30,8 @@ export const FINAL_ASSETS: readonly string[] = [
   '/models/cursor-3d.glb',
   /* ฟอนต์ที่หัวเรื่องสามมิติปั้นเป็นทรง — ไม่ใช่ฟอนต์ของหน้า (ดู sections/hero/Headline3D) */
   '/fonts/momo-trust-display.json',
+  /* ตัวหนังสือ 3D ในฟอง/วิดเจ็ต (Open Runde — ดู sections/hero/BubbleTraveler) */
+  '/fonts/open-runde/open-runde-regular.json',
   /* งานลายเส้นในจอแรก โหลดด้วย SVGLoader แล้วอัดเป็นทรง */
   heroLife,
   heroBubble,

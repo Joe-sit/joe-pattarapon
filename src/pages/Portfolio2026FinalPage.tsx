@@ -15,7 +15,6 @@ import { SkyStory } from '@/sections/skystory/SkyStory'
 import { WhatIDoCard } from '@/sections/whatidocard/WhatIDoCard'
 
 import { CloudWipe, WIPE_FULL } from '@/components/CloudWipe'
-import { AnchorNav } from '@/components/AnchorNav'
 import { CursorGuideLayer } from '@/cursorguide/CursorGuideLayer'
 import { Final2026Gate } from './Final2026Gate'
 import { cursorShow, cursorWake } from '@/cursorguide/morph'
@@ -178,25 +177,39 @@ function TopBar() {
             <li>
               {NAV_L.map((n, i) => (
                 <a key={n.label} href={n.href} className="v3-nav-link v3-nav-enter" style={{ '--d': NAV_L.length - i } as CSSProperties}>
-                  {n.label}
+                  <NavFlip label={n.label} />
                 </a>
               ))}
             </li>
             <li>
               {NAV_R.map((n, i) => (
                 <a key={n.label} href={n.href} className="v3-nav-link v3-nav-enter" style={{ '--d': i + 1 } as CSSProperties}>
-                  {n.label}
+                  <NavFlip label={n.label} />
                 </a>
               ))}
             </li>
           </ul>
-          <a href={SITE.resumeUrl} target="_blank" rel="noreferrer" className="v3-nav-cta v3-nav-side v3-nav-enter" style={{ '--d': 3 } as CSSProperties}>
-            <span className="v3-nav-cta-in">
-              <Chevron />
+          {/*
+           * ปุ่ม Resume (ref aardvarkbookclub.com .button-alt): สองแผ่น ข้อความ + ลูกศร — ชี้แล้วเอียงสวนกันแล้วดีดกลับ
+           * พื้นพองนิด ตัวอักษรยุบเป็นคลื่นซ้ายไปขวา · ดู .v3-cta-* ใน portfolio2026final.css
+           */}
+          <a href={SITE.resumeUrl} target="_blank" rel="noreferrer" aria-label="Resume" className="v3-nav-cta v3-nav-side v3-nav-enter" style={{ '--d': 3 } as CSSProperties}>
+            <span className="v3-cta-pill v3-cta-pill-text">
+              <span className="v3-cta-bg" />
+              <span className="v3-cta-label" aria-hidden>
+                {[...'Resume'].map((ch, i) => (
+                  <span key={i} className="v3-cta-ch" style={{ '--i': i } as CSSProperties}>
+                    {ch}
+                  </span>
+                ))}
+              </span>
             </span>
-            <span className="v3-nav-cta-text">Resume</span>
-            <span className="v3-nav-cta-out">
-              <Chevron />
+            <span className="v3-cta-pill v3-cta-pill-icon" aria-hidden>
+              <span className="v3-cta-bg" />
+              {/* ลูกศรเต็ม (→) แบบตั๋วต้นแบบ */}
+              <svg viewBox="0 0 14 12" className="size-[14px]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 6h11M7.5 1.5 12 6l-4.5 4.5" />
+              </svg>
             </span>
           </a>
         </div>
@@ -251,6 +264,27 @@ function TopBar() {
         </div>
       </aside>
     </>
+  )
+}
+
+/**
+ * ป้ายลิงก์ nav แบบพลิกม้วน (ref eduardbodak.com — .nav-button): สองชั้นซ้อนในมุมมอง 3D
+ *   ปกติ: ป้ายเดิม · ชี้: ป้ายเดิมพลิกหงายถอยขึ้นไป ชั้นใหม่ (แผ่นพื้นมน + ป้าย) ม้วนขึ้นมาจากด้านล่าง
+ *   บนชั้นใหม่มีป้ายสีเน้นทับ แล้วเช็ดหายจากบนลงล่าง (หน่วงนิด) เผยสีปกติ — ดู .v3-nf-* ใน portfolio2026final.css
+ * ชั้นที่ม้วนขึ้นมาเป็นของตกแต่ง (aria-hidden) — โปรแกรมอ่านจอได้ยินป้ายครั้งเดียว
+ */
+function NavFlip({ label }: { label: string }) {
+  return (
+    <span className="v3-nf">
+      <span className="v3-nf-default">
+        <span className="v3-nf-text">{label}</span>
+      </span>
+      <span className="v3-nf-hover" aria-hidden>
+        <span className="v3-nf-bg" />
+        <span className="v3-nf-text">{label}</span>
+        <span className="v3-nf-text v3-nf-accent">{label}</span>
+      </span>
+    </span>
   )
 }
 
@@ -781,8 +815,8 @@ export function Portfolio2026FinalPage() {
           <NewHeroScene className="absolute inset-x-0 top-0 h-[100svh]" />
         </Suspense>
       </div>
-      {/* แผงจูนของฉาก — dev เท่านั้น เหมือน /new-hero (ดู newhero/CameraTuner) */}
-      {import.meta.env.DEV && (
+      {/* แผงจูนของฉาก — dev เท่านั้น และซ่อนเป็นค่าเริ่มต้น: เปิดด้วย ?tune ท้าย URL (ดู newhero/CameraTuner) */}
+      {import.meta.env.DEV && new URLSearchParams(window.location.search).has('tune') && (
         <Suspense fallback={null}>
           <CameraTuner />
         </Suspense>
@@ -804,12 +838,7 @@ export function Portfolio2026FinalPage() {
       <WorkStory />
 
       <TopBar />
-      {/* ราวจุดนำสายตา — ตัวเดียวกับที่ใช้ในเวอร์ชัน Vue (branch `2026`)
-          ในแบบมีทุกจอยกเว้นจอแรก จึงจางหายตอนอยู่ที่ hero */}
-      <AnchorNav
-        sections={SECTION_LINKS}
-        className={onHero ? 'pointer-events-none opacity-0' : undefined}
-      />
+      {/* ราวจุดนำสายตา (AnchorNav แบบ atlassian) ถอดออกจากหน้านี้ — เก็บไว้ใช้ในหน้ารายละเอียดงาน */}
 
       {/* ── จอ 1: หัวเรื่อง ──────────────────────────────────────────────
           โปร่งใส ไม่มีพื้นของตัวเอง — ฉากที่ตรึงไว้ข้างบนคือพื้นของจอนี้ จอแรกจึงไม่มีขอบ

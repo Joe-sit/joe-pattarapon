@@ -15,7 +15,7 @@ import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
  */
 
 export const DESK = { w: 760, h: 475, r: 28, depth: 22, color: '#c592f2' }
-const FONT = '/fonts/momo-trust-sans.json'
+const FONT = '/fonts/open-runde/open-runde-regular.json'
 /** TTFLoader ขยายพิกัดฟอนต์ 1.389 เท่า (ดู ServiceTrack) */
 const FONT_K = 0.72
 /** ระยะยกต่อชั้นตอนแยกชั้นเต็ม */

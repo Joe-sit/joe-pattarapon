@@ -1,3 +1,36 @@
+/*
+ * Open Runde (github.com/lauridskern/open-runde — Inter ขอบมน, OFL · public/fonts/open-runde/OFL.txt)
+ * ฟอนต์หลักของหน้า — สี่น้ำหนักจริง 400/500/600/700 (เกินกว่านั้นเบราว์เซอร์ใช้ 700)
+ */
+@font-face {
+  font-family: 'Open Runde';
+  src: url('/fonts/open-runde/OpenRunde-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Open Runde';
+  src: url('/fonts/open-runde/OpenRunde-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Open Runde';
+  src: url('/fonts/open-runde/OpenRunde-Semibold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Open Runde';
+  src: url('/fonts/open-runde/OpenRunde-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ── /2026-final ───────────────────────────────────────────────────────────
    สีและค่าคงที่ของหน้านี้ ถอดจากไฟล์ Figma (BMS Design System, node 12716:2552)
 
@@ -43,10 +76,10 @@
   --v3-grey: #d9d9d9;
 
   /* ฟอนต์ของแบบ โหลดจาก Google Fonts ที่ index.html
-     Display มีน้ำหนักเดียวคือ 400 — อย่าสั่ง font-weight อย่างอื่นกับหัวเรื่อง มันจะได้ตัวหนา
-     ปลอมที่เบราว์เซอร์วาดเอง ส่วน Sans มีจริง 300-700 */
-  --v3-display: 'Momo Trust Display', 'Mona Sans', system-ui, sans-serif;
-  --v3-body: 'Momo Trust Sans', 'Mona Sans', system-ui, sans-serif;
+     ทั้งหัวเรื่องและเนื้อความเป็น Open Runde (400–700) — เดิม Momo Trust Display/Sans
+     (หัวเรื่อง 3D ของจอแรกยังเป็น typeface JSON ของ Momo — ดู sections/hero/Headline3D) */
+  --v3-display: 'Open Runde', 'Mona Sans', system-ui, sans-serif;
+  --v3-body: 'Open Runde', 'Mona Sans', system-ui, sans-serif;
 
   background: var(--v3-shell);
   color: var(--v3-ink);
@@ -85,6 +118,8 @@
 /* ในแบบเนื้อหาชิดขอบซ้ายที่ 64px เท่ากับตำแหน่งราวเดิม — ขยับเข้ามาไม่ให้ทับกระเบื้อง */
 .v3 .anchor-nav {
   left: 24px;
+  /* เหนือชั้นฉากเรื่องเต็มจอ (WorkStory/BubbleTraveler z 51–55) — ไม่งั้นราวจางใต้เมฆ */
+  z-index: 56;
 }
 
 /**
@@ -524,8 +559,75 @@
     color 0.3s cubic-bezier(1, 0, 1, 0.6),
     opacity 0.3s var(--nav-ease);
 }
-.v3-nav-link:hover {
-  opacity: 0.6;
+/*
+ * ป้ายพลิกม้วน (NavFlip) — ref eduardbodak.com .nav-button: ปกติพลิกหงายถอยขึ้น · ชั้น hover ม้วนขึ้นจากล่าง
+ * ป้ายสีเน้นบนชั้น hover เช็ดหายจากบนลงล่าง หน่วง 0.115s · ทุกอย่าง 0.4s ease เดียวกับต้นแบบ
+ */
+.v3-nf {
+  --nf-ease: cubic-bezier(0.5, 0.6, 0, 1);
+  display: grid;
+  perspective: 25rem;
+  transform-style: preserve-3d;
+}
+.v3-nf-default,
+.v3-nf-hover {
+  grid-area: 1 / 1;
+  display: grid;
+  pointer-events: none;
+  transition:
+    translate 0.4s var(--nf-ease),
+    rotate 0.4s var(--nf-ease),
+    opacity 0.25s var(--nf-ease);
+}
+.v3-nf-default {
+  transform-origin: center bottom;
+}
+.v3-nf-hover {
+  backface-visibility: hidden;
+  translate: 0 100% -12.5rem;
+  rotate: x -120deg;
+  transform-origin: center center;
+}
+.v3-nf-text {
+  grid-area: 1 / 1;
+  z-index: 1;
+  padding: 0.3rem 0.45rem 0.35rem;
+}
+.v3-nf-bg {
+  grid-area: 1 / 1;
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--nav-text) 16%, transparent);
+}
+.v3-nf-accent {
+  z-index: 2;
+  color: var(--v3-orange);
+  clip-path: inset(0);
+  transition: clip-path 0.4s var(--nf-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .v3-nav-link:is(:hover, :focus-visible) .v3-nf-default {
+    translate: 0 -35% -7.5rem;
+    rotate: x -54deg;
+    /* พลิกหงายแล้วเหลือเป็นแผ่นบางขีดผ่านป้ายใหม่ — จางหายระหว่างพลิก */
+    opacity: 0;
+    transition-delay: 0.05s;
+  }
+  .v3-nav-link:is(:hover, :focus-visible) .v3-nf-hover {
+    translate: 0;
+    rotate: x 0deg;
+    transition-delay: 75ms;
+  }
+  .v3-nav-link:is(:hover, :focus-visible) .v3-nf-accent {
+    clip-path: inset(0 0 100%);
+    transition-delay: 0.115s;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .v3-nf-default,
+  .v3-nf-hover,
+  .v3-nf-accent {
+    transition: none;
+  }
 }
 .v3-nav-logo {
   position: relative;
@@ -593,47 +695,92 @@
 /* Resume: ปุ่มเข้มมน 16px — ชี้แล้วลูกศรขวาวิ่งออก ลูกศรใหม่เลื่อนเข้ามาทางซ้าย ตัวหนังสือขยับตาม */
 .v3-nav-cta {
   display: flex;
-  align-items: center;
+  align-items: stretch;
+  /* ทรงตั๋ว: สองชิ้นสูงเท่ากัน มุมมนเล็ก ชิดกันสนิท — มุมมนที่ชนกันกลายเป็นรอยบาก V บน-ล่างแบบตั๋วฉีก */
+  gap: 0;
+  height: 44px;
   justify-self: end;
-  overflow: hidden;
-  padding: 15px 22px;
-  border-radius: 16px;
-  background: #1d2433;
   color: #fff;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 700;
-  line-height: 1.3;
-  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  line-height: 1;
   white-space: nowrap;
   cursor: pointer;
 }
-.v3-nav-cta-in,
-.v3-nav-cta-out {
+/*
+ * ปุ่ม Resume แบบ ref aardvarkbookclub.com (.button-alt): แผ่นข้อความ + แผ่นลูกศร แยกกัน
+ * ชี้ (เข้าแต่ละครั้งเล่นหนึ่งรอบ): สองแผ่นเอียงสวนกัน (−4° · +18°) แล้วดีดกลับ · พื้นพองนิด · ตัวอักษรยุบเป็นคลื่นไล่ซ้ายไปขวา
+ */
+.v3-cta-pill {
+  position: relative;
   display: flex;
-  width: 20px;
+  align-items: center;
+  padding: 0 26px;
+}
+.v3-cta-pill-icon {
   justify-content: center;
-  transition:
-    transform 0.5s var(--nav-ease),
-    opacity 0.5s var(--nav-ease);
+  width: 46px;
+  padding: 0;
 }
-.v3-nav-cta-in {
-  margin-left: -20px;
-  opacity: 0;
-  transform: translateX(-30px);
+.v3-cta-bg {
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  background: #1d2433;
 }
-.v3-nav-cta-text {
-  transition: transform 0.5s var(--nav-ease);
+.v3-cta-label,
+.v3-cta-pill-icon > svg {
+  position: relative;
+  z-index: 1;
 }
-.v3-nav-cta:hover .v3-nav-cta-in {
-  opacity: 1;
-  transform: translateX(10px);
+.v3-cta-ch {
+  display: inline-block;
 }
-.v3-nav-cta:hover .v3-nav-cta-text {
-  transform: translateX(20px);
+@keyframes v3-cta-tilt-text {
+  35% {
+    rotate: -4deg;
+    translate: -3px -1px;
+  }
 }
-.v3-nav-cta:hover .v3-nav-cta-out {
-  opacity: 0;
-  transform: translateX(30px);
+@keyframes v3-cta-tilt-icon {
+  35% {
+    rotate: 18deg;
+    translate: 6px -1px;
+  }
+}
+@keyframes v3-cta-pop {
+  35% {
+    scale: 1.047 1.08;
+  }
+}
+@keyframes v3-cta-ch {
+  40% {
+    translate: 0 30%;
+    scale: 0.55;
+    rotate: -14deg;
+  }
+}
+@media (hover: hover) and (pointer: fine) {
+  .v3-nav-cta:is(:hover, :focus-visible) .v3-cta-pill-text {
+    animation: v3-cta-tilt-text 0.55s cubic-bezier(0.34, 1.4, 0.5, 1);
+  }
+  .v3-nav-cta:is(:hover, :focus-visible) .v3-cta-pill-icon {
+    animation: v3-cta-tilt-icon 0.55s cubic-bezier(0.34, 1.4, 0.5, 1);
+  }
+  .v3-nav-cta:is(:hover, :focus-visible) .v3-cta-bg {
+    animation: v3-cta-pop 0.55s cubic-bezier(0.34, 1.4, 0.5, 1);
+  }
+  .v3-nav-cta:is(:hover, :focus-visible) .v3-cta-ch {
+    animation: v3-cta-ch 0.42s cubic-bezier(0.5, 0, 0.3, 1) calc(var(--i) * 28ms) both;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .v3-nav-cta .v3-cta-pill,
+  .v3-nav-cta .v3-cta-bg,
+  .v3-nav-cta .v3-cta-ch {
+    animation: none !important;
+  }
 }
 
 /*

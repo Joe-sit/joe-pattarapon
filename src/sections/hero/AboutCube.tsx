@@ -48,7 +48,7 @@ const YAX = new THREE.Vector3(0, 1, 0)
 
 export function AboutCube({ clip }: { clip: THREE.Plane }) {
   const { size, gl } = useThree()
-  const font = useLoader(FontLoader, '/fonts/momo-trust-sans.json')
+  const font = useLoader(FontLoader, '/fonts/open-runde/open-runde-regular.json')
   const root = useRef<THREE.Group>(null)
   const pieces = useRef<(THREE.Group | null)[]>([])
   const emblem = useRef<THREE.Mesh>(null)

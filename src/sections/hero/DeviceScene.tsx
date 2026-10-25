@@ -18,7 +18,7 @@ import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
  */
 
 const DIM = 0.6
-const FONT = '/fonts/momo-trust-sans.json'
+const FONT = '/fonts/open-runde/open-runde-regular.json'
 /** TTFLoader ขยายพิกัดฟอนต์ 1.389 เท่า (ดู ServiceTrack) */
 const FONT_K = 0.72
 const P = (x: number, y: number) => [x - 560, 560 - y] as const

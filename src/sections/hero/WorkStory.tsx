@@ -12,7 +12,7 @@ import { FallSky, type FallPose } from './FallSky'
 import { BEAT, endOf, storySv2 } from '@/sections/skystory/beats'
 import { AsciiClouds, type CloudBlob } from '@/components/AsciiClouds'
 import { ISLAND } from './ResearchPlatform'
-import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, slotRect, TILE_SLOTS, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, type WorkBeats } from './workMotion'
+import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, TILE_SLOTS, WORKS_BOOM, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, STORY_FONT, type WorkBeats } from './workMotion'
 
 /**
  * เครื่องแก้วเป็นโต๊ะทำงาน — เรื่องต่อจาก "Here is what I do"
@@ -437,6 +437,7 @@ export function WorkStory() {
         if (font > 0 && ww.offsetWidth > 0) {
           ly.font = font
           ly.ox = spans.map((sp) => sp.offsetLeft)
+          /* คำพื้นหลังกลางจอ (translate −50%) */
           ly.left = vw / 2 - ww.offsetWidth / 2
           ly.cy = vh / 2
           ly.ok = true
@@ -453,7 +454,12 @@ export function WorkStory() {
       const vw2 = frame.current.on ? inW * (1 - outW) : 0
       ww.style.visibility = vw2 > 0.002 ? 'visible' : 'hidden'
       ww.style.opacity = vw2.toFixed(3)
-      ww.style.transform = `translate(-50%, -50%) scale(${(1 + outW * 0.08).toFixed(4)})`
+      /*
+       * หลังการ์ดลงแถว: คำเอียงตามแนวทแยง วางใต้แถว (แบบภาพ ref) — เลื่อน/เอียง/ย่อ ตามจังหวะลงแถว
+       * (ตัวอักษร 3D ลงจอดที่ตำแหน่งกลางจอก่อน จากนั้นคำ DOM ค่อยไหลไปตำแหน่งนี้)
+       */
+      const lw = smooth((wp - WORKS_BOOM[0] - WORKS_BOOM[1] * 0.2) / (WORKS_BOOM[1] * 0.7))
+      ww.style.transform = `translate(-50%, -50%) translate(${(lw * vw * -0.08).toFixed(1)}px, ${(lw * vh * 0.33).toFixed(1)}px) rotate(${(lw * -15).toFixed(2)}deg) scale(${(1 - lw * 0.42 + outW * 0.08).toFixed(4)})`
     }
     /* ── ปุ่มไทล์งาน (DOM ทับตำแหน่งไทล์ 3D) — กดได้เฉพาะช่วงค้าง ── */
     const tb = tilesBox.current
@@ -463,10 +469,12 @@ export function WorkStory() {
       if (hold) {
         tileBtns.current.forEach((el, n) => {
           if (!el) return
-          const r = slotRect(n, vw, vh)
-          el.style.width = `${r.w.toFixed(1)}px`
-          el.style.height = `${r.h.toFixed(1)}px`
-          el.style.transform = `translate(${(r.cx - r.w / 2).toFixed(1)}px, ${(r.cy - r.h / 2).toFixed(1)}px) rotate(${r.rot}deg)`
+          /* กล่องจริงบนจอของการ์ด 3D (BenchScreen ฉายมุมการ์ดทุกเฟรม) */
+          const r = worksUI.rects[n]
+          if (!r) return
+          el.style.width = `${(r.x1 - r.x0).toFixed(1)}px`
+          el.style.height = `${(r.y1 - r.y0).toFixed(1)}px`
+          el.style.transform = `translate(${r.x0.toFixed(1)}px, ${r.y0.toFixed(1)}px)`
         })
       }
       if (!hold && openTile !== -1) setOpenTile(-1)
@@ -674,7 +682,7 @@ export function WorkStory() {
               bigWords.current[i] = el
             }}
             className="absolute top-[28%] left-1/2 text-[clamp(110px,23vw,420px)] leading-none font-bold tracking-[-0.055em] whitespace-nowrap text-white will-change-[transform,opacity,filter]"
-            style={{ visibility: 'hidden', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, "Helvetica Neue", sans-serif' }}
+            style={{ visibility: 'hidden', fontFamily: STORY_FONT }}
             aria-hidden
           >
             {sw.w}
@@ -683,8 +691,8 @@ export function WorkStory() {
         </div>
         <div
           ref={worksWord}
-          className="absolute top-1/2 left-1/2 text-[clamp(90px,17vw,320px)] leading-none font-bold tracking-[-0.055em] whitespace-nowrap text-white will-change-[transform,opacity]"
-          style={{ visibility: 'hidden', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, "Helvetica Neue", sans-serif' }}
+          className="absolute top-1/2 left-1/2 text-[clamp(60px,11vw,210px)] leading-none font-bold tracking-[-0.055em] whitespace-nowrap text-white will-change-[transform,opacity]"
+          style={{ visibility: 'hidden', fontFamily: STORY_FONT }}
         >
           {[...WORKS_TEXT].map((ch, n) => (ch === ' ' ? ' ' : <span key={n} data-l>{ch}</span>))}
         </div>
@@ -729,7 +737,7 @@ export function WorkStory() {
                 bigLines.current[i] = el
               }}
               className="absolute top-[28%] left-1/2 text-[clamp(110px,23vw,420px)] leading-none font-bold tracking-[-0.055em] whitespace-nowrap text-white will-change-[transform,opacity,filter]"
-              style={{ visibility: 'hidden', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, "Helvetica Neue", sans-serif' }}
+              style={{ visibility: 'hidden', fontFamily: STORY_FONT }}
             >
               {sw.w}
             </div>

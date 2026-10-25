@@ -22,7 +22,7 @@ import { ABOUT_STORY, CHAT_ITEM, DIAGRAM_MORPH, aboutBox, aboutLens, aboutQuad }
 
 export const FOV = 30
 
-const FONT = '/fonts/momo-trust-sans.json'
+const FONT = '/fonts/open-runde/open-runde-regular.json'
 const SKILL_OF = { 'UX/UI': 'Design', Coding: 'Coding', Research: 'Research' } as const
 const CARDS = (['UX/UI', 'Coding', 'Research'] as const).map((name) => {
   const s = SKILLS.find((k) => k.title === SKILL_OF[name])
