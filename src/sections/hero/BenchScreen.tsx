@@ -5,7 +5,7 @@ import { makeChunkyTile } from './liquidGlass'
 import { K as ISLE_K, ResearchIsland, blockFlight } from './ResearchPlatform'
 import { outlineMat, rrect } from './shapes'
 import { storySv2 } from '@/sections/skystory/beats'
-import { WORKS } from './WorksGallery'
+import { DECK_WORKS } from './WorksGallery'
 import {
   DEVICE,
   LAYOUT_H,
@@ -27,11 +27,13 @@ import {
   worksWordLayout,
   worksPostSm,
   WORKS_HOLD,
-  TILE_SLOTS,
   worksUI,
   WORKS_FLY,
   WORKS_HAND,
   WORKS_TEXT,
+  gridRect,
+  worksGridScroll,
+  TILE_SLOTS,
   STORY_FONT,
 } from './workMotion'
 
@@ -127,17 +129,34 @@ const CR = (14 * 62) / 258
  *   ตำแหน่ง = อินทิกรัลของทิศ (cos φ, sin φ) ตามความกว้าง → โค้งเป็นวงรอบจริง ความยาวกระดาษคงที่ ไม่ยืด
  * หน้า/หลังมีลาย (หลังกลับซ้ายขวา) · มุมมนตัดใน fragment · เงาร่องสัน (uGutter) · แสงตามความโค้ง
  */
+/**
+ * ตาราง offset ของเอฟเฟกต์ hover (grid distortion แบบ produx.design) — DIST_N × DIST_N ช่อง เก็บ (dx, dy) หน่วย uv ของการ์ด
+ * กรอง nearest = บิดเป็นบล็อก (ไม่ใช่วุ้นเนียน) · ใช้ร่วมทุกใบ แต่เปิด (uDistOn) เฉพาะใบที่เมาส์อยู่
+ */
+const DIST_N = 26
+const DIST_DATA = new Float32Array(DIST_N * DIST_N * 4)
+const DIST_TEX = new THREE.DataTexture(DIST_DATA, DIST_N, DIST_N, THREE.RGBAFormat, THREE.FloatType)
+DIST_TEX.magFilter = THREE.NearestFilter
+DIST_TEX.minFilter = THREE.NearestFilter
+DIST_TEX.needsUpdate = true
+/** เมาส์บนการ์ดเฟรมก่อน (uv) — หาความเร็ว */
+const DIST_PREV = { u: -1, v: -1, card: -1 }
 function makeWorkCard(map: THREE.Texture, pop: readonly [string, string]) {
   return new THREE.ShaderMaterial({
     transparent: true,
     side: THREE.DoubleSide,
     toneMapped: false,
-    uniforms: { uMap: { value: map }, uOpacity: { value: 0 }, uSize: { value: new THREE.Vector2(CW, CH) }, uTh: { value: 0 }, uCurl: { value: 0 }, uGutter: { value: 0 }, uR: { value: CR }, uPop: { value: 0 }, uDim: { value: 1 }, uEdge: { value: 1 }, uPopA: { value: new THREE.Color(pop[0]) }, uPopB: { value: new THREE.Color(pop[1]) }, uShear: { value: 0 }, uPhoto: { value: null as THREE.Texture | null }, uReal: { value: 0 }, uCrop: { value: new THREE.Vector2(1, 1) } },
+    uniforms: { uMap: { value: map }, uOpacity: { value: 0 }, uSize: { value: new THREE.Vector2(CW, CH) }, uTh: { value: 0 }, uCurl: { value: 0 }, uGutter: { value: 0 }, uR: { value: CR }, uPop: { value: 0 }, uDim: { value: 1 }, uEdge: { value: 1 }, uPopA: { value: new THREE.Color(pop[0]) }, uPopB: { value: new THREE.Color(pop[1]) }, uShear: { value: 0 }, uPhoto: { value: null as THREE.Texture | null }, uReal: { value: 0 }, uCrop: { value: new THREE.Vector2(1, 1) }, uOcc: { value: 0 }, uRim: { value: 0 }, uWaveA: { value: 0 }, uWaveK: { value: 0 }, uWavePh: { value: 0 }, uWaveE: { value: 0 }, uAngC: { value: 0 }, uDist: { value: DIST_TEX }, uDistOn: { value: 0 } },
     vertexShader: /* glsl */ `
       uniform vec2 uSize;
       uniform float uTh;
       uniform float uCurl;
       uniform float uShear;
+      uniform float uWaveA;
+      uniform float uWaveK;
+      uniform float uWavePh;
+      uniform float uWaveE;
+      uniform float uAngC;
       varying vec2 vUv;
       varying vec3 vN;
       void main() {
@@ -146,6 +165,14 @@ function makeWorkCard(map: THREE.Texture, pop: readonly [string, string]) {
         vec2 xz = abs(uCurl) < 1e-3
           ? vec2(cos(uTh), sin(uTh)) * u * uSize.x
           : vec2(sin(phi) - sin(uTh), cos(uTh) - cos(phi)) * uSize.x / uCurl;
+        /* ริบบิ้นเป็นคลื่น (แบบ jesperlandberg): ดันเข้า/ออกตามแนวรัศมีของวง — คลื่นผูกกับมุมบนวง การ์ดไหลผ่านคลื่น */
+        xz -= vec2(-sin(phi), cos(phi)) * uWaveA * sin(uWaveK * phi + uWavePh);
+        /*
+         * feedback ที่ขอบจอตอนเลื่อน (แบบ ref): ยิ่งห่างกลางจอ (มุมบนวง) ยิ่งสะบัด — คลื่นแรงขึ้น + โค้งเข้าหาคนดู
+         * uWaveE มาจากความเร็วการหมุนของวง · ใบกลางแทบนิ่ง
+         */
+        float edge = smoothstep(0.2, 1.05, abs(uAngC + phi));
+        xz += vec2(-sin(phi), cos(phi)) * uWaveE * edge * (0.7 + 0.5 * sin(uWaveK * 1.6 * phi + uWavePh * 1.3));
         vec3 p = vec3(xz.x, position.y * uSize.y, xz.y);
         /* ทรงขนานเอียง (แถว My Works แบบภาพ ref): ขอบขวายกสูงกว่าซ้าย — เฉือนแนวตั้งรอบกลางแผ่น */
         p.y += (u - 0.5) * uShear * uSize.x;
@@ -167,6 +194,10 @@ function makeWorkCard(map: THREE.Texture, pop: readonly [string, string]) {
       uniform sampler2D uPhoto;
       uniform float uReal;
       uniform vec2 uCrop;
+      uniform float uOcc;
+      uniform float uRim;
+      uniform sampler2D uDist;
+      uniform float uDistOn;
       varying vec2 vUv;
       varying vec3 vN;
       float hash(vec2 q) { return fract(sin(dot(q, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -190,9 +221,18 @@ function makeWorkCard(map: THREE.Texture, pop: readonly [string, string]) {
         col = mix(col, pop * (0.85 + 0.15 * max(dot(n, L), 0.0)), uPop);
         /* ลงแถวแล้ว = ภาพผลงานจริง (ครอปกลางเต็มใบ · uCrop = สัดส่วนการ์ดต่อภาพ) แสงเบาลง ไม่ให้ภาพหม่น */
         if (uReal > 0.001) {
-          vec3 ph = texture2D(uPhoto, 0.5 + (uv - 0.5) * uCrop).rgb * (0.88 + 0.14 * max(dot(n, L), 0.0));
+          /* hover (แบบ produx.design): ภาพบิดเป็นบล็อกพิกเซลลากตามทิศเมาส์ — ตาราง offset (DIST_TEX, nearest) แล้วค่อยคืนตัว */
+          vec2 duv = uv - texture2D(uDist, uv).rg * uDistOn;
+          vec3 ph = texture2D(uPhoto, 0.5 + (duv - 0.5) * uCrop).rgb * (0.88 + 0.14 * max(dot(n, L), 0.0));
           col = mix(col, ph, uReal);
         }
+        /*
+         * มิติของการ์ดในแถว: ไล่แสงบนหน้า (สว่างซ้ายบน → หม่นขวาล่าง) · เงาตกจากใบหน้าที่ยืนบังด้านซ้าย (uOcc)
+         * · ขอบ bevel สว่างรอบใบ (uRim) — หน้าแบนเรียบอ่านเป็นภาพแปะ ไม่ใช่แผ่นหนาที่มีแสง
+         */
+        col *= mix(1.0, mix(1.07, 0.86, clamp(vUv.x * 0.65 + (1.0 - vUv.y) * 0.35, 0.0, 1.0)), uRim);
+        col *= 1.0 - uOcc * 0.5 * pow(1.0 - smoothstep(0.0, 0.5, vUv.x), 1.6);
+        col = mix(col, vec3(1.0), uRim * 0.42 * smoothstep(-1.6, -0.3, d) * (0.55 + 0.45 * (1.0 - vUv.x)));
         /* เส้นขอบหนาคงที่บนจอ: ไทล์ขยายเต็มจอ (uEdge เล็กลง) เส้นไม่หนาตาม */
         col = mix(col, vec3(0.1, 0.09, 0.12), uPop * smoothstep(-2.4 * uEdge, -1.4 * uEdge, d));
         col += (hash(floor(gl_FragCoord.xy)) - 0.5) * (0.035 + 0.05 * uPop);
@@ -256,7 +296,7 @@ const LM3 = new THREE.Matrix4()
 /** ท่ากองงานตอนจบ Code: ระยะ z · ขนาด (โลก ที่จอสูง 900) */
 const WORKS_LOCK = [1432, 20.66] as const
 /** ขนาดโลกของการ์ดงานตอนเป็นหนังสือ (จอสูง 900) */
-const WORKS_CARD = 0.56
+const WORKS_CARD = 1.15
 /** ป้าย My Works ในวิดเจ็ต (พิกัดกลุ่มอัลบั้ม): ซ้ายคำ x · กลางบรรทัด y · ขนาดฟอนต์ */
 const LABEL0 = [-62.5, -52.4, 10.5] as const
 /** ระนาบที่ตัวอักษรลงจอด (หน้าวิดเจ็ต หลังหน้ากระดาษ) · หน่วงออกตัวต่อตัวอักษร */
@@ -270,33 +310,20 @@ const LB = new THREE.Vector3()
 const LS2 = new THREE.Vector3()
 const LE2 = new THREE.Vector3()
 const SLOT_P = new THREE.Vector3()
-const SLOT_Q = new THREE.Quaternion()
-const QZ = new THREE.Quaternion()
 const OFF = new THREE.Vector3()
-const RB = new THREE.Vector3()
-const RD = new THREE.Vector3()
+const SLOT_Q = new THREE.Quaternion()
+const UPV = new THREE.Vector3()
+/** ความเข้มของ hover รวม (ใบอื่นมืดลง) */
+const HOVER_K = { v: 0 }
+const OPEN_P = new THREE.Vector3()
 const PC = new THREE.Vector3()
-/**
- * แถวการ์ดยืน: กลางใบใกล้สุด (สัดส่วนจอ) · ระยะจากกล้อง (เท่าของระยะถึงระนาบกอง) · กว้างใบใกล้ (สัดส่วนจอ)
- * หมุนทุกใบ (rad — y บวก = ขอบขวาถอยลึก) · ก้าวระหว่างใบ [ไปขวาตามแกนการ์ด, ถอยหลังการ์ด] (เท่าของความกว้าง)
- */
-const DECK_NEAR = [0.2, 0.52] as const
-const DECK_DIST = 0.42
-const DECK_W = 0.25
-const DECK_ROT = [0.05, 0.5, -0.03] as const
-const DECK_STEP = [1.02, 0.42] as const
-/** ความหนาการ์ด (หน่วยการ์ด) */
-const CARD_T = 4.5
-const DECK_Q = new THREE.Quaternion()
-const RN = new THREE.Vector3()
-const STK_P = new THREE.Vector3()
-/** กล่องบนจอ (px) ของการ์ดหน้าแบน — มุมสี่มุมของแผ่นในพิกัดเมช (x 0..CW จากสัน · y ±CH/2) */
-function projRect(m: THREE.Object3D, cam: THREE.Camera, W: number, H: number, out: { x0: number; y0: number; x1: number; y1: number }) {
+/** กล่องบนจอ (px) ของการ์ดหน้าแบน — มุมสี่มุมของแผ่นในพิกัดเมช (x 0..CW จากขอบซ้าย · y ±h/2) */
+function projRect(m: THREE.Object3D, cam: THREE.Camera, W: number, H: number, out: { x0: number; y0: number; x1: number; y1: number }, h = CH) {
   out.x0 = Infinity
   out.y0 = Infinity
   out.x1 = -Infinity
   out.y1 = -Infinity
-  for (const [x, y] of [[0, -CH / 2], [CW, -CH / 2], [0, CH / 2], [CW, CH / 2]]) {
+  for (const [x, y] of [[0, -h / 2], [CW, -h / 2], [0, h / 2], [CW, h / 2]]) {
     PC.set(x, y, 0).applyMatrix4(m.matrixWorld).project(cam)
     const sx = (PC.x * 0.5 + 0.5) * W
     const sy = (-PC.y * 0.5 + 0.5) * H
@@ -306,6 +333,10 @@ function projRect(m: THREE.Object3D, cam: THREE.Camera, W: number, H: number, ou
     out.y1 = Math.max(out.y1, sy)
   }
 }
+/** ความหนาการ์ด (หน่วยการ์ด) */
+const CARD_T = 4.5
+const RN = new THREE.Vector3()
+const STK_P = new THREE.Vector3()
 /** ทิศระเบิดของวิดเจ็ตตอนเครื่องชน [x, y, หมุน x, หมุน y, หมุน z] (ใบ 1 = ม่วง, 2 = พีช) */
 const BURST: Record<number, readonly [number, number, number, number, number]> = {
   1: [1, 0.35, -0.6, 1, 0.5],
@@ -666,10 +697,11 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
     /* ภาพผลงานจริง (ชุดเดียวกับ WorksGallery) — ใส่หน้าการ์ดตอนลงแถว · ครอปกลางให้เต็มการ์ดทรงตั้ง */
     const loader = new THREE.TextureLoader()
     covers.forEach((m, n) => {
-      const w = WORKS[n % WORKS.length]
+      const w = DECK_WORKS[n % DECK_WORKS.length]
       const t = loader.load(w.img, (tex) => {
         const img = tex.image as { width: number; height: number }
         const ia = img.width / Math.max(1, img.height)
+        m.userData.ia = ia
         const ca = CW / CH
         m.uniforms.uCrop.value.set(ia > ca ? ca / ia : 1, ia > ca ? 1 : ia / ca)
       })
@@ -748,7 +780,34 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
           #include <colorspace_fragment>
         }`,
     })
-    return { geo, covers, bodyGeo, bodies, folderGeo, folder }
+    /*
+     * เงานุ่มหลังการ์ด: แผ่นหลังตัวการ์ด เหลื่อมขวาล่าง (แสงจากซ้ายบน) ขอบฟุ้ง — ตกลงบนใบที่ยืนถัดไปข้างหลัง
+     * ระยะในเชดเดอร์ = SDF กล่องมุมมนขนาดการ์ด (หน่วยการ์ด)
+     */
+    const shadowGeo = new THREE.PlaneGeometry(CW + 40, CH + 40)
+    shadowGeo.translate(CW / 2 + 7, -6, -CARD_T - 1.2)
+    const shadows = covers.map(
+      () =>
+        new THREE.ShaderMaterial({
+          transparent: true,
+          depthWrite: false,
+          toneMapped: false,
+          uniforms: { uOpacity: { value: 0 } },
+          vertexShader: /* glsl */ `
+            varying vec2 vP;
+            void main() { vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+          fragmentShader: /* glsl */ `
+            uniform float uOpacity;
+            varying vec2 vP;
+            void main() {
+              vec2 q = abs(vP - vec2(${(CW / 2 + 7).toFixed(1)}, -6.0)) - vec2(${(CW / 2 - CR).toFixed(2)}, ${(CH / 2 - CR).toFixed(2)});
+              float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - ${CR.toFixed(2)};
+              float a = 1.0 - smoothstep(-8.0, 16.0, d);
+              gl_FragColor = vec4(0.05, 0.12, 0.32, a * a * 0.34 * uOpacity);
+            }`,
+        }),
+    )
+    return { geo, covers, bodyGeo, bodies, folderGeo, folder, shadowGeo, shadows }
   }, [])
   useEffect(
     () => () => {
@@ -757,6 +816,8 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
       works.bodies.forEach((m) => m.dispose())
       works.folderGeo.dispose()
       works.folder.dispose()
+      works.shadowGeo.dispose()
+      works.shadows.forEach((m) => m.dispose())
       works.covers.forEach((m) => {
         m.uniforms.uMap.value.dispose()
         m.uniforms.uPhoto.value?.dispose()
@@ -827,14 +888,14 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
   const worksRef = useRef<THREE.Group>(null)
   const folderRef = useRef<THREE.Mesh>(null)
   const coverRefs = useRef<(THREE.Mesh | null)[]>([])
+  const tileOpenK = useRef<number[]>(Array(FAN_N).fill(0))
+  const tileHoverK = useRef<number[]>(Array(FAN_N).fill(0))
   const letterRefs = useRef<(THREE.Mesh | null)[]>([])
   /** ความคืบหน้าช่วง My Works แบบหน่วงแล้ว (ดู worksPost) */
   const postSm = useRef(-9)
   /** บล็อกลงการ์ดฟ้าเสร็จแล้ว (หน้าบนสุดของกองงานโผล่แทนกระเบื้อง) — อ่านเฟรมถัดไป */
   const landedRef = useRef(false)
   /** ไทล์งาน: ความคืบหน้าเปิดเต็มจอ / hover (หน่วงตามเวลา) */
-  const tileOpenK = useRef<number[]>(Array(FAN_N).fill(0))
-  const tileHoverK = useRef<number[]>(Array(FAN_N).fill(0))
   /** บท Code หน้าตรง: นิ้วแตะการ์ดทีละใบ (จุดแตะ + วงกระเพื่อม) — แอปมีชีวิต ใช้งานอยู่จริง */
   const touch = useMemo(
     () => ({
@@ -858,7 +919,7 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
   const ringRef = useRef<THREE.Mesh>(null)
   const rings = useRef<(THREE.Mesh | null)[]>([])
 
-  useFrame(({ clock, camera }, delta) => {
+  useFrame(({ clock, camera, gl }, delta) => {
     const g = root.current
     const f = frame.current
     if (!g || !f) return
@@ -1019,6 +1080,17 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
         const fade = 1 - smooth(clamp01((b.code - BLUE_FADE[0]) / BLUE_FADE[1]))
         ;(pc.mat as THREE.ShaderMaterial).uniforms.uAlpha.value = fade
         ;(pc.mat as THREE.ShaderMaterial).uniforms.uVivid.value = smooth(clamp01(k / 0.35))
+        /*
+         * portal: ตั้งแต่การ์ดฟ้าเริ่มพุ่งเข้ากล้อง หน้าการ์ดค่อย ๆ กลายเป็นหน้าต่างไปฟ้าของ section ถัดไป (liquidGlass uPortal)
+         * ฟ้าในหน้าต่างตรึงกับจอ — ต้องรู้ขนาดบัฟเฟอร์จริง (px) กับขนาดจุดครึ่งโทน (9 px CSS × dpr)
+         */
+        {
+          const um = (pc.mat as THREE.ShaderMaterial).uniforms
+          um.uPortal.value = smooth(clamp01(k / 0.16))
+          gl.getDrawingBufferSize(um.uRes.value)
+          um.uDotPx.value = 9 * gl.getPixelRatio()
+          um.uTime.value = clock.elapsedTime
+        }
         /* ช่องขาวข้างในจางออกก่อนใหญ่จนกินจอ — เหลือฟ้าล้วน */
         pc.tiles.forEach((pt) => {
           ;(pt.mat as THREE.ShaderMaterial).uniforms.uAlpha.value = (1 - smooth(clamp01((k - 0.15) / 0.25))) * fade
@@ -1054,9 +1126,6 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
         /* กองงาน + ป้ายมาพร้อมการ์ด (บท Design) — ไม่ใช่โผล่ตอนลอย */
         const wk = a * (1 - ex)
         wkv = wk
-        /* ฝาโฟลเดอร์จางตอนวิดเจ็ตเริ่มขยายเต็มจอ (ก่อนแจกการ์ด) — ไม่โตเป็นก้อนฟ้าบังจอ */
-        works.folder.uniforms.uOpacity.value = wk * (1 - smooth(clamp01((k - 0.1) / 0.3)))
-        if (folderRef.current) folderRef.current.visible = works.folder.uniforms.uOpacity.value > 0.002
         /* ขนาดในพิกัดการ์ด: หาร grow ออก ให้แถวไม่โตตามการ์ด */
         let wgScale = 1
         const wg = worksRef.current
@@ -1096,6 +1165,18 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
          * (ขนาดโลกของเครื่องเปลี่ยนตามบท — ใช้คุมตั้งแต่แรก กองจะโต/หดเองระหว่างบท)
          */
         const cs = lerp(1, 1 / Math.pow(1 + Math.pow(r, 4), 0.25), smooth(clamp01(k / 0.45)))
+        /*
+         * ฝาโฟลเดอร์ไปกับกองกระดาษเป็นชุดเดียว (สเกล cs เดียวกัน) ตลอดที่วิดเจ็ตขยายเต็มจอ — ไม่จางกลางทาง
+         * (เคยจางตอนวิดเจ็ตโต = เหลือกระดาษจิ๋วบนพื้นฟ้า ขาดช่วง) · กระดาษพุ่งออกจากปากโฟลเดอร์แล้ว ฝาค่อยจมลงและจาง
+         */
+        const fOut = smooth(clamp01((post - DEAL[0] - 0.06) / 0.34))
+        works.folder.uniforms.uOpacity.value = wk * (1 - fOut)
+        const fm = folderRef.current
+        if (fm) {
+          fm.visible = works.folder.uniforms.uOpacity.value > 0.002
+          fm.scale.setScalar(cs)
+          fm.position.set(0, -cs * 95 * fOut, 2.4 * cs)
+        }
         /* จอ → พิกัดกลุ่มอัลบั้ม (ระนาบ z ที่ให้) · หันหน้าเข้ากล้อง (billboard) — ใช้วางไทล์ลงช่อง/เปิดเต็มจอ */
         if (wg) {
           LM3.copy(wg.matrixWorld).invert()
@@ -1110,29 +1191,65 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
         toLocal(W / 2, H / 2, 0, LA)
         toLocal(W / 2 + 100, H / 2, 0, LB)
         const upp = LA.distanceTo(LB) / 100
-        /* ระยะกล้องถึงระนาบเล่ม (พิกัดกลุ่ม) */
-        const camZ = RO.copy(camera.position).applyMatrix4(LM3).z
         const dt = Math.min(0.1, delta)
         const openAny = tileOpenK.current.reduce((m, v) => Math.max(m, v), 0)
+        worksUI.panel = 0
+        /* ผังแบบ produx แต่พื้นเป็นฟ้าของเราเอง (ไม่เอาพื้นดำของ ref) */
+        worksUI.dark = 0
         /*
-         * แถวการ์ดยืน (แบบภาพ ref): การ์ดหนามุมมนขนานกันทุกใบ เรียงลึกเข้าจอไปทางขวา — ใบใกล้สุดซ้าย ใบถัดไปเหลื่อมไปขวาและถอยหลัง
-         * ขนาดที่หด / การบังกัน / ทรงเอียง มาจาก perspective ล้วน · ทุกใบหมุนเท่ากัน (DECK_ROT) ขอบขวาถอยลึก เห็นสันหนาฝั่งซ้าย
-         * ใบใกล้สุด: กลางที่ DECK_NEAR (สัดส่วนจอ) ระยะ DECK_DIST (เท่าของระยะกล้องถึงระนาบกอง) กว้าง DECK_W ของจอ
+         * Selected Work แบบ produx.design: การ์ดลงช่องของผังนิตยสาร (GRID_ITEMS) หันตรงแบนบนจอ — ทั้งก้อนเลื่อนขึ้นตามสกรอลล์
+         * ช่องบนจอ (px) → พิกัดกลุ่มบนระนาบ z 1.2 · ขนาดการ์ด = ความกว้างช่อง · สัดส่วนสูงตามช่อง
          */
-        const zN = camZ * (1 - DECK_DIST)
-        toLocal(W * DECK_NEAR[0], H * DECK_NEAR[1], zN, RB)
-        toLocal(W / 2, H / 2, zN, LA)
-        toLocal(W / 2 + 100, H / 2, zN, LB)
-        const dSc = (W * DECK_W * LA.distanceTo(LB)) / 100 / CW
-        DECK_Q.copy(BQ).multiply(QZ.setFromEuler(LE.set(DECK_ROT[0], DECK_ROT[1], DECK_ROT[2])))
-        RD.set(DECK_STEP[0], 0, -DECK_STEP[1]).applyQuaternion(DECK_Q)
-        RN.set(0, 0, 1).applyQuaternion(DECK_Q)
-        /* เปิด (คลิก): กลางจอ กว้าง 92% สูง 88% หันตรง */
+        const gOff = worksGridScroll(post, W, H)
+        UPV.set(0, 1, 0).applyQuaternion(BQ)
+        /* เปิด (คลิก): กลางจอ กว้าง 92% สูง 88% หันตรง (OPEN_P — PC ถูก projRect ใช้ทับระหว่างวนใบ) */
         const tw = W * 0.92
         const tho = H * 0.88
-        toLocal(W / 2, H / 2, 1.2, PC)
+        toLocal(W / 2, H / 2, 1.2, OPEN_P)
         /* แจกการ์ด: กองในวิดเจ็ต → ช่องในแถว ทีละใบ (ใบใกล้ออกก่อน) */
         const deal = clamp01((post - DEAL[0]) / DEAL[1])
+        /*
+         * ตาราง offset ของ hover: คืนตัวทุกเฟรม (คูณ relax) · เมาส์ขยับบนการ์ด = เติมความเร็วลงช่องรอบเมาส์ (แรงลดตามระยะ)
+         * ความเร็ววัดจากตำแหน่ง uv เฟรมก่อน — เปลี่ยนใบ = เริ่มนับใหม่ ไม่กระชาก
+         */
+        {
+          const mo = worksUI.mouse
+          const relax = Math.pow(0.9, dt * 60)
+          let live = 0
+          for (let i = 0; i < DIST_DATA.length; i += 4) {
+            DIST_DATA[i] *= relax
+            DIST_DATA[i + 1] *= relax
+            live = Math.max(live, Math.abs(DIST_DATA[i]) + Math.abs(DIST_DATA[i + 1]))
+          }
+          if (mo.card >= 0 && mo.card === DIST_PREV.card && DIST_PREV.u >= 0) {
+            const du = mo.u - DIST_PREV.u
+            const dv = mo.v - DIST_PREV.v
+            if (Math.abs(du) + Math.abs(dv) > 1e-4) {
+              const R = 0.2
+              for (let y = 0; y < DIST_N; y++)
+                for (let x = 0; x < DIST_N; x++) {
+                  const cx = (x + 0.5) / DIST_N
+                  const cy = (y + 0.5) / DIST_N
+                  const d = Math.hypot(cx - mo.u, (cy - mo.v) * (CH / CW))
+                  if (d > R) continue
+                  const pw = Math.pow(1 - d / R, 1.4) * 1.6
+                  const k = (y * DIST_N + x) * 4
+                  DIST_DATA[k] = Math.max(-0.18, Math.min(0.18, DIST_DATA[k] + du * pw))
+                  DIST_DATA[k + 1] = Math.max(-0.18, Math.min(0.18, DIST_DATA[k + 1] + dv * pw))
+                }
+              live = 1
+            }
+          }
+          DIST_PREV.u = mo.u
+          DIST_PREV.v = mo.v
+          DIST_PREV.card = mo.card
+          if (live > 1e-4) {
+            DIST_TEX.needsUpdate = true
+            invalidate()
+          }
+        }
+        /* hover: ใบอื่นมืดลง (แบบ ref) — ไล่นุ่ม */
+        HOVER_K.v += ((worksUI.hover >= 0 && worksUI.open < 0 ? 1 : 0) - HOVER_K.v) * (1 - Math.exp(-dt * 8))
         coverRefs.current.forEach((cm, j) => {
           if (!cm) return
           const [sx0, sy0] = STACK[j % STACK.length]
@@ -1146,41 +1263,63 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
           ok2[j] += ((worksUI.open === j ? 1 : 0) - ok2[j]) * (1 - Math.exp(-dt * 7))
           hk2[j] += ((worksUI.hover === j && worksUI.open < 0 ? 1 : 0) - hk2[j]) * (1 - Math.exp(-dt * 10))
           const ok = smooth(ok2[j])
-          /* ช่องในแถว · hover = ยกเข้าหาคนดู · ท้ายบทไหลออกตามแนวแถวเข้าหากล้อง */
-          SLOT_P.copy(RB)
-            .addScaledVector(RD, CW * dSc * (j - 4 * ex))
-            .addScaledVector(RN, CW * dSc * 0.14 * hk2[j])
-          SLOT_P.lerp(PC, ok)
-          SLOT_Q.copy(DECK_Q).slerp(BQ, ok)
-          const sc = lerp(dSc * (1 + hk2[j] * 0.04), (tw * upp) / CW, ok)
+          /* ช่องของผัง (px บนจอ) → กลางช่องบนระนาบกลุ่ม · เปิด (คลิก) = กลางจอ */
+          const gr = gridRect(j, W, H, gOff)
+          /* ขนาดต่อพิกเซลวัดตรงที่ช่องนี้ (ระนาบของกลุ่มเอียงนิด — ใช้ค่ากลางจอแล้วการ์ดใหญ่เกินช่อง ~10%) */
+          toLocal(gr.x, gr.y + gr.h / 2, 1.2, LA)
+          toLocal(gr.x + gr.w, gr.y + gr.h / 2, 1.2, LB)
+          SLOT_P.copy(LA).add(LB).multiplyScalar(0.5)
+          const gW = LA.distanceTo(LB)
+          SLOT_P.lerp(OPEN_P, ok)
+          SLOT_Q.copy(BQ)
+          const sc = lerp(gW / CW, (tw * upp) / CW, ok)
           /* จุดกำเนิดเมชอยู่ที่ขอบซ้าย → เลื่อนให้กลางการ์ดอยู่ที่ช่อง */
           SLOT_P.sub(OFF.set(CW * 0.5 * sc, 0, 0).applyQuaternion(SLOT_Q))
-          /* ระหว่างทาง: โค้งเข้าหาคนดูนิด ไม่ลากเป็นเส้นตรงทะลุใบอื่น */
-          SLOT_P.addScaledVector(RN, Math.sin(Math.PI * pe) * CW * dSc * 0.5)
+          /* ระหว่างทาง: โค้งเข้าหาคนดูนิด */
+          SLOT_P.addScaledVector(RN.set(0, 0, 1).applyQuaternion(BQ), Math.sin(Math.PI * pe) * CW * sc * 0.4)
           cm.position.copy(STK_P).lerp(SLOT_P, pe)
+          /* ช่วงแรกของทาง: ยกขึ้นพ้นปากโฟลเดอร์ก่อน (กระดาษถูกดึงออกจากแฟ้ม) แล้วค่อยลงแถว */
+          cm.position.addScaledVector(UPV, Math.sin(Math.PI * Math.min(1, pe * 1.8)) * (1 - pe) * cs * 70)
           cm.quaternion.identity().slerp(SLOT_Q, pe)
           cm.scale.setScalar(lerp(cs, sc, pe))
           /* ตัวการ์ดหนา: บางแนบกระเบื้องตอนอยู่ในกอง → หนาเต็มตอนออกแถว */
           const body = cm.children[0]
-          if (body) body.scale.set(1, 1, lerp(0.15, 1, pe))
+          /* ตัวการ์ดหนามีแค่ตอนเป็นกระดาษในกอง — ในผังเป็นภาพแบนแบบ ref */
+          if (body) {
+            body.visible = pe < 0.15
+            body.scale.set(1, 1, 0.15)
+          }
           const u = works.covers[j].uniforms
           u.uTh.value = 0
           u.uCurl.value = 0
+          u.uWaveA.value = 0
+          u.uWaveE.value = 0
           u.uGutter.value = 0
           u.uPop.value = 0
           u.uShear.value = 0
-          u.uSize.value.set(CW, lerp(CH, (CW * tho) / tw, ok))
-          u.uDim.value = 1 - 0.75 * Math.max(0, openAny - ok)
+          u.uR.value = lerp(CR, 0.6, pe)
+          const hNow = lerp(lerp(CH, (CW * gr.h) / gr.w, pe), (CW * tho) / tw, ok)
+          u.uSize.value.set(CW, hNow)
+          /* ครอปภาพแบบ cover ตามสัดส่วนการ์ดเฟรมนี้ */
+          const ia = (works.covers[j].userData.ia as number | undefined) ?? 16 / 9
+          const ca = CW / hNow
+          u.uCrop.value.set(ia > ca ? ca / ia : 1, ia > ca ? 1 : ia / ca)
+          u.uDim.value = (1 - 0.75 * Math.max(0, openAny - ok)) * (1 - 0.55 * HOVER_K.v * (1 - hk2[j]))
+          u.uDistOn.value = hk2[j] * (1 - ok)
           u.uEdge.value = 1
           /* ภาพผลงานจริงขึ้นหน้าการ์ดระหว่างออกแถว */
           u.uReal.value = smooth(clamp01((pe - 0.2) / 0.6))
           works.bodies[j].uniforms.uDim.value = u.uDim.value
+          /* หน้าเรียบ ไม่มีขอบสว่าง/เงาบัง/เงาตก (เวอร์ชันแถวแรก) */
+          u.uRim.value = 0
+          u.uOcc.value = 0
+          works.shadows[j].uniforms.uOpacity.value = 0
           /* หน้าบนสุด (j % 4 = 3) = ที่บล็อกลง — โผล่เมื่อบล็อกลงเสร็จ (ก่อนหน้านั้นคือกระเบื้องที่กำลังบิน) */
           cm.visible = (j < STACK.length || pe > 0.001) && (j % STACK.length !== 3 || album0Landed || deal > 0.001)
           /* กล่องบนจอของการ์ด (ให้ปุ่มกด DOM) — มุมทั้งสี่ฉายลงจอ */
           if (pe > 0 && j < TILE_SLOTS.length) {
             cm.updateMatrixWorld()
-            projRect(cm, camera, W, H, worksUI.rects[j] ||= { x0: 0, y0: 0, x1: 0, y1: 0 })
+            projRect(cm, camera, W, H, (worksUI.rects[j] ||= { x0: 0, y0: 0, x1: 0, y1: 0 }), hNow)
           }
         })
         works.covers.forEach((m, j) => {
@@ -1415,6 +1554,7 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
                   frustumCulled={false}
                 >
                   <mesh geometry={works.bodyGeo} material={works.bodies[j]} renderOrder={4} frustumCulled={false} />
+                  <mesh geometry={works.shadowGeo} material={works.shadows[j]} renderOrder={3.9} frustumCulled={false} />
                 </mesh>
               ))}
               {ltr.letters.map((l, j) => (

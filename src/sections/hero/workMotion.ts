@@ -254,7 +254,52 @@ export function slotRect(i: number, vw: number, vh: number) {
   return { cx: x * vw, cy: y * vh, w: ww, h: ww * TILE_ASPECT, rot: r }
 }
 /** สถานะโต้ตอบของ section My Works — DOM (WorkStory) ตั้ง hover/open · 3D (BenchScreen) วาดตาม */
-export const worksUI = { hover: -1, open: -1, hold: 0, rects: [] as { x0: number; y0: number; x1: number; y1: number }[] }
+/**
+ * สถานะ UI ของ section Selected Work ที่ BenchScreen (3D) เขียน แล้ว WorkStory (DOM) อ่าน
+ *   rects = กล่องบนจอของการ์ดแต่ละใบ + จุดวางชื่องาน (lx, ly — มุมซ้ายล่างด้านในการ์ด) · lk = สเกลชื่อ (px ต่อหน่วยการ์ด)
+ *   dark = ความเข้มของพื้นดำ (0..1) — คำใหญ่ DOM จางตาม
+ */
+export const worksUI = {
+  hover: -1,
+  /** เมาส์บนการ์ดที่ชี้ (uv ของหน้าการ์ด 0..1, y ขึ้น) · card = ใบ (−1 = ไม่ได้ชี้) — ขับเอฟเฟกต์บิดภาพ */
+  mouse: { u: 0, v: 0, card: -1 },
+  open: -1,
+  hold: 0,
+  dark: 0,
+  /** แผง Selected Work (DOM เต็มจอ) ขึ้นทับแล้วแค่ไหน 0..1 — การ์ด 3D จางสวน */
+  panel: 0,
+  rects: [] as { x0: number; y0: number; x1: number; y1: number; lx?: number; ly?: number; rx?: number; lk?: number; a?: number }[],
+}
+/**
+ * ผัง Selected Work แบบ produx.design — ภาพงานวางสลับแบบนิตยสาร (ใหญ่ซ้าย·เล็กขวาต่ำลง / กว้างกลาง / เล็กซ้าย·ใหญ่ขวา …)
+ * หน่วย: x, w, top เป็นสัดส่วนความกว้างจอ (vw) · a = กว้าง/สูง · ใต้ภาพมีชื่อ + คำอธิบาย (DOM) · หัวข้ออยู่บนสุด
+ * ทั้งก้อนเลื่อนขึ้นตามระยะเลื่อนช่วงค้าง (worksGridScroll) — การ์ด 3D (BenchScreen) กับข้อความ (WorkStory) ใช้ผังชุดนี้ชุดเดียว
+ */
+export const GRID_ITEMS: readonly { x: number; w: number; top: number; a: number }[] = [
+  { x: 0.07, w: 0.36, top: 0, a: 1.6 },
+  { x: 0.645, w: 0.21, top: 0.05, a: 0.82 },
+  { x: 0.36, w: 0.5, top: 0.43, a: 2.05 },
+  { x: 0.07, w: 0.2, top: 0.78, a: 1.0 },
+  { x: 0.42, w: 0.44, top: 0.74, a: 1.75 },
+  { x: 0.12, w: 0.38, top: 1.14, a: 1.5 },
+  { x: 0.6, w: 0.26, top: 1.18, a: 0.86 },
+]
+/** หัวข้อ (สัดส่วนความสูงจอจากขอบบนของก้อน) · ช่องแรกเริ่มใต้หัวข้อ (px = vh × GRID_HEAD) */
+export const GRID_HEAD = 0.34
+/** กล่องบนจอ (px) ของช่อง i เมื่อก้อนเลื่อนไป off px */
+export function gridRect(i: number, W: number, H: number, off: number) {
+  const it = GRID_ITEMS[i % GRID_ITEMS.length]
+  const w = it.w * W
+  const h = w / it.a
+  return { x: it.x * W, y: H * GRID_HEAD + it.top * W - off, w, h }
+}
+/** ระยะที่ก้อนเลื่อนขึ้น (px) ตามระยะเลื่อน: ช่วงค้างพาจากบนสุดจนช่องสุดท้ายพ้นกลางจอ · ท้ายบท (ex) เลื่อนต่อออกไป */
+export function worksGridScroll(post: number, W: number, H: number) {
+  const end = Math.max(0, ...GRID_ITEMS.map((_, i) => gridRect(i, W, H, 0)).map((r) => r.y + r.h)) + H * 0.18 - H
+  const k = Math.min(1, Math.max(0, (post - WORKS_HOLD[0]) / (WORKS_HOLD[1] - WORKS_HOLD[0])))
+  const ex = Math.min(1, Math.max(0, (post - WORKS_HOLD[1]) / (WORKS_HOLD[2] - WORKS_HOLD[1])))
+  return k * end + ex * H * 0.9
+}
 export const worksPost = (b: { code: number; works: number }) => (b.code - 0.86) * BEAT.code[1] + b.works * BEAT.works[1]
 /** ช่วงค้างของ section My Works (worksPost): เริ่มค้าง (ไทล์ลงที่ครบ) · เริ่มออก · จบ (= ต้น Ship) */
 export const WORKS_HOLD = [0.9, 2.3, 2.85] as const

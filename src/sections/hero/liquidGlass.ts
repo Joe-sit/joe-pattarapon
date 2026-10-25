@@ -215,7 +215,7 @@ export function makeChunkyTile(color: THREE.ColorRepresentation) {
   return new THREE.ShaderMaterial({
     transparent: true,
     toneMapped: false,
-    uniforms: { uTint: { value: new THREE.Color(color) }, uDark: { value: 0 }, uFill: { value: 1e5 }, uSpan: { value: 1 }, uFillTop: { value: new THREE.Color(color) }, uFillBot: { value: new THREE.Color(color) }, uAlpha: { value: 1 }, uFaceTop: { value: new THREE.Color(color) }, uFaceBot: { value: new THREE.Color(color) }, uFaceMid: { value: new THREE.Color(color) }, uMap: { value: null as THREE.Texture | null }, uHasMap: { value: 0 }, uVivid: { value: 0 }, uHalf: { value: new THREE.Vector2(1, 1) } },
+    uniforms: { uTint: { value: new THREE.Color(color) }, uDark: { value: 0 }, uFill: { value: 1e5 }, uSpan: { value: 1 }, uFillTop: { value: new THREE.Color(color) }, uFillBot: { value: new THREE.Color(color) }, uAlpha: { value: 1 }, uFaceTop: { value: new THREE.Color(color) }, uFaceBot: { value: new THREE.Color(color) }, uFaceMid: { value: new THREE.Color(color) }, uMap: { value: null as THREE.Texture | null }, uHasMap: { value: 0 }, uVivid: { value: 0 }, uHalf: { value: new THREE.Vector2(1, 1) }, uPortal: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uDotPx: { value: 9 }, uTime: { value: 0 } },
     vertexShader: /* glsl */ `
       varying vec3 vN;
       varying vec3 vO;
@@ -241,6 +241,10 @@ export function makeChunkyTile(color: THREE.ColorRepresentation) {
       uniform float uHasMap;
       uniform float uVivid;
       uniform vec2 uHalf;
+      uniform float uPortal;
+      uniform vec2 uRes;
+      uniform float uDotPx;
+      uniform float uTime;
       varying vec3 vN;
       varying vec3 vO;
       varying vec3 vP;
@@ -291,6 +295,24 @@ export function makeChunkyTile(color: THREE.ColorRepresentation) {
         a = mix(a, 1.0, under);
         float lip = exp(-(vP.y - uFill) * (vP.y - uFill) / 18.0) * step(-uSpan, uFill) * step(uFill, uSpan);
         col = mix(col, vec3(1.0), lip * 0.7 * uDark);
+        /*
+         * portal (การ์ดฟ้า = หน้าต่างไปฟ้าของ section ถัดไป): หน้าการ์ดเป็นท้องฟ้าที่ *ตรึงกับจอ* (พิกัด gl_FragCoord)
+         * ไล่สีเดียวกับ .ss-sky (#1f6fe0 → #3f8cf0 → #6aaaf5) + เมฆจุดครึ่งโทนแบบฟ้าของ hero — การ์ดขยายเท่าไร ฟ้าข้างในไม่ขยับ
+         * = มองทะลุหน้าต่าง · เต็มจอแล้วการ์ดจางออก ฟ้าจริงข้างหลังเป็นภาพเดียวกัน ไม่มีรอยต่อ · สันการ์ดยังเป็นกรอบหน้าต่าง
+         */
+        if (uPortal > 0.001) {
+          vec2 sp = gl_FragCoord.xy / uRes;
+          float ty = 1.0 - sp.y;
+          vec3 skyc = ty < 0.55 ? mix(vec3(0.0123, 0.1559, 0.7454), vec3(0.0513, 0.2623, 0.8714), ty / 0.55) : mix(vec3(0.0513, 0.2623, 0.8714), vec3(0.1441, 0.4020, 0.9131), (ty - 0.55) / 0.45);
+          vec2 cp = vec2(sp.x * uRes.x / uRes.y, sp.y) * vec2(2.4, 5.6) + vec2(uTime * 0.02, 0.0);
+          float cn = vnoise(cp) * 0.55 + vnoise(cp * 2.1 + 3.7) * 0.3 + vnoise(cp * 0.45 + 9.1) * 0.45;
+          float cd = smoothstep(0.6, 0.76, cn) * mix(0.6, 1.0, smoothstep(0.08, 0.45, abs(sp.x - 0.5)));
+          vec2 cell = fract(gl_FragCoord.xy / uDotPx) - 0.5;
+          float rad = sqrt(cd) * 0.62;
+          float dotv = 1.0 - smoothstep(rad - 0.06, rad + 0.02, length(cell));
+          skyc = mix(skyc, mix(vec3(0.68, 0.78, 0.96), vec3(0.88), cd), dotv * 0.78);
+          col = mix(col, mix(skyc, col, side), uPortal);
+        }
         a = max(a, lip * 0.8) * uAlpha;
         gl_FragColor = vec4(col, a);
         #include <colorspace_fragment>

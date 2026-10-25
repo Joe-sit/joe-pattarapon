@@ -1189,7 +1189,7 @@ export function BubbleTraveler() {
     <div className="pointer-events-none fixed inset-0 z-[52]" style={{ visibility: on ? 'visible' : 'hidden' }} aria-hidden>
       <Canvas
         frameloop={on ? 'demand' : 'never'}
-        dpr={[1, 1.75]}
+        dpr={[1, 1.25]}
         orthographic
         camera={{ position: [0, 0, 2400], zoom: 1, near: 1, far: 8000 }}
         gl={{ antialias: true, alpha: true }}

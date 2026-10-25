@@ -51,7 +51,7 @@ export function CursorGuideLayer() {
         orthographic
         camera={{ position: [0, 0, 100], zoom: 1, near: 0.1, far: 400 }}
         frameloop="demand"
-        dpr={[1, 2]}
+        dpr={[1, 1.25]}
         gl={{ alpha: true, antialias: true }}
       >
         {/* ลูกศรซ่อนอยู่จนถึงคิวของอินโทร — ไม่อุ่นไว้ env map กับเชดเดอร์จะไปคอมไพล์ตอนมันโผล่ = ค้าง ~100ms ท้ายท่าคลี่บาน */}

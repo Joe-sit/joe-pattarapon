@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame, useThree } from '@react-three/fiber'
+import { worksUI } from './workMotion'
 
 /**
  * ฉากหลังของเวทีไอโซ: กำลังร่วงลงจากฟ้า — ภาษาภาพเดียวกับฟ้าของ hero (เมฆจุดครึ่งโทน ดู newhero/NewHeroScene)
@@ -8,6 +9,7 @@ import { useFrame, useThree } from '@react-three/fiber'
  *   เมฆ    fbm พิมพ์ลงตะแกรงจุดในพิกัดพิกเซลของจอ (จุดโตตาม √ความหนาแน่น) สองชั้นความลึก:
  *          ชั้นใกล้จุดโต พุ่งขึ้นเร็ว · ชั้นไกลจุดเล็ก จาง ช้า — หนาที่ขอบจอซ้ายขวา กลางจอโปร่งให้เวที
  *          ก่อนร่วง (fall 0) ไม่มีเมฆ: เมฆไหลขึ้นมาจากขอบล่างตามระยะร่วง ไม่โผล่กลางจอ
+ *          เป็นจุดครึ่งโทน (halftone) ชุดเดียวกับฟ้าของ hero — เดิมเป็นก้อนฟุ้งนุ่ม
  *   ภูเขา  ทิวเขาไกลสามชั้น (ridged noise) สีจมไปทางฟ้า ยอดพิมพ์จุดขาวเป็นหิมะ — โผล่จากขอบล่าง
  *          สูงขึ้นตามที่ร่วงลง (ชั้นใกล้ขึ้นมาก ชั้นไกลขึ้นน้อย)
  *
@@ -78,7 +80,9 @@ const FRAG = /* glsl */ `
     float alpha = 0.0;
 
     /* ── ภูเขา (ไกลไปใกล้ ชั้นใกล้ทับ) ── */
+    /* ข้ามทั้งภูเขาเหนือยอดสูงสุดที่เป็นไปได้ (ยอดชั้นไกล + แอมพลิจูด) — ครึ่งบนจอไม่ต้องคิด ridge 12 ครั้ง */
     for (int i = 0; i < 3; i++) {
+      if (uv.y > mix(-0.08, 0.30, uProg) + 0.2) break;
       float fi = float(i);
       float top = mix(-0.08, 0.30 - fi * 0.075, uProg);
       float amp = 0.2 - fi * 0.03;
@@ -98,30 +102,45 @@ const FRAG = /* glsl */ `
       }
     }
 
-    /* ── เมฆสองชั้น: ไกลก่อน ใกล้ทับ ── */
+    /* ── เมฆสองชั้น (ไกลช้า ใกล้เร็ว) — เก็บความหนาแน่นสูงสุดไว้พิมพ์จุดทีเดียว ── */
+    float cd = 0.0;
     for (int L = 0; L < 2; L++) {
       float near = float(L);
       float speed = mix(0.55, 1.35, near);
       float scale = mix(4.2, 2.3, near);
-      vec2 p = vec2(uv.x * uAspect, uv.y - uFall * speed) * scale;
-      p.y *= 1.7;
-      float mass = fbm(p * 0.35 + near * 9.0, 2);
-      float n = fbm(p + near * 4.0, 3) * 0.6 + mass * 0.55;
-      /* หนาที่ขอบซ้ายขวา โปร่งกลางจอ (ก้อนใหญ่จริง ๆ ล้ำเข้ามาได้บ้าง) */
-      float side = smoothstep(0.18, 0.46, abs(uv.x - 0.5));
-      side = max(side, smoothstep(0.62, 0.95, mass) * 0.55);
       /* หน้าคลื่นเมฆไหลขึ้นจากขอบล่างเร็ว ๆ ตั้งแต่ข้อความ What I do เริ่มลอย (uIn) — ก่อนนั้นไม่มีเมฆ · ชั้นใกล้นำนิด */
       float front = uIn * mix(1.35, 1.5, near) - 0.05;
       float enter = smoothstep(front, front - 0.25, uv.y);
+      /* เหนือหน้าคลื่น = ไม่มีเมฆชั้นนี้ — ข้าม fbm ทั้งหมด (ถูกที่สุดก่อน) */
+      if (enter <= 0.0) continue;
+      vec2 p = vec2(uv.x * uAspect, uv.y - uFall * speed) * scale;
+      /* ยืดแนวนอนแบบฟ้าของ hero (cuv.y × 2.1) — ก้อนแบนกว้าง ไม่ใช่แท่ง */
+      p.y *= 2.6;
+      float mass = fbm(p * 0.35 + near * 9.0, 2);
+      /* หนาที่ขอบซ้ายขวา โปร่งกลางจอ (ก้อนใหญ่จริง ๆ ล้ำเข้ามาได้บ้าง) */
+      /*
+       * กระจายทั้งจอเป็นก้อน ๆ (ไม่ใช่กำแพงเต็มความสูงสองข้าง = เมฆตั้ง) — กลางจอแค่บางลง ให้เวทีโล่ง
+       * ก้อนเกิดจาก mass (ย่านที่มีเมฆ) ไม่ใช่จากระยะห่างกลางจอล้วน
+       */
+      float side = mix(0.0, 1.0, smoothstep(0.2, 0.45, abs(uv.x - 0.5))) * smoothstep(0.55, 0.75, mass);
+      /* กลางจอที่ก้อนไม่ใหญ่พอ = โปร่ง — ข้าม fbm อีกสองชุด */
+      if (side <= 0.0) continue;
+      float n = fbm(p + near * 4.0, 3) * 0.6 + mass * 0.55;
       /*
        * ก้อนฟุ้งแบบม่านเมฆของ hero (components/CloudWipe): ขอบนุ่ม ชั้นไกลฟุ้งกว่าและจางกว่า
        * ท้องก้อนอมฟ้าเทา (ปริมาตร) ยอดขาว — ไม่ใช่จุดครึ่งโทน: ฉากหลังต้องไม่แย่งสายตาจากเวที
        */
-      float soft = mix(0.32, 0.2, near);
-      float dens = smoothstep(0.44, 0.44 + soft, n) * side * enter;
-      float lit = smoothstep(0.55, 0.85, fbm(p + vec2(0.0, 0.18) + near * 4.0, 3) * 0.6 + mass * 0.55);
-      vec3 c = mix(vec3(0.80, 0.87, 0.97), vec3(0.98, 0.99, 1.0), lit);
-      float a = dens * mix(0.5, 0.8, near);
+      /*
+       * เมฆจุดครึ่งโทนแบบฟ้าของ hero (newhero/NewHeroScene): ความหนาแน่นพิมพ์ลงตะแกรงจุดในพิกเซลจอ — จุดโตตาม √ความหนาแน่น
+       * ชั้นใกล้จุดใหญ่ ชั้นไกลจุดเล็กกว่าและเหลื่อมตะแกรง (ไม่ซ้อนตรงกันเป็นลายมัวเร) · ท้องเมฆขาวจัด ขอบอมฟ้า
+       */
+      cd = max(cd, smoothstep(0.58, 0.68, n) * side * enter * mix(0.85, 1.0, near));
+    }
+    /* ตะแกรงเดียว (สองชั้นรวมความหนาแน่นก่อน) — สองตะแกรงคนละขนาดซ้อนกันเกิดลายไขว้ */
+    if (cd > 0.001) {
+      float dotv = halftone(cd, uDot, vec2(0.0));
+      vec3 c = mix(vec3(0.84, 0.9, 0.99), vec3(0.94), cd);
+      float a = dotv * 0.78;
       pm = c * a + pm * (1.0 - a);
       alpha = a + alpha * (1.0 - a);
     }
@@ -160,10 +179,12 @@ export function FallSky({ pose }: { pose: React.RefObject<FallPose> }) {
     const p = pose.current
     const m = mesh.current
     if (!p || !m) return
-    const on = p.on && p.iso > 0.001
+    /* พื้นดำของวง Selected Work บังเต็มจอ = ไม่ต้องวาดฟ้า (shader เต็มจอทุกเฟรมเปล่า ๆ) */
+    const on = p.on && p.iso > 0.001 && worksUI.dark < 0.999
     m.visible = on
     if (!on) {
-      drift.current = 0
+      /* ซ่อนเพราะพื้นดำบัง ≠ ออกจากบท — เก็บระยะร่วงไว้ ฟ้ากลับมาไม่กระโดด */
+      if (!(p.on && p.iso > 0.001)) drift.current = 0
       return
     }
     /* ร่วงเองช้า ๆ ตามเวลา — หยุดเลื่อนก็ยังร่วง (ผูกกับ iso: ก่อนเริ่มไม่สะสม) */

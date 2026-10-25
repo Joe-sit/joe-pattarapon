@@ -12,6 +12,13 @@ import customerImg from '@/assets/portfolios/customer-personality-analysis.png'
 import waterMapImg from '@/assets/portfolios/water-map.png'
 import portWebImg from '@/assets/portfolios/first-portfolio-web.png'
 import ricardoImg from '@/assets/portfolios/ricardo-game.png'
+import mock1Img from '@/assets/mock-works/mock-1.jpg'
+import mock2Img from '@/assets/mock-works/mock-2.jpg'
+import mock3Img from '@/assets/mock-works/mock-3.jpg'
+import mock4Img from '@/assets/mock-works/mock-4.jpg'
+import mock5Img from '@/assets/mock-works/mock-5.jpg'
+import mock6Img from '@/assets/mock-works/mock-6.jpg'
+import mock7Img from '@/assets/mock-works/mock-7.jpg'
 
 /**
  * ผลงานจริง — ชื่อ หมวด บรรทัดรอง ยกมาจากหน้า Portfolio ของเว็บเวอร์ชัน Vue (git 777c118^ components/views/PortfolioPage.vue)
@@ -31,6 +38,30 @@ export const WORKS = [
   { name: 'Portfolio Website', category: 'Web Dev', sub: 'Web Technology Project 2020', img: portWebImg, ratio: 1.15 },
   { name: 'Ricardo Your Hero', category: 'Other', sub: 'Scratch Game Dev 2019', img: ricardoImg, ratio: 0.95 },
 ] as const
+
+/**
+ * ภาพ mockup ชั่วคราวของแถว Selected Work — ภาพ UI/อุปกรณ์จาก Unsplash (Unsplash License: ใช้ฟรี ไม่บังคับเครดิต แต่ใส่ไว้)
+ * **ไม่ใช่ผลงานของเรา** จึงใช้เฉพาะตอน dev (ดู DECK_WORKS) — build จริงยังเป็นผลงานจริงใน WORKS
+ */
+export const MOCK_WORKS = [
+  { img: mock1Img, name: 'Mockup · Unsplash @creatvise', src: 'https://unsplash.com/photos/pXrR7-tzJuU' },
+  { img: mock2Img, name: 'Mockup · Unsplash @creatvise', src: 'https://unsplash.com/photos/K7igmbb11NQ' },
+  { img: mock3Img, name: 'Mockup · Unsplash @danielkorpai', src: 'https://unsplash.com/photos/mxPiMiz7KCo' },
+  { img: mock4Img, name: 'Mockup · Unsplash @tranmautritam', src: 'https://unsplash.com/photos/g-pKprPg5yw' },
+  { img: mock5Img, name: 'Mockup · Unsplash @lukechesser', src: 'https://unsplash.com/photos/JKUTrJ4vK00' },
+  { img: mock6Img, name: 'Mockup · Unsplash @dengxiangs', src: 'https://unsplash.com/photos/-WXQm_NTK0U' },
+  { img: mock7Img, name: 'Mockup · Unsplash @danielkorpai', src: 'https://unsplash.com/photos/vHVfpi3h5xk' },
+] as const
+
+/** ภาพบนการ์ดแถว Selected Work: dev = mockup สวย ๆ ไว้จัดหน้า · build จริง = ผลงานจริง */
+/**
+ * งานที่ section Selected Work แสดง (การ์ด 3D + แผงแบบ superpower) — ชื่อ/หมวด/บรรทัดรองเป็นของงานจริงเสมอ
+ * ตอน dev ภาพเป็น mockup (credit = ช่างภาพ Unsplash — แผงขึ้นป้ายบอกว่าเป็นภาพ mockup) · build จริง = ภาพงานจริง
+ */
+export type DeckWork = { img: string; name: string; category: string; sub: string; credit?: string }
+export const DECK_WORKS: readonly DeckWork[] = import.meta.env.DEV
+  ? MOCK_WORKS.map((m, i) => ({ ...WORKS[i % WORKS.length], img: m.img, credit: m.name.replace('Mockup · ', '') }))
+  : WORKS
 
 /**
  * Gallery ผลงาน (ปลายทางของ section My Works ใน What I do) — แผงสีเข้มเลื่อนขึ้นจากล่างตามสกรอลล์ 1:1 ทับฉากห้อย

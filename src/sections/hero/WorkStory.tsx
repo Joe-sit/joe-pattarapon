@@ -11,8 +11,9 @@ import { BenchScreen } from './BenchScreen'
 import { FallSky, type FallPose } from './FallSky'
 import { BEAT, endOf, storySv2 } from '@/sections/skystory/beats'
 import { AsciiClouds, type CloudBlob } from '@/components/AsciiClouds'
+import { DECK_WORKS } from './WorksGallery'
 import { ISLAND } from './ResearchPlatform'
-import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, TILE_SLOTS, WORKS_BOOM, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, STORY_FONT, type WorkBeats } from './workMotion'
+import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, TILE_SLOTS, WORKS_BOOM, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, STORY_FONT, GRID_ITEMS, gridRect, worksGridScroll, type WorkBeats } from './workMotion'
 
 /**
  * เครื่องแก้วเป็นโต๊ะทำงาน — เรื่องต่อจาก "Here is what I do"
@@ -159,7 +160,8 @@ function disMask(el: HTMLElement, text: string, prev: DisMask | null): DisMask |
   if (!w || !h || !r.width) return null
   if (prev && prev.w === w && prev.h === h && prev.font === font) return prev
   const c = new OffscreenCanvas(w, h)
-  const g = c.getContext('2d')
+  /* willReadFrequently: เก็บแคนวาสไว้ฝั่ง CPU — อ่าน getImageData แล้วไม่ต้องรอดึงพิกเซลกลับจาก GPU */
+  const g = c.getContext('2d', { willReadFrequently: true })
   if (!g) return null
   g.font = font
   g.letterSpacing = cs.letterSpacing
@@ -198,6 +200,13 @@ export function WorkStory() {
   const [openTile, setOpenTile] = useState(-1)
   const tilesBox = useRef<HTMLDivElement>(null)
   const tileBtns = useRef<(HTMLButtonElement | null)[]>([])
+  const viewTag = useRef<HTMLDivElement>(null)
+  const gridBox = useRef<HTMLDivElement>(null)
+  const gridHead = useRef<HTMLDivElement>(null)
+  const gridCaps = useRef<(HTMLDivElement | null)[]>([])
+  const gridTags = useRef<(HTMLDivElement | null)[]>([])
+  const tileLabels = useRef<(HTMLSpanElement | null)[]>([])
+  const tileArrows = useRef<(HTMLSpanElement | null)[]>([])
   useEffect(() => {
     worksUI.open = openTile
     if (openTile < 0) return
@@ -451,7 +460,8 @@ export function WorkStory() {
       const inW = wp >= WORKS_HAND[0] ? 1 : 0
       /* ค้างเป็นพื้นหลังตลอด section My Works · ออกพร้อมไทล์ท้ายบท */
       const outW = smooth((wp - WORKS_HOLD[1]) / (WORKS_HOLD[2] - WORKS_HOLD[1]))
-      const vw2 = frame.current.on ? inW * (1 - outW) : 0
+      /* พื้นดำของผัง Selected Work ขึ้น = คำใหญ่จางออก (หัวข้อของผังรับช่วง) — ผูกกับระยะเลื่อนช่วงแจก */
+      const vw2 = frame.current.on ? inW * (1 - outW) * (1 - smooth((wp - 0.12) / 0.4)) : 0
       ww.style.visibility = vw2 > 0.002 ? 'visible' : 'hidden'
       ww.style.opacity = vw2.toFixed(3)
       /*
@@ -460,6 +470,31 @@ export function WorkStory() {
        */
       const lw = smooth((wp - WORKS_BOOM[0] - WORKS_BOOM[1] * 0.2) / (WORKS_BOOM[1] * 0.7))
       ww.style.transform = `translate(-50%, -50%) translate(${(lw * vw * -0.08).toFixed(1)}px, ${(lw * vh * 0.33).toFixed(1)}px) rotate(${(lw * -15).toFixed(2)}deg) scale(${(1 - lw * 0.42 + outW * 0.08).toFixed(4)})`
+    }
+    /* ── ผัง Selected Work (แบบ produx): พื้นดำ + หัวข้อ + ชื่อ/คำอธิบายใต้ภาพ + ป้ายหมวดมุมภาพ — ตำแหน่งจาก gridRect ชุดเดียวกับการ์ด 3D ── */
+    {
+      const on = frame.current.on
+      const gb = gridBox.current
+      if (gb) {
+        const wp = worksPostSm.v
+        /* ข้อความขึ้นหลังการ์ดลงช่อง · ท้ายบทจางพร้อมการ์ด */
+        const a = on ? smooth((wp - 0.5) / 0.2) * (1 - smooth((wp - WORKS_HOLD[1]) / (WORKS_HOLD[2] - WORKS_HOLD[1]))) : 0
+        gb.style.visibility = a > 0.002 ? 'visible' : 'hidden'
+        gb.style.opacity = a.toFixed(3)
+        if (a > 0.002) {
+          const vw = window.innerWidth
+          const vh = window.innerHeight
+          const off = worksGridScroll(wp, vw, vh)
+          if (gridHead.current) gridHead.current.style.transform = `translateY(${(vh * 0.11 - off).toFixed(1)}px)`
+          GRID_ITEMS.forEach((_, i) => {
+            const r = gridRect(i, vw, vh, off)
+            const cap = gridCaps.current[i]
+            if (cap) cap.style.transform = `translate(${r.x.toFixed(1)}px, ${(r.y + r.h).toFixed(1)}px)`
+            const tag = gridTags.current[i]
+            if (tag) tag.style.transform = `translate(${(r.x + r.w).toFixed(1)}px, ${(r.y + r.h).toFixed(1)}px) translate(-100%, -100%)`
+          })
+        }
+      }
     }
     /* ── ปุ่มไทล์งาน (DOM ทับตำแหน่งไทล์ 3D) — กดได้เฉพาะช่วงค้าง ── */
     const tb = tilesBox.current
@@ -475,6 +510,24 @@ export function WorkStory() {
           el.style.width = `${(r.x1 - r.x0).toFixed(1)}px`
           el.style.height = `${(r.y1 - r.y0).toFixed(1)}px`
           el.style.transform = `translate(${r.x0.toFixed(1)}px, ${r.y0.toFixed(1)}px)`
+          /* ชื่องาน (ซ้ายล่าง) + ปุ่มลูกศร (ขวาล่าง) ตามจุดบนการ์ดโค้งที่ฉายมา · ขนาดตามสเกลการ์ดตรงนั้น */
+          const lab = tileLabels.current[n]
+          if (lab && r.lx !== undefined && r.ly !== undefined && r.rx !== undefined && r.lk !== undefined && r.x1 > r.x0) {
+            const k = Math.min(1.2, Math.max(0.3, r.lk / 12))
+            lab.style.visibility = (r.a ?? 1) > 0.01 ? 'visible' : 'hidden'
+            lab.style.opacity = (r.a ?? 1).toFixed(3)
+            lab.style.transform = `translate(${(r.lx - r.x0).toFixed(1)}px, ${(r.ly - r.y0).toFixed(1)}px) translateY(-100%) scale(${k.toFixed(3)})`
+            const arr = tileArrows.current[n]
+            if (arr) {
+              arr.style.visibility = (r.a ?? 1) > 0.01 ? 'visible' : 'hidden'
+              arr.style.opacity = (r.a ?? 1).toFixed(3)
+              arr.style.transform = `translate(${(r.rx - r.x0).toFixed(1)}px, ${(r.ly - r.y0).toFixed(1)}px) translate(-100%, -100%) scale(${k.toFixed(3)})`
+            }
+          } else {
+            if (lab) lab.style.visibility = 'hidden'
+            const arr = tileArrows.current[n]
+            if (arr) arr.style.visibility = 'hidden'
+          }
         })
       }
       if (!hold && openTile !== -1) setOpenTile(-1)
@@ -646,7 +699,8 @@ export function WorkStory() {
         <Canvas
           className="!absolute inset-0"
           frameloop="demand"
-          dpr={[1, 1.5]}
+          /* เมฆจุดครึ่งโทนต้องคมเท่าจุดของ hero — dpr 1 (ไม่ใช่ 0.6 ที่จุดเบลอตอนขยาย) · ยังถูกกว่าเดิม (1.25–2) และ shader ข้ามพิกเซลว่างเอง */
+          dpr={1}
           orthographic
           camera={{ position: [0, 0, 2400], zoom: 1, near: 1, far: 8000 }}
           gl={{ antialias: false, alpha: true }}
@@ -697,7 +751,7 @@ export function WorkStory() {
           {[...WORKS_TEXT].map((ch, n) => (ch === ' ' ? ' ' : <span key={n} data-l>{ch}</span>))}
         </div>
         </div>
-        <Canvas className="!absolute inset-0" frameloop="never" dpr={[1, 1.75]} camera={{ fov: FOV, position: [0, 0, 1700] }} gl={{ antialias: true, alpha: true }} style={{ pointerEvents: 'none' }}
+        <Canvas className="!absolute inset-0" frameloop="never" dpr={[1, 1.25]} camera={{ fov: FOV, position: [0, 0, 1700] }} gl={{ antialias: true, alpha: true }} style={{ pointerEvents: 'none' }}
           /* ขาวต้องเป็นขาว: ตัวแมปโทนตั้งต้น (ACES) กดขาวลงเป็นเทาหม่น */
           onCreated={({ gl }) => {
             gl.toneMapping = THREE.NeutralToneMapping
@@ -748,7 +802,55 @@ export function WorkStory() {
        * section My Works: ปุ่มไทล์งานทับตำแหน่งไทล์ 3D (ช่อง TILE_SLOTS) — hover ยกไทล์ · คลิกเปิดเต็มจอ
        * เปิดแล้ว: แผงรายละเอียด (ยังไม่มีเนื้อหางาน — บล็อกเทาว่างตามที่ตั้งไว้) + ปุ่มปิด · Esc / เลื่อนจอ = ปิด
        */}
+      {/* ข้อความของผัง Selected Work (แบบ produx) — ไม่รับเมาส์ ปุ่มกดอยู่ชั้นไทล์ */}
+      <div ref={gridBox} className="pointer-events-none fixed inset-0 z-[52] overflow-hidden text-white [text-shadow:0_1px_10px_rgba(20,50,120,0.25)]" style={{ visibility: 'hidden', opacity: 0, fontFamily: STORY_FONT }} aria-hidden>
+        <div ref={gridHead} className="absolute inset-x-[7vw] top-0 flex items-end justify-between">
+          <h2 className="text-[clamp(34px,3.3vw,56px)] leading-[1.02] font-medium tracking-[-0.03em]">
+            Selected
+            <br />
+            Work
+          </h2>
+          <span className="mb-2 border-b border-white/70 pb-1 font-mono text-[12px] tracking-[0.08em] uppercase">View all works</span>
+        </div>
+        {GRID_ITEMS.map((_, i) => {
+          const d = DECK_WORKS[i % DECK_WORKS.length]
+          return (
+            <div key={i}>
+              <div
+                ref={(el) => {
+                  gridTags.current[i] = el
+                }}
+                className="absolute top-0 left-0 flex gap-[3px] p-2.5"
+              >
+                <span className="bg-[#2a2a2c]/90 px-2 py-1 font-mono text-[10px] tracking-[0.06em] text-white/85 uppercase">{d.category}</span>
+              </div>
+              <div
+                ref={(el) => {
+                  gridCaps.current[i] = el
+                }}
+                className="absolute top-0 left-0 flex gap-3 pt-[1.4vw]"
+              >
+                <span className="mt-[0.45em] size-2 shrink-0 border border-white/70" />
+                <div className="max-w-[min(30vw,420px)]">
+                  <div className="text-[clamp(15px,1.15vw,20px)] leading-tight font-medium">{d.name}</div>
+                  <div className="mt-2 font-mono text-[11px] leading-[1.35] text-white/80 uppercase">{d.sub}</div>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
       <div ref={tilesBox} className="pointer-events-none fixed inset-0 z-[52]" style={{ visibility: 'hidden' }}>
+        {/* ป้าย ↗ VIEW ตามเคอร์เซอร์ตอนชี้การ์ด (แบบ produx.design) */}
+        <div
+          ref={viewTag}
+          className="pointer-events-none fixed top-0 left-0 z-[3] flex gap-[3px] font-mono text-[12px] font-semibold tracking-[0.06em] text-black uppercase transition-opacity duration-200"
+          style={{ opacity: 0 }}
+          aria-hidden
+        >
+          <span className="grid size-7 place-items-center bg-white">↗</span>
+          <span className="grid h-7 place-items-center bg-white px-2.5">View</span>
+        </div>
         {openTile < 0 &&
           TILE_SLOTS.map((_, n) => (
             <button
@@ -762,14 +864,49 @@ export function WorkStory() {
               onPointerEnter={() => {
                 worksUI.hover = n
               }}
+              onPointerMove={(e) => {
+                /* uv บนหน้าการ์ด (ประมาณจากกล่องบนจอ) — ขับภาพบิด · ป้าย VIEW ตามเคอร์เซอร์ */
+                const r = e.currentTarget.getBoundingClientRect()
+                worksUI.mouse.u = (e.clientX - r.left) / Math.max(1, r.width)
+                worksUI.mouse.v = 1 - (e.clientY - r.top) / Math.max(1, r.height)
+                worksUI.mouse.card = n
+                const tag = viewTag.current
+                if (tag) {
+                  tag.style.opacity = '1'
+                  tag.style.transform = `translate(${(e.clientX + 18).toFixed(0)}px, ${(e.clientY + 14).toFixed(0)}px)`
+                }
+              }}
               onPointerLeave={() => {
                 if (worksUI.hover === n) worksUI.hover = -1
+                if (worksUI.mouse.card === n) worksUI.mouse.card = -1
+                if (viewTag.current) viewTag.current.style.opacity = '0'
               }}
               onClick={() => {
                 worksUI.hover = -1
                 setOpenTile(n)
               }}
-            />
+            >
+              <span
+                ref={(el) => {
+                  tileLabels.current[n] = el
+                }}
+                className="pointer-events-none absolute top-0 left-0 origin-bottom-left text-[26px] leading-none font-medium tracking-[-0.02em] whitespace-nowrap text-white [text-shadow:0_1px_8px_rgba(0,0,0,0.45)]"
+                style={{ visibility: 'hidden', fontFamily: STORY_FONT }}
+              >
+                {DECK_WORKS[n % DECK_WORKS.length].name}
+              </span>
+              <span
+                ref={(el) => {
+                  tileArrows.current[n] = el
+                }}
+                className="pointer-events-none absolute top-0 left-0 grid size-7 origin-bottom-right place-items-center rounded-full bg-black/85 text-white"
+                style={{ visibility: 'hidden' }}
+              >
+                <svg width="11" height="11" viewBox="0 0 13 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M1 6h11M7.5 1.5 12 6l-4.5 4.5" />
+                </svg>
+              </span>
+            </button>
           ))}
         {openTile >= 0 && (
           <div className="pointer-events-auto absolute top-[6vh] left-[4vw] h-[88vh] w-[92vw] animate-[ws-detail-in_0.35s_ease-out_0.3s_both] p-[min(5vw,56px)]">
