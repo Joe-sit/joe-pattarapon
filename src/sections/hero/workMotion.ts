@@ -261,51 +261,26 @@ export function slotRect(i: number, vw: number, vh: number) {
  */
 export const worksUI = {
   hover: -1,
-  /** เมาส์บนการ์ดที่ชี้ (uv ของหน้าการ์ด 0..1, y ขึ้น) · card = ใบ (−1 = ไม่ได้ชี้) — ขับเอฟเฟกต์บิดภาพ */
-  mouse: { u: 0, v: 0, card: -1 },
   open: -1,
   hold: 0,
   dark: 0,
-  /** แผง Selected Work (DOM เต็มจอ) ขึ้นทับแล้วแค่ไหน 0..1 — การ์ด 3D จางสวน */
-  panel: 0,
+  /** ฟ้าเย็นของ FallSky — ตอนนี้ไม่ใช้ (0) */
+  dusk: 0,
   rects: [] as { x0: number; y0: number; x1: number; y1: number; lx?: number; ly?: number; rx?: number; lk?: number; a?: number }[],
-}
-/**
- * ผัง Selected Work แบบ produx.design — ภาพงานวางสลับแบบนิตยสาร (ใหญ่ซ้าย·เล็กขวาต่ำลง / กว้างกลาง / เล็กซ้าย·ใหญ่ขวา …)
- * หน่วย: x, w, top เป็นสัดส่วนความกว้างจอ (vw) · a = กว้าง/สูง · ใต้ภาพมีชื่อ + คำอธิบาย (DOM) · หัวข้ออยู่บนสุด
- * ทั้งก้อนเลื่อนขึ้นตามระยะเลื่อนช่วงค้าง (worksGridScroll) — การ์ด 3D (BenchScreen) กับข้อความ (WorkStory) ใช้ผังชุดนี้ชุดเดียว
- */
-export const GRID_ITEMS: readonly { x: number; w: number; top: number; a: number }[] = [
-  { x: 0.07, w: 0.36, top: 0, a: 1.6 },
-  { x: 0.645, w: 0.21, top: 0.05, a: 0.82 },
-  { x: 0.36, w: 0.5, top: 0.43, a: 2.05 },
-  { x: 0.07, w: 0.2, top: 0.78, a: 1.0 },
-  { x: 0.42, w: 0.44, top: 0.74, a: 1.75 },
-  { x: 0.12, w: 0.38, top: 1.14, a: 1.5 },
-  { x: 0.6, w: 0.26, top: 1.18, a: 0.86 },
-]
-/** หัวข้อ (สัดส่วนความสูงจอจากขอบบนของก้อน) · ช่องแรกเริ่มใต้หัวข้อ (px = vh × GRID_HEAD) */
-export const GRID_HEAD = 0.34
-/** กล่องบนจอ (px) ของช่อง i เมื่อก้อนเลื่อนไป off px */
-export function gridRect(i: number, W: number, H: number, off: number) {
-  const it = GRID_ITEMS[i % GRID_ITEMS.length]
-  const w = it.w * W
-  const h = w / it.a
-  return { x: it.x * W, y: H * GRID_HEAD + it.top * W - off, w, h }
-}
-/** ระยะที่ก้อนเลื่อนขึ้น (px) ตามระยะเลื่อน: ช่วงค้างพาจากบนสุดจนช่องสุดท้ายพ้นกลางจอ · ท้ายบท (ex) เลื่อนต่อออกไป */
-export function worksGridScroll(post: number, W: number, H: number) {
-  const end = Math.max(0, ...GRID_ITEMS.map((_, i) => gridRect(i, W, H, 0)).map((r) => r.y + r.h)) + H * 0.18 - H
-  const k = Math.min(1, Math.max(0, (post - WORKS_HOLD[0]) / (WORKS_HOLD[1] - WORKS_HOLD[0])))
-  const ex = Math.min(1, Math.max(0, (post - WORKS_HOLD[1]) / (WORKS_HOLD[2] - WORKS_HOLD[1])))
-  return k * end + ex * H * 0.9
 }
 export const worksPost = (b: { code: number; works: number }) => (b.code - 0.86) * BEAT.code[1] + b.works * BEAT.works[1]
 /** ช่วงค้างของ section My Works (worksPost): เริ่มค้าง (ไทล์ลงที่ครบ) · เริ่มออก · จบ (= ต้น Ship) */
-export const WORKS_HOLD = [0.9, 2.3, 2.85] as const
+/* ออกให้จบก่อนด่านหนังสติ๊กโผล่ (SlingGate SHOW 2.45) */
+export const WORKS_HOLD = [0.9, 2.05, 2.42] as const
 
 /**
  * ตำแหน่งบล็อกในแท่งแก้วของ island ในพิกัดผังจอเครื่อง (หน่วยผัง · 4 ก้อน × xyz) — ฟองเขียนทุกเฟรม (./BubbleTraveler)
  * บล็อกบินจากจุดนี้ไปเป็นกระเบื้องของ widget (./BenchScreen) ตั้งแต่ฟองลงจอดบนหัวเครื่อง
  */
 export const barLayout = { e: new Float32Array(12), ok: false }
+
+/**
+ * ด่านหนังสติ๊กท้าย Selected Work (WorkStory SlingGate เขียน · ตัวละคร SlingRider อ่าน)
+ *   vis = ด่านโผล่แค่ไหน · px, py = เปลยางบนจอ (px) · pull = ง้างแค่ไหน (0..1) · launch = พุ่งแล้วแค่ไหน (0..1)
+ */
+export const sling = { vis: 0, px: 0, py: 0, pull: 0, launch: 0 }

@@ -62,6 +62,40 @@ export function armPoseFromTuner(t) {
 }
 
 /**
+ * หน้าการ์ตูนของ hero (facePose ของ Mascot) จากค่าที่จูนไว้ — ใช้ร่วมกับหัวในแถบนำทาง (pages/NavHead3D)
+ * @param t - ค่าจาก tuner · noIdle - ปิดกวาดตา/กระพริบ (หน้าค้างท่าที่จูน)
+ */
+export function facePoseFromTuner(t, noIdle = false) {
+  return {
+    eye: t.fcEye,
+    gap: t.fcGap,
+    eyeY: t.fcEyeY,
+    pupil: t.fcPupil,
+    pupilX: t.fcPupilX,
+    pupilY: t.fcPupilY,
+    look: t.fcLook,
+    brow: t.fcBrow,
+    browY: t.fcBrowY,
+    browArc: t.fcBrowArc,
+    browTilt: t.fcBrowTilt * RAD,
+    mouth: t.fcMouth,
+    mouthH: t.fcMouthH,
+    mouthX: t.fcMouthX,
+    mouthY: t.fcMouthY,
+    x: t.fcX,
+    y: t.fcY,
+    z: t.fcZ,
+    rotX: t.fcRotX * RAD,
+    rotY: t.fcRotY * RAD,
+    rotZ: t.fcRotZ * RAD,
+    scale: t.fcScale,
+    /* noIdle: 0 = ปิดกวาดตา/กระพริบถาวร (ดูที่ดักไว้ใน Mascot) หน้าค้างท่าที่จูนไว้ */
+    lookEvery: noIdle ? 0 : t.fcLookEvery,
+    blinkEvery: noIdle ? 0 : t.fcBlinkEvery,
+  }
+}
+
+/**
  * @param props - noWind: ปิดลมที่พัดเสื้อ สำหรับจอที่ไม่ต้องการให้ผ้าปริว (ดู
  *   sections/whatidopixel) ส่งเป็น prop `wind` เองไม่ได้ เพราะ {...rest} ถูกกระจายก่อน
  *   แล้วค่าจากแผงจูนทับทีหลัง
@@ -203,33 +237,7 @@ export function HeroRider({
         headBounce: t.hfBounce,
         headIdleBack: t.hfIdleBack,
       }}
-      facePose={{
-        eye: t.fcEye,
-        gap: t.fcGap,
-        eyeY: t.fcEyeY,
-        pupil: t.fcPupil,
-        pupilX: t.fcPupilX,
-        pupilY: t.fcPupilY,
-        look: t.fcLook,
-        brow: t.fcBrow,
-        browY: t.fcBrowY,
-        browArc: t.fcBrowArc,
-        browTilt: t.fcBrowTilt * RAD,
-        mouth: t.fcMouth,
-        mouthH: t.fcMouthH,
-        mouthX: t.fcMouthX,
-        mouthY: t.fcMouthY,
-        x: t.fcX,
-        y: t.fcY,
-        z: t.fcZ,
-        rotX: t.fcRotX * RAD,
-        rotY: t.fcRotY * RAD,
-        rotZ: t.fcRotZ * RAD,
-        scale: t.fcScale,
-        /* noIdle: 0 = ปิดกวาดตา/กระพริบถาวร (ดูที่ดักไว้ใน Mascot) หน้าค้างท่าที่จูนไว้ */
-        lookEvery: noIdle ? 0 : t.fcLookEvery,
-        blinkEvery: noIdle ? 0 : t.fcBlinkEvery,
-      }}
+      facePose={facePoseFromTuner(t, noIdle)}
       torsoPose={torsoPose ?? ownTorso}
       legPose={legPose ?? ownLeg}
       armPose={armPose ?? armPoseFromTuner(t)}

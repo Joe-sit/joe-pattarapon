@@ -180,9 +180,6 @@ const rnd = (n: number, k: number) => {
 const POSE0 = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0, iso: 0, grow: 0, page: 0, mag: 0, tuck: 0, fall: 0, prog: 0, act: [0, 0, 0], sel: 0, gone: 0, whirl: 0, caretOut: 0, zoom: 1, dev: 0, float: 0, tilt: 0, bx: 0, by: 0, bk: 1, bt: 1, flat: 0, wire: 0, land: 0, away: 0, brx: 0, bry: 0, bspin: 0, hx: 0, hy: 0, isle: 0, flip: 0, flatK: 0, sv2v: 0, dark: 0, push: 0, devFade: 1 }
 type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number; iso: number; grow: number; page: number; mag: number; tuck: number; fall: number; prog: number; act: number[]; sel: number; gone: number; whirl: number; caretOut: number; zoom: number; dev: number; float: number; tilt: number; bx: number; by: number; bk: number; bt: number; flat: number; wire: number; land: number; away: number; brx: number; bry: number; bspin: number; hx: number; hy: number; isle: number; flip: number; flatK: number; sv2v: number; dark: number; push: number; devFade: number }
 
-/** เบซิเยร์กำลังสอง (ต้น · ควบคุม · ปลาย) */
-const qb = (a: number, c: number, b: number, t: number) => (1 - t) * (1 - t) * a + 2 * (1 - t) * t * c + t * t * b
-
 function readPose(): Pose {
   const off: Pose = { ...POSE0 }
   const vw = window.innerWidth
@@ -210,21 +207,7 @@ function readPose(): Pose {
   const wb = workBeats(sv2)
   const bp = benchPose(wb, vw, vh)
   const hp = headPose(vw, vh)
-  /*
-   * ทางเดินจากฟองในหัวเรื่อง → กลางจอ: กินทั้งจอแรก (0 → 0.9) ease ไซน์เข้า-ออก (ไหลต่อเนื่อง ไม่พุ่งแล้วหยุด)
-   * เส้นโค้ง (เบซิเยร์กำลังสอง) ออกตัวขึ้นตามหัวเรื่องที่กำลังเลื่อนขึ้น (จุดควบคุมสูงกว่าต้นทาง 12% จอ) แล้วโค้งลงกลางจอ
-   * — ไม่หลุดสวนทางหัวเรื่อง · ไม่หน่วงตามเวลา (lenis นุ่มอยู่แล้ว ซ้อนอีกชั้น = ลอยตามช้า)
-   * (เดิม smoothstep 0.03 → 0.45 เส้นตรง แล้วนิ่งค้างกลางจอระหว่างม่านเมฆ)
-   */
-  const dRaw = clamp01(sv / 0.9)
-  const d = 0.5 - 0.5 * Math.cos(Math.PI * dRaw)
-  /*
-   * ช่วงพิมพ์ข้อความกลางจอ (ต้น What I do → ก่อนฟองหงาย BEAT.lift): ไม่ค้างนิ่ง — ลอยขึ้นและพองขึ้นช้า ๆ
-   * แล้วกลับเข้าที่พอดีตอนบทหงายเริ่ม (ครึ่งคลื่นไซน์) รอยต่อบทถัดไปจึงตรงเดิม
-   */
-  const dt2 = clamp01(sv2 / BEAT.lift[0])
-  const driftY = -vh * 0.035 * Math.sin(Math.PI * dt2)
-  const driftK = 1 + 0.07 * Math.sin(Math.PI * dt2)
+  const d = smooth((sv - 0.03) / 0.42)
   const h1 = Math.min(vh * 0.17, 150)
   /**
    * ความสูงจริงของฟองในหัวเรื่อง — ไม่ใช่ r.height: หัวเรื่องถูกบิด skewY(-5deg) กรอบที่วัดได้จึงสูงกว่าตัวฟอง
@@ -248,9 +231,9 @@ function readPose(): Pose {
   const barH = VB_H * ((26 * sh) / FS)
   return {
     on: true,
-    x: qb(r.left + r.width / 2, lerp(r.left + r.width / 2, vw / 2, 0.35), vw / 2, d),
-    y: lerp(qb(r.top + r.height / 2, r.top + r.height / 2 - vh * 0.12, vh * 0.5, d) + driftY, barY, head) + lift,
-    h: lerp(lerp(h0, h1, d) * driftK, barH, head),
+    x: lerp(r.left + r.width / 2, vw / 2, d),
+    y: lerp(lerp(r.top + r.height / 2, vh * 0.5, d), barY, head) + lift,
+    h: lerp(lerp(h0, h1, d), barH, head),
     /* หัวเรื่องถูกบิด skewY(-5deg) — ตอนยังอยู่ที่เดิมฟองบิดตาม (เฉือน ไม่ใช่หมุน) แล้วค่อยตั้งตรง */
     rot: (1 - d) * Math.tan((5 * Math.PI) / 180),
     /* ระหว่างทางลงมา (ช่วงจอแรก + ม่านเมฆ) มีแต่จุดกำลังพิมพ์ ข้อความรอพิมพ์ในฟ้าของ What I do */

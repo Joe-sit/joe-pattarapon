@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { Routes, Route, useLocation } from 'react-router'
 import Lenis from '@studio-freight/lenis'
+import { lenisBox } from '@/lib/lenisBox'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
@@ -38,6 +39,7 @@ const RigExportPage = lazy(() => import('@/pages/RigExportPage'))
 const FaviconLab = lazy(() => import('@/pages/FaviconLab'))
 const BubbleBlocks = lazy(() => import('@/pages/BubbleBlocks'))
 const FastworkProfile = lazy(() => import('@/pages/FastworkProfile'))
+const AboutMePage = lazy(() => import('@/pages/AboutMePage'))
 import { SITE } from '@/config/site'
 import { setEyeOpen, setIntroDone } from '@/stores/intro'
 import { useSceneReady } from '@/stores/ready'
@@ -136,6 +138,8 @@ export function App() {
   const isBlocks = import.meta.env.DEV && location.pathname === '/bubble-blocks'
   /* ปกโปรไฟล์ Fastwork — ทำภาพปก (dev) */
   const isFastwork = import.meta.env.DEV && location.pathname === '/fastwork-profile'
+  /** หน้า About me — เข้าจากคลิกตัวละครใน hero (/2026-final) */
+  const isAbout = location.pathname === '/about'
 
   // Which splash plays is decided by where the visitor landed, not by where
   // they are now — it runs once, on load, and reading `location` live would
@@ -275,6 +279,7 @@ export function App() {
     // `smooth` / `resetNativeScroll` from the Vue version are not Lenis 1.x options.
     const lenis = new Lenis({ duration: 1, smoothWheel: true })
     lenisRef.current = lenis
+    lenisBox.l = lenis
 
     // สูตรผูก Lenis กับ GSAP: Lenis เดินด้วย ticker ของ gsap (นาฬิกาเดียวกับทุก tween)
     // แล้วแจ้ง ScrollTrigger ทุกครั้งที่ตำแหน่งเลื่อนขยับ — ไม่ต้องมี rAF loop ของตัวเอง
@@ -297,6 +302,7 @@ export function App() {
     return () => {
       gsap.ticker.remove(raf)
       lenisRef.current = null
+      lenisBox.l = null
       lenis.destroy()
     }
   }, [])
@@ -310,7 +316,7 @@ export function App() {
           opens onto the hero's own scene, and the mascot page has no such scene
           to open onto. */}
       {/* /new-hero เป็นหน้าเปล่าไว้ทดลอง — สปแลชของเว็บบังของที่กำลังจูนอยู่เปล่า ๆ */}
-      {showSplash && !isIntroLab && !isNewHero && !isRigExport && !isFavLab && !isBlocks && !isFastwork &&
+      {showSplash && !isIntroLab && !isNewHero && !isRigExport && !isFavLab && !isBlocks && !isFastwork && !isAbout &&
         (landedOn === '/2026' ? (
           /* /2026 มีอินโทรของตัวเอง (เศษโค้ด -> สนาม ASCII -> เวิร์ดมาร์ก)
              หน้าอื่นยังใช้สปแลชเดิม — คนละภาษาภาพกัน ไม่ควรบังคับให้เหมือน */
@@ -347,6 +353,10 @@ export function App() {
       ) : isFastwork ? (
         <Suspense fallback={null}>
           <FastworkProfile />
+        </Suspense>
+      ) : isAbout ? (
+        <Suspense fallback={null}>
+          <AboutMePage />
         </Suspense>
       ) : isV3 ? (
         <Portfolio2026FinalPage />

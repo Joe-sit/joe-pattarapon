@@ -926,8 +926,8 @@ function Backdrop({ clay, clip = false }) {
     u.uCloudScale.value = t.skyCloudScale
     u.uCloudCut.value = t.skyCloudCut
     /*
-     * เมฆงอกตอนเปิดฉาก: ฟ้าของด่านโหลด (BlobReveal) ไม่มีเมฆ ฉากจริงไหลออกจากปากบานแล้วเมฆเต็มก้อนโผล่ตามขอบรู
-     * = ภาพกระโดด · ให้เมฆโตจากแกนก้อน (จุดใหญ่สุดก่อน) หลังฉากไหลออกมาแล้ว · ไม่มีอินโทร = เต็มเลย
+     * เมฆตอนเปิดฉาก: ฟ้าของด่านโหลด (BlobReveal) ไม่มีเมฆ ฉากจริงไหลออกจากปากบานแล้วเมฆเต็มก้อนโผล่ตามขอบรู
+     * = ภาพกระโดด · ให้เมฆจางขึ้นหลังฉากไหลออกมาแล้ว (ขนาดก้อน/จุดเท่าเดิมตลอด ไม่โต) · ไม่มีอินโทร = เต็มเลย
      */
     const it = introTime()
     const ci = it < 0 ? 1 : Math.min(1, Math.max(0, (it - 0.8) / 1.6))
@@ -1094,17 +1094,16 @@ function Backdrop({ clay, clip = false }) {
                */
               float mass = fbmN(flow * 0.3, 2);
               float n = fbmN(flow, 3) * 0.62 + mass * 0.52;
-              /* uCloudIn < 1 = เกณฑ์สูงขึ้น เหลือแต่แกนก้อน → ก้อนบานออกหาขอบ (ดู uCloudIn ในลูปเฟรม) */
-              float cutIn = uCloudCut + (1.0 - uCloudIn) * 0.34;
-              float dens = smoothstep(cutIn, cutIn + 0.2, n) * band;
+              float dens = smoothstep(uCloudCut, uCloudCut + 0.2, n) * band;
               /* รัศมีจุด: √ความหนาแน่น เพื่อให้ *พื้นที่* ของจุดโตเป็นเส้นตรงตามความหนาแน่น */
-              float rad = sqrt(dens) * 0.62 * (0.55 + 0.45 * uCloudIn);
+              float rad = sqrt(dens) * 0.62;
               vec2 cell = fract(gl_FragCoord.xy / max(2.0, uCloudDot)) - 0.5;
               float dotv = 1.0 - smoothstep(rad - 0.05, rad + 0.02, length(cell));
               /* ท้องเมฆขาวจัด ขอบเมฆอมสีฟ้าของฟ้าเอง — ไม่ใช่ขาวเท่ากันทั้งก้อน */
               /* ท้องเมฆสว่างสุดที่ 0.94 ไม่ถึงขาวสนิท — ขาวสนิทแข่งกับหัวเรื่องซึ่งขาวจริง */
               vec3 cloudCol = mix(mix(sky, vec3(0.94), 0.72), vec3(0.94), dens);
-              sky = mix(sky, cloudCol, dotv * uCloud);
+              /* โผล่ตอนเปิดฉาก = จางขึ้นอย่างเดียว ขนาดก้อน/จุดคงที่ตลอด (uCloudIn) */
+              sky = mix(sky, cloudCol, dotv * uCloud * uCloudIn);
             }
 
             /* โหมด clay: ไล่เทาแทนทั้งผืน (ผสมด้วย mix ไม่ใช่ if ตาม shader-mobile) */
@@ -3155,7 +3154,28 @@ function Scene({ bare = false }) {
             rotation={[t.skaterRotX * RAD, t.skaterRotY * RAD, t.skaterRotZ * RAD]}
             scale={t.skaterScale}
           >
-          <HeroRider legPose={legPose} torsoPose={torsoPose} />
+          {/*
+            ชี้ตัวละคร = tooltip "About me" ตามเคอร์เซอร์ (หน้า /2026-final วาด — ดู HeroAboutTip) · คลิก = ไปหน้า About me
+            ส่งเป็น event ของหน้าต่าง — แคนวาสนี้ไม่ต้องรู้จักเราเตอร์
+          */}
+          <group
+            onPointerOver={(e) => {
+              e.stopPropagation()
+              document.body.style.cursor = 'pointer'
+              window.dispatchEvent(new CustomEvent('hero-about', { detail: { on: true } }))
+            }}
+            onPointerOut={() => {
+              document.body.style.cursor = ''
+              window.dispatchEvent(new CustomEvent('hero-about', { detail: { on: false } }))
+            }}
+            onClick={(e) => {
+              e.stopPropagation()
+              document.body.style.cursor = ''
+              window.dispatchEvent(new CustomEvent('hero-about', { detail: { on: false, open: true } }))
+            }}
+          >
+            <HeroRider legPose={legPose} torsoPose={torsoPose} />
+          </group>
           </Entrance>
         )}
       </group>

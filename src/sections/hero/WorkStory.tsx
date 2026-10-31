@@ -10,10 +10,12 @@ import { DeviceHalo } from './DeviceHalo'
 import { BenchScreen } from './BenchScreen'
 import { FallSky, type FallPose } from './FallSky'
 import { BEAT, endOf, storySv2 } from '@/sections/skystory/beats'
+import { SlingGate } from './SlingGate'
+import { SlingRider } from './SlingRider'
 import { AsciiClouds, type CloudBlob } from '@/components/AsciiClouds'
 import { DECK_WORKS } from './WorksGallery'
 import { ISLAND } from './ResearchPlatform'
-import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, TILE_SLOTS, WORKS_BOOM, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, STORY_FONT, GRID_ITEMS, gridRect, worksGridScroll, type WorkBeats } from './workMotion'
+import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, TILE_SLOTS, WORKS_BOOM, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, STORY_FONT, type WorkBeats } from './workMotion'
 
 /**
  * เครื่องแก้วเป็นโต๊ะทำงาน — เรื่องต่อจาก "Here is what I do"
@@ -200,13 +202,6 @@ export function WorkStory() {
   const [openTile, setOpenTile] = useState(-1)
   const tilesBox = useRef<HTMLDivElement>(null)
   const tileBtns = useRef<(HTMLButtonElement | null)[]>([])
-  const viewTag = useRef<HTMLDivElement>(null)
-  const gridBox = useRef<HTMLDivElement>(null)
-  const gridHead = useRef<HTMLDivElement>(null)
-  const gridCaps = useRef<(HTMLDivElement | null)[]>([])
-  const gridTags = useRef<(HTMLDivElement | null)[]>([])
-  const tileLabels = useRef<(HTMLSpanElement | null)[]>([])
-  const tileArrows = useRef<(HTMLSpanElement | null)[]>([])
   useEffect(() => {
     worksUI.open = openTile
     if (openTile < 0) return
@@ -235,6 +230,41 @@ export function WorkStory() {
   const wordsClip = useRef<HTMLDivElement>(null)
   const dark = useRef<HTMLDivElement>(null)
   const liftNow = useRef(0)
+  const tileLabels = useRef<(HTMLSpanElement | null)[]>([])
+  const tileArrows = useRef<(HTMLSpanElement | null)[]>([])
+  const hitFlash = useRef<HTMLDivElement>(null)
+  /** จังหวะชน: เวลาที่ข้าม CODE_HIT (ms) · ค่าบท Code เฟรมก่อน */
+  const hitAt = useRef({ t: -1, prev: 0 })
+  /* แรงกระแทกตอนชน — วิ่งทุกเฟรมตามเวลาจริงช่วง 0.8 วิ หลังชน (ส่วนที่ผูกสกรอลล์อัปเดตเฉพาะตอนเลื่อน ใช้ไม่ได้) */
+  useEffect(() => {
+    let raf = 0
+    const loop = () => {
+      raf = requestAnimationFrame(loop)
+      const t = hitAt.current.t
+      if (t < 0) return
+      const hdt = (performance.now() - t) / 1000
+      if (hdt > 0.85) return
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      const lift = liftNow.current
+      const shk = hdt < 0.6 ? Math.exp(-hdt * 8) * 11 : 0
+      const sx = Math.sin(hdt * 83) * shk + Math.sin(hdt * 151 + 1.3) * shk * 0.4
+      const sy = Math.sin(hdt * 97 + 0.7) * shk * 0.7
+      /* ขยายเกินจอตามแรงสั่น (ขอบไม่หลุดเห็นของข้างหลัง) — ระยะสั่นสูงสุด ×2 ต่อด้านสั้นของจอ */
+      const over = 1 + (shk * 1.5 * 2) / Math.min(vw, vh)
+      if (layer.current) layer.current.style.transform = `translate3d(${sx.toFixed(1)}px, ${(lift + sy).toFixed(1)}px, 0) scale(${over.toFixed(4)})`
+      const hx = devScreen.ok ? devScreen.cx : vw / 2
+      const hy = devScreen.ok ? devScreen.cy - devScreen.hh * 0.75 - lift : vh * 0.3
+      const fl = hitFlash.current
+      if (fl) {
+        fl.style.opacity = (Math.exp(-hdt * 11) * Math.min(1, hdt * 60)).toFixed(3)
+        fl.style.transform = `translate(${hx.toFixed(0)}px, ${hy.toFixed(0)}px) translate(-50%, -50%) scale(${(8 + Math.pow(hdt, 0.5) * 70).toFixed(1)})`
+        if (hdt > 0.8) fl.style.opacity = '0'
+      }
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [])
   /**
    * คำ Code สลายเป็น ASCII แบบพุ่งหาคนดู (ทุกเฟรม — อักขระสลับตัววิบวับตามเวลาแม้หยุดเลื่อน)
    *   ช่วงแรก: เนื้อคำกลายเป็นตารางอักขระ (ทึบตรงเนื้อเต็ม) แล้วอักขระสลับตัวไปมาบนบันไดเดียวกันเหมือนกำลังถอดรหัส
@@ -247,7 +277,10 @@ export function WorkStory() {
     if (!cv) return
     const vw = window.innerWidth
     const vh = window.innerHeight
-    const dis = live ? (b.code - DIS_FROM) / DIS_LEN : 0
+    /* แรงชน: ทันทีที่ชน คำแตกออกจากจุดชนตามเวลา (~0.35 วิ) แม้หยุดเลื่อน — จากนั้นระยะเลื่อนพาต่อ */
+    const ht = hitAt.current.t
+    const burst = ht >= 0 ? 0.16 * smooth((performance.now() - ht) / 350) : 0
+    const dis = live ? Math.max((b.code - DIS_FROM) / DIS_LEN, b.code >= DIS_FROM ? burst : 0) : 0
     const g = cv.getContext('2d')
     if (!g) return
     const ci = SKILL_WORDS.findIndex((w) => w.key === 'code')
@@ -317,6 +350,7 @@ export function WorkStory() {
     }
     const fstep = Math.floor(time * 14)
     let lastFs = -1
+    const fly: { x: number; y: number; x0: number; y0: number; k1: number; k0: number; size: number; lvl: number; a: number }[] = []
     for (let row = 0; row < m.rows; row++)
       for (let col = 0; col < m.cols; col++) {
         const c = m.cov[row * m.cols + col]
@@ -370,6 +404,11 @@ export function WorkStory() {
         /* ไม่จางเร็ว: ใหญ่ขึ้นเรื่อย ๆ จนเกือบชนกล้องค่อยจาง (ระยะใกล้มาก ๆ) — ช่วงท้ายสุดของการพุ่งเท่านั้น */
         const a = appear * wipe * (1 - smooth((k1 - 9) / 6)) * (1 - smooth((p - 0.9) / 0.1)) * (0.6 + 0.4 * c)
         if (a < 0.01) continue
+        /* หลุดแล้วพุ่งเข้ากล้อง = วาดหลังเจาะรู (ทะลุออกหน้าเครื่อง) · ยังติดคำ = วาดตอนนี้ (โดนรูตามกรอบเครื่องตัด) */
+        if (p > 0.08) {
+          fly.push({ x, y, x0: P0.x, y0: P0.y, k1, k0: P0.k, size, lvl, a })
+          continue
+        }
         const near = Math.max(0, Math.min(1, (k1 - 1) / 4))
         const rgb = `${Math.round(255 - 45 * near)},${Math.round(255 - 75 * near)},255`
         /* หางความเร็ว: จากตำแหน่งเมื่อครู่มาถึงตอนนี้ — ยาวขึ้นตามความเร็วเข้าหากล้อง */
@@ -401,6 +440,26 @@ export function WorkStory() {
       g.roundRect(cx - hw, cy - hh - liftNow.current, hw * 2, hh * 2, Math.min(devScreen.r, hw, hh))
       g.fill()
       g.globalCompositeOperation = 'source-over'
+    }
+    /* เศษที่หลุดแล้ว: หน้าเครื่อง — มีหางความเร็ว ใกล้กล้องอมม่วง */
+    for (const f of fly) {
+      const near = Math.max(0, Math.min(1, (f.k1 - 1) / 4))
+      const rgb = `${Math.round(255 - 45 * near)},${Math.round(255 - 75 * near)},255`
+      if (Math.abs(f.k1 - f.k0) > 0.05) {
+        g.strokeStyle = `rgba(${rgb},${(f.a * 0.35).toFixed(3)})`
+        g.lineWidth = Math.max(1, f.size * 0.08)
+        g.beginPath()
+        g.moveTo(f.x0, f.y0)
+        g.lineTo(f.x, f.y)
+        g.stroke()
+      }
+      const fs = f.size < 24 ? Math.round(f.size) : f.size < 80 ? Math.round(f.size / 4) * 4 : Math.round(f.size / 16) * 16
+      if (fs !== lastFs) {
+        g.font = `700 ${fs}px ui-monospace, SFMono-Regular, Menlo, monospace`
+        lastFs = fs
+      }
+      g.fillStyle = `rgba(${rgb},${f.a.toFixed(3)})`
+      g.fillText(DIS_RAMP[f.lvl], f.x, f.y)
     }
   }, [])
 
@@ -446,7 +505,6 @@ export function WorkStory() {
         if (font > 0 && ww.offsetWidth > 0) {
           ly.font = font
           ly.ox = spans.map((sp) => sp.offsetLeft)
-          /* คำพื้นหลังกลางจอ (translate −50%) */
           ly.left = vw / 2 - ww.offsetWidth / 2
           ly.cy = vh / 2
           ly.ok = true
@@ -460,8 +518,11 @@ export function WorkStory() {
       const inW = wp >= WORKS_HAND[0] ? 1 : 0
       /* ค้างเป็นพื้นหลังตลอด section My Works · ออกพร้อมไทล์ท้ายบท */
       const outW = smooth((wp - WORKS_HOLD[1]) / (WORKS_HOLD[2] - WORKS_HOLD[1]))
-      /* พื้นดำของผัง Selected Work ขึ้น = คำใหญ่จางออก (หัวข้อของผังรับช่วง) — ผูกกับระยะเลื่อนช่วงแจก */
-      const vw2 = frame.current.on ? inW * (1 - outW) * (1 - smooth((wp - 0.12) / 0.4)) : 0
+      /*
+       * พื้นดำของวงการ์ดขึ้น (แบบ jesperlandberg ไม่มีคำใหญ่ทับ) = คำจางออก — ผูกกับระยะเลื่อนช่วงแจก ไม่ใช่ worksUI.dark
+       * (ท้ายบทพื้นดำจางลง คำจะกลับมาโผล่ทับการ์ดที่กำลังออก)
+       */
+      const vw2 = frame.current.on ? inW * (1 - outW) * (1 - smooth((wp - 0.14) / 0.45)) : 0
       ww.style.visibility = vw2 > 0.002 ? 'visible' : 'hidden'
       ww.style.opacity = vw2.toFixed(3)
       /*
@@ -471,36 +532,20 @@ export function WorkStory() {
       const lw = smooth((wp - WORKS_BOOM[0] - WORKS_BOOM[1] * 0.2) / (WORKS_BOOM[1] * 0.7))
       ww.style.transform = `translate(-50%, -50%) translate(${(lw * vw * -0.08).toFixed(1)}px, ${(lw * vh * 0.33).toFixed(1)}px) rotate(${(lw * -15).toFixed(2)}deg) scale(${(1 - lw * 0.42 + outW * 0.08).toFixed(4)})`
     }
-    /* ── ผัง Selected Work (แบบ produx): พื้นดำ + หัวข้อ + ชื่อ/คำอธิบายใต้ภาพ + ป้ายหมวดมุมภาพ — ตำแหน่งจาก gridRect ชุดเดียวกับการ์ด 3D ── */
-    {
-      const on = frame.current.on
-      const gb = gridBox.current
-      if (gb) {
-        const wp = worksPostSm.v
-        /* ข้อความขึ้นหลังการ์ดลงช่อง · ท้ายบทจางพร้อมการ์ด */
-        const a = on ? smooth((wp - 0.5) / 0.2) * (1 - smooth((wp - WORKS_HOLD[1]) / (WORKS_HOLD[2] - WORKS_HOLD[1]))) : 0
-        gb.style.visibility = a > 0.002 ? 'visible' : 'hidden'
-        gb.style.opacity = a.toFixed(3)
-        if (a > 0.002) {
-          const vw = window.innerWidth
-          const vh = window.innerHeight
-          const off = worksGridScroll(wp, vw, vh)
-          if (gridHead.current) gridHead.current.style.transform = `translateY(${(vh * 0.11 - off).toFixed(1)}px)`
-          GRID_ITEMS.forEach((_, i) => {
-            const r = gridRect(i, vw, vh, off)
-            const cap = gridCaps.current[i]
-            if (cap) cap.style.transform = `translate(${r.x.toFixed(1)}px, ${(r.y + r.h).toFixed(1)}px)`
-            const tag = gridTags.current[i]
-            if (tag) tag.style.transform = `translate(${(r.x + r.w).toFixed(1)}px, ${(r.y + r.h).toFixed(1)}px) translate(-100%, -100%)`
-          })
-        }
-      }
-    }
     /* ── ปุ่มไทล์งาน (DOM ทับตำแหน่งไทล์ 3D) — กดได้เฉพาะช่วงค้าง ── */
     const tb = tilesBox.current
     if (tb) {
       const hold = frame.current.on && worksUI.hold === 1
       tb.style.visibility = hold ? 'visible' : 'hidden'
+      /* ชื่องาน/ลูกศรตั้ง visibility เองตอนค้าง (ชนะ hidden ของกล่องแม่) — พ้นช่วงค้างต้องซ่อนเอง ไม่งั้นค้างลอยทับด่านถัดไป */
+      if (!hold) {
+        tileLabels.current.forEach((el) => {
+          if (el) el.style.visibility = 'hidden'
+        })
+        tileArrows.current.forEach((el) => {
+          if (el) el.style.visibility = 'hidden'
+        })
+      }
       if (hold) {
         tileBtns.current.forEach((el, n) => {
           if (!el) return
@@ -568,7 +613,18 @@ export function WorkStory() {
         was = live
         setOn(live)
       }
-      if (layer.current) layer.current.style.transform = lift ? `translate3d(0, ${lift.toFixed(1)}px, 0)` : ''
+      /*
+       * จังหวะชน (เครื่องพุ่งชนคำ Code ตอน CODE_HIT): ข้ามไปข้างหน้า = จับเวลาจริง แล้วเล่นแรงกระแทกตามเวลา ไม่ใช่ตามระยะเลื่อน
+       *   จอสั่น (สุ่มกำหนดผล ไล่จางเร็ว ~0.45 วิ) · แสงวาบขาวม่วงบานจากจุดชน · วงคลื่นกระแทกขยายออก
+       * กระโดดไกล (เปิดหน้ากลางบท) ไม่นับเป็นการชน
+       */
+      const ha = hitAt.current
+      const cNow = live ? b.code : 0
+      if (ha.prev < CODE_HIT && cNow >= CODE_HIT && cNow - ha.prev < 0.15) ha.t = performance.now()
+      if (cNow < CODE_HIT - 0.05) ha.t = -1
+      ha.prev = cNow
+      /* จอสั่น/แสงวาบ/วงคลื่นเล่นตามเวลาใน loop ของมันเอง (ดู useEffect ของ hitAt) — ตรงนี้ตั้งแค่ระยะยก */
+      if (layer.current && !(ha.t >= 0 && performance.now() - ha.t < 600)) layer.current.style.transform = lift ? `translate3d(0, ${lift.toFixed(1)}px, 0)` : ''
 
       /* ── บท Code: ฉากมืดลง (ทับฟ้ากับเมฆ) แสงออร่าม่วงที่ขอบบนกับขอบล่างของเครื่อง · กลับสว่างตอนจบบท ── */
       const dk = dark.current
@@ -699,7 +755,7 @@ export function WorkStory() {
         <Canvas
           className="!absolute inset-0"
           frameloop="demand"
-          /* เมฆจุดครึ่งโทนต้องคมเท่าจุดของ hero — dpr 1 (ไม่ใช่ 0.6 ที่จุดเบลอตอนขยาย) · ยังถูกกว่าเดิม (1.25–2) และ shader ข้ามพิกเซลว่างเอง */
+          /* เมฆจุดครึ่งโทนต้องคม — dpr 1 · shader ข้ามพิกเซลว่างเอง */
           dpr={1}
           orthographic
           camera={{ position: [0, 0, 2400], zoom: 1, near: 1, far: 8000 }}
@@ -727,7 +783,6 @@ export function WorkStory() {
         </div>
         {/* คำใหญ่ของแต่ละบท (ตัวทึบ) — เหนือฟ้า ใต้ของบนจอ · เจาะรูตามกรอบเครื่อง: ในกรอบเครื่องเหลือแต่เส้นขอบ */}
         <div ref={bigSolid} className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-        <canvas ref={disCanvas} className="absolute inset-0 size-full" />
         <div ref={wordsClip} className="absolute inset-0">
         {SKILL_WORDS.map((sw, i) => (
           <div
@@ -767,8 +822,16 @@ export function WorkStory() {
             <directionalLight position={[-500, 700, 1000]} intensity={2.6} />
             <DeviceHalo />
             <BenchScreen frame={frame} />
+            <SlingRider />
           </Suspense>
         </Canvas>
+        {/*
+          แคนวาสสลายคำ Code อยู่ *เหนือ* แคนวาสเครื่อง — เศษที่หลุดพุ่งเข้าหากล้องต้องทะลุออกมาหน้าเครื่อง
+          (เนื้อที่ยังติดคำถูกเจาะรูตามกรอบเครื่องในแคนวาสเอง = ยังอยู่หลังเครื่อง)
+        */}
+        <canvas ref={disCanvas} className="absolute inset-0 size-full" />
+        {/* แสงวาบตอนเครื่องชนคำ (นับเวลาจริงจากจังหวะชน — ไม่ผูกระยะเลื่อน) */}
+        <div ref={hitFlash} className="pointer-events-none absolute top-0 left-0 size-[10px] rounded-full" style={{ opacity: 0, background: 'radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(235,220,255,0.7) 14%, rgba(170,130,255,0.18) 38%, rgba(150,110,255,0) 60%)', mixBlendMode: 'screen' }} aria-hidden />
         {/* คำใหญ่ชั้นเส้นขอบ — เหนือ widget/island บนจอเครื่อง แต่ใต้ตัวเครื่องแก้ว (แคนวาสของฟอง) — คำจึงอยู่หลังเครื่องเสมอ
             ตรงที่ของบนจอบังตัวทึบ ยังเห็นรูปตัวอักษรเป็นเส้นขอบ */}
         {/*
@@ -802,55 +865,9 @@ export function WorkStory() {
        * section My Works: ปุ่มไทล์งานทับตำแหน่งไทล์ 3D (ช่อง TILE_SLOTS) — hover ยกไทล์ · คลิกเปิดเต็มจอ
        * เปิดแล้ว: แผงรายละเอียด (ยังไม่มีเนื้อหางาน — บล็อกเทาว่างตามที่ตั้งไว้) + ปุ่มปิด · Esc / เลื่อนจอ = ปิด
        */}
-      {/* ข้อความของผัง Selected Work (แบบ produx) — ไม่รับเมาส์ ปุ่มกดอยู่ชั้นไทล์ */}
-      <div ref={gridBox} className="pointer-events-none fixed inset-0 z-[52] overflow-hidden text-white [text-shadow:0_1px_10px_rgba(20,50,120,0.25)]" style={{ visibility: 'hidden', opacity: 0, fontFamily: STORY_FONT }} aria-hidden>
-        <div ref={gridHead} className="absolute inset-x-[7vw] top-0 flex items-end justify-between">
-          <h2 className="text-[clamp(34px,3.3vw,56px)] leading-[1.02] font-medium tracking-[-0.03em]">
-            Selected
-            <br />
-            Work
-          </h2>
-          <span className="mb-2 border-b border-white/70 pb-1 font-mono text-[12px] tracking-[0.08em] uppercase">View all works</span>
-        </div>
-        {GRID_ITEMS.map((_, i) => {
-          const d = DECK_WORKS[i % DECK_WORKS.length]
-          return (
-            <div key={i}>
-              <div
-                ref={(el) => {
-                  gridTags.current[i] = el
-                }}
-                className="absolute top-0 left-0 flex gap-[3px] p-2.5"
-              >
-                <span className="bg-[#2a2a2c]/90 px-2 py-1 font-mono text-[10px] tracking-[0.06em] text-white/85 uppercase">{d.category}</span>
-              </div>
-              <div
-                ref={(el) => {
-                  gridCaps.current[i] = el
-                }}
-                className="absolute top-0 left-0 flex gap-3 pt-[1.4vw]"
-              >
-                <span className="mt-[0.45em] size-2 shrink-0 border border-white/70" />
-                <div className="max-w-[min(30vw,420px)]">
-                  <div className="text-[clamp(15px,1.15vw,20px)] leading-tight font-medium">{d.name}</div>
-                  <div className="mt-2 font-mono text-[11px] leading-[1.35] text-white/80 uppercase">{d.sub}</div>
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+      {/* ด่านหนังสติ๊กท้าย Selected Work → section ถัดไป (ตัวละครในเปล — SlingRider ในแคนวาสของบนจอ) */}
+      <SlingGate frame={frame} />
       <div ref={tilesBox} className="pointer-events-none fixed inset-0 z-[52]" style={{ visibility: 'hidden' }}>
-        {/* ป้าย ↗ VIEW ตามเคอร์เซอร์ตอนชี้การ์ด (แบบ produx.design) */}
-        <div
-          ref={viewTag}
-          className="pointer-events-none fixed top-0 left-0 z-[3] flex gap-[3px] font-mono text-[12px] font-semibold tracking-[0.06em] text-black uppercase transition-opacity duration-200"
-          style={{ opacity: 0 }}
-          aria-hidden
-        >
-          <span className="grid size-7 place-items-center bg-white">↗</span>
-          <span className="grid h-7 place-items-center bg-white px-2.5">View</span>
-        </div>
         {openTile < 0 &&
           TILE_SLOTS.map((_, n) => (
             <button
@@ -864,22 +881,8 @@ export function WorkStory() {
               onPointerEnter={() => {
                 worksUI.hover = n
               }}
-              onPointerMove={(e) => {
-                /* uv บนหน้าการ์ด (ประมาณจากกล่องบนจอ) — ขับภาพบิด · ป้าย VIEW ตามเคอร์เซอร์ */
-                const r = e.currentTarget.getBoundingClientRect()
-                worksUI.mouse.u = (e.clientX - r.left) / Math.max(1, r.width)
-                worksUI.mouse.v = 1 - (e.clientY - r.top) / Math.max(1, r.height)
-                worksUI.mouse.card = n
-                const tag = viewTag.current
-                if (tag) {
-                  tag.style.opacity = '1'
-                  tag.style.transform = `translate(${(e.clientX + 18).toFixed(0)}px, ${(e.clientY + 14).toFixed(0)}px)`
-                }
-              }}
               onPointerLeave={() => {
                 if (worksUI.hover === n) worksUI.hover = -1
-                if (worksUI.mouse.card === n) worksUI.mouse.card = -1
-                if (viewTag.current) viewTag.current.style.opacity = '0'
               }}
               onClick={() => {
                 worksUI.hover = -1

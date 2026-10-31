@@ -676,7 +676,8 @@ const GROUPS: { title: string; rows: [Num, string, number, number, number][] }[]
  * ฉาก favicon ทั้งชุด (กล้อง เส้นแสง พื้น เงาซ้อน ไฟ ตัวละคร) — ใช้ในหน้านี้ และปกโปรไฟล์ Fastwork (pages/FastworkHead3D)
  * ให้หัวในปกตรงกับ favicon ที่จูนไว้ทุกค่า
  */
-export function FaviconScene({ s, spin }: { s: S; spin?: React.Ref<THREE.Group> }) {
+/** face: หน้าการ์ตูนแบบ hero (facePose ของ Mascot) — ไม่ส่ง = หน้าตาจาก GLB แบบ favicon */
+export function FaviconScene({ s, spin, face }: { s: S; spin?: React.Ref<THREE.Group>; face?: object }) {
   const follow = useMemo(
     /* headFollow 0 = ไม่หันตามเมาส์เลย (ภาพ favicon ต้องนิ่งตามที่จูน) — เหลือแค่มุมหัวจากสไลเดอร์ */
     () => ({ headBaseYaw: s.headYaw, headBasePitch: s.headPitch, headBaseRoll: s.headRoll, headYaw: 0, headPitch: 0, headFollow: 0 }),
@@ -711,7 +712,7 @@ export function FaviconScene({ s, spin }: { s: S; spin?: React.Ref<THREE.Group> 
         <group position={[s.tx, s.ty, s.tz]}>
           <group ref={spin}>
             <group position={[-s.tx, -s.ty, -s.tz]}>
-              <Mascot isolated noIdle rotation={[0, s.bodyYaw, 0]} followOverride={follow as never} />
+              <Mascot isolated noIdle rotation={[0, s.bodyYaw, 0]} followOverride={follow as never} cartoonFace={(face ? true : null) as never} facePose={(face ?? null) as never} />
             </group>
           </group>
         </group>

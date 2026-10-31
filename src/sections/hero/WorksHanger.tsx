@@ -2,8 +2,7 @@ import { useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { HeroRider } from '@/newhero/HeroRider'
-import { Cursor } from '@/newhero/Cursor'
-import { WORKS_EMERGE, WORKS_HANG, WORKS_HOLD, clamp01, smooth, worksPostSm, worksUI } from './workMotion'
+import { WORKS_BOOM, WORKS_HOLD, clamp01, slotRect, smooth, worksPostSm, worksUI } from './workMotion'
 
 /**
  * ตัวละครใน section My Works — ตัวเดียวกับ hero (HeroRider) ห้อยดึงไทล์งานช่อง 0 แบบภาพประกอบ Essential coding apps
@@ -16,19 +15,14 @@ import { WORKS_EMERGE, WORKS_HANG, WORKS_HOLD, clamp01, smooth, worksPostSm, wor
  */
 
 /** ความสูงตัวละครบนจอ (สัดส่วนความสูงจอ) · ระนาบโลกที่วาง (หน้าไทล์) */
-const BODY_VH = 1.02
-const PLANE_Z = 1500
+const BODY_VH = 0.66
+const PLANE_Z = 1440
 /** เอียงเท้าเข้าหากล้อง (องศา) — ยิ่งมาก ขายิ่งยาวตามเพอร์สเปกทีฟ */
-const LOW_ANGLE = -64
+const LOW_ANGLE = -56
 
 const RAD = Math.PI / 180
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t
 /* HeroRider เป็น JSX — ค่าเริ่มต้น null ทำให้ TS อนุมานชนิด prop เป็น null · ท่ามีรูปร่างตาม SKATE_ARM / SKATE_LEG / SKATE_TORSO ใน joespresso Mascot */
 const Rider = HeroRider as unknown as React.ComponentType<Record<string, unknown>>
-const Arrow = Cursor as unknown as React.ComponentType<Record<string, unknown>>
-/** เคอร์เซอร์สูงเท่านี้ของความสูงตัวละคร · เอียง (องศา) */
-const CURSOR_K = 0.34
-const CURSOR_TILT = 18
 const RO = new THREE.Vector3()
 const RP = new THREE.Vector3()
 const A = new THREE.Vector3()
@@ -43,7 +37,6 @@ export function WorksHanger() {
   const pull = useRef(0)
   const away = useRef(0)
   const inner = useRef<THREE.Group>(null)
-  const cur = useRef<THREE.Group>(null)
   /*
    * วัดตัวละครครั้งเดียวหลังโหลด+ตั้งท่าแล้ว (ไม่เดาขนาด GLB): จุดบนสุด = มือที่เหยียดขึ้น → ย้ายมาไว้ที่จุดหมุน
    * ความสูงตัว (หน่วยของมัน) ใช้แปลงเป็น px บนจอ
@@ -110,10 +103,7 @@ export function WorksHanger() {
     const gg = g.current
     if (!gg) return
     const post = worksPostSm.v
-    /* โผล่จากแสงตรงสันหนังสือ (กลางจอ เล็ก ไกล) → โค้งขึ้นไปค้างจุดห้อย · หลังถึงแกว่งลูกตุ้มเลยนิดแล้วนิ่ง */
-    const emRaw = clamp01((post - WORKS_EMERGE[0]) / WORKS_EMERGE[1])
-    const land = smooth(emRaw)
-    const settle = clamp01((post - WORKS_EMERGE[0] - WORKS_EMERGE[1]) / 0.25)
+    const land = smooth(clamp01((post - WORKS_BOOM[0] - WORKS_BOOM[1] * 0.25) / (WORKS_BOOM[1] * 0.65)))
     const ex = smooth(clamp01((post - WORKS_HOLD[1]) / (WORKS_HOLD[2] - WORKS_HOLD[1])))
     const dt = Math.min(0.1, delta)
     pull.current += ((worksUI.hover === 0 ? 1 : 0) - pull.current) * (1 - Math.exp(-dt * 6))
@@ -133,14 +123,6 @@ export function WorksHanger() {
         if (!BOX.isEmpty()) {
           fit.current.h = BOX.max.y - BOX.min.y
           inn.position.set(-(BOX.min.x + BOX.max.x) / 2 - (BOX.max.x - BOX.min.x) * 0.12, -BOX.max.y, -(BOX.min.z + BOX.max.z) / 2)
-          /* เคอร์เซอร์ (สูง 1 หน่วย ปลายบน) — หางอยู่ที่มือ (จุดหมุน) ตัวชี้ขึ้นเอียงนิด */
-          const c = cur.current
-          if (c) {
-            const ck = fit.current.h * CURSOR_K
-            c.scale.setScalar(ck)
-            c.rotation.set(0, 0, CURSOR_TILT * RAD)
-            c.position.set(-Math.sin(CURSOR_TILT * RAD) * ck * 0.45, Math.cos(CURSOR_TILT * RAD) * ck * 0.45, 0)
-          }
         }
       }
       gg.scale.setScalar(1e-4)
@@ -150,6 +132,7 @@ export function WorksHanger() {
     if (!gg.visible) return
     const W = size.width
     const H = size.height
+    const rc = slotRect(0, W, H)
     /* จอ → โลก: เส้นจากกล้องผ่านจุดบนจอ ตัดระนาบ z = PLANE_Z (ตามความสูงจอเหมือนท่าล็อกของเล่มงาน) */
     const pz = PLANE_Z * (H / 900)
     const toWorld = (sx: number, sy: number, out: THREE.Vector3) => {
@@ -161,14 +144,14 @@ export function WorksHanger() {
     toWorld(W / 2 + 100, H / 2, B)
     const upp = A.distanceTo(B) / 100
     const bodyPx = H * BODY_VH
-    /* มือ (จับหางเคอร์เซอร์): จากสันหนังสือกลางจอ → จุดห้อย โค้งขึ้นกลางทาง · ออก/เปิดไทล์ = ตกลง */
-    const drop = (ex + away.current) * H * 0.9
-    const hx = lerp(W * 0.5, W * WORKS_HANG[0], land)
-    const hy = lerp(H * 0.5, H * WORKS_HANG[1], land) - Math.sin(Math.PI * land) * H * 0.14 + drop
+    /* มือจับขอบล่างไทล์ · เข้า = ลอยขึ้นจากล่างจอ · ออก/เปิดไทล์ = ตกลง */
+    const drop = (1 - land) * H * 0.9 + (ex + away.current) * H * 0.9
+    const hx = rc.cx
+    const hy = rc.cy + rc.h * 0.42 + drop
     toWorld(hx, hy, A)
     gg.position.copy(A)
-    /* ขนาด: ความสูงตัวที่วัดได้ → bodyPx บนจอ · ตอนโผล่เล็กจากในแสงแล้วโตขึ้น */
-    gg.scale.setScalar(((bodyPx * upp) / fit.current.h) * lerp(0.08, 1, land))
+    /* ขนาด: ความสูงตัวที่วัดได้ → bodyPx บนจอ */
+    gg.scale.setScalar((bodyPx * upp) / fit.current.h)
     /* ห้อยแกว่ง (หมุนรอบมือ) · ดึงแรง = เหวี่ยงมากขึ้น */
     const t = clock.elapsedTime
     const sw = swing.current
@@ -178,9 +161,7 @@ export function WorksHanger() {
        * perspective จึงยืดขาให้ยาว เท้าใหญ่ หัวกับไทล์เล็กลงไกลออกไป
        */
       sw.rotation.x = LOW_ANGLE * RAD
-      /* ระหว่างลอย ตัวเหวี่ยงตามหลังทิศที่ไป · ถึงแล้วแกว่งลูกตุ้มเลยนิดแล้วนิ่ง */
-      const osc = settle > 0 && settle < 1 ? Math.exp(-4 * settle) * Math.sin(settle * 14) * 16 : 0
-      sw.rotation.z = (-48 + (1 - land) * 34 + osc + Math.sin(t * 1.3) * 4 + pull.current * 10) * RAD
+      sw.rotation.z = (-24 + Math.sin(t * 1.3) * 4 + pull.current * 10) * RAD
       sw.rotation.y = (-18 + Math.sin(t * 0.9) * 6) * RAD
     }
   })
@@ -192,10 +173,6 @@ export function WorksHanger() {
         <group ref={inner}>
           <Rider noBoard noIdle armPose={armPose} legPose={legPose} torsoPose={torsoPose} />
         </group>
-      </group>
-      {/* เคอร์เซอร์ไม่แกว่งตาม (อยู่นอกกลุ่ม swing) — หันหน้าเข้ากล้องเสมอ ตัวละครแกว่งห้อยจากหางมัน */}
-      <group ref={cur}>
-        <Arrow kind="arrow" depth={0.3} outline={0.03} />
       </group>
     </group>
   )
