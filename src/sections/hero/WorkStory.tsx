@@ -11,11 +11,13 @@ import { BenchScreen } from './BenchScreen'
 import { FallSky, type FallPose } from './FallSky'
 import { BEAT, endOf, storySv2 } from '@/sections/skystory/beats'
 import { SlingGate } from './SlingGate'
+import { HoldHand } from './HoldHand'
+import { GrassStage } from './GrassStage'
 import { SlingRider } from './SlingRider'
 import { AsciiClouds, type CloudBlob } from '@/components/AsciiClouds'
 import { DECK_WORKS } from './WorksGallery'
 import { ISLAND } from './ResearchPlatform'
-import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, TILE_SLOTS, WORKS_BOOM, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, STORY_FONT, type WorkBeats } from './workMotion'
+import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, TILE_SLOTS, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, STORY_FONT, GRASS_STORY, GRASS_OPEN, CUT, type WorkBeats } from './workMotion'
 
 /**
  * เครื่องแก้วเป็นโต๊ะทำงาน — เรื่องต่อจาก "Here is what I do"
@@ -229,10 +231,12 @@ export function WorkStory() {
   /* ชั้นตัวคำ DOM (ไม่รวมแคนวาสสลาย) — เจาะรูด้วย clip-path ที่นี่ */
   const wordsClip = useRef<HTMLDivElement>(null)
   const dark = useRef<HTMLDivElement>(null)
+  const blackout = useRef<HTMLDivElement>(null)
   const liftNow = useRef(0)
   const tileLabels = useRef<(HTMLSpanElement | null)[]>([])
   const tileArrows = useRef<(HTMLSpanElement | null)[]>([])
   const hitFlash = useRef<HTMLDivElement>(null)
+  const benchCv = useRef<HTMLCanvasElement>(null)
   /** จังหวะชน: เวลาที่ข้าม CODE_HIT (ms) · ค่าบท Code เฟรมก่อน */
   const hitAt = useRef({ t: -1, prev: 0 })
   /* แรงกระแทกตอนชน — วิ่งทุกเฟรมตามเวลาจริงช่วง 0.8 วิ หลังชน (ส่วนที่ผูกสกรอลล์อัปเดตเฉพาะตอนเลื่อน ใช้ไม่ได้) */
@@ -518,24 +522,21 @@ export function WorkStory() {
       const inW = wp >= WORKS_HAND[0] ? 1 : 0
       /* ค้างเป็นพื้นหลังตลอด section My Works · ออกพร้อมไทล์ท้ายบท */
       const outW = smooth((wp - WORKS_HOLD[1]) / (WORKS_HOLD[2] - WORKS_HOLD[1]))
-      /*
-       * พื้นดำของวงการ์ดขึ้น (แบบ jesperlandberg ไม่มีคำใหญ่ทับ) = คำจางออก — ผูกกับระยะเลื่อนช่วงแจก ไม่ใช่ worksUI.dark
-       * (ท้ายบทพื้นดำจางลง คำจะกลับมาโผล่ทับการ์ดที่กำลังออก)
-       */
-      const vw2 = frame.current.on ? inW * (1 - outW) * (1 - smooth((wp - 0.14) / 0.45)) : 0
+      /* คำใหญ่อยู่ตลอดบท (ธีมเรา — คำใหญ่บนฟ้าแบบ Research/Design/Code) · ออกพร้อมวงการ์ดท้ายบท */
+      const vw2 = frame.current.on && !GRASS_STORY ? inW * (1 - outW) : 0
       ww.style.visibility = vw2 > 0.002 ? 'visible' : 'hidden'
       ww.style.opacity = vw2.toFixed(3)
       /*
-       * หลังการ์ดลงแถว: คำเอียงตามแนวทแยง วางใต้แถว (แบบภาพ ref) — เลื่อน/เอียง/ย่อ ตามจังหวะลงแถว
-       * (ตัวอักษร 3D ลงจอดที่ตำแหน่งกลางจอก่อน จากนั้นคำ DOM ค่อยไหลไปตำแหน่งนี้)
+       * ตอนวงการ์ดแจกออก: คำลอยขึ้นไปอยู่เหนือวง ย่อลง (วงกินกลางจอ) — ตัวอักษร 3D ลงจอดกลางจอก่อน แล้วคำ DOM ค่อยไหลขึ้น
        */
-      const lw = smooth((wp - WORKS_BOOM[0] - WORKS_BOOM[1] * 0.2) / (WORKS_BOOM[1] * 0.7))
-      ww.style.transform = `translate(-50%, -50%) translate(${(lw * vw * -0.08).toFixed(1)}px, ${(lw * vh * 0.33).toFixed(1)}px) rotate(${(lw * -15).toFixed(2)}deg) scale(${(1 - lw * 0.42 + outW * 0.08).toFixed(4)})`
+      /* ขึ้นพ้นวงก่อนการ์ดแจกเต็ม (วงการ์ดแจกช่วง worksPost ~0.2 → 0.6) — ไม่ให้ตัวอักษรโผล่ซอกการ์ด */
+      const lw = smooth((wp - 0.12) / 0.36)
+      ww.style.transform = `translate(-50%, -50%) translateY(${(lw * vh * -0.34).toFixed(1)}px) scale(${(1 - lw * 0.45 + outW * 0.08).toFixed(4)})`
     }
     /* ── ปุ่มไทล์งาน (DOM ทับตำแหน่งไทล์ 3D) — กดได้เฉพาะช่วงค้าง ── */
     const tb = tilesBox.current
     if (tb) {
-      const hold = frame.current.on && worksUI.hold === 1
+      const hold = frame.current.on && worksUI.hold === 1 && !GRASS_STORY
       tb.style.visibility = hold ? 'visible' : 'hidden'
       /* ชื่องาน/ลูกศรตั้ง visibility เองตอนค้าง (ชนะ hidden ของกล่องแม่) — พ้นช่วงค้างต้องซ่อนเอง ไม่งั้นค้างลอยทับด่านถัดไป */
       if (!hold) {
@@ -602,6 +603,8 @@ export function WorkStory() {
       /* เปิดตั้งแต่ฟองเริ่มหงาย (ฟ้าร่วง · การ์ดค้นคว้ารอบแท่น) */
       const live = b.lift > 0 && hand < 1 && sr.bottom > 0
       frame.current.b = b
+      /* เรื่องพื้นหญ้า: ฉากหญ้าคลุมเต็มจอแล้ว — ซ่อนของบนจอเครื่องข้างใต้ (ไม่งั้นโผล่ตรงฟ้าโปร่งของฉากหญ้า) จนเครื่องกลับมาตอน Ship */
+      if (benchCv.current) benchCv.current.style.visibility = GRASS_STORY && b.code >= GRASS_OPEN[0] + GRASS_OPEN[1] && b.ship <= 0 ? 'hidden' : ''
       frame.current.on = live
       /* ทั้งชั้นเลื่อนขึ้นด้วย CSS ตอนจอถัดไปดันขึ้นมาแล้ว — ฟ้าไม่ต้องยกเอง (lift 0) */
       const fp = fall.current
@@ -620,7 +623,8 @@ export function WorkStory() {
        */
       const ha = hitAt.current
       const cNow = live ? b.code : 0
-      if (ha.prev < CODE_HIT && cNow >= CODE_HIT && cNow - ha.prev < 0.15) ha.t = performance.now()
+      /* เรื่องพื้นหญ้า: เครื่องไม่ชนคำ (มือมาจับแทน) — ไม่มีแรงกระแทก */
+      if (!GRASS_STORY && ha.prev < CODE_HIT && cNow >= CODE_HIT && cNow - ha.prev < 0.15) ha.t = performance.now()
       if (cNow < CODE_HIT - 0.05) ha.t = -1
       ha.prev = cNow
       /* จอสั่น/แสงวาบ/วงคลื่นเล่นตามเวลาใน loop ของมันเอง (ดู useEffect ของ hitAt) — ตรงนี้ตั้งแค่ระยะยก */
@@ -664,6 +668,15 @@ export function WorkStory() {
           }
         }
       }
+
+      /*
+       * เรื่องพื้นหญ้า: ก่อนตัดเข้าฉากหญ้า (CUT) ฉาก Code หรี่ดำรอบเครื่อง — เหลือเครื่อง + มือบนความมืด = เฟรมแรกของฉากหญ้า
+       * ค้างไว้เลยจังหวะตัดนิด (ฉากหญ้านับเฟรมใน rAF ของมันเอง ช้ากว่าได้หนึ่งเฟรม) แล้วปล่อย — ฉากหญ้าคลุมทึบแล้ว
+       */
+      const bo = GRASS_STORY && live && b.code < CUT[0] + 0.02 ? smooth((b.code - (CUT[0] - CUT[1])) / CUT[1]) : 0
+      if (blackout.current) blackout.current.style.opacity = bo.toFixed(3)
+      if (bigFront.current) bigFront.current.style.opacity = bo > 0 ? (1 - bo).toFixed(3) : ''
+      if (disCanvas.current) disCanvas.current.style.opacity = bo > 0 ? (1 - bo).toFixed(3) : ''
 
       /* ── คำใหญ่พื้นหลังของบท (Research / Design / Code) ── */
       liftNow.current = lift
@@ -806,7 +819,9 @@ export function WorkStory() {
           {[...WORKS_TEXT].map((ch, n) => (ch === ' ' ? ' ' : <span key={n} data-l>{ch}</span>))}
         </div>
         </div>
-        <Canvas className="!absolute inset-0" frameloop="never" dpr={[1, 1.25]} camera={{ fov: FOV, position: [0, 0, 1700] }} gl={{ antialias: true, alpha: true }} style={{ pointerEvents: 'none' }}
+        {/* หรี่ดำก่อนตัดเข้าฉากหญ้า — ทับฟ้า/ฉากมืด/คำทึบ ใต้จอเครื่อง (แคนวาสถัดไป) */}
+        <div ref={blackout} className="pointer-events-none absolute inset-0 bg-black" style={{ opacity: 0 }} aria-hidden />
+        <Canvas ref={benchCv} className="!absolute inset-0" frameloop="never" dpr={[1, 1.25]} camera={{ fov: FOV, position: [0, 0, 1700] }} gl={{ antialias: true, alpha: true }} style={{ pointerEvents: 'none' }}
           /* ขาวต้องเป็นขาว: ตัวแมปโทนตั้งต้น (ACES) กดขาวลงเป็นเทาหม่น */
           onCreated={({ gl }) => {
             gl.toneMapping = THREE.NeutralToneMapping
@@ -866,6 +881,8 @@ export function WorkStory() {
        * เปิดแล้ว: แผงรายละเอียด (ยังไม่มีเนื้อหางาน — บล็อกเทาว่างตามที่ตั้งไว้) + ปุ่มปิด · Esc / เลื่อนจอ = ปิด
        */}
       {/* ด่านหนังสติ๊กท้าย Selected Work → section ถัดไป (ตัวละครในเปล — SlingRider ในแคนวาสของบนจอ) */}
+      {GRASS_STORY && <GrassStage frame={frame} />}
+      {GRASS_STORY && <HoldHand frame={frame} />}
       <SlingGate frame={frame} />
       <div ref={tilesBox} className="pointer-events-none fixed inset-0 z-[52]" style={{ visibility: 'hidden' }}>
         {openTile < 0 &&
@@ -902,7 +919,7 @@ export function WorkStory() {
                 ref={(el) => {
                   tileArrows.current[n] = el
                 }}
-                className="pointer-events-none absolute top-0 left-0 grid size-7 origin-bottom-right place-items-center rounded-full bg-black/85 text-white"
+                className="pointer-events-none absolute top-0 left-0 grid size-7 origin-bottom-right place-items-center rounded-full bg-white/90 text-[#2f6bff] shadow-[0_4px_14px_rgba(20,60,160,0.25)]"
                 style={{ visibility: 'hidden' }}
               >
                 <svg width="11" height="11" viewBox="0 0 13 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

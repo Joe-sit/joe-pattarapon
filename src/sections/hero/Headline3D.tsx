@@ -557,6 +557,10 @@ const BUBBLE_TOYS = false
  * ไม่ได้ปั้นทรงขึ้นใหม่: สีกับรูปร่างมาจากไฟล์ต้นฉบับทั้งหมด สิ่งที่เพิ่มคือความหนาเท่านั้น
  * (ไฟล์เดิมยังถูกใช้เป็นตัววัดกรอบในผัง HTML อยู่ แค่ถูกซ่อนไม่ให้เห็น)
  */
+/** สูงตัวพิมพ์ใหญ่ของฟอนต์หัวเรื่องเทียบขนาด 1 · สูงตัวอักษรในไฟล์ LIFE (หน่วย viewBox) */
+const CAP_H = 0.72
+const LIFE_GLYPH = 84
+
 function SvgArt({ box }: { box: LineBox }) {
   const data = useLoader(SVGLoader, box.src ?? '')
   /* โหลดและปั้นไว้ล่วงหน้าเหมือนตัวอักษร แต่ไม่ให้เห็นจนถึงคิวโชว์ (ดู Headline3DField) */
@@ -567,7 +571,11 @@ function SvgArt({ box }: { box: LineBox }) {
    * (ค่าที่ส่งเข้าแคนวาสเป็น prop คือชุดของตัวอักษร ซึ่งถูกคิดไว้ก่อนหน้าอยู่แล้ว)
    */
   const t = useTuner()
-  const thick = box.glass ? t.bbThick : 26
+  /*
+   * LIFE หนาเท่าตัวอักษรอื่น: ตัวอักษรอัดลึก hlDepth × ขนาดฟอนต์ (สูงตัวพิมพ์ใหญ่ ~0.72 ของขนาด)
+   * ตัวในไฟล์ LIFE สูงราว LIFE_GLYPH หน่วย SVG — แปลงสัดส่วนเดียวกัน (เดิมตายตัว 26 หน่วย ขอบ 2 = บางแบนกว่าตัวอื่นเห็นชัด)
+   */
+  const thick = box.glass ? t.bbThick : (t.hlDepth / CAP_H) * LIFE_GLYPH
   /**
    * หน้าที่มีฟองเดินทาง (ดู ./BubbleTraveler) ใบนั้นเป็นฟองใบเดียวของหน้า นั่งอยู่ตรงนี้ตั้งแต่ต้น = ใบนี้ไม่วาด
    * (ยังวัดกรอบจากผัง HTML เหมือนเดิม) แค่บอกเขาว่าถึงคิวโชว์เมื่อไร
@@ -627,7 +635,7 @@ function SvgArt({ box }: { box: LineBox }) {
          * bevel = ครึ่งความหนา แล้วอัดเนื้อตรงเกือบศูนย์ — ทั้งชิ้นกลายเป็นผิวโค้งต่อกัน
          * ขอบจึงกวาดไฮไลต์เป็นแถบไล่ระดับ และความหนาอ่านได้จากภาพหักเหที่บีบตรงขอบ
          */
-        const bev = box.glass ? thick * 0.499 * Math.max(0, Math.min(1, t.bbRound)) : 2
+        const bev = box.glass ? thick * 0.499 * Math.max(0, Math.min(1, t.bbRound)) : Math.min(thick * 0.45, (t.hlBevS / CAP_H) * LIFE_GLYPH)
         const geo = new THREE.ExtrudeGeometry(shape, {
           depth: Math.max(1e-4, thick - bev * 2),
           bevelEnabled: true,
@@ -789,7 +797,12 @@ function SvgArt({ box }: { box: LineBox }) {
       />
     )}
     {/* แกน y ของ SVG ชี้ลง ของฉากชี้ขึ้น — พลิกด้วยสเกลติดลบ แล้วเลื่อนมุมซ้ายบนมาที่กรอบ */}
-    <group position={[originX, originY, 0]} scale={[s, -s, s]} visible={live && !(box.glass && away)}>
+    {/* งานทึบ (LIFE) เอียงท่าเดียวกับตัวอักษรอื่น (hlRot*) รอบกลางของตัวเอง — สันข้างหันมารับแสงเหมือนกัน */}
+    <group
+      position={[originX + (w * s) / 2, originY - (h * s) / 2, 0]}
+      rotation={box.glass ? [0, 0, 0] : [(t.hlRotX * Math.PI) / 180, (t.hlRotY * Math.PI) / 180, (t.hlRotZ * Math.PI) / 180]}
+    >
+    <group position={[(-w * s) / 2, (h * s) / 2, 0]} scale={[s, -s, s]} visible={live && !(box.glass && away)}>
       <group position={[-parts.bb.min.x, -parts.bb.min.y, 0]}>
         {parts.outline && <mesh geometry={parts.outline} material={chromeMat} />}
         {!parts.outline && parts.list.map((p, i) => (
@@ -862,6 +875,7 @@ function SvgArt({ box }: { box: LineBox }) {
           </mesh>
         ))}
       </group>
+    </group>
     </group>
     </>
   )

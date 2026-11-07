@@ -13,6 +13,7 @@ import {
   barLayout,
   codeDark,
   CODE_HIT,
+  GRASS_STORY,
   deviceMat,
   wfK,
   clamp01,
@@ -856,9 +857,9 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
           vec2 w = fwidth(g);
           vec2 l = 1.0 - smoothstep(vec2(0.0), w * 1.2, abs(fract(g - 0.5) - 0.5));
           float line = max(l.x, l.y);
-          /* จางตามระยะจากตัวกล้อง (กลางแผ่น = ใต้กล้อง) — ไกลหายเข้ามืด */
+          /* จางตามระยะจากตัวกล้อง (กลางแผ่น = ใต้กล้อง) — ไกลกลืนหายเข้าฟ้า · เส้นขาวบนฟ้า (ธีมเรา) */
           float fade = exp(-length(vP) / uFar);
-          gl_FragColor = vec4(vec3(0.55), line * fade * 0.8 * uOpacity);
+          gl_FragColor = vec4(vec3(1.0), line * fade * 0.55 * uOpacity);
         }`,
     })
     return { geo, covers, bodyGeo, bodies, folderGeo, folder, shadowGeo, shadows, bgGeo, bg, gridGeo, grid }
@@ -1128,7 +1129,8 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
          * เข้ากลางจอจริง (ไม่ใช่กลางเครื่อง): แปลงระยะจากกลางเครื่องถึงกลางจอ (px) เป็นหน่วยผังจอ
          * เต็มจอราว k 0.85 → ฉากมืดเปิดรูเป็นฟ้าอยู่ใต้ฟ้าของวิดเจ็ต (WorkStory DARK_OUT) → วิดเจ็ตจางเผยฟ้าจริง (BLUE_FADE)
          */
-        const k = clamp01((b.code - 0.7) / 0.22)
+        /* เรื่องพื้นหญ้า: วิดเจ็ตฟ้าไม่ขยายเป็นฟ้า (ฉากหญ้าเปิดออกจากจอแทน) — อยู่ที่เดิมในจอที่มือถืออยู่ */
+        const k = GRASS_STORY ? 0 : clamp01((b.code - 0.7) / 0.22)
         const e = k * k * (3 - 2 * k)
         /* กลางจอ = แกนกล้อง (จุดกำเนิดโลกของแคนวาสนี้) — แปลงเข้าพิกัดของเครื่องตรง ๆ ไม่ต้องกะจากกรอบเครื่อง */
         g.updateWorldMatrix(true, false)
@@ -1181,7 +1183,8 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
         let wgScale = 1
         const wg = worksRef.current
         if (wg) {
-          wg.visible = wk > 0.002
+          /* เรื่องพื้นหญ้า: ไม่มีโฟลเดอร์แจก/วงการ์ด/ตัวอักษรบิน — งานอยู่ในฉากหญ้า (GrassStage) */
+          wg.visible = wk > 0.002 && !GRASS_STORY
           wg.position.set(0, 0, pc.top + 2)
           /* แถวเอียงลึกเข้าจอนิด (ก้มมอง) — เห็นสันบน/ล่างของการ์ด มีมิติ ไม่แบนกับจอ */
           wg.rotation.set(tk * 0.3, 0, 0, 'XYZ')
@@ -1281,8 +1284,12 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
         const waveW = Rc * (CAR_WAVE[0] + Math.min(CAR_WAVE[1], cv.v * CAR_WAVE[2]))
         const waveK = (Math.PI * 2) / (dA * CAR_WAVE[3])
         if (cv.v > 0.01 || Math.abs(fTarget - focus) > 1e-4) invalidate()
-        /* พื้นดำ/ตาราง: เข้มขึ้นตามการแจก · ท้ายบทจางพร้อมการ์ด */
-        const dark = smooth(clamp01((post - DEAL[0] - 0.1) / 0.45)) * (1 - ex)
+        /*
+         * พื้นตาราง: ขึ้นตามการแจก · ท้ายบทจางพร้อมการ์ด — ธีมเรา: ไม่มีพื้นดำ (ฟ้า/เมฆ/ภูเขาของ FallSky อยู่ข้างหลังตลอด)
+         * ตารางเป็นเส้นขาวบางบนฟ้า จางตามระยะ · พื้นดำแบบ jesperlandberg ปิดไว้ (dark = 0 → FallSky วาดต่อ)
+         */
+        const floorK = smooth(clamp01((post - DEAL[0] - 0.1) / 0.45)) * (1 - ex)
+        const dark = 0
         worksUI.dark = dark
         const bgm = bgRef.current
         if (bgm) {
@@ -1294,7 +1301,7 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
         }
         const gm2 = gridRef.current
         if (gm2) {
-          gm2.visible = dark > 0.002
+          gm2.visible = floorK > 0.002
           const span = D * 14
           gm2.position.copy(camera.position).applyMatrix4(LM3).addScaledVector(RN.set(0, -1, 0).applyQuaternion(BQ), cH * cSc * CAR_FLOOR)
           gm2.quaternion.copy(BQ).multiply(QZ.setFromEuler(LE.set(-Math.PI / 2, 0, 0)))
@@ -1302,7 +1309,7 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
           works.grid.uniforms.uSpan.value = span
           works.grid.uniforms.uCell.value = cH * cSc * 0.42
           works.grid.uniforms.uFar.value = D * 1.8
-          works.grid.uniforms.uOpacity.value = dark
+          works.grid.uniforms.uOpacity.value = floorK
         }
         /* เปิด (คลิก): กลางจอ กว้าง 92% สูง 88% หันตรง */
         const tw = W * 0.92
@@ -1448,7 +1455,8 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
         gone = fade <= 0.001 && wk <= 0.002
       } else {
         /* กระจายออกนุ่มขึ้น ยาวขึ้น (ไม่วาบ) — ease-out กำลังสอง */
-        const k = clamp01((b.code - CODE_HIT - (i - 1) * 0.02) / 0.34)
+        /* เรื่องพื้นหญ้า: ไม่ชน = วิดเจ็ตไม่กระจาย */
+        const k = GRASS_STORY ? 0 : clamp01((b.code - CODE_HIT - (i - 1) * 0.02) / 0.34)
         const burst = 1 - Math.pow(1 - k, 2)
         const dir = BURST[i]
         px += dir[0] * burst * 560

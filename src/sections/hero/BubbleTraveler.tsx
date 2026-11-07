@@ -18,7 +18,7 @@ import { useTuner } from '@/newhero/tuner'
 import { StageLight } from './Headline3D'
 import { BAR_AT, BASE_Y as ISLE_Y, ISLAND, ISLAND_CARD, K as ISLE_K, PadIsland, blockFlight, blockY, padIsland, type IslandApi } from './ResearchPlatform'
 import { bubbleTravel, setBubbleAway, setHeadBubbleLive, subscribeBubbleAway } from './bubbleTravel'
-import { DEVICE, LAYOUT_H, WF, WF_HEAD, benchPose, camDist, codeDark, devHook, CODE_HIT, HIT_FLY, barLayout, caretSpot, deviceMat, devScreen, groundMat, deviceSpot, headPose, inOut as inOut3, researchPhase, wfK, workBeats } from './workMotion'
+import { DEVICE, LAYOUT_H, WF, WF_HEAD, benchPose, camDist, codeDark, devHook, CODE_HIT, HIT_FLY, GRASS_STORY, barLayout, caretSpot, deviceMat, devScreen, groundMat, deviceSpot, headPose, inOut as inOut3, researchPhase, wfK, workBeats } from './workMotion'
 import { outlineMat } from './shapes'
 
 /**
@@ -298,6 +298,8 @@ function readPose(): Pose {
     /* เครื่องกลับมาต้น Ship — หลัง section My Works (BEAT.works) จบ */
     devFade: 1 - smooth((wb.code - 0.78) / 0.1) * (1 - smooth(wb.ship / 0.25)),
     push: (() => {
+      /* เรื่องพื้นหญ้า: ไม่พุ่งชนคำ — เครื่องถอยห่างกล้องนิดตอนมือ (HoldHand) ยื่นมาจับ ให้เห็นทั้งมือ ฝ่ามือ แขน ในเฟรมแบบ Frame 1 */
+      if (GRASS_STORY) return -0.24 * soft5((wb.code - 0.42) / 0.24) * (1 - soft5(wb.ship / 0.3))
       const a = Math.min(1, Math.max(0, (wb.code - (CODE_HIT - HIT_FLY)) / HIT_FLY))
       const pre = 0.32 * a * a
       const post = wb.code > CODE_HIT ? 0.8 * soft5((wb.code - CODE_HIT) / (1 - CODE_HIT)) : 0

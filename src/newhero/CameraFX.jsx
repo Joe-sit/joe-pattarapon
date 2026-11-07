@@ -254,6 +254,8 @@ export function CameraFX({
   rimBack = 0.6,
   /** 1 = ACES ตามปกติ, 0 = ไม่ tone map (โหมดแบน) */
   tone = 1,
+  /** ตัวคูณความแรง rim แบบ ref (อ่านทุกเฟรม ไม่ต้อง re-render) — ฉากที่หรี่ทั้งภาพเองต้องหรี่ rim ตาม ไม่งั้นขอบขาวลอยบนความมืด */
+  rimK = /** @type {{ current: number } | null} */ (null),
 }) {
   const { gl, scene, camera, size, viewport } = useThree()
   const self = useRef()
@@ -376,7 +378,7 @@ export function CameraFX({
     m.uNear.value = camera.near
     m.uFar.value = camera.far
     m.uTexel.value.set(1 / target.width, 1 / target.height)
-    m.uRim.value = rim
+    m.uRim.value = rim * (rimK ? rimK.current : 1)
     m.uRimW.value = rimW * dpr
     m.uRimSoft.value = rimSoft
     m.uRimThresh.value = rimThresh
