@@ -19,11 +19,16 @@ import { mapPhase } from './mapWorld'
 import { RoadInfo, RoadStage } from './RoadStage'
 import { RoadHome } from './RoadHome'
 import { roadCut, roadPhase } from './roadWorld'
+import { AsciiWorks, asciiPhase } from './AsciiWorks'
+import { DeskStage, deskPhase } from './DeskStage'
+import { SwitcherStage } from './SwitcherStage'
+import { FoldStage } from './FoldStage'
+import { StickerBacking, StickerStage, stickerPhase } from './StickerStage'
 import { SlingRider } from './SlingRider'
 import { AsciiClouds, type CloudBlob } from '@/components/AsciiClouds'
 import { DECK_WORKS } from './WorksGallery'
 import { ISLAND } from './ResearchPlatform'
-import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, TILE_SLOTS, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, STORY_FONT, GRASS_STORY, NO_CRASH, PLANET_STORY, MAP_STORY, ROAD_STORY, PLANET_EMERGE, GRASS_OPEN, CUT, type WorkBeats } from './workMotion'
+import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, TILE_SLOTS, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, STORY_FONT, GRASS_STORY, NO_CRASH, PLANET_STORY, MAP_STORY, ROAD_STORY, ASCII_STORY, DESK_STORY, SWITCHER_STORY, FOLD_STORY, STICKER_STORY, PLANET_EMERGE, GRASS_OPEN, CUT, type WorkBeats } from './workMotion'
 
 /**
  * เครื่องแก้วเป็นโต๊ะทำงาน — เรื่องต่อจาก "Here is what I do"
@@ -393,11 +398,28 @@ export function WorkStory() {
         const bx = ex0 - cx + ((ex0 - hx) / hd) * kick + (dhash(id, 2) - 0.5) * 60 * p
         const by = ey0 - cy + ((ey0 - hy) / hd) * kick + (dhash(id, 3) - 0.5) * 40 * p
         /* ตำแหน่ง 3D ณ ความคืบหน้า q → ฉายลงจอ */
-        const at3 = (q: number) => {
-          const z = z0 + zEnd * Math.pow(q, 1.7)
-          const kk = F / Math.max(60, F - z)
-          return { x: cx + bx * kk, y: cy + by * kk, k: kk }
-        }
+        const at3 = ASCII_STORY
+          ? /*
+             * เรื่อง ascii: ไม่พุ่งหาคนดู — แตกออกนิดแล้วหมุนวนเป็นก้นหอยรอบเครื่อง ถูกดูดเข้ากลางจอเครื่อง
+             * (หมุนทางเดียวกันทั้งหมด เร็วไม่เท่ากัน) ใกล้จอยิ่งเล็กลง · k = สเกลขนาดตัว
+             */
+            (q: number) => {
+              const ox = devScreen.ok ? devScreen.cx : cx
+              const oy = devScreen.ok ? devScreen.cy - liftNow.current : cy
+              const dx0 = ex0 - ox
+              const dy0 = ey0 - oy
+              const r0 = Math.hypot(dx0, dy0)
+              const e = q * q * (3 - 2 * q)
+              const bulge = 1 + 0.6 * Math.sin(Math.PI * Math.min(1, q * 1.5))
+              const rr = r0 * bulge * Math.pow(1 - e, 1.25)
+              const th = Math.atan2(dy0, dx0) + (1.3 + dhash(id, 4) * 1.2) * Math.PI * Math.pow(q, 1.15)
+              return { x: ox + Math.cos(th) * rr, y: oy + Math.sin(th) * rr * 0.86, k: 1.15 - 0.75 * e }
+            }
+          : (q: number) => {
+              const z = z0 + zEnd * Math.pow(q, 1.7)
+              const kk = F / Math.max(60, F - z)
+              return { x: cx + bx * kk, y: cy + by * kk, k: kk }
+            }
         const P1 = at3(p)
         const P0 = at3(Math.max(0, p - 0.05))
         const k1 = P1.k
@@ -612,7 +634,9 @@ export function WorkStory() {
       /* เรื่องพื้นหญ้า: ฉากหญ้าคลุมเต็มจอแล้ว — ซ่อนของบนจอเครื่องข้างใต้ (ไม่งั้นโผล่ตรงฟ้าโปร่งของฉากหญ้า) จนเครื่องกลับมาตอน Ship */
       if (benchCv.current) {
         /* เรื่องถนน: ตัดไปแผ่นไอคอนในแคนวาสถนนแล้ว — ซ่อนของบนจอเครื่อง (เครื่องล้นจอ ไอคอนรับไม้ต่อ) */
-        benchCv.current.style.visibility = (GRASS_STORY && b.code >= GRASS_OPEN[0] + GRASS_OPEN[1] && b.ship <= 0) || (ROAD_STORY && roadCut(roadPhase(b))) ? 'hidden' : ''
+        /* เรื่อง ascii: อยู่ในจอเครื่องแล้ว (เครื่องคลุมทั้งหน้า) — ซ่อนของบนจอเครื่อง */
+        benchCv.current.style.visibility =
+          (GRASS_STORY && b.code >= GRASS_OPEN[0] + GRASS_OPEN[1] && b.ship <= 0) || (ROAD_STORY && roadCut(roadPhase(b))) || (ASCII_STORY && asciiPhase(b).dolly > 0.999) || (DESK_STORY && deskPhase(b).opaque) || (STICKER_STORY && stickerPhase(b).gone) ? 'hidden' : ''
         /* เรื่องโลก: จอเครื่องล้างของบนจอออกตอนโลกเริ่มผุด (เห็นชัดว่าโลกออกมาจากจอ) · กลับมาพร้อมเครื่องตอนต้นบท Ship */
         benchCv.current.style.opacity = PLANET_STORY ? (1 - smooth((b.code - PLANET_EMERGE[0] + 0.03) / 0.07) * (1 - smooth(b.ship / 0.25))).toFixed(3) : ''
       }
@@ -650,8 +674,12 @@ export function WorkStory() {
          * รัศมี/ตำแหน่งแกว่งไม่เท่ากัน รวมกันด้วย mask-composite (ด้านนอกทุกวงเท่านั้นที่ยังมืด) จึงได้ขอบหยักเคลื่อนไหว
          */
         const kin = live ? smooth(b.code / 0.1) : 0
-        const q = smooth((b.code - DARK_OUT) / (1 - DARK_OUT))
-        const show = kin > 0.002 && q < 0.999 && b.code < 1
+        /* เรื่อง ascii: ฉากมืดอยู่ต่อจนจบ Selected Work (ปกประกอบบนพื้นมืด) แล้วค่อยเปิดรูเป็นฟ้า */
+        const ap = ASCII_STORY ? asciiPhase(b) : null
+        /* เรื่อง desk: ฉากมืดอยู่ใต้ฉากโต๊ะจนส่งไม้กลับ แล้วหายทันที (ฉากโต๊ะยังทับอยู่ — ข้างใต้กลายเป็นฟ้ารอ) */
+        const dp = DESK_STORY ? deskPhase(b) : null
+        const q = ap ? ap.open : dp ? (dp.sky ? 1 : 0) : smooth((b.code - DARK_OUT) / (1 - DARK_OUT))
+        const show = kin > 0.002 && q < 0.999 && (ap ? ap.post < ap.end : dp ? !dp.sky : b.code < 1)
         dk.style.visibility = show ? 'visible' : 'hidden'
         if (show) {
           dk.style.opacity = kin.toFixed(3)
@@ -839,6 +867,12 @@ export function WorkStory() {
         {MAP_STORY && <MapStage frame={frame} />}
         {/* เรื่องถนน: พื้นสว่าง + แผ่นไอคอน → หลังคา → ถนน (ใต้แคนวาสของบนจอเครื่อง — รับไม้ต่อตอนไอคอนเต็มจอ) */}
         {ROAD_STORY && <RoadStage frame={frame} />}
+        {/* เรื่อง switcher: ตัวสลับแอปแบบ iOS — การ์ดผลงานลอดใต้ของบนจอเครื่อง (เครื่องคือการ์ดใบขวาสุด) */}
+        {SWITCHER_STORY && <SwitcherStage frame={frame} />}
+        {/* เรื่อง fold: แผงจอพับคลี่ออกจากหลังเครื่อง — ใต้ของบนจอเครื่อง (วิดเจ็ตทับพื้นจอแผง 0) */}
+        {FOLD_STORY && <FoldStage frame={frame} />}
+        {/* เรื่อง sticker: พื้นจอทึบใต้วิดเจ็ต (ก่อนลอก) */}
+        {STICKER_STORY && <StickerBacking frame={frame} />}
         <Canvas ref={benchCv} className="!absolute inset-0" frameloop="never" dpr={[1, 1.25]} camera={{ fov: FOV, position: [0, 0, 1700] }} gl={{ antialias: true, alpha: true }} style={{ pointerEvents: 'none' }}
           /* ขาวต้องเป็นขาว: ตัวแมปโทนตั้งต้น (ACES) กดขาวลงเป็นเทาหม่น */
           onCreated={({ gl }) => {
@@ -863,7 +897,13 @@ export function WorkStory() {
           แคนวาสสลายคำ Code อยู่ *เหนือ* แคนวาสเครื่อง — เศษที่หลุดพุ่งเข้าหากล้องต้องทะลุออกมาหน้าเครื่อง
           (เนื้อที่ยังติดคำถูกเจาะรูตามกรอบเครื่องในแคนวาสเอง = ยังอยู่หลังเครื่อง)
         */}
+        {/* เรื่อง sticker: แผ่นที่ลอก + ฝาโน้ตบุ๊ก — เหนือของบนจอเครื่อง ใต้ตัวเครื่องแก้ว */}
+        {STICKER_STORY && <StickerStage frame={frame} bench={benchCv} />}
         <canvas ref={disCanvas} className="absolute inset-0 size-full" />
+        {/* เรื่อง ascii: อักขระของคำ Code พุ่งกลับลงไปเรียงเป็นปกผลงาน แล้วคมชัดเป็นภาพจริง */}
+        {ASCII_STORY && <AsciiWorks frame={frame} />}
+        {/* เรื่อง desk: ถอยกล้องจากจอเห็นโต๊ะ Joe แล้วไปดูบอร์ดผลงาน */}
+        {DESK_STORY && <DeskStage frame={frame} />}
         {/* แสงวาบตอนเครื่องชนคำ (นับเวลาจริงจากจังหวะชน — ไม่ผูกระยะเลื่อน) */}
         <div ref={hitFlash} className="pointer-events-none absolute top-0 left-0 size-[10px] rounded-full" style={{ opacity: 0, background: 'radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(235,220,255,0.7) 14%, rgba(170,130,255,0.18) 38%, rgba(150,110,255,0) 60%)', mixBlendMode: 'screen' }} aria-hidden />
         {/* คำใหญ่ชั้นเส้นขอบ — เหนือ widget/island บนจอเครื่อง แต่ใต้ตัวเครื่องแก้ว (แคนวาสของฟอง) — คำจึงอยู่หลังเครื่องเสมอ

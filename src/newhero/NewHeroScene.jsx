@@ -930,7 +930,8 @@ function Backdrop({ clay, clip = false }) {
      * = ภาพกระโดด · ให้เมฆจางขึ้นหลังฉากไหลออกมาแล้ว (ขนาดก้อน/จุดเท่าเดิมตลอด ไม่โต) · ไม่มีอินโทร = เต็มเลย
      */
     const it = introTime()
-    const ci = it < 0 ? 1 : Math.min(1, Math.max(0, (it - 0.8) / 1.6))
+    const ci = it < 0 ? 1 : Math.min(1, Math.max(0, (it - 0.7) / 2.4))
+    /* ความคืบหน้าของคลื่นงอก (เชดเดอร์แจกให้แต่ละจุดเอง) — ออกตัวนุ่ม วิ่งสม่ำเสมอ */
     u.uCloudIn.value = ci * ci * (3 - 2 * ci)
     u.uCloudDot.value = t.skyCloudDot
     /* เมฆลอยด้วยนาฬิกาของฉาก ไม่ใช่ตามระยะเลื่อน — ฟ้าต้องมีชีวิตแม้คนดูไม่ขยับ */
@@ -1097,13 +1098,22 @@ function Backdrop({ clay, clip = false }) {
               float dens = smoothstep(uCloudCut, uCloudCut + 0.2, n) * band;
               /* รัศมีจุด: √ความหนาแน่น เพื่อให้ *พื้นที่* ของจุดโตเป็นเส้นตรงตามความหนาแน่น */
               float rad = sqrt(dens) * 0.62;
+              /*
+               * โผล่ตอนเปิดฉาก: จุดครึ่งโทนงอกทีละจุด (รัศมี 0 → เต็ม เด้งเกินนิด) เป็นคลื่นจากซ้ายบนไปขวา
+               * แต่ละจุดเหลื่อมเวลาสุ่มนิด ๆ — เห็นเป็นเมฆค่อย ๆ "พิมพ์" ตัวเองขึ้นมา ไม่ใช่ทั้งผืนจางพร้อมกัน
+               */
+              vec2 cid = floor(gl_FragCoord.xy / max(2.0, uCloudDot));
+              float ch = fract(sin(dot(cid, vec2(12.9898, 78.233))) * 43758.5453);
+              float front = vUv.x * 0.62 + (1.0 - y) * 0.22 + ch * 0.28;
+              float lk = clamp((uCloudIn * 1.5 - front) / 0.32, 0.0, 1.0);
+              float pop = 1.0 + 0.35 * sin(3.14159 * lk) * (1.0 - lk);
+              rad *= lk * pop;
               vec2 cell = fract(gl_FragCoord.xy / max(2.0, uCloudDot)) - 0.5;
               float dotv = 1.0 - smoothstep(rad - 0.05, rad + 0.02, length(cell));
               /* ท้องเมฆขาวจัด ขอบเมฆอมสีฟ้าของฟ้าเอง — ไม่ใช่ขาวเท่ากันทั้งก้อน */
               /* ท้องเมฆสว่างสุดที่ 0.94 ไม่ถึงขาวสนิท — ขาวสนิทแข่งกับหัวเรื่องซึ่งขาวจริง */
               vec3 cloudCol = mix(mix(sky, vec3(0.94), 0.72), vec3(0.94), dens);
-              /* โผล่ตอนเปิดฉาก = จางขึ้นอย่างเดียว ขนาดก้อน/จุดคงที่ตลอด (uCloudIn) */
-              sky = mix(sky, cloudCol, dotv * uCloud * uCloudIn);
+              sky = mix(sky, cloudCol, dotv * uCloud * min(1.0, lk * 1.6));
             }
 
             /* โหมด clay: ไล่เทาแทนทั้งผืน (ผสมด้วย mix ไม่ใช่ if ตาม shader-mobile) */

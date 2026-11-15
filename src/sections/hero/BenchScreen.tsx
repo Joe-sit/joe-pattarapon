@@ -718,9 +718,12 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
     const geo = new THREE.PlaneGeometry(1, 1, 32, 1)
     geo.translate(0.5, 0, 0)
     const covers = Array.from({ length: FAN_N }, (_, n) => makeWorkCard(paintPlaceholder(n), POP[n % POP.length]))
-    /* ภาพผลงานจริง (ชุดเดียวกับ WorksGallery) — ใส่หน้าการ์ดตอนลงแถว · ครอปกลางให้เต็มการ์ดทรงตั้ง */
+    /*
+     * ภาพผลงานจริง (ชุดเดียวกับ WorksGallery) — ใส่หน้าการ์ดตอนลงแถว · ครอปกลางให้เต็มการ์ดทรงตั้ง
+     * เฉพาะเรื่องชน (crash) — เรื่องอื่นไม่แสดงแถวนี้ (wg.visible) ไม่ต้องโหลด: ภาพ 1920 กว้าง + mipmap ราว 10MB ต่อใบ
+     */
     const loader = new THREE.TextureLoader()
-    covers.forEach((m, n) => {
+    if (!NO_CRASH) covers.forEach((m, n) => {
       const w = DECK_WORKS[n % DECK_WORKS.length]
       const t = loader.load(w.img, (tex) => {
         const img = tex.image as { width: number; height: number }

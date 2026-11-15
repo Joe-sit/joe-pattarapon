@@ -73,7 +73,7 @@ function SplashReveal({
     null
   )
 }) {
-  const canvasRef = useRef(null);
+  const hostRef = useRef(null);
   const animationFrameId = useRef(null);
   /**
    * ค่าวางรูปที่ลูปอ่าน — ผ่าน ref ไม่ใช่ closure
@@ -90,8 +90,14 @@ function SplashReveal({
   starRef.current = star;
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const host = hostRef.current;
+    if (!host) return;
+    // แคนวาสสร้างใหม่ทุกรอบ effect — cleanup ปิด context ทิ้ง (ดูท้าย effect) ใช้แคนวาสเดิมซ้ำไม่ได้
+    // (StrictMode รัน effect สองรอบบน element เดิม · photo/live เปลี่ยนก็รันใหม่)
+    const canvas = document.createElement('canvas');
+    canvas.className = 'block size-full';
+    canvas.setAttribute('aria-hidden', 'true');
+    host.appendChild(canvas);
 
     // Track if the effect is still active for cleanup
     let isActive = true;
@@ -1249,16 +1255,17 @@ function SplashReveal({
       window.removeEventListener('touchstart', handleTouchStart);
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleTouchEnd);
+
+      // คืนทั้ง context — ไม่งั้น framebuffer ของการจำลอง (เต็มจอ ~30–40MB) ค้างอยู่ใน GPU จน GC มาเก็บแคนวาส
+      // ซึ่งช้ามาก: section นี้ mount ใหม่ทุกครั้งที่เลื่อนผ่าน (live) วัดแล้วโตรอบละ context ไม่มีวันลด
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
+      canvas.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photo, live]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="pointer-events-none absolute inset-0 block size-full"
-      aria-hidden
-    />
+    <div ref={hostRef} className="pointer-events-none absolute inset-0" aria-hidden />
   )
 }
 

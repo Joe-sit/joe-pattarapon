@@ -18,9 +18,14 @@ import { useTuner } from '@/newhero/tuner'
 import { StageLight } from './Headline3D'
 import { BAR_AT, BASE_Y as ISLE_Y, ISLAND, ISLAND_CARD, K as ISLE_K, PadIsland, blockFlight, blockY, padIsland, type IslandApi } from './ResearchPlatform'
 import { bubbleTravel, setBubbleAway, setHeadBubbleLive, subscribeBubbleAway } from './bubbleTravel'
-import { DEVICE, LAYOUT_H, WF, WF_HEAD, benchPose, camDist, codeDark, devHook, CODE_HIT, HIT_FLY, GRASS_STORY, NO_CRASH, PLANET_STORY, MAP_STORY, ROAD_STORY, planetLive, planetPhase, barLayout, caretSpot, deviceMat, devScreen, groundMat, deviceSpot, headPose, inOut as inOut3, researchPhase, wfK, workBeats } from './workMotion'
+import { DEVICE, LAYOUT_H, WF, WF_HEAD, benchPose, camDist, codeDark, devHook, CODE_HIT, HIT_FLY, GRASS_STORY, NO_CRASH, PLANET_STORY, MAP_STORY, ROAD_STORY, ASCII_STORY, DESK_STORY, SWITCHER_STORY, FOLD_STORY, STICKER_STORY, planetLive, planetPhase, barLayout, caretSpot, deviceMat, devScreen, groundMat, deviceSpot, headPose, inOut as inOut3, researchPhase, wfK, workBeats } from './workMotion'
 import { mapGround, mapLive, mapPhase, phoneOnGround, stepMap } from './mapWorld'
 import { HOME_ICON, ICON_PX, roadCut, roadPhase } from './roadWorld'
+import { asciiPhase } from './AsciiWorks'
+import { deskPhase } from './DeskStage'
+import { CARD_H, switchDev } from './SwitcherStage'
+import { FOLD_H, FOLD_TILT, foldDev } from './FoldStage'
+import { stickerSink } from './StickerStage'
 import { PlanetCar } from './PlanetStage'
 import { outlineMat } from './shapes'
 
@@ -164,6 +169,9 @@ const ZOOM_LEN = 1.3
 const SIDE_FLAT = 0.35
 const AX_X = new THREE.Vector3(1, 0, 0)
 const AX_Z = new THREE.Vector3(0, 0, 1)
+const AX_Y = new THREE.Vector3(0, 1, 0)
+const FD_Q = new THREE.Quaternion()
+const FD_Y = new THREE.Quaternion()
 /** เรื่องถนน: กลางไอคอนบนจอ · ระยะกลางไอคอนจากกลางเครื่อง · เอียงวูบ */
 const RD_C = new THREE.Vector3()
 const RD_O = new THREE.Vector3()
@@ -196,8 +204,8 @@ const rnd = (n: number, k: number) => {
   const v = Math.sin(n * 12.9898 + k * 78.233) * 43758.5453
   return v - Math.floor(v)
 }
-const POSE0 = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0, iso: 0, grow: 0, page: 0, mag: 0, tuck: 0, fall: 0, prog: 0, act: [0, 0, 0], sel: 0, gone: 0, whirl: 0, caretOut: 0, zoom: 1, dev: 0, float: 0, tilt: 0, bx: 0, by: 0, bk: 1, bt: 1, flat: 0, wire: 0, land: 0, away: 0, brx: 0, bry: 0, bspin: 0, hx: 0, hy: 0, isle: 0, flip: 0, flatK: 0, sv2v: 0, dark: 0, push: 0, devFade: 1, pBulge: 0, pFly: 0, pMove: 0, pPost: 0, mLand: 0, mMap: 0, mAlt: 0, rDolly: 0 }
-type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number; iso: number; grow: number; page: number; mag: number; tuck: number; fall: number; prog: number; act: number[]; sel: number; gone: number; whirl: number; caretOut: number; zoom: number; dev: number; float: number; tilt: number; bx: number; by: number; bk: number; bt: number; flat: number; wire: number; land: number; away: number; brx: number; bry: number; bspin: number; hx: number; hy: number; isle: number; flip: number; flatK: number; sv2v: number; dark: number; push: number; devFade: number; pBulge: number; pFly: number; pMove: number; pPost: number; mLand: number; mMap: number; mAlt: number; rDolly: number }
+const POSE0 = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0, iso: 0, grow: 0, page: 0, mag: 0, tuck: 0, fall: 0, prog: 0, act: [0, 0, 0], sel: 0, gone: 0, whirl: 0, caretOut: 0, zoom: 1, dev: 0, float: 0, tilt: 0, bx: 0, by: 0, bk: 1, bt: 1, flat: 0, wire: 0, land: 0, away: 0, brx: 0, bry: 0, bspin: 0, hx: 0, hy: 0, isle: 0, flip: 0, flatK: 0, sv2v: 0, dark: 0, push: 0, devFade: 1, pBulge: 0, pFly: 0, pMove: 0, pPost: 0, mLand: 0, mMap: 0, mAlt: 0, rDolly: 0, swSwipe: 0, swDx: 0, fdK: 0, fdT: 0, fdYaw: 0, stSink: 0 }
+type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number; iso: number; grow: number; page: number; mag: number; tuck: number; fall: number; prog: number; act: number[]; sel: number; gone: number; whirl: number; caretOut: number; zoom: number; dev: number; float: number; tilt: number; bx: number; by: number; bk: number; bt: number; flat: number; wire: number; land: number; away: number; brx: number; bry: number; bspin: number; hx: number; hy: number; isle: number; flip: number; flatK: number; sv2v: number; dark: number; push: number; devFade: number; pBulge: number; pFly: number; pMove: number; pPost: number; mLand: number; mMap: number; mAlt: number; rDolly: number; swSwipe: number; swDx: number; fdK: number; fdT: number; fdYaw: number; stSink: number }
 
 function readPose(): Pose {
   const off: Pose = { ...POSE0 }
@@ -317,8 +325,20 @@ function readPose(): Pose {
     /* เครื่องกลับมาต้น Ship — หลัง section My Works (BEAT.works) จบ */
     /* เรื่องโลก: เครื่องไม่หาย — ถือโลกไว้ตลอดเรื่อง (โลกพองออกจากจอ) */
     /* เรื่องถนน: เครื่องหายตอนตัดไปแผ่นไอคอนในแคนวาสถนน (ไอคอนเต็มจอแล้ว ตัวเครื่องล้นขอบจอหมด) */
-    devFade: ROAD_STORY ? (roadCut(roadPhase(wb)) ? 0 : 1) : PLANET_STORY || MAP_STORY ? 1 : 1 - smooth((wb.code - 0.78) / 0.1) * (1 - smooth(wb.ship / 0.25)),
-    rDolly: ROAD_STORY ? roadPhase(wb).dolly : 0,
+    /* เรื่อง ascii: เครื่องหายตอนขยายจนจอคลุมทั้งหน้าแล้ว (อยู่ "ในจอ") · กลับมาตอนจอหดกลับ */
+    devFade: SWITCHER_STORY || FOLD_STORY || STICKER_STORY ? 1 : DESK_STORY ? (deskPhase(wb).opaque ? 0 : 1) : ASCII_STORY ? (asciiPhase(wb).dolly > 0.999 ? 0 : 1) : ROAD_STORY ? (roadCut(roadPhase(wb)) ? 0 : 1) : PLANET_STORY || MAP_STORY ? 1 : 1 - smooth((wb.code - 0.78) / 0.1) * (1 - smooth(wb.ship / 0.25)),
+    rDolly: ROAD_STORY ? roadPhase(wb).dolly : ASCII_STORY ? asciiPhase(wb).dolly : 0,
+    ...(() => {
+      if (!SWITCHER_STORY) return { swSwipe: 0, swDx: 0 }
+      const sw = switchDev(wb)
+      return { swSwipe: sw.swipe, swDx: sw.dx }
+    })(),
+    ...(() => {
+      if (!FOLD_STORY) return { fdK: 0, fdT: 0, fdYaw: 0 }
+      const fd = foldDev(wb)
+      return { fdK: fd.k, fdT: fd.t, fdYaw: fd.yaw }
+    })(),
+    stSink: STICKER_STORY ? stickerSink(wb) : 0,
     ...(() => {
       if (!PLANET_STORY) return { pBulge: 0, pFly: 0, pMove: 0, pPost: 0 }
       const pp = planetPhase(wb)
@@ -810,19 +830,56 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
        * เรื่องถนน (./roadWorld · GIF ref): ดันเข้าหาไอคอนแอปบนหน้าโฮม — ไอคอนเลื่อนเข้ากลางจอ ขยายแบบทวีคูณ (ความเร็วบนจอสม่ำเสมอ)
        * เครื่องคลายมุมเป็นหน้าตรง เอียงวูบนิดกลางทาง (กล้องมือถือ) · จบที่ไอคอนกว้าง ICON_PX ของจอ = ท่าเริ่มของแผ่นไอคอนในแคนวาสถนน
        */
-      if (ROAD_STORY && p.rDolly > 0) {
+      if ((ROAD_STORY || ASCII_STORY) && p.rDolly > 0) {
         const k = p.rDolly
         DEV_M.decompose(PM_P, PM_Q, PM_S)
         const s0 = PM_S.x
-        const s1 = (size.height * ICON_PX) / HOME_ICON.s
+        /* ถนน: ดันเข้าไอคอนบนหน้าโฮม · ascii: ดันเข้ากลางจอจนจอคลุมทั้งหน้า (กว้าง/สูงเกินจอนิด) */
+        const fx = ASCII_STORY ? 0 : HOME_ICON.x
+        const fy = ASCII_STORY ? 0 : HOME_ICON.y
+        const s1 = ASCII_STORY ? Math.max((size.height * 1.12) / (DEVICE.hh * 2), (size.width * 1.1) / (DEVICE.hw * 2)) : (size.height * ICON_PX) / HOME_ICON.s
         const sc = s0 * Math.exp(Math.log(s1 / s0) * k)
-        RD_C.set(HOME_ICON.x, HOME_ICON.y, 0).applyMatrix4(DEV_M)
+        RD_C.set(fx, fy, 0).applyMatrix4(DEV_M)
         RD_C.multiplyScalar(1 - k)
         PM_Q.slerp(PM_I, Math.min(1, k * 1.6))
         PM_Q.multiply(RD_Q.setFromAxisAngle(AX_Z, 0.07 * Math.sin(Math.PI * k)))
-        RD_O.set(HOME_ICON.x, HOME_ICON.y, 0).applyQuaternion(PM_Q).multiplyScalar(sc)
+        RD_O.set(fx, fy, 0).applyQuaternion(PM_Q).multiplyScalar(sc)
         PM_P.copy(RD_C).sub(RD_O)
         PM_S.setScalar(sc)
+        DEV_M.compose(PM_P, PM_Q, PM_S)
+      }
+      /*
+       * ตัวสลับแอป (./SwitcherStage): เครื่องตั้งตรงหน้ากล้อง หดเป็นการ์ดสูง CARD_H ของจอ ยกขึ้นนิด
+       * แล้วเลื่อนไปตามสำรับ (dx เท่าความกว้างการ์ด) — การ์ด DOM อ่าน devScreen แล้ววางตาม
+       */
+      if (SWITCHER_STORY && p.swSwipe > 0) {
+        const k = p.swSwipe
+        DEV_M.decompose(PM_P, PM_Q, PM_S)
+        const sc = lerp(PM_S.x, (size.height * CARD_H) / (DEVICE.hh * 2), k)
+        PM_P.lerp(PM_T.set(p.swDx * DEVICE.hw * 2 * sc, size.height * 0.03, 0), k)
+        PM_Q.slerp(PM_I, k)
+        PM_S.setScalar(sc)
+        DEV_M.compose(PM_P, PM_Q, PM_S)
+      }
+      /*
+       * จอพับ (./FoldStage): เครื่องหดเป็นแผงสูง FOLD_H ของจอ ตั้งตรง (เอียงเข้าซิกแซกตอนแผงแรกคลี่)
+       * แล้วเลื่อนซ้ายตามแถบที่คลี่ออก (fdT เท่าความกว้างแผง) — แผง DOM ต่อบานพับจากขอบเครื่องตาม devScreen
+       */
+      if (FOLD_STORY && p.fdK > 0) {
+        const k = p.fdK
+        DEV_M.decompose(PM_P, PM_Q, PM_S)
+        const sc = lerp(PM_S.x, (size.height * FOLD_H) / (DEVICE.hh * 2), k)
+        PM_P.lerp(PM_T.set(-p.fdT * DEVICE.hw * 2 * sc, size.height * 0.03, 0), k)
+        /* ก้มมองเท่าแถบ DOM (CSS rotateX บวก = three หมุนแกน X ลบ — แกน y กลับทิศ) แล้วหมุนซิกแซก */
+        FD_Q.setFromAxisAngle(AX_X, -FOLD_TILT).multiply(FD_Y.setFromAxisAngle(AX_Y, p.fdYaw))
+        PM_Q.slerp(FD_Q, k)
+        PM_S.setScalar(sc)
+        DEV_M.compose(PM_P, PM_Q, PM_S)
+      }
+      /* สติกเกอร์ (./StickerStage): ลอกจอออกแล้ว เครื่องเปล่าจมลงใต้ขอบจอ (ฝาโน้ตบุ๊กขึ้นมาแทน) · ท้ายบทลอยกลับรับแผ่นคืน */
+      if (STICKER_STORY && p.stSink > 0) {
+        DEV_M.decompose(PM_P, PM_Q, PM_S)
+        PM_P.y -= size.height * 1.25 * p.stSink
         DEV_M.compose(PM_P, PM_Q, PM_S)
       }
       DEV_M.toArray(deviceMat.e)

@@ -309,10 +309,10 @@ export const DEFAULTS = {
   skyWarm: 0.26,
   skyVig: 0.18,
   /* เมฆจุดครึ่งโทน (halftone) — ปั้นในเชดเดอร์ของฟ้า ไม่ใช่รูป (ดู Sky ใน NewHeroScene) */
-  skyCloud: 0.82,
+  skyCloud: 0.2,
   skyCloudScale: 6.2,
   skyCloudCut: 0.56,
-  skyCloudDot: 7,
+  skyCloudDot: 5,
   skyCloudDrift: 0.012,
   portalWall: 1,
   portalHemi: 0.45,

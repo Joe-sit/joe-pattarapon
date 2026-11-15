@@ -40,6 +40,7 @@ const FaviconLab = lazy(() => import('@/pages/FaviconLab'))
 const BubbleBlocks = lazy(() => import('@/pages/BubbleBlocks'))
 const FastworkProfile = lazy(() => import('@/pages/FastworkProfile'))
 const AboutMePage = lazy(() => import('@/pages/AboutMePage'))
+const JoeDeskPage = lazy(() => import('@/pages/JoeDeskPage'))
 /* /measure — จัดองค์ประกอบตามภาพ ref (ตัวละครถือไม้บรรทัดวัด device) รอบดินปั้น */
 const MeasurePage = lazy(() => import('@/pages/MeasurePage'))
 import { SITE } from '@/config/site'
@@ -144,6 +145,8 @@ export function App() {
   const isFastwork = import.meta.env.DEV && location.pathname === '/fastwork-profile'
   /** หน้า About me — เข้าจากคลิกตัวละครใน hero (/2026-final) */
   const isAbout = location.pathname === '/about'
+  /** หน้า Joe Desk — landing จาก Figma Joe-Space (โต๊ะทำงานไอโซเมตริก) */
+  const isJoeDesk = location.pathname === '/joe-desk'
 
   // Which splash plays is decided by where the visitor landed, not by where
   // they are now — it runs once, on load, and reading `location` live would
@@ -320,7 +323,7 @@ export function App() {
           opens onto the hero's own scene, and the mascot page has no such scene
           to open onto. */}
       {/* /new-hero เป็นหน้าเปล่าไว้ทดลอง — สปแลชของเว็บบังของที่กำลังจูนอยู่เปล่า ๆ */}
-      {showSplash && !isIntroLab && !isNewHero && !isRigExport && !isFavLab && !isBlocks && !isFastwork && !isAbout &&
+      {showSplash && !isIntroLab && !isNewHero && !isRigExport && !isFavLab && !isBlocks && !isFastwork && !isAbout && !isJoeDesk &&
         (landedOn === '/2026' ? (
           /* /2026 มีอินโทรของตัวเอง (เศษโค้ด -> สนาม ASCII -> เวิร์ดมาร์ก)
              หน้าอื่นยังใช้สปแลชเดิม — คนละภาษาภาพกัน ไม่ควรบังคับให้เหมือน */
@@ -361,6 +364,10 @@ export function App() {
       ) : isAbout ? (
         <Suspense fallback={null}>
           <AboutMePage />
+        </Suspense>
+      ) : isJoeDesk ? (
+        <Suspense fallback={null}>
+          <JoeDeskPage />
         </Suspense>
       ) : isV3 ? (
         <Portfolio2026FinalPage />

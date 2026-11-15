@@ -41,14 +41,29 @@ export const BEAT = {
  */
 const SLOW: readonly [number, number] = [BEAT.lift[0], BEAT.code[0]]
 const SLOW_K = 1.7
-/** จอที่เลื่อนจริงเพิ่มขึ้นจากการยืด */
-const SLOW_EXTRA = (SLOW[1] - SLOW[0]) * (SLOW_K - 1)
+/**
+ * ยืดช่วง Selected Work (บท works) — งาน compile ทีละชิ้น (hero/AsciiWorks) ต้องมีระยะเลื่อนพอให้อ่านทีละงาน
+ * ไม่ยืด = งานละราว 0.15 จอ เลื่อนนิดเดียวผ่านไปแล้ว
+ */
+const WORKS_K = 2.4
+/** ช่วงที่ยืด [เริ่ม, จบ, เท่า] (หน่วย sv2 · เรียงตามลำดับ ไม่ทับกัน) */
+const STRETCH: readonly (readonly [number, number, number])[] = [
+  [SLOW[0], SLOW[1], SLOW_K],
+  [BEAT.works[0], BEAT.works[0] + BEAT.works[1], WORKS_K],
+]
+/** จอที่เลื่อนจริงเพิ่มขึ้นจากการยืดทั้งหมด */
+const SLOW_EXTRA = STRETCH.reduce((s, [a, b, k]) => s + (b - a) * (k - 1), 0)
 /** จอที่เลื่อนจริง → sv2 ของเรื่อง (ช่วงยืดเดินช้าลง นอกช่วงเท่าเดิม) */
 export function storySv2(raw: number) {
-  if (raw <= SLOW[0]) return raw
-  const end = SLOW[0] + (SLOW[1] - SLOW[0]) * SLOW_K
-  if (raw <= end) return SLOW[0] + (raw - SLOW[0]) / SLOW_K
-  return raw - SLOW_EXTRA
+  let extra = 0
+  for (const [a, b, k] of STRETCH) {
+    const ra = a + extra
+    if (raw <= ra) return raw - extra
+    const len = (b - a) * k
+    if (raw <= ra + len) return a + (raw - ra) / k
+    extra += (b - a) * (k - 1)
+  }
+  return raw - extra
 }
 
 /**

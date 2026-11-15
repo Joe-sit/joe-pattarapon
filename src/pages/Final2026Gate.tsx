@@ -791,6 +791,14 @@ export function Final2026Gate() {
 function ThoughtLine({ progress, done, leaving }: { progress: number; done: boolean; leaving: boolean }) {
   const [, setTick] = useState(0)
   const box = useRef<HTMLDivElement>(null)
+  const line = useRef<HTMLSpanElement>(null)
+  /* แสงกวาดผืนเดียวทั้งบรรทัด: บอกความกว้างบรรทัดกับตำแหน่งแต่ละคำให้ CSS (--lw --ox) */
+  useLayoutEffect(() => {
+    const el = line.current
+    if (!done || leaving || !el) return
+    el.style.setProperty('--lw', `${el.offsetWidth}px`)
+    ;[...el.children].forEach((w) => (w as HTMLElement).style.setProperty('--ox', `${(w as HTMLElement).offsetLeft}px`))
+  }, [done, leaving])
   /*
    * scramble: แต่ละตัวอักษร (ไล่ซ้าย→ขวา ห่าง SCR.step) สุ่มเป็นสัญลักษณ์ SCR.mix ms → กลายเป็นจุด → จาง
    * ล็อกความกว้างเดิมของทุกตัวก่อน — สัญลักษณ์กว้างไม่เท่าตัวจริง บรรทัดจะไม่ขยับ · เขียน DOM ตรง (ไม่ผ่าน state ทุกเฟรม)
@@ -857,9 +865,9 @@ function ThoughtLine({ progress, done, leaving }: { progress: number; done: bool
           ))}
         </span>
       ) : done ? (
-        <span key="ready" className="v3-ready-line text-[15px] font-semibold">
+        <span key="ready" ref={line} className="v3-ready-line text-[15px] font-semibold">
           {label.split(' ').map((w, i) => (
-            <span key={i} className="v3-ready-word" style={{ animationDelay: `${i * 85}ms, ${520 + i * 85}ms` }}>
+            <span key={i} className="v3-ready-word" style={{ animationDelay: `${i * 85}ms, 700ms` }}>
               {w}
             </span>
           ))}

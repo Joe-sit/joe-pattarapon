@@ -291,14 +291,23 @@ export const sling = { vis: 0, px: 0, py: 0, pull: 0, launch: 0 }
  *   grass  มือตัวละครจับเครื่อง → ฉากหมุนออกเป็นมุมเสยบนพื้นหญ้า (./GrassStage · ./HoldHand)
  *   map    เครื่องล้มลงนอนบนพื้นเมืองดินปั้น ลาก/กดลูกศรเดินดูเมือง เจอป้ายผลงานกระจายรอบเมือง (./MapStage)
  *   planet โลกผุดออกจากจอเครื่อง ลอยไปมุมขวาล่าง มีรถวิ่งบนผิวโลก · ปกผลงานใหญ่มุมซ้ายบน เลื่อนแล้วเปลี่ยนงานทีละชิ้น (./PlanetStage)
+ *   ascii  อักขระของคำ Code ที่สลาย พุ่งกลับเข้าจอไปเรียงเป็นปกผลงาน (ASCII สีตามภาพ) แล้วคมชัดเป็นภาพจริง (./AsciiWorks)
+ *   switcher เครื่องเปิดตัวสลับแอปแบบ iOS — เครื่องหดเป็นการ์ด การ์ดผลงานเรียงซ้อนทางซ้าย ปัดย้อนทีละใบ แล้วเปิดกลับ (./SwitcherStage)
+ *   fold   เครื่องเป็นจอพับหีบเพลง — แผงจอคลี่ออกจากหลังเครื่องทีละบาน แต่ละบาน = งานหนึ่งชิ้น แล้วพับกลับ (./FoldStage)
+ *   sticker หน้าจอที่เสร็จลอกออกเป็นสติกเกอร์ ไปแปะฝาโน้ตบุ๊กของ Joe ที่เต็มไปด้วยสติกเกอร์งานเก่า แล้วบินกลับ (./StickerStage)
  *   road   จอเครื่องเป็นหน้าโฮม → ดันเข้าไอคอนแอป (favicon) → ไอคอนหงายเป็นหลังคา → โฉบลงถนน ป้ายผลงานริมทาง (./RoadStage · GIF ref)
  */
-export type PostCode = 'crash' | 'grass' | 'planet' | 'map' | 'road'
-export const POST_CODE = 'road' as PostCode
+export type PostCode = 'crash' | 'grass' | 'planet' | 'map' | 'road' | 'ascii' | 'desk' | 'switcher' | 'fold' | 'sticker'
+export const POST_CODE = 'sticker' as PostCode
 export const GRASS_STORY = POST_CODE === 'grass'
 export const PLANET_STORY = POST_CODE === 'planet'
 export const MAP_STORY = POST_CODE === 'map'
 export const ROAD_STORY = POST_CODE === 'road'
+export const ASCII_STORY = POST_CODE === 'ascii'
+export const DESK_STORY = POST_CODE === 'desk'
+export const SWITCHER_STORY = POST_CODE === 'switcher'
+export const FOLD_STORY = POST_CODE === 'fold'
+export const STICKER_STORY = POST_CODE === 'sticker'
 /** เครื่องไม่พุ่งชนคำ Code (ไม่มีแรงกระแทก วิดเจ็ตไม่กระจาย ฟ้าไม่ขยาย ไม่มีโฟลเดอร์/การ์ดของเรื่องเดิม) */
 export const NO_CRASH = POST_CODE !== 'crash'
 /**

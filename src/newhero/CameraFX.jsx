@@ -1,7 +1,6 @@
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame, useThree } from '@react-three/fiber'
-import { introSince } from './intro'
 
 /**
  * เอฟเฟกต์กล้อง — วาดฉากลงบัฟเฟอร์ก่อน แล้วค่อยเอามาบิดตอนพ่นลงจอ
@@ -337,32 +336,20 @@ export function CameraFX({
 
   useMemo(() => () => target.dispose(), [target])
 
-  /**
-   * ความละเอียดยืดหยุ่นช่วงอินโทร — ตอนกล้องเพิ่งไถลออกจากพอร์ทัล ของในฉากเต็มจอ ทุกพิกเซลแพง เฟรมตก (M1: ~15–20fps)
-   * แล้วพอถอยออกเกือบสุดกลับเป็น 60fps = ท่าเดียวกันแต่ความเร็วกระชาก
-   * วาดฉากลงแค่มุมหนึ่งของบัฟเฟอร์เดิม (viewport) แล้วยืดขึ้นจอ — ปรับได้ทุกเฟรมโดยไม่จองบัฟเฟอร์ใหม่ (ต่างจากเปลี่ยน dpr)
-   * ลดเฉพาะตอนอินโทรเล่นและเฟรมช้าจริง (เฉลี่ยหลายเฟรม) · อินโทรจบค่อย ๆ คมกลับเต็ม — ภาพนิ่งไม่เคยถูกลด
+  /*
+   * ไม่ลดความละเอียดระหว่างอินโทรแล้ว (เดิมลดเหลือ 60% ตอนเฟรมช้า แล้วไต่กลับ) — คนดูเห็นชัดว่าทุกอย่างเริ่มเบลอ/หยัก
+   * แล้วค่อยคมขึ้นกลางฉากเปิด = ภาพไม่ต่อเนื่อง · คุณภาพต้องคงที่ตั้งแต่เฟรมแรก
    */
-  const dyn = useRef({ k: 1, ema: 1 / 60 })
 
   /**
    * priority 1 = เข้ามาแทนลูปวาดปกติของ r3f ทั้งหมด
    * ต้องสั่งวาดเองทั้งสองรอบ: รอบแรกลงบัฟเฟอร์ รอบสองพ่น quad ลงจอ
    */
-  useFrame((_, delta) => {
+  useFrame(() => {
     const m = post.mat.uniforms
-    const dn = dyn.current
-    dn.ema += (Math.min(delta, 0.1) - dn.ema) * 0.15
-    const since = introSince()
-    const playing = Number.isFinite(since) && since < 0
-    if (playing && dn.ema > 1 / 48) dn.k = Math.max(0.6, dn.k - 0.03)
-    else if (!playing || dn.ema < 1 / 57) dn.k = Math.min(1, dn.k + (playing ? 0.008 : 0.02))
-    const vw = Math.max(1, Math.round(target.width * dn.k))
-    const vh = Math.max(1, Math.round(target.height * dn.k))
-    target.viewport.set(0, 0, vw, vh)
-    target.scissor.set(0, 0, vw, vh)
-    target.scissorTest = dn.k < 1
-    m.uScale.value.set(vw / target.width, vh / target.height)
+    target.viewport.set(0, 0, target.width, target.height)
+    target.scissorTest = false
+    m.uScale.value.set(1, 1)
     m.uFish.value = fish
     m.uSkewX.value = skewX
     m.uSkewY.value = skewY

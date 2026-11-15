@@ -70,6 +70,8 @@ export function Rider({
    * ปิดท่าสเก็ตของ rig ด้วยและใช้ท่าแขนปล่อยข้างลำตัวแทน
    */
   stand = false,
+  /** ทับหน้าการ์ตูน: false = ตาดำสองแท่งเดิมของโมเดล (แบบภาพ Figma — หน้า /joe-desk) · null = ตามท่า */
+  face = null,
   /**
    * ไม่เอียงลำตัวตามบอร์ด แต่ยังเป็นท่าสเก็ตของริก (ต่างจาก `stand` ที่ปิดท่าทั้งชุด)
    *
@@ -252,7 +254,7 @@ export function Rider({
               armsDown={stand}
               /* หน้าการ์ตูนชุดเดียวกับท่าสเก็ต — ของมันผูกกับ prop skate อยู่เดิม โหมดยืน
                  จึงเหลือแต่ตาดำสองแท่งที่มากับ GLB (ดู cartoonFace ใน Mascot) */
-              cartoonFace={stand ? true : undefined}
+              cartoonFace={face ?? (stand ? true : undefined)}
               rimPower={rimPower}
               rimBoost={rimBoost}
               rimEdge={rimEdge}

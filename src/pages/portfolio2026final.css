@@ -982,23 +982,27 @@
 }
 
 
-/* "Joe is ready to meet you" — คำลอยขึ้นจากเบลอทีละคำ แล้วแสงกวาดผ่านทั้งบรรทัดหนึ่งที */
+/*
+ * "Joe is ready to meet you" — คำลอยขึ้นจากเบลอทีละคำ แล้วแสงกวาดผ่าน "ทั้งบรรทัด" ทีเดียว
+ * ไล่สีผืนเดียวกว้างสามเท่าบรรทัด (--lw) แต่ละคำเลื่อนผืนชดเชยตำแหน่งตัวเอง (--ox) — แสงเป็นแถบเดียวต่อเนื่องข้ามคำ
+ * แสงเป็นฟ้าอ่อน→ม่วง (ไม่ใช่ขาว — ขาวบนพื้นขาวตัวอักษรหายเป็นรู)
+ */
 .v3-ready-line {
   display: inline-flex;
   gap: 0.28em;
 }
 .v3-ready-word {
   display: inline-block;
-  background: linear-gradient(90deg, #1f4fb8 0%, #1f4fb8 38%, #ffffff 48%, #b44be0 56%, #1f4fb8 66%, #1f4fb8 100%);
-  background-size: 300% 100%;
-  background-position: 100% 0;
+  background: linear-gradient(90deg, #1f4fb8 0%, #1f4fb8 45.5%, #6f9bff 48%, #b44be0 50%, #6f9bff 52%, #1f4fb8 54.5%, #1f4fb8 100%);
+  background-size: calc(var(--lw, 200px) * 3) 100%;
+  background-position: calc(var(--lw, 200px) * -1.8 - var(--ox, 0px)) 0;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   opacity: 0;
   animation:
     v3-ready-in 620ms cubic-bezier(0.16, 1, 0.3, 1) both,
-    v3-ready-sweep 1100ms cubic-bezier(0.4, 0, 0.2, 1) 520ms both;
+    v3-ready-sweep 1200ms cubic-bezier(0.45, 0, 0.25, 1) 700ms both;
 }
 @keyframes v3-ready-in {
   from {
@@ -1014,9 +1018,9 @@
 }
 @keyframes v3-ready-sweep {
   from {
-    background-position: 100% 0;
+    background-position: calc(var(--lw, 200px) * -1.8 - var(--ox, 0px)) 0;
   }
   to {
-    background-position: 0% 0;
+    background-position: calc(var(--lw, 200px) * -0.2 - var(--ox, 0px)) 0;
   }
 }
