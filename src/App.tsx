@@ -40,6 +40,8 @@ const FaviconLab = lazy(() => import('@/pages/FaviconLab'))
 const BubbleBlocks = lazy(() => import('@/pages/BubbleBlocks'))
 const FastworkProfile = lazy(() => import('@/pages/FastworkProfile'))
 const AboutMePage = lazy(() => import('@/pages/AboutMePage'))
+/* /measure — จัดองค์ประกอบตามภาพ ref (ตัวละครถือไม้บรรทัดวัด device) รอบดินปั้น */
+const MeasurePage = lazy(() => import('@/pages/MeasurePage'))
 import { SITE } from '@/config/site'
 import { setEyeOpen, setIntroDone } from '@/stores/intro'
 import { useSceneReady } from '@/stores/ready'
@@ -117,6 +119,8 @@ export function App() {
   /* เล่าเรื่องด้วยตัวหนังสือแบบภาพยนตร์ (ซูมข้อความ → ยิงลำแสงไปขวา) — จอเดียว ไม่ใช้ shell */
   const isTextStory = location.pathname === '/text-story'
   const isCompact = location.pathname === '/compact'
+  /* จัดองค์ประกอบตามภาพ ref: ตัวละครถือไม้บรรทัดวัด device (ดินปั้นก่อน) — จอเดียว ไม่ใช้ shell */
+  const isMeasure = location.pathname === '/measure'
   /* ฉากเล่าเรื่องกล้องน้อยกับบอลลูน (ภาพอ้างอิงพาสเทลฟ้าเมฆ) — จอเดียวเลื่อนเล่า ไม่ใช้ shell */
   const isBalloons = location.pathname === '/balloons'
   /* ฉากกล่องแก้วฟ้าประกอบตัวเล่าสกิล (ภาพอ้างอิงแบนเนอร์กล่องแก้ว) — จอเดียวเลื่อนเล่า ไม่ใช้ shell */
@@ -380,6 +384,10 @@ export function App() {
         </Suspense>
       ) : isGallery ? (
         <GalleryPage />
+      ) : isMeasure ? (
+        <Suspense fallback={null}>
+          <MeasurePage />
+        </Suspense>
       ) : isNewHero ? (
         <NewHeroPage />
       ) : isV2 ? (

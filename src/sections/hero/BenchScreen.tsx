@@ -13,7 +13,7 @@ import {
   barLayout,
   codeDark,
   CODE_HIT,
-  GRASS_STORY,
+  NO_CRASH,
   deviceMat,
   wfK,
   clamp01,
@@ -1130,7 +1130,7 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
          * เต็มจอราว k 0.85 → ฉากมืดเปิดรูเป็นฟ้าอยู่ใต้ฟ้าของวิดเจ็ต (WorkStory DARK_OUT) → วิดเจ็ตจางเผยฟ้าจริง (BLUE_FADE)
          */
         /* เรื่องพื้นหญ้า: วิดเจ็ตฟ้าไม่ขยายเป็นฟ้า (ฉากหญ้าเปิดออกจากจอแทน) — อยู่ที่เดิมในจอที่มือถืออยู่ */
-        const k = GRASS_STORY ? 0 : clamp01((b.code - 0.7) / 0.22)
+        const k = NO_CRASH ? 0 : clamp01((b.code - 0.7) / 0.22)
         const e = k * k * (3 - 2 * k)
         /* กลางจอ = แกนกล้อง (จุดกำเนิดโลกของแคนวาสนี้) — แปลงเข้าพิกัดของเครื่องตรง ๆ ไม่ต้องกะจากกรอบเครื่อง */
         g.updateWorldMatrix(true, false)
@@ -1184,7 +1184,7 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
         const wg = worksRef.current
         if (wg) {
           /* เรื่องพื้นหญ้า: ไม่มีโฟลเดอร์แจก/วงการ์ด/ตัวอักษรบิน — งานอยู่ในฉากหญ้า (GrassStage) */
-          wg.visible = wk > 0.002 && !GRASS_STORY
+          wg.visible = wk > 0.002 && !NO_CRASH
           wg.position.set(0, 0, pc.top + 2)
           /* แถวเอียงลึกเข้าจอนิด (ก้มมอง) — เห็นสันบน/ล่างของการ์ด มีมิติ ไม่แบนกับจอ */
           wg.rotation.set(tk * 0.3, 0, 0, 'XYZ')
@@ -1456,7 +1456,7 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
       } else {
         /* กระจายออกนุ่มขึ้น ยาวขึ้น (ไม่วาบ) — ease-out กำลังสอง */
         /* เรื่องพื้นหญ้า: ไม่ชน = วิดเจ็ตไม่กระจาย */
-        const k = GRASS_STORY ? 0 : clamp01((b.code - CODE_HIT - (i - 1) * 0.02) / 0.34)
+        const k = NO_CRASH ? 0 : clamp01((b.code - CODE_HIT - (i - 1) * 0.02) / 0.34)
         const burst = 1 - Math.pow(1 - k, 2)
         const dir = BURST[i]
         px += dir[0] * burst * 560

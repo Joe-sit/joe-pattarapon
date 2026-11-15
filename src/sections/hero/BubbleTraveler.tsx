@@ -18,7 +18,10 @@ import { useTuner } from '@/newhero/tuner'
 import { StageLight } from './Headline3D'
 import { BAR_AT, BASE_Y as ISLE_Y, ISLAND, ISLAND_CARD, K as ISLE_K, PadIsland, blockFlight, blockY, padIsland, type IslandApi } from './ResearchPlatform'
 import { bubbleTravel, setBubbleAway, setHeadBubbleLive, subscribeBubbleAway } from './bubbleTravel'
-import { DEVICE, LAYOUT_H, WF, WF_HEAD, benchPose, camDist, codeDark, devHook, CODE_HIT, HIT_FLY, GRASS_STORY, barLayout, caretSpot, deviceMat, devScreen, groundMat, deviceSpot, headPose, inOut as inOut3, researchPhase, wfK, workBeats } from './workMotion'
+import { DEVICE, LAYOUT_H, WF, WF_HEAD, benchPose, camDist, codeDark, devHook, CODE_HIT, HIT_FLY, GRASS_STORY, NO_CRASH, PLANET_STORY, MAP_STORY, ROAD_STORY, planetLive, planetPhase, barLayout, caretSpot, deviceMat, devScreen, groundMat, deviceSpot, headPose, inOut as inOut3, researchPhase, wfK, workBeats } from './workMotion'
+import { mapGround, mapLive, mapPhase, phoneOnGround, stepMap } from './mapWorld'
+import { HOME_ICON, ICON_PX, roadCut, roadPhase } from './roadWorld'
+import { PlanetCar } from './PlanetStage'
 import { outlineMat } from './shapes'
 
 /**
@@ -128,6 +131,17 @@ const IB_P = new THREE.Vector3()
 const IB_Q = new THREE.Quaternion()
 const IB_S = new THREE.Vector3()
 const DEV_M = new THREE.Matrix4()
+/** เรื่องโลก: แยก/ประกอบท่าเครื่องตอนกลายเป็นการ์ดหน้า (PM_I = หันตรงหน้ากล้อง) */
+const PM_P = new THREE.Vector3()
+const PM_Q = new THREE.Quaternion()
+const PM_S = new THREE.Vector3()
+const PM_T = new THREE.Vector3()
+const PM_I = new THREE.Quaternion()
+/** เรื่องแผนที่: ท่าเครื่องนอนบนพื้นเมือง */
+const MAP_M = new THREE.Matrix4()
+const MAP_PH = new THREE.Matrix4()
+const MAP_Q = new THREE.Quaternion()
+const MAP_S = new THREE.Vector3()
 const DEV_P = new THREE.Vector3()
 const DEV_S = new THREE.Vector3()
 const DEV_Q = new THREE.Quaternion()
@@ -149,6 +163,11 @@ const ZOOM_LEN = 1.3
 /** มุมหงายเพิ่มตอน island งอกครบ — รวม ~82° เกือบราบ มองหน้าตรง */
 const SIDE_FLAT = 0.35
 const AX_X = new THREE.Vector3(1, 0, 0)
+const AX_Z = new THREE.Vector3(0, 0, 1)
+/** เรื่องถนน: กลางไอคอนบนจอ · ระยะกลางไอคอนจากกลางเครื่อง · เอียงวูบ */
+const RD_C = new THREE.Vector3()
+const RD_O = new THREE.Vector3()
+const RD_Q = new THREE.Quaternion()
 const TILT_Q = new THREE.Quaternion()
 const FLOAT_M = new THREE.Matrix4()
 
@@ -177,8 +196,8 @@ const rnd = (n: number, k: number) => {
   const v = Math.sin(n * 12.9898 + k * 78.233) * 43758.5453
   return v - Math.floor(v)
 }
-const POSE0 = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0, iso: 0, grow: 0, page: 0, mag: 0, tuck: 0, fall: 0, prog: 0, act: [0, 0, 0], sel: 0, gone: 0, whirl: 0, caretOut: 0, zoom: 1, dev: 0, float: 0, tilt: 0, bx: 0, by: 0, bk: 1, bt: 1, flat: 0, wire: 0, land: 0, away: 0, brx: 0, bry: 0, bspin: 0, hx: 0, hy: 0, isle: 0, flip: 0, flatK: 0, sv2v: 0, dark: 0, push: 0, devFade: 1 }
-type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number; iso: number; grow: number; page: number; mag: number; tuck: number; fall: number; prog: number; act: number[]; sel: number; gone: number; whirl: number; caretOut: number; zoom: number; dev: number; float: number; tilt: number; bx: number; by: number; bk: number; bt: number; flat: number; wire: number; land: number; away: number; brx: number; bry: number; bspin: number; hx: number; hy: number; isle: number; flip: number; flatK: number; sv2v: number; dark: number; push: number; devFade: number }
+const POSE0 = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0, iso: 0, grow: 0, page: 0, mag: 0, tuck: 0, fall: 0, prog: 0, act: [0, 0, 0], sel: 0, gone: 0, whirl: 0, caretOut: 0, zoom: 1, dev: 0, float: 0, tilt: 0, bx: 0, by: 0, bk: 1, bt: 1, flat: 0, wire: 0, land: 0, away: 0, brx: 0, bry: 0, bspin: 0, hx: 0, hy: 0, isle: 0, flip: 0, flatK: 0, sv2v: 0, dark: 0, push: 0, devFade: 1, pBulge: 0, pFly: 0, pMove: 0, pPost: 0, mLand: 0, mMap: 0, mAlt: 0, rDolly: 0 }
+type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number; iso: number; grow: number; page: number; mag: number; tuck: number; fall: number; prog: number; act: number[]; sel: number; gone: number; whirl: number; caretOut: number; zoom: number; dev: number; float: number; tilt: number; bx: number; by: number; bk: number; bt: number; flat: number; wire: number; land: number; away: number; brx: number; bry: number; bspin: number; hx: number; hy: number; isle: number; flip: number; flatK: number; sv2v: number; dark: number; push: number; devFade: number; pBulge: number; pFly: number; pMove: number; pPost: number; mLand: number; mMap: number; mAlt: number; rDolly: number }
 
 function readPose(): Pose {
   const off: Pose = { ...POSE0 }
@@ -296,10 +315,25 @@ function readPose(): Pose {
      */
     /* เครื่อง (แก้ว) จางหลบตอนวิดเจ็ตฟ้าขยายเต็มจอ แล้วกลับมาช่วงต้นบท Ship (พร้อมหดกลับที่) */
     /* เครื่องกลับมาต้น Ship — หลัง section My Works (BEAT.works) จบ */
-    devFade: 1 - smooth((wb.code - 0.78) / 0.1) * (1 - smooth(wb.ship / 0.25)),
+    /* เรื่องโลก: เครื่องไม่หาย — ถือโลกไว้ตลอดเรื่อง (โลกพองออกจากจอ) */
+    /* เรื่องถนน: เครื่องหายตอนตัดไปแผ่นไอคอนในแคนวาสถนน (ไอคอนเต็มจอแล้ว ตัวเครื่องล้นขอบจอหมด) */
+    devFade: ROAD_STORY ? (roadCut(roadPhase(wb)) ? 0 : 1) : PLANET_STORY || MAP_STORY ? 1 : 1 - smooth((wb.code - 0.78) / 0.1) * (1 - smooth(wb.ship / 0.25)),
+    rDolly: ROAD_STORY ? roadPhase(wb).dolly : 0,
+    ...(() => {
+      if (!PLANET_STORY) return { pBulge: 0, pFly: 0, pMove: 0, pPost: 0 }
+      const pp = planetPhase(wb)
+      return { pBulge: pp.bulge, pFly: pp.fly, pMove: pp.move, pPost: pp.post }
+    })(),
+    ...(() => {
+      if (!MAP_STORY) return { mLand: 0, mMap: 0, mAlt: 0 }
+      const mp = mapPhase(wb)
+      return { mLand: mp.land, mMap: mp.map, mAlt: mp.alt }
+    })(),
     push: (() => {
       /* เรื่องพื้นหญ้า: ไม่พุ่งชนคำ — เครื่องถอยห่างกล้องนิดตอนมือ (HoldHand) ยื่นมาจับ ให้เห็นทั้งมือ ฝ่ามือ แขน ในเฟรมแบบ Frame 1 */
       if (GRASS_STORY) return -0.24 * soft5((wb.code - 0.42) / 0.24) * (1 - soft5(wb.ship / 0.3))
+      /* เรื่องโลก: เครื่องนิ่งกลางจอ — โลกผุดออกจากจอแทนการพุ่งชน (./PlanetStage) */
+      if (NO_CRASH) return 0
       const a = Math.min(1, Math.max(0, (wb.code - (CODE_HIT - HIT_FLY)) / HIT_FLY))
       const pre = 0.32 * a * a
       const post = wb.code > CODE_HIT ? 0.8 * soft5((wb.code - CODE_HIT) / (1 - CODE_HIT)) : 0
@@ -726,6 +760,71 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
       const rise = inOut01(clamp01(L / 0.42))
       DEV_M.compose(DEV_P.set(gx - size.width / 2 + p.bx, size.height / 2 - p.y - p.by - dropY - (1 - rise) * size.height * 0.85, -(1 - rise) * size.height * 0.6), DEV_Q, DEV_S.setScalar(ds))
       DEV_M.multiply(FLOAT_M.makeTranslation(0, -PAD_Y * zf, 0))
+      /*
+       * เรื่องโลก (./PlanetStage):
+       *   โลกผุดจากกลางจอเครื่อง (ก่อนเครื่องขยับ) แล้วลอยไปมุมขวาล่าง ใหญ่ล้นขอบ
+       *   เครื่องเลื่อนไปซ้าย ตั้งตรง ขยายเป็นการ์ดหน้าสุดของกองผลงาน (ของบนจอ BenchScreen อ่าน deviceMat ชุดนี้ — ตามไปด้วย)
+       */
+      planetLive.bulge = p.pBulge
+      planetLive.fly = p.pFly
+      planetLive.move = p.pMove
+      planetLive.post = p.pPost
+      if (PLANET_STORY && p.pBulge > 0) {
+        DEV_M.decompose(PM_P, PM_Q, PM_S)
+        /* โลกที่จอเครื่อง: รัศมีโตจากเล็กกว่าจอถึงเต็มกว้างเครื่อง ดันออกหน้าจอ · ลอยไปมุมขวาล่าง รัศมีราว 0.5 ความสูงจอ */
+        const bu = p.pBulge
+        const fl = p.pFly
+        const r0 = DEVICE.hw * PM_S.x * (0.3 + 0.75 * bu)
+        const r1 = size.height * 0.5
+        planetLive.x = lerp(PM_P.x, size.width * 0.36, fl)
+        planetLive.y = lerp(PM_P.y, -size.height * 0.58, fl)
+        planetLive.z = lerp(PM_P.z + r0 * (bu * 1.4 - 0.8), size.height * 0.2, fl)
+        planetLive.r = lerp(r0, r1, fl)
+        if (p.pMove > 0) {
+          const m = p.pMove
+          /* การ์ดหน้า: สูงราว 0.74 ของจอ (ครึ่งสูงจอเครื่อง 0.37H) กลางที่ซ้ายของจอ ตั้งตรงหน้ากล้อง */
+          const kS = (size.height * 0.43) / Math.max(1e-3, DEVICE.hh * PM_S.y)
+          PM_P.lerp(PM_T.set(-size.width * 0.24, size.height * 0.02, 0), m)
+          PM_Q.slerp(PM_I, m)
+          PM_S.multiplyScalar(1 + (kS - 1) * m)
+          DEV_M.compose(PM_P, PM_Q, PM_S)
+        }
+      } else planetLive.r = 0
+      /*
+       * เรื่องแผนที่ (./MapStage · ./mapWorld): เครื่องลอยค้าง หงายเป็นแนวราบ แล้วลอยลงนอนบนพื้นเมือง (ท่าเดียวกับพื้นในแคนวาสเมือง — ทาบกันพอดี)
+       * นอนแล้วติดไปกับพื้น: ผู้ชมลากแผนที่ เครื่องเลื่อนตามเมือง
+       */
+      if (MAP_STORY && p.mLand > 0) {
+        stepMap()
+        DEV_M.decompose(PM_P, PM_Q, PM_S)
+        mapGround(MAP_M, size.height, p.mAlt).multiply(phoneOnGround(MAP_PH, t.bbThick, p.mAlt))
+        MAP_M.decompose(PM_T, MAP_Q, MAP_S)
+        const l = p.mLand
+        /* ลอยค้างแล้วหงายเป็นแนวราบ (ยังลอยสูง) — การลงพื้นเป็นความสูง (mAlt) ในท่าเป้าเอง */
+        PM_P.lerp(PM_T, l)
+        PM_Q.slerp(MAP_Q, l)
+        PM_S.lerp(MAP_S, l)
+        DEV_M.compose(PM_P, PM_Q, PM_S)
+      }
+      /*
+       * เรื่องถนน (./roadWorld · GIF ref): ดันเข้าหาไอคอนแอปบนหน้าโฮม — ไอคอนเลื่อนเข้ากลางจอ ขยายแบบทวีคูณ (ความเร็วบนจอสม่ำเสมอ)
+       * เครื่องคลายมุมเป็นหน้าตรง เอียงวูบนิดกลางทาง (กล้องมือถือ) · จบที่ไอคอนกว้าง ICON_PX ของจอ = ท่าเริ่มของแผ่นไอคอนในแคนวาสถนน
+       */
+      if (ROAD_STORY && p.rDolly > 0) {
+        const k = p.rDolly
+        DEV_M.decompose(PM_P, PM_Q, PM_S)
+        const s0 = PM_S.x
+        const s1 = (size.height * ICON_PX) / HOME_ICON.s
+        const sc = s0 * Math.exp(Math.log(s1 / s0) * k)
+        RD_C.set(HOME_ICON.x, HOME_ICON.y, 0).applyMatrix4(DEV_M)
+        RD_C.multiplyScalar(1 - k)
+        PM_Q.slerp(PM_I, Math.min(1, k * 1.6))
+        PM_Q.multiply(RD_Q.setFromAxisAngle(AX_Z, 0.07 * Math.sin(Math.PI * k)))
+        RD_O.set(HOME_ICON.x, HOME_ICON.y, 0).applyQuaternion(PM_Q).multiplyScalar(sc)
+        PM_P.copy(RD_C).sub(RD_O)
+        PM_S.setScalar(sc)
+        DEV_M.compose(PM_P, PM_Q, PM_S)
+      }
       DEV_M.toArray(deviceMat.e)
       /* กรอบเครื่องบนจอ (เพอร์สเปกทีฟจากความลึกของกลางเครื่อง · มุมเอียงหงายย่อความสูงตามจริง) */
       {
@@ -737,7 +836,8 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
         /* กว้างตามมุมพลิก (บทโค้ดพลิกเห็นด้านหลัง — สันเครื่องแคบลง) */
         const cw = Math.abs(e[0]) / Math.max(1e-6, ds)
         devScreen.hw = (DEVICE.hw * ds * cw) / wd
-        devScreen.hh = (DEVICE.hh * ds * sy) / wd
+        /* สเกลจริงจากเมทริกซ์ (ไม่ใช่ ds — เรื่องโลกขยายเครื่องเพิ่มหลังคิด ds) */
+        devScreen.hh = (DEVICE.hh * Math.hypot(e[4], e[5], e[6]) * sy) / wd
         devScreen.r = (DEVICE.r * ds * cw) / wd
         devScreen.ok = L > 0
         devHook.fn?.()
@@ -1037,6 +1137,8 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
       <group ref={islandG} matrixAutoUpdate={false} visible={false}>
         <PadIsland api={islandApi} />
       </group>
+      {/* เรื่องโลก: ลูกโลกจิ๋ว + รถ (ผุดจากจอเครื่อง ลอยไปมุมขวาล่าง — ./PlanetStage) */}
+      {PLANET_STORY && <PlanetCar />}
       <group ref={devG} matrixAutoUpdate={false} visible={false}>
         <mesh geometry={devGeo} material={glass} frustumCulled={false} />
       </group>
@@ -1154,6 +1256,8 @@ export function BubbleTraveler() {
     const kick = () => {
       if (!raf) raf = requestAnimationFrame(read)
     }
+    /* เรื่องแผนที่: พื้นเลื่อน (ลาก/ปุ่มลูกศร) โดยไม่มีการสกรอลล์ — ปลุกให้วาดเครื่องที่นอนบนพื้นตาม */
+    mapLive.wake = () => wake.current()
     /* ใบในหัวเรื่องไม่วาดเลยบนหน้านี้ — ใบนี้แทนตลอด */
     setBubbleAway(true)
     const unsub = subscribeBubbleAway(kick)

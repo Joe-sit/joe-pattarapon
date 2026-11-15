@@ -286,13 +286,50 @@ export const barLayout = { e: new Float32Array(12), ok: false }
 export const sling = { vis: 0, px: 0, py: 0, pull: 0, launch: 0 }
 
 /**
- * เรื่อง Selected Work แบบ "ลงจอดบนพื้นหญ้า" (ต่อท้าย Code — แทนเครื่องพุ่งชนคำ Code + วงการ์ด):
- *   มือตัวละครค่อย ๆ ยื่นขึ้นมาจับเครื่อง (./HoldHand) → ฉากหมุนออกจากจอมือถือเป็นมุมเสยช้อนจากพื้น
- *   → ทุ่งหญ้า (จบเรื่องท้องฟ้า: ร่วงจากฟ้ามาลงพื้น) แถวการ์ดงาน + ตัวละครยืนไถมือถือมุมขวาล่าง (./GrassStage)
- *   → ท้ายบทกล้องเงยขึ้นฟ้า ส่งต่อด่านหนังสติ๊ก
- * false = กลับไปเรื่องเดิม (ชนคำ + วงการ์ด)
+ * เรื่องหลังบท Code (Selected Work) — เลือกได้สี่แบบ:
+ *   crash  เครื่องพุ่งชนคำ Code ทะลุ → วิดเจ็ตฟ้าขยายเป็นฟ้า → โฟลเดอร์แจกการ์ด (flip paper)
+ *   grass  มือตัวละครจับเครื่อง → ฉากหมุนออกเป็นมุมเสยบนพื้นหญ้า (./GrassStage · ./HoldHand)
+ *   map    เครื่องล้มลงนอนบนพื้นเมืองดินปั้น ลาก/กดลูกศรเดินดูเมือง เจอป้ายผลงานกระจายรอบเมือง (./MapStage)
+ *   planet โลกผุดออกจากจอเครื่อง ลอยไปมุมขวาล่าง มีรถวิ่งบนผิวโลก · ปกผลงานใหญ่มุมซ้ายบน เลื่อนแล้วเปลี่ยนงานทีละชิ้น (./PlanetStage)
+ *   road   จอเครื่องเป็นหน้าโฮม → ดันเข้าไอคอนแอป (favicon) → ไอคอนหงายเป็นหลังคา → โฉบลงถนน ป้ายผลงานริมทาง (./RoadStage · GIF ref)
  */
-export const GRASS_STORY = true
+export type PostCode = 'crash' | 'grass' | 'planet' | 'map' | 'road'
+export const POST_CODE = 'road' as PostCode
+export const GRASS_STORY = POST_CODE === 'grass'
+export const PLANET_STORY = POST_CODE === 'planet'
+export const MAP_STORY = POST_CODE === 'map'
+export const ROAD_STORY = POST_CODE === 'road'
+/** เครื่องไม่พุ่งชนคำ Code (ไม่มีแรงกระแทก วิดเจ็ตไม่กระจาย ฟ้าไม่ขยาย ไม่มีโฟลเดอร์/การ์ดของเรื่องเดิม) */
+export const NO_CRASH = POST_CODE !== 'crash'
+/**
+ * เรื่องโลก (planet) — บท Code: โลกผุดจากจอเครื่องแล้วลอยไปที่ [เริ่ม, ยาว]
+ * worksPost: ปกผลงานโผล่ [เริ่ม, ยาว] · ไล่ผลงานทีละชิ้น [เริ่ม, จบ] · ออก [เริ่ม, ยาว]: ปกจาง โลกหดกลับเข้าจอเครื่องตรงจังหวะเครื่องกลับมา (ต้นบท Ship)
+ */
+export const PLANET_EMERGE = [0.6, 0.27] as const
+export const PLANET_COVER_IN = [-0.05, 0.3] as const
+export const PLANET_SCROLL = [0.3, 2.1] as const
+export const PLANET_OUT = [2.42, 0.47] as const
+/**
+ * ท่าของเรื่องโลก ณ ความคืบหน้าตอนนี้ — ใช้ร่วมกัน (BubbleTraveler ขยับเครื่อง/โลก · PlanetStage การ์ดผลงาน)
+ *   bulge 0→1  โลก (ลูกโลกจิ๋วของพอร์ทัล hero — newhero/Globe) ดันออกจากจอเครื่อง
+ *   fly   0→1  โลกลอยจากจอเครื่องไปมุมขวาล่าง ขยายใหญ่ล้นขอบ · รถวิ่งบนถนนรอบโลก
+ *   move  0→1  เครื่องเลื่อนไปซ้าย ตั้งตรง ขยายเป็น "การ์ดหน้าสุด" ของกองผลงาน (จอเครื่อง = ปกผลงาน)
+ *   ออก        ย้อนทุกอย่างกลับเข้าเครื่อง เครื่องกลับกลางจอ ต่อบท Ship
+ */
+export function planetPhase(b: { code: number; works: number }) {
+  const post = worksPost(b)
+  const back = smooth((post - PLANET_OUT[0]) / PLANET_OUT[1])
+  return {
+    post,
+    bulge: smooth((b.code - PLANET_EMERGE[0]) / 0.14) * (1 - back),
+    fly: smooth((b.code - (PLANET_EMERGE[0] + 0.1)) / 0.2) * (1 - back),
+    move: smooth((b.code - (PLANET_EMERGE[0] + 0.14)) / 0.2) * (1 - back),
+  }
+}
+/**
+ * ท่าเฟรมนี้ (BubbleTraveler เขียนทุกเฟรม): ค่าความคืบหน้า + ที่วางโลกเป็นพิกัดฉาก (px · กลางจอ = 0 · y ขึ้น) และรัศมี (px)
+ */
+export const planetLive = { bulge: 0, fly: 0, move: 0, post: 0, x: 0, y: 0, z: 0, r: 0 }
 /** บท Code (b.code): มือยื่นขึ้นมาจับ [เริ่ม, ยาว] · ฉากเปิดออกจากจอ + หมุนเป็นมุมเสย [เริ่ม, ยาว] */
 export const HAND_IN = [0.42, 0.22] as const
 export const GRASS_OPEN = [0.68, 0.24] as const

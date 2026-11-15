@@ -13,11 +13,17 @@ import { BEAT, endOf, storySv2 } from '@/sections/skystory/beats'
 import { SlingGate } from './SlingGate'
 import { HoldHand } from './HoldHand'
 import { GrassStage } from './GrassStage'
+import { PlanetStage } from './PlanetStage'
+import { MapInfo, MapStage } from './MapStage'
+import { mapPhase } from './mapWorld'
+import { RoadInfo, RoadStage } from './RoadStage'
+import { RoadHome } from './RoadHome'
+import { roadCut, roadPhase } from './roadWorld'
 import { SlingRider } from './SlingRider'
 import { AsciiClouds, type CloudBlob } from '@/components/AsciiClouds'
 import { DECK_WORKS } from './WorksGallery'
 import { ISLAND } from './ResearchPlatform'
-import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, TILE_SLOTS, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, STORY_FONT, GRASS_STORY, GRASS_OPEN, CUT, type WorkBeats } from './workMotion'
+import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, TILE_SLOTS, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, STORY_FONT, GRASS_STORY, NO_CRASH, PLANET_STORY, MAP_STORY, ROAD_STORY, PLANET_EMERGE, GRASS_OPEN, CUT, type WorkBeats } from './workMotion'
 
 /**
  * เครื่องแก้วเป็นโต๊ะทำงาน — เรื่องต่อจาก "Here is what I do"
@@ -523,7 +529,7 @@ export function WorkStory() {
       /* ค้างเป็นพื้นหลังตลอด section My Works · ออกพร้อมไทล์ท้ายบท */
       const outW = smooth((wp - WORKS_HOLD[1]) / (WORKS_HOLD[2] - WORKS_HOLD[1]))
       /* คำใหญ่อยู่ตลอดบท (ธีมเรา — คำใหญ่บนฟ้าแบบ Research/Design/Code) · ออกพร้อมวงการ์ดท้ายบท */
-      const vw2 = frame.current.on && !GRASS_STORY ? inW * (1 - outW) : 0
+      const vw2 = frame.current.on && !NO_CRASH ? inW * (1 - outW) : 0
       ww.style.visibility = vw2 > 0.002 ? 'visible' : 'hidden'
       ww.style.opacity = vw2.toFixed(3)
       /*
@@ -536,7 +542,7 @@ export function WorkStory() {
     /* ── ปุ่มไทล์งาน (DOM ทับตำแหน่งไทล์ 3D) — กดได้เฉพาะช่วงค้าง ── */
     const tb = tilesBox.current
     if (tb) {
-      const hold = frame.current.on && worksUI.hold === 1 && !GRASS_STORY
+      const hold = frame.current.on && worksUI.hold === 1 && !NO_CRASH
       tb.style.visibility = hold ? 'visible' : 'hidden'
       /* ชื่องาน/ลูกศรตั้ง visibility เองตอนค้าง (ชนะ hidden ของกล่องแม่) — พ้นช่วงค้างต้องซ่อนเอง ไม่งั้นค้างลอยทับด่านถัดไป */
       if (!hold) {
@@ -604,7 +610,12 @@ export function WorkStory() {
       const live = b.lift > 0 && hand < 1 && sr.bottom > 0
       frame.current.b = b
       /* เรื่องพื้นหญ้า: ฉากหญ้าคลุมเต็มจอแล้ว — ซ่อนของบนจอเครื่องข้างใต้ (ไม่งั้นโผล่ตรงฟ้าโปร่งของฉากหญ้า) จนเครื่องกลับมาตอน Ship */
-      if (benchCv.current) benchCv.current.style.visibility = GRASS_STORY && b.code >= GRASS_OPEN[0] + GRASS_OPEN[1] && b.ship <= 0 ? 'hidden' : ''
+      if (benchCv.current) {
+        /* เรื่องถนน: ตัดไปแผ่นไอคอนในแคนวาสถนนแล้ว — ซ่อนของบนจอเครื่อง (เครื่องล้นจอ ไอคอนรับไม้ต่อ) */
+        benchCv.current.style.visibility = (GRASS_STORY && b.code >= GRASS_OPEN[0] + GRASS_OPEN[1] && b.ship <= 0) || (ROAD_STORY && roadCut(roadPhase(b))) ? 'hidden' : ''
+        /* เรื่องโลก: จอเครื่องล้างของบนจอออกตอนโลกเริ่มผุด (เห็นชัดว่าโลกออกมาจากจอ) · กลับมาพร้อมเครื่องตอนต้นบท Ship */
+        benchCv.current.style.opacity = PLANET_STORY ? (1 - smooth((b.code - PLANET_EMERGE[0] + 0.03) / 0.07) * (1 - smooth(b.ship / 0.25))).toFixed(3) : ''
+      }
       frame.current.on = live
       /* ทั้งชั้นเลื่อนขึ้นด้วย CSS ตอนจอถัดไปดันขึ้นมาแล้ว — ฟ้าไม่ต้องยกเอง (lift 0) */
       const fp = fall.current
@@ -624,7 +635,7 @@ export function WorkStory() {
       const ha = hitAt.current
       const cNow = live ? b.code : 0
       /* เรื่องพื้นหญ้า: เครื่องไม่ชนคำ (มือมาจับแทน) — ไม่มีแรงกระแทก */
-      if (!GRASS_STORY && ha.prev < CODE_HIT && cNow >= CODE_HIT && cNow - ha.prev < 0.15) ha.t = performance.now()
+      if (!NO_CRASH && ha.prev < CODE_HIT && cNow >= CODE_HIT && cNow - ha.prev < 0.15) ha.t = performance.now()
       if (cNow < CODE_HIT - 0.05) ha.t = -1
       ha.prev = cNow
       /* จอสั่น/แสงวาบ/วงคลื่นเล่นตามเวลาใน loop ของมันเอง (ดู useEffect ของ hitAt) — ตรงนี้ตั้งแค่ระยะยก */
@@ -675,8 +686,11 @@ export function WorkStory() {
        */
       const bo = GRASS_STORY && live && b.code < CUT[0] + 0.02 ? smooth((b.code - (CUT[0] - CUT[1])) / CUT[1]) : 0
       if (blackout.current) blackout.current.style.opacity = bo.toFixed(3)
-      if (bigFront.current) bigFront.current.style.opacity = bo > 0 ? (1 - bo).toFixed(3) : ''
-      if (disCanvas.current) disCanvas.current.style.opacity = bo > 0 ? (1 - bo).toFixed(3) : ''
+      /* เรื่องแผนที่: ผงคำ Code ที่สลายอยู่จางหายตอนเมืองโผล่ (ไม่ลอยทับพื้นเมือง) */
+      /* เรื่องถนน: จางตอนจอเครื่องเป็นหน้าโฮม (พื้นสว่างของฉากถนนกลบฉาก Code) */
+      const fo = Math.max(bo, MAP_STORY && live ? Math.min(1, mapPhase(b).map * 1.6) : 0, ROAD_STORY && live ? Math.min(1, roadPhase(b).home * 1.4) : 0)
+      if (bigFront.current) bigFront.current.style.opacity = fo > 0 ? (1 - fo).toFixed(3) : ''
+      if (disCanvas.current) disCanvas.current.style.opacity = fo > 0 ? (1 - fo).toFixed(3) : ''
 
       /* ── คำใหญ่พื้นหลังของบท (Research / Design / Code) ── */
       liftNow.current = lift
@@ -821,6 +835,10 @@ export function WorkStory() {
         </div>
         {/* หรี่ดำก่อนตัดเข้าฉากหญ้า — ทับฟ้า/ฉากมืด/คำทึบ ใต้จอเครื่อง (แคนวาสถัดไป) */}
         <div ref={blackout} className="pointer-events-none absolute inset-0 bg-black" style={{ opacity: 0 }} aria-hidden />
+        {/* เรื่องแผนที่: เมืองดินปั้นใต้ตัวเครื่อง (ใต้แคนวาสของบนจอเครื่องด้วย — จอเครื่องที่นอนบนพื้นยังเห็นของบนจอ) */}
+        {MAP_STORY && <MapStage frame={frame} />}
+        {/* เรื่องถนน: พื้นสว่าง + แผ่นไอคอน → หลังคา → ถนน (ใต้แคนวาสของบนจอเครื่อง — รับไม้ต่อตอนไอคอนเต็มจอ) */}
+        {ROAD_STORY && <RoadStage frame={frame} />}
         <Canvas ref={benchCv} className="!absolute inset-0" frameloop="never" dpr={[1, 1.25]} camera={{ fov: FOV, position: [0, 0, 1700] }} gl={{ antialias: true, alpha: true }} style={{ pointerEvents: 'none' }}
           /* ขาวต้องเป็นขาว: ตัวแมปโทนตั้งต้น (ACES) กดขาวลงเป็นเทาหม่น */
           onCreated={({ gl }) => {
@@ -837,6 +855,7 @@ export function WorkStory() {
             <directionalLight position={[-500, 700, 1000]} intensity={2.6} />
             <DeviceHalo />
             <BenchScreen frame={frame} />
+            {ROAD_STORY && <RoadHome />}
             <SlingRider />
           </Suspense>
         </Canvas>
@@ -883,6 +902,9 @@ export function WorkStory() {
       {/* ด่านหนังสติ๊กท้าย Selected Work → section ถัดไป (ตัวละครในเปล — SlingRider ในแคนวาสของบนจอ) */}
       {GRASS_STORY && <GrassStage frame={frame} />}
       {GRASS_STORY && <HoldHand frame={frame} />}
+      {PLANET_STORY && <PlanetStage frame={frame} />}
+      {MAP_STORY && <MapInfo />}
+      {ROAD_STORY && <RoadInfo />}
       <SlingGate frame={frame} />
       <div ref={tilesBox} className="pointer-events-none fixed inset-0 z-[52]" style={{ visibility: 'hidden' }}>
         {openTile < 0 &&

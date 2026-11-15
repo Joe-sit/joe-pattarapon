@@ -136,6 +136,31 @@ type Field = {
 
 const FieldCtx = createContext<Field | null>(null)
 
+/**
+ * ท่าโผล่ของหัวเรื่อง: ทีละตัว ไล่ซ้ายไปขวาข้ามทุกบรรทัด (LIFE ท้ายสุด) — จางขึ้น ยกขึ้นจากต่ำกว่านิด ถอยลึกนิด
+ * แล้วพลิกตั้งจากท่าเอนหลัง เข้าที่แบบชะลอยาว (quart out)
+ * dur = วินาทีต่อตัว · stag = ระยะห่างระหว่างตัว · drop/back = ยกขึ้น/ถอยลึก (em) · tilt = มุมเอนหลังตอนเริ่ม (เรเดียน)
+ */
+const APPEAR = { dur: 0.9, stag: 0.045, drop: 0.45, back: 0.8, tilt: 1.15 }
+
+/** ลำดับเริ่มของบรรทัดนี้ = จำนวนตัวอักษรของบรรทัดที่อยู่ก่อนหน้า (บนลงล่าง แล้วซ้ายไปขวา) — ท่าโผล่ไหลต่อกันข้ามบรรทัด */
+function charsBefore(lines: Map<number, LineBox>, box: LineBox) {
+  let n = 0
+  lines.forEach((b) => {
+    if (b.src) return
+    if (b.top < box.top - 1 || (Math.abs(b.top - box.top) <= 1 && b.left < box.left)) n += b.text.replace(/\s/g, '').length
+  })
+  return n
+}
+/** จำนวนตัวอักษรทั้งหัวเรื่อง — LIFE (รูป) โผล่ต่อจากตัวสุดท้าย */
+function charsAll(lines: Map<number, LineBox>) {
+  let n = 0
+  lines.forEach((b) => {
+    if (!b.src) n += b.text.replace(/\s/g, '').length
+  })
+  return n
+}
+
 /** เลขประจำบรรทัด — เพิ่มทีละหนึ่งตอน mount ไม่ต้องพึ่งข้อความซ้ำกันได้ */
 let nextId = 0
 
@@ -183,7 +208,12 @@ function Glyph({
   const { invalidate } = useThree()
   /* คิวเปิดตัวมาทีหลังการสร้าง mesh — ตั้งเวลาเริ่มใหม่ตอนคิวมาถึง ไม่ใช่ตอน mount */
   useEffect(() => {
-    from.current = Math.max(startAt, performance.now())
+    /*
+     * ลำดับของตัวนี้ (startAt) เปลี่ยนได้ตอนบรรทัดอื่นเพิ่งลงทะเบียน (ลำดับไหลข้ามบรรทัด — ดู charsBefore)
+     * ถ้าท่าเริ่มเล่นไปแล้ว ห้ามตั้งเวลาใหม่ — ไม่งั้นตัวที่โผล่แล้วหายวาบแล้วโผล่ใหม่พร้อมกันทุกบรรทัด
+     */
+    const now = performance.now()
+    if (!Number.isFinite(from.current) || now < from.current) from.current = Math.max(startAt, now)
     invalidate()
   }, [startAt, invalidate])
 
@@ -200,12 +230,12 @@ function Glyph({
       onMoving(false)
       return
     }
-    const t = (performance.now() - from.current) / (cfg.enter * 1000)
+    const t = (performance.now() - from.current) / (APPEAR.dur * 1000)
     const rising = t < 1
     const e = t < 0 ? 0 : t > 1 ? 1 : t
-    // เข้าที่แบบชะลอยาว (quint.out) ไม่ใช่ cubic — ท้ายทางช้าลงมากพอที่ตาจะอ่านว่า "หยุดเอง"
-    const k = 1 - (1 - e) ** 5
-    if (mat.current) mat.current.opacity = k
+    // ท่าโผล่ (APPEAR): เข้าที่แบบชะลอยาว — ตัวชัดก่อนเข้าที่นิด (ความทึบเร็วกว่าท่าเคลื่อน)
+    const k = 1 - (1 - e) ** 4
+    if (mat.current) mat.current.opacity = 1 - (1 - Math.min(1, e * 1.6)) ** 2
     // ใจกลางตัวอักษรอยู่สูงจากเส้นฐานราวหนึ่งในสามของขนาด และเยื้องไปครึ่งตัวทางขวา
     const dx = spec.x + spec.ha * 0.5 - local.x
     const dy = 0.36 - local.y
@@ -225,11 +255,11 @@ function Glyph({
     c.x += (tx - c.x) * cfg.ease
     c.y += (ty - c.y) * cfg.ease
     c.z += (tz - c.z) * cfg.ease
-    g.position.set(spec.x + c.x, c.y - (1 - k) * cfg.rise, c.z)
+    g.position.set(spec.x + c.x, c.y - (1 - k) * APPEAR.drop, c.z - (1 - k) * APPEAR.back)
     // เอียงตามทิศที่ถูกผลัก ตัวอักษรจึงหันสันข้างให้เห็นความหนา ไม่ใช่เลื่อนแบน ๆ
     // ท่าตั้งต้นจากแผงจูน + การเอียงตามทิศที่ถูกผลัก (สันข้างจะได้หันมารับแสง)
     g.rotation.set(
-      cfg.rot[0] + (-c.y / cfg.push) * 0.16,
+      cfg.rot[0] - (1 - k) * APPEAR.tilt + (-c.y / cfg.push) * 0.16,
       cfg.rot[1] + (c.x / cfg.push) * 0.2,
       cfg.rot[2],
     )
@@ -372,6 +402,8 @@ function Line({ box, cfg }: { box: LineBox; cfg: Cfg }) {
    * แบ่งเป็นตัวละเฟรมแล้วงานก้อนเดียวกันกลายเป็นงานเล็ก ๆ ที่แทรกระหว่างเฟรมได้
    */
   const [ready, setReady] = useState(0)
+  const readyRef = useRef(0)
+  readyRef.current = ready
   useEffect(() => {
     if (!specs) return undefined
     /**
@@ -387,7 +419,9 @@ function Line({ box, cfg }: { box: LineBox; cfg: Cfg }) {
       return undefined
     }
     let id = 0
-    let n = 0
+    /* ปั้นไว้ครบแล้ว (ตอนก่อนถึงคิว) = ไม่ต้องเริ่มนับใหม่ — เริ่มจากศูนย์จะถอดตัวที่ปั้นแล้วออกแล้วใส่ใหม่ ท่าโผล่เริ่มซ้ำ */
+    let n = readyRef.current
+    if (n >= specs.length) return undefined
     /**
      * ต่อคิวตอนเธรดหลักว่าง (requestIdleCallback) ไม่ใช่ทุกเฟรม — ถ้าเบียดเข้าไปทุกเฟรม
      * งานสร้างรูปทรงจะไปแย่งเวลากับฉากที่กำลังเล่นอยู่พอดี เบราว์เซอร์ที่ไม่มี API นี้
@@ -444,6 +478,7 @@ function Line({ box, cfg }: { box: LineBox; cfg: Cfg }) {
    */
   const originX = box.left - size.width / 2
   const originY = size.height / 2 - box.top - box.height + s * 0.2
+  const lineOrder = field ? charsBefore(field.lines, box) : 0
 
   useFrame(() => {
     local.x = (mouse.x - fieldRect.left - box.left) / s
@@ -459,7 +494,7 @@ function Line({ box, cfg }: { box: LineBox; cfg: Cfg }) {
           spec={spec}
           local={local}
           onMoving={report(i)}
-          startAt={lineStart + i * cfg.stag * 1000}
+          startAt={lineStart + (lineOrder + i) * APPEAR.stag * 1000}
           cfg={cfg}
         />
       ))}
@@ -566,6 +601,41 @@ function SvgArt({ box }: { box: LineBox }) {
   /* โหลดและปั้นไว้ล่วงหน้าเหมือนตัวอักษร แต่ไม่ให้เห็นจนถึงคิวโชว์ (ดู Headline3DField) */
   const live = useContext(FieldCtx)?.live ?? false
   const { size, invalidate } = useThree()
+  /*
+   * ท่าโผล่ของ LIFE (APPEAR) — ทีละตัว L · i · F · E ต่อจากตัวอักษรตัวสุดท้ายของหัวเรื่อง (ชิ้นในไฟล์แยกตัวตามสี)
+   * แต่ละตัวยกขึ้น ถอยลึก พลิกตั้งรอบกลางของตัวเอง · ฟองแก้วไม่มีท่านี้
+   * หน่วยเป็นหน่วย SVG (อยู่ใต้กลุ่มที่ย่อด้วย s แล้ว) — 1 em ≈ LIFE_GLYPH / CAP_H
+   */
+  const field = useContext(FieldCtx)
+  const meshRefs = useRef<(THREE.Mesh | null)[]>([])
+  const letterRef = useRef<{ of: number[]; c: { x: number; y: number }[]; z: number } | null>(null)
+  useFrame(() => {
+    const L = letterRef.current
+    if (!L || box.glass || !field) return
+    const base = field.revealAt + charsAll(field.lines) * APPEAR.stag * 1000
+    const em = LIFE_GLYPH / CAP_H
+    let moving = false
+    meshRefs.current.forEach((m, i) => {
+      if (!m) return
+      const li = L.of[i] ?? 0
+      const start = base + li * APPEAR.stag * 1000
+      const t = Number.isFinite(start) ? (performance.now() - start) / (APPEAR.dur * 1000) : 0
+      if (t < 1) moving = true
+      const e = t < 0 ? 0 : t > 1 ? 1 : t
+      const k = 1 - (1 - e) ** 4
+      const c = L.c[li]
+      const th = (1 - k) * APPEAR.tilt
+      /* หมุนรอบแกน x ผ่านกลางตัวอักษร (c, z) = เลื่อนชิ้นให้กลางตัวอยู่ที่เดิมหลังหมุน · แกน y ของ SVG ชี้ลง: ยกขึ้น = y บวก */
+      const cs = Math.cos(th)
+      const sn = Math.sin(th)
+      m.rotation.x = th
+      m.position.set(0, c.y - (c.y * cs - L.z * sn) + (1 - k) * APPEAR.drop * em, L.z - (c.y * sn + L.z * cs) - (1 - k) * APPEAR.back * em)
+      const mat = m.material as THREE.Material
+      mat.transparent = true
+      mat.opacity = 1 - (1 - Math.min(1, e * 1.6)) ** 2
+    })
+    if (moving) invalidate()
+  })
   /**
    * แผงจูนอ่านได้จากในแคนวาสด้วย เพราะสโตร์เป็น useSyncExternalStore ไม่ใช่ React context
    * (ค่าที่ส่งเข้าแคนวาสเป็น prop คือชุดของตัวอักษร ซึ่งถูกคิดไว้ก่อนหน้าอยู่แล้ว)
@@ -757,6 +827,26 @@ function SvgArt({ box }: { box: LineBox }) {
     }
   }, [build, invalidate])
 
+  /* แต่ละชิ้นเป็นตัวไหน (จับตามสี เรียงซ้ายไปขวา) + กลางของตัว — ให้ท่าโผล่ทีละตัว */
+  if (parts && !box.glass) {
+    const byColor = new Map<string, number>()
+    const boxes: THREE.Box3[] = []
+    const of = parts.list.map((p) => {
+      let li = byColor.get(p.color)
+      if (li === undefined) {
+        li = boxes.length
+        byColor.set(p.color, li)
+        boxes.push(new THREE.Box3())
+      }
+      if (p.geo.boundingBox) boxes[li].union(p.geo.boundingBox)
+      return li
+    })
+    const centers = boxes.map((b) => ({ x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2 }))
+    const order = centers.map((c, i) => ({ i, x: c.x })).sort((a, b) => a.x - b.x).map((q) => q.i)
+    const rank = new Map(order.map((li, r) => [li, r]))
+    letterRef.current = { of: of.map((li) => rank.get(li) ?? 0), c: order.map((li) => centers[li]), z: thick / 2 }
+  }
+
   if (!parts) return null
 
   const w = Math.max(1e-3, parts.bb.max.x - parts.bb.min.x)
@@ -802,11 +892,18 @@ function SvgArt({ box }: { box: LineBox }) {
       position={[originX + (w * s) / 2, originY - (h * s) / 2, 0]}
       rotation={box.glass ? [0, 0, 0] : [(t.hlRotX * Math.PI) / 180, (t.hlRotY * Math.PI) / 180, (t.hlRotZ * Math.PI) / 180]}
     >
+    <group>
     <group position={[(-w * s) / 2, (h * s) / 2, 0]} scale={[s, -s, s]} visible={live && !(box.glass && away)}>
       <group position={[-parts.bb.min.x, -parts.bb.min.y, 0]}>
         {parts.outline && <mesh geometry={parts.outline} material={chromeMat} />}
         {!parts.outline && parts.list.map((p, i) => (
-          <mesh key={i} geometry={p.geo}>
+          <mesh
+            key={i}
+            geometry={p.geo}
+            ref={(el) => {
+              meshRefs.current[i] = el
+            }}
+          >
             {box.glass ? (
               /**
                * กระจก: โปร่งจริงด้วย alpha ของแคนวาส ไม่ใช่ transmission
@@ -875,6 +972,7 @@ function SvgArt({ box }: { box: LineBox }) {
           </mesh>
         ))}
       </group>
+    </group>
     </group>
     </group>
     </>

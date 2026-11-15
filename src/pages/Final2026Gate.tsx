@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { startIntro } from '@/joespresso/intro'
 import { holdIntro, introGate, introSkip, releaseIntro } from '@/newhero/intro'
 import { panelScreen } from '@/newhero/panelScreen'
@@ -8,7 +8,7 @@ import { headlineReady } from '@/sections/hero/headlineReady'
 import { useSceneProgress } from '@/stores/ready'
 import { preloadFinalAssets } from './final2026Assets'
 import { BlobReveal } from '@/components/BlobReveal'
-import { warmSettled } from '@/lib/WarmShaders'
+import { warmProgress, warmSettled } from '@/lib/WarmShaders'
 import type { BlobRevealHandle } from '@/components/BlobReveal'
 
 /**
@@ -47,6 +47,22 @@ import type { BlobRevealHandle } from '@/components/BlobReveal'
 
 /** วินาทีที่ยอมรอ ก่อนออกตัวทั้งที่ยังไม่ได้สัญญาณ — กันหน้าค้างถ้ามีอะไรพัง */
 const GIVE_UP_AFTER = 12000
+/** พักหลังโหลดเสร็จจริง (จุดเติมเต็มแล้ว) ก่อนเริ่มคลี่ (ms) */
+const READY_PAUSE = 1300
+/**
+ * ก่อนคลี่: ตัวหนังสือ scramble แบบ AI decode ไล่ซ้ายไปขวา แล้วสลายเป็นจุด (ms) — จุดโหลดเด้งรับตอนตัวท้ายสลาย
+ * SCR = ระยะเริ่มห่างต่อตัว · สุ่มนาน · ค้างเป็นจุดแล้วจาง
+ */
+const SCR = { step: 20, mix: 280, dot: 170 }
+const SCR_GLYPHS = '!<>-_\\/[]{}=+*^?#01x%$'
+const LEAVE = 24 * SCR.step + SCR.mix + SCR.dot
+/**
+ * ความคืบหน้ารวมของทุกด่านที่รอจริง (0–1) — ไม่ใช่แค่ไบต์ของไฟล์ฉาก ซึ่งครบตั้งแต่ต้นแล้วยังต้องรอคอมไพล์อีกนาน
+ * น้ำหนัก: ดาวน์โหลดไฟล์ฉาก (ต่อเนื่อง) · ไฟล์ของหน้า · ฉากพร้อมวาด · อุ่น shader ทุกแคนวาส (ต่อเนื่อง) · หัวเรื่องปั้นครบ · บานฉายพิกัดได้
+ * shown = ค่าที่จุดแสดง ไล่ตามค่าจริงนุ่ม ๆ ไม่เคยแซงหน้า ไม่ถอยหลัง · ThoughtLine อ่านจากที่นี่
+ */
+const LOAD_W = { bytes: 0.45, assets: 0.1, scene: 0.15, warm: 0.15, headline: 0.1, panels: 0.05 }
+const loadView = { shown: 0, fullAt: 0, suckAt: 0 }
 /** ความยาวของการมอร์ฟทั้งท่อน (วินาที) */
 const MORPH = 1.6
 /** ช่องถัดไปออกตัวช้ากว่ากันเท่าไร — ไล่ซ้ายไปขวา */
@@ -68,7 +84,8 @@ const DOT_GAP = 18
  * สีเม็ด: ดำตอนรอ → แก้วขาวตอนคลี่ — บานดำทึบที่คลี่เต็มฟ้าหนักเกินไป จึงดำแค่ตอนเป็นจุด
  * สต็อปตามลำดับ: เนื้อแก้ว 3 สต็อป แล้วขอบ 2 สต็อป · [r,g,b,opacity]
  */
-const GLASS_DARK = [[58, 58, 62, 1], [21, 21, 23, 1], [5, 5, 6, 1], [255, 255, 255, 0.35], [0, 0, 0, 0.6]]
+/* ตอนรอเป็นฟ้าของ hero (บนสว่าง → ล่างน้ำเงินเข้ม) แทนดำ — ด่านโหลดอยู่ในโทนเดียวกับจอแรก */
+const GLASS_DARK = [[110, 176, 250, 1], [47, 107, 224, 1], [26, 72, 180, 1], [255, 255, 255, 0.55], [18, 44, 120, 0.45]]
 const GLASS_LIGHT = [[255, 255, 255, 1], [238, 243, 249, 1], [207, 220, 238, 1], [255, 255, 255, 1], [143, 166, 198, 0.7]]
 /** สีกลับเป็นแก้วขาวภายในเท่านี้ของ MORPH แรก (≈0.3s) */
 const GLASS_TURN = 0.19
@@ -184,6 +201,10 @@ export function Final2026Gate() {
   const sceneReady = useNewHeroReady()
   const [assetsReady, setAssetsReady] = useState(false)
   const [morphing, setMorphing] = useState(false)
+  /** ช่วงตัวหนังสือถูกดูดเข้าจุด (ระหว่างพักกับคลี่) */
+  const [leaving, setLeaving] = useState(false)
+  /** โหลดเสร็จจริงแล้ว — ค้างเป็น "Joe is ready to meet you" ครู่หนึ่ง (READY_PAUSE) ก่อนเริ่มคลี่ */
+  const [ready, setReady] = useState(false)
   const [gone, setGone] = useState(false)
   const veil = useRef<HTMLDivElement>(null)
   /** ชั้นท้องฟ้าที่ค่อย ๆ ขึ้นมาทับพื้นขาว */
@@ -196,6 +217,9 @@ export function Final2026Gate() {
   const stops = useRef<(SVGStopElement | null)[]>([])
   /** รูใสของแก้วแต่ละเม็ด (วงกลมขอบนุ่มในหน้ากาก) — แก้วละลายจากกลางบานออกไปหาขอบ ไม่จางทั้งแผ่น */
   const iris = useRef<(SVGCircleElement | null)[]>([])
+  /** รางของจุด (เทาอ่อน) + กรอบตัดเนื้อแก้วจากล่างขึ้นตามความคืบหน้า — จุดเติมเต็มตามไบต์ที่โหลดได้จริง */
+  const track = useRef<(SVGPathElement | null)[]>([])
+  const fillClip = useRef<(SVGRectElement | null)[]>([])
   /**
    * ที่ยืนของช่องในเฟรมล่าสุดของท่ารอ — จุดตั้งต้นของการมอร์ฟ
    *
@@ -250,18 +274,20 @@ export function Final2026Gate() {
    * setInterval เพื่อให้เห็นค่าในเฟรมเดียวกับที่ฉากเขียน
    */
   useEffect(() => {
-    if (!assetsReady || !sceneReady || morphing) return undefined
+    if (!assetsReady || !sceneReady || morphing || ready) return undefined
     let raf = 0
     const look = () => {
       if (panelScreen.ready && headlineReady.armed && headlineReady.pending === 0 && warmSettled()) {
-        setMorphing(true)
+        setReady(true)
         return
       }
       raf = requestAnimationFrame(look)
     }
     raf = requestAnimationFrame(look)
     return () => cancelAnimationFrame(raf)
-  }, [assetsReady, sceneReady, morphing])
+  }, [assetsReady, sceneReady, morphing, ready])
+
+
 
   /* ทางถอย: รอนานเกินไปก็เปิด ดีกว่าค้างอยู่อย่างนั้น */
   useEffect(() => {
@@ -310,6 +336,9 @@ export function Final2026Gate() {
   /** ท่ามอร์ฟ — เขียนลง DOM ตรง ๆ ทุกเฟรม ไม่ผ่าน state */
   useEffect(() => {
     if (!morphing) return undefined
+    /* คลี่เป็นบาน = เลิกเป็นแถบความคืบหน้า: ถอดกรอบตัดเนื้อแก้ว ซ่อนราง */
+    glass.current.forEach((el) => el?.removeAttribute('clip-path'))
+    track.current.forEach((el) => el && (el.style.opacity = '0'))
     /**
      * ปล่อยอินโทรของฉากตอนเริ่มมอร์ฟ แล้วให้ช่อง *ไล่ตาม* บานที่กำลังเลื่อน
      *
@@ -553,7 +582,29 @@ export function Final2026Gate() {
   useEffect(() => {
     if (morphing || gone) return undefined
     let raf = 0
+    let pauseId = 0
     const tick = (now: number) => {
+      /* ความคืบหน้ารวมจริงของเฟรมนี้ — จุดเติมทีละจุดตามค่านี้ (จุดแรกเต็มก่อนแล้วค่อยจุดถัดไป) */
+      const W = LOAD_W
+      const target = ready
+        ? 1
+        : W.bytes * clamp01(progress) +
+          (assetsReady ? W.assets : 0) +
+          (sceneReady ? W.scene : 0) +
+          W.warm * warmProgress() +
+          (headlineReady.armed && headlineReady.pending === 0 ? W.headline : 0) +
+          (panelScreen.ready ? W.panels : 0)
+      const want = Math.min(target, ready ? 1 : 0.985)
+      if (want > loadView.shown) loadView.shown += (want - loadView.shown) * 0.09
+      if (ready && 1 - loadView.shown < 0.004) loadView.shown = 1
+      if (loadView.shown >= 1 && !loadView.fullAt) loadView.fullAt = now
+      /* เติมเต็มแล้วจริง → พักหายใจ ให้อ่าน "Joe is ready to meet you" แล้วค่อยคลี่ */
+      if (ready && loadView.shown >= 1 && !pauseId)
+        pauseId = window.setTimeout(() => {
+          loadView.suckAt = performance.now()
+          setLeaving(true)
+          pauseId = window.setTimeout(() => setMorphing(true), LEAVE)
+        }, READY_PAUSE)
       for (let i = 0; i < DOTS; i += 1) {
         /**
          * เต้นด้วยขนาดของช่อง และ "โต" ตามไบต์จริงของไฟล์ฉาก (แบ่งเป็นสามขั้น)
@@ -561,15 +612,39 @@ export function Final2026Gate() {
          * ความคืบหน้าอยู่ในขนาด ไม่ใช่ความทึบ เพราะลายเป็นผืนเดียวใบเดียว — จะทำให้จุดแต่ละ
          * จุดทึบไม่เท่ากันต้องแยกเป็นสามผืน ซึ่งเป็นต้นเหตุของเฟรมตกที่เพิ่งแก้ไป
          */
-        const fill = clamp01(progress * DOTS - i)
-        const d = DOT * (0.52 + 0.48 * fill) * (1 + 0.16 * Math.sin(now / 320 - i * 0.7))
-        put(i, dotCorners(dotRect(i, d)), d / 2)
+        /*
+         * ความคืบหน้าอยู่ใน "เนื้อที่เติม" ของจุด: แก้วดำเติมจากล่างขึ้นบนรางเทา ทีละจุด ตามไบต์ของไฟล์ฉากที่โหลดได้จริง
+         * ขนาดแค่เต้นเบา ๆ เป็นระลอก (ยังมีชีวิตตอนรอคอมไพล์หลังโหลดครบ)
+         */
+        const fill = clamp01(loadView.shown * DOTS - i)
+        /* เต็มครบ → จุดเด้งรับเป็นคลื่นซ้ายไปขวาหนึ่งที แล้วนิ่ง (เลิกเต้นรอ) */
+        const since = loadView.fullAt ? now - loadView.fullAt - i * 110 : -1
+        const pop = since > 0 && since < 520 ? 0.2 * Math.sin((Math.PI * since) / 520) * (1 - since / 1040) : 0
+        /* ตัวหนังสือถูกดูดเข้าจุดกลาง: จุดกลางพองรับ แล้วส่งแรงเด้งออกไปจุดข้าง ๆ */
+        const gulp = loadView.suckAt ? now - loadView.suckAt - LEAVE * 0.62 - Math.abs(i - (DOTS - 1) / 2) * 90 : -1
+        const swell = gulp > 0 && gulp < 460 ? (i === (DOTS - 1) / 2 ? 0.3 : 0.16) * Math.sin((Math.PI * gulp) / 460) : 0
+        const idle = loadView.fullAt ? 0 : 0.08 * Math.sin(now / 320 - i * 0.7)
+        const d = DOT * (1 + idle + pop + swell)
+        const r = dotRect(i, d)
+        put(i, dotCorners(r), d / 2)
+        track.current[i]?.setAttribute('d', roundPath(dotCorners(r), d / 2))
+        const c = fillClip.current[i]
+        if (c) {
+          const h = r.h * inOut(fill)
+          c.setAttribute('x', (r.x - 2).toFixed(1))
+          c.setAttribute('width', (r.w + 4).toFixed(1))
+          c.setAttribute('y', (r.y + r.h - h).toFixed(1))
+          c.setAttribute('height', Math.max(0, h + 1).toFixed(1))
+        }
       }
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [morphing, gone, progress])
+    return () => {
+      cancelAnimationFrame(raf)
+      clearTimeout(pauseId)
+    }
+  }, [morphing, gone, progress, ready, assetsReady, sceneReady])
 
   /* บอกหน้าว่าม่านถอดแล้ว (ดู setGateOpen) — ของที่ต้องเล่นท่าโผล่ให้คนเห็นรอจังหวะนี้ */
   useEffect(() => {
@@ -587,6 +662,26 @@ export function Final2026Gate() {
         aria-busy={!morphing}
         aria-live="polite"
       >
+        {/* แสงฟ้าอ่อน ๆ รอบจุดโหลด — กลิ่นฟ้าของ hero บนพื้นขาว (จางทิ้งตอนคลี่ — ฟ้าจริงมาแทน) */}
+        <div
+          className="pointer-events-none absolute inset-0 transition-opacity duration-500"
+          style={{
+            opacity: morphing ? 0 : 1,
+            background:
+              'radial-gradient(28% 34% at 50% 50%, rgba(110,176,250,0.20) 0%, rgba(110,176,250,0.08) 55%, rgba(110,176,250,0) 100%), radial-gradient(18% 22% at 58% 46%, rgba(180,75,224,0.07) 0%, rgba(180,75,224,0) 100%)',
+          }}
+        />
+        {/* พร้อมแล้ว → แสงบานออกจากกลางจอหนึ่งจังหวะ ฟ้า-ม่วงแบบ hero */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            opacity: ready && !morphing ? 1 : 0,
+            transform: `scale(${ready ? 1.15 : 0.7})`,
+            transition: 'opacity 700ms ease, transform 1400ms cubic-bezier(0.16, 1, 0.3, 1)',
+            background:
+              'radial-gradient(30% 30% at 50% 50%, rgba(110,176,250,0.28) 0%, rgba(110,176,250,0) 100%), radial-gradient(22% 26% at 44% 54%, rgba(180,75,224,0.14) 0%, rgba(180,75,224,0) 100%), radial-gradient(20% 24% at 57% 45%, rgba(47,107,224,0.16) 0%, rgba(47,107,224,0) 100%)',
+          }}
+        />
         {/* ฟ้าของ hero — ตัดด้วยกรอบมุมมนชุดเดียวกับการ์ดของฉาก ขอบนอกจึงยังเป็นขาวของหน้า */}
         <div
           ref={sky}
@@ -619,13 +714,13 @@ export function Final2026Gate() {
             จะทะลุขึ้นมาเป็นภาพซ้อนเหลื่อม ๆ ในเม็ดที่กำลังคลี่ — แก้วเปิดด้วยการละลายจากกลาง (ดู melt) แทน
           */}
           <linearGradient id="v3-gate-glass" x1="0" y1="0" x2="1" y2="1">
-            <stop ref={(n) => { stops.current[0] = n }} offset="0" stopColor="#3a3a3e" />
-            <stop ref={(n) => { stops.current[1] = n }} offset="0.55" stopColor="#151517" />
-            <stop ref={(n) => { stops.current[2] = n }} offset="1" stopColor="#050506" />
+            <stop ref={(n) => { stops.current[0] = n }} offset="0" stopColor="#6eb0fa" />
+            <stop ref={(n) => { stops.current[1] = n }} offset="0.55" stopColor="#2f6be0" />
+            <stop ref={(n) => { stops.current[2] = n }} offset="1" stopColor="#1a48b4" />
           </linearGradient>
           <linearGradient id="v3-gate-rim" x1="0" y1="0" x2="0" y2="1">
-            <stop ref={(n) => { stops.current[3] = n }} offset="0" stopColor="#ffffff" stopOpacity="0.35" />
-            <stop ref={(n) => { stops.current[4] = n }} offset="1" stopColor="#000000" stopOpacity="0.6" />
+            <stop ref={(n) => { stops.current[3] = n }} offset="0" stopColor="#ffffff" stopOpacity="0.55" />
+            <stop ref={(n) => { stops.current[4] = n }} offset="1" stopColor="#122c78" stopOpacity="0.45" />
           </linearGradient>
           {/* รูใสขอบนุ่ม: กลางดำ (ซ่อนแก้ว) ไล่เป็นขาวที่ขอบวง */}
           <radialGradient id="v3-gate-iris">
@@ -633,6 +728,19 @@ export function Final2026Gate() {
             <stop offset="0.7" stopColor="#000" />
             <stop offset="1" stopColor="#fff" />
           </radialGradient>
+          {Array.from({ length: DOTS }, (_, i) => (
+            <clipPath key={`f${i}`} id={`v3-gate-fill-${i}`} clipPathUnits="userSpaceOnUse">
+              <rect
+                ref={(n) => {
+                  fillClip.current[i] = n
+                }}
+                x="0"
+                y="0"
+                width="0"
+                height="0"
+              />
+            </clipPath>
+          ))}
           {Array.from({ length: DOTS }, (_, i) => (
             <mask key={i} id={`v3-gate-melt-${i}`} maskUnits="userSpaceOnUse" x="0" y="0" width="100%" height="100%">
               <rect width="100%" height="100%" fill="#fff" />
@@ -648,18 +756,117 @@ export function Final2026Gate() {
         </defs>
         {Array.from({ length: DOTS }, (_, i) => (
           <path
+            key={`t${i}`}
+            ref={(n) => {
+              track.current[i] = n
+            }}
+            d=""
+            fill="#e3ecf9"
+          />
+        ))}
+        {Array.from({ length: DOTS }, (_, i) => (
+          <path
             key={i}
             ref={(n) => {
               glass.current[i] = n
             }}
             d=""
+            clipPath={`url(#v3-gate-fill-${i})`}
             fill="url(#v3-gate-glass)"
             stroke="url(#v3-gate-rim)"
             strokeWidth={1.2}
           />
         ))}
       </svg>
-      <span className="sr-only">{`Loading ${Math.round(Math.min(1, progress) * 100)}%`}</span>
+      <ThoughtLine progress={progress} done={ready || morphing} leaving={leaving || morphing} />
+    </div>
+  )
+}
+
+/**
+ * บรรทัดบอกสถานะใต้จุดโหลด — อารมณ์ "AI กำลังคิด" (แบบ Thought Line ของ React Bits): แสงกวาดผ่านตัวหนังสือเป็นจังหวะ
+ * พูดแทน Joe: กำลังเตรียมตัว (ดาวน์โหลด) → รออยู่ (เตรียมฉาก) → พร้อมเจอแล้ว (นิ่ง ไม่มีแสงกวาด)
+ * % = ความคืบหน้ารวมจริงของทุกด่านที่รอ (loadView — ตัวเดียวกับที่จุดเติม) · เรนเดอร์ใหม่เฉพาะชิ้นนี้ 10 ครั้ง/วินาที
+ */
+function ThoughtLine({ progress, done, leaving }: { progress: number; done: boolean; leaving: boolean }) {
+  const [, setTick] = useState(0)
+  const box = useRef<HTMLDivElement>(null)
+  /*
+   * scramble: แต่ละตัวอักษร (ไล่ซ้าย→ขวา ห่าง SCR.step) สุ่มเป็นสัญลักษณ์ SCR.mix ms → กลายเป็นจุด → จาง
+   * ล็อกความกว้างเดิมของทุกตัวก่อน — สัญลักษณ์กว้างไม่เท่าตัวจริง บรรทัดจะไม่ขยับ · เขียน DOM ตรง (ไม่ผ่าน state ทุกเฟรม)
+   */
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!leaving || !el) return undefined
+    const chars = [...el.querySelectorAll<HTMLElement>('[data-ch]')]
+    chars.forEach((c) => {
+      c.style.width = `${c.getBoundingClientRect().width.toFixed(2)}px`
+    })
+    const t0 = performance.now()
+    let raf = 0
+    let last = -1
+    const step = (now: number) => {
+      const t = now - t0
+      /* สุ่มใหม่ทุก ~45ms (ถี่กว่านั้นอ่านไม่ทัน เป็นแค่ภาพสั่น) */
+      const tick = Math.floor(t / 45)
+      chars.forEach((c, j) => {
+        const u = t - j * SCR.step
+        if (u < 0) return
+        if (u < SCR.mix) {
+          if (tick !== last) c.textContent = SCR_GLYPHS[Math.floor(Math.random() * SCR_GLYPHS.length)]
+          c.style.color = '#7a4be0'
+          return
+        }
+        c.textContent = '•'
+        c.style.color = '#2f6be0'
+        const k = Math.min(1, (u - SCR.mix) / SCR.dot)
+        c.style.opacity = (1 - k).toFixed(3)
+        c.style.transform = `scale(${(1 - 0.5 * k).toFixed(3)})`
+      })
+      last = tick
+      if (t < LEAVE + 40) raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [leaving])
+  useEffect(() => {
+    if (done) return undefined
+    const id = window.setInterval(() => setTick((v) => v + 1), 100)
+    return () => window.clearInterval(id)
+  }, [done])
+  const pct = Math.round(loadView.shown * 100)
+  const label = done ? 'Joe is ready to meet you' : progress < 1 ? `Joe is getting ready · ${pct}%` : `Joe is waiting for you · ${pct}%`
+  return (
+    <div
+      ref={box}
+      className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[13px] font-medium tracking-[0.01em] whitespace-nowrap tabular-nums"
+      style={{ top: `calc(50% + ${DOT + 20}px)` }}
+      aria-live="polite"
+    >
+      {done && leaving ? (
+        /* สีทึบเดียวกับปลายแสงกวาด — สลับมาโครงตัวอักษรเดี่ยวได้โดยภาพไม่เปลี่ยน */
+        <span key="leave" className="v3-ready-line text-[15px] font-semibold text-[#1f4fb8]">
+          {label.split(' ').map((w, i) => (
+            <span key={i} className="inline-block">
+              {[...w].map((ch, j) => (
+                <span key={j} data-ch className="inline-block text-center">
+                  {ch}
+                </span>
+              ))}
+            </span>
+          ))}
+        </span>
+      ) : done ? (
+        <span key="ready" className="v3-ready-line text-[15px] font-semibold">
+          {label.split(' ').map((w, i) => (
+            <span key={i} className="v3-ready-word" style={{ animationDelay: `${i * 85}ms, ${520 + i * 85}ms` }}>
+              {w}
+            </span>
+          ))}
+        </span>
+      ) : (
+        <span className="v3-think-shimmer">{label}</span>
+      )}
     </div>
   )
 }

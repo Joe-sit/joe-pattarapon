@@ -25,6 +25,12 @@ const pending = new Set<object>()
 export function warmSettled() {
   return pending.size === 0
 }
+/** จำนวนแคนวาสที่เคยลงทะเบียน — ไว้คิดสัดส่วนที่อุ่นเสร็จแล้ว (warmProgress) */
+let seen = 0
+/** สัดส่วนแคนวาสที่อุ่นเสร็จ (0 = ยังไม่มีแคนวาสไหนขึ้นมาเลย) — ด่านโหลดใช้แสดงความคืบหน้าจริง */
+export function warmProgress() {
+  return seen ? (seen - pending.size) / seen : 0
+}
 
 /** จังหวะระหว่างรอบ · ต้องนิ่งนานเท่านี้ · อย่างน้อยกี่รอบ · เพดานรอ (กันค้างถ้ามีอะไรพัง) */
 const STEP = 160
@@ -42,6 +48,7 @@ export function WarmShaders() {
     gl.debug.checkShaderErrors = import.meta.env.DEV
     const token = {}
     pending.add(token)
+    seen += 1
     const done = () => {
       pending.delete(token)
     }
