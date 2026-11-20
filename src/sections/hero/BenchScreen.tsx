@@ -14,6 +14,7 @@ import {
   codeDark,
   CODE_HIT,
   NO_CRASH,
+  CRASH_HIT,
   deviceMat,
   wfK,
   clamp01,
@@ -390,8 +391,20 @@ const FACE_TILE: Record<string, readonly [string, string, string]> = {
   '#b3a5f4': ['#eaa75e', '#db8f48', '#c97834'],
 }
 
-/** สีปุ่ม + ต่อการ์ด (ใบ 3 เป็นเกาะ Research — ไม่มีปุ่ม) */
-const BADGE = ['#3d5bd9', '#f2564b'] as const
+/**
+ * วิดเจ็ตแบบการ์ด rolodex (./RolodexStage) — วิดเจ็ตบนจอคือการ์ดสามใบแรกของสำรับที่ไอคอนแอประเบิดออกมาท้ายบท Code
+ * สีเรียบ ขอบหนาสีโทนเดียวกัน ของข้างในเป็นก้อนสีโทนเดียวกับการ์ด (ใบ 0 ฟ้า = My Works · ใบ 1 ม่วงอ่อน = การ์ดแชท · ใบ 2 แดงขอบบานเย็น = เกาะ Research)
+ */
+const FLAT_CARD: readonly { fill: string; edge: string }[] = [
+  { fill: '#1f6fe3', edge: '#39a3ff' },
+  { fill: '#a688f6', edge: '#bea6fa' },
+  { fill: '#e8423f', edge: '#c11fbd' },
+]
+const FLAT_TILE: Record<string, string> = { '#44c4de': '#2d8af0', '#a696f1': '#5d1fa8', '#b3a5f4': '#7a3ad6' }
+/** ขอบหนาของการ์ด (สัดส่วนด้านสั้น — เท่าการ์ดในสำรับ) */
+const FLAT_EDGE = 0.055
+/** สีปุ่ม + ต่อการ์ด (ใบ 3 เป็นเกาะ Research — ไม่มีปุ่ม) — โทนเข้มของการ์ดตัวเอง */
+const BADGE = ['#0f4fb8', '#5d1fa8'] as const
 /** วินาทีต่อการแตะหนึ่งครั้ง (บท Code — แอปมีชีวิต) */
 const TAP_CYCLE = 1.7
 const PICK_AT = [0.52, 0.67, 0.8] as const
@@ -611,6 +624,14 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
       cm.uniforms.uFaceMid.value.set(FACE_CARD[i][1])
       cm.uniforms.uFaceBot.value.set(FACE_CARD[i][2])
       cm.uniforms.uHalf.value.set(c.w / 2, c.h / 2)
+      const fc = FLAT_CARD[i]
+      if (fc) {
+        cm.uniforms.uFlat.value = 1
+        cm.uniforms.uFaceMid.value.set(fc.fill)
+        cm.uniforms.uEdge.value.set(fc.edge)
+        cm.uniforms.uEdgeW.value = Math.min(c.w, c.h) * FLAT_EDGE
+        cm.uniforms.uRad.value = c.r
+      }
       c.tiles.forEach((t) => {
         const f = FACE_TILE[t.color]
         const tm = mat(t.color, true) as THREE.ShaderMaterial
@@ -620,6 +641,11 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
           tm.uniforms.uFaceTop.value.set(f[0])
           tm.uniforms.uFaceMid.value.set(f[1])
           tm.uniforms.uFaceBot.value.set(f[2])
+        }
+        const ft = FLAT_TILE[t.color]
+        if (ft) {
+          tm.uniforms.uFlat.value = 1
+          tm.uniforms.uFaceMid.value.set(ft)
         }
       })
       return { c, geo: sl.g, top: sl.top, mat: cm, tiles: c.tiles.map((t) => ({ t, geo: slab(t, 4).g, mat: mat(t.color, true) })) }
@@ -1459,7 +1485,7 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
       } else {
         /* กระจายออกนุ่มขึ้น ยาวขึ้น (ไม่วาบ) — ease-out กำลังสอง */
         /* เรื่องพื้นหญ้า: ไม่ชน = วิดเจ็ตไม่กระจาย */
-        const k = NO_CRASH ? 0 : clamp01((b.code - CODE_HIT - (i - 1) * 0.02) / 0.34)
+        const k = CRASH_HIT ? clamp01((b.code - CODE_HIT - (i - 1) * 0.02) / 0.34) : 0
         const burst = 1 - Math.pow(1 - k, 2)
         const dir = BURST[i]
         px += dir[0] * burst * 560

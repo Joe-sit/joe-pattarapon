@@ -41,6 +41,7 @@ const BubbleBlocks = lazy(() => import('@/pages/BubbleBlocks'))
 const FastworkProfile = lazy(() => import('@/pages/FastworkProfile'))
 const AboutMePage = lazy(() => import('@/pages/AboutMePage'))
 const JoeDeskPage = lazy(() => import('@/pages/JoeDeskPage'))
+const RoomPage = lazy(() => import('@/pages/RoomPage'))
 /* /measure — จัดองค์ประกอบตามภาพ ref (ตัวละครถือไม้บรรทัดวัด device) รอบดินปั้น */
 const MeasurePage = lazy(() => import('@/pages/MeasurePage'))
 import { SITE } from '@/config/site'
@@ -147,6 +148,8 @@ export function App() {
   const isAbout = location.pathname === '/about'
   /** หน้า Joe Desk — landing จาก Figma Joe-Space (โต๊ะทำงานไอโซเมตริก) */
   const isJoeDesk = location.pathname === '/joe-desk'
+  /** ห้องสี่เหลี่ยมเปล่า — side project ไว้หาไอเดียจัดห้อง */
+  const isRoom = location.pathname === '/room'
 
   // Which splash plays is decided by where the visitor landed, not by where
   // they are now — it runs once, on load, and reading `location` live would
@@ -323,7 +326,7 @@ export function App() {
           opens onto the hero's own scene, and the mascot page has no such scene
           to open onto. */}
       {/* /new-hero เป็นหน้าเปล่าไว้ทดลอง — สปแลชของเว็บบังของที่กำลังจูนอยู่เปล่า ๆ */}
-      {showSplash && !isIntroLab && !isNewHero && !isRigExport && !isFavLab && !isBlocks && !isFastwork && !isAbout && !isJoeDesk &&
+      {showSplash && !isIntroLab && !isNewHero && !isRigExport && !isFavLab && !isBlocks && !isFastwork && !isAbout && !isJoeDesk && !isRoom &&
         (landedOn === '/2026' ? (
           /* /2026 มีอินโทรของตัวเอง (เศษโค้ด -> สนาม ASCII -> เวิร์ดมาร์ก)
              หน้าอื่นยังใช้สปแลชเดิม — คนละภาษาภาพกัน ไม่ควรบังคับให้เหมือน */
@@ -368,6 +371,10 @@ export function App() {
       ) : isJoeDesk ? (
         <Suspense fallback={null}>
           <JoeDeskPage />
+        </Suspense>
+      ) : isRoom ? (
+        <Suspense fallback={null}>
+          <RoomPage />
         </Suspense>
       ) : isV3 ? (
         <Portfolio2026FinalPage />

@@ -500,6 +500,14 @@ function LidBody() {
   )
 }
 
+/**
+ * วัดขนาดแคนวาสด้วย ResizeObserver อย่างเดียว ไม่ฟัง scroll และไม่ debounce
+ * ค่าตั้งต้นของ r3f ใช้ handler ตัวเดียว (debounce 50ms) ทั้ง ResizeObserver และ scroll — แคนวาสนี้ mount กลางการเลื่อน
+ * ถ้า scroll event มาต่อเนื่อง (Lenis / แทร็กแพดเหวี่ยง) การวัดถูกเลื่อนไปเรื่อย ๆ renderer ไม่ถูกสร้าง = จอขาว
+ * แคนวาสเป็น fixed เต็มจอ การเลื่อนไม่เปลี่ยนขนาดอยู่แล้ว
+ */
+const MEASURE = { scroll: false, debounce: 0 }
+
 export function StickerStage({ frame, bench }: { frame: Frame; bench: React.RefObject<HTMLCanvasElement | null> }) {
   /* mount เฉพาะช่วงที่ใช้ (กลางบท Code → ต้น Ship) — นอกช่วงคืน context ทั้งก้อน */
   const [on, setOn] = useState(false)
@@ -538,7 +546,7 @@ export function StickerStage({ frame, bench }: { frame: Frame; bench: React.RefO
   return (
     <div className="pointer-events-none absolute inset-0" style={{ fontFamily: STORY_FONT }} aria-label="Selected Work">
       {on && (
-        <Canvas className="!absolute inset-0" dpr={[1, 1.5]} camera={{ fov: FOV, position: [0, 0, 1700], near: 5, far: 20000 }} gl={{ antialias: true, alpha: true }} style={{ pointerEvents: 'none' }}>
+        <Canvas className="!absolute inset-0" dpr={[1, 1.5]} resize={MEASURE} camera={{ fov: FOV, position: [0, 0, 1700], near: 5, far: 20000 }} gl={{ antialias: true, alpha: true }} style={{ pointerEvents: 'none' }}>
           <Scene frame={frame} bench={bench} focusOut={focusOut} />
         </Canvas>
       )}

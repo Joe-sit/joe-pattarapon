@@ -295,10 +295,11 @@ export const sling = { vis: 0, px: 0, py: 0, pull: 0, launch: 0 }
  *   switcher เครื่องเปิดตัวสลับแอปแบบ iOS — เครื่องหดเป็นการ์ด การ์ดผลงานเรียงซ้อนทางซ้าย ปัดย้อนทีละใบ แล้วเปิดกลับ (./SwitcherStage)
  *   fold   เครื่องเป็นจอพับหีบเพลง — แผงจอคลี่ออกจากหลังเครื่องทีละบาน แต่ละบาน = งานหนึ่งชิ้น แล้วพับกลับ (./FoldStage)
  *   sticker หน้าจอที่เสร็จลอกออกเป็นสติกเกอร์ ไปแปะฝาโน้ตบุ๊กของ Joe ที่เต็มไปด้วยสติกเกอร์งานเก่า แล้วบินกลับ (./StickerStage)
+ *   rolodex ต้นเรื่องเดียวกับถนน (หน้าโฮม → ดันเข้าไอคอน favicon) แล้วไอคอนระเบิดเป็นสำรับ rolodex ของงาน (./RolodexStage · คลิป Ecommpay)
  *   road   จอเครื่องเป็นหน้าโฮม → ดันเข้าไอคอนแอป (favicon) → ไอคอนหงายเป็นหลังคา → โฉบลงถนน ป้ายผลงานริมทาง (./RoadStage · GIF ref)
  */
-export type PostCode = 'crash' | 'grass' | 'planet' | 'map' | 'road' | 'ascii' | 'desk' | 'switcher' | 'fold' | 'sticker'
-export const POST_CODE = 'sticker' as PostCode
+export type PostCode = 'crash' | 'grass' | 'planet' | 'map' | 'road' | 'ascii' | 'desk' | 'switcher' | 'fold' | 'sticker' | 'rolodex'
+export const POST_CODE = 'rolodex' as PostCode
 export const GRASS_STORY = POST_CODE === 'grass'
 export const PLANET_STORY = POST_CODE === 'planet'
 export const MAP_STORY = POST_CODE === 'map'
@@ -308,8 +309,11 @@ export const DESK_STORY = POST_CODE === 'desk'
 export const SWITCHER_STORY = POST_CODE === 'switcher'
 export const FOLD_STORY = POST_CODE === 'fold'
 export const STICKER_STORY = POST_CODE === 'sticker'
+export const ROLO_STORY = POST_CODE === 'rolodex'
 /** เครื่องไม่พุ่งชนคำ Code (ไม่มีแรงกระแทก วิดเจ็ตไม่กระจาย ฟ้าไม่ขยาย ไม่มีโฟลเดอร์/การ์ดของเรื่องเดิม) */
 export const NO_CRASH = POST_CODE !== 'crash'
+/** เครื่องพุ่งชนคำ Code (แรงกระแทก แสงวาบ วิดเจ็ตกระจาย) — เรื่อง rolodex ชนด้วย แต่ไม่มีท้ายเรื่องชนเดิม (ฟ้าขยาย/โฟลเดอร์) */
+export const CRASH_HIT = POST_CODE === 'crash' || ROLO_STORY
 /**
  * เรื่องโลก (planet) — บท Code: โลกผุดจากจอเครื่องแล้วลอยไปที่ [เริ่ม, ยาว]
  * worksPost: ปกผลงานโผล่ [เริ่ม, ยาว] · ไล่ผลงานทีละชิ้น [เริ่ม, จบ] · ออก [เริ่ม, ยาว]: ปกจาง โลกหดกลับเข้าจอเครื่องตรงจังหวะเครื่องกลับมา (ต้นบท Ship)

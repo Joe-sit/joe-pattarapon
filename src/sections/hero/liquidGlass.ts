@@ -215,7 +215,7 @@ export function makeChunkyTile(color: THREE.ColorRepresentation) {
   return new THREE.ShaderMaterial({
     transparent: true,
     toneMapped: false,
-    uniforms: { uTint: { value: new THREE.Color(color) }, uDark: { value: 0 }, uFill: { value: 1e5 }, uSpan: { value: 1 }, uFillTop: { value: new THREE.Color(color) }, uFillBot: { value: new THREE.Color(color) }, uAlpha: { value: 1 }, uFaceTop: { value: new THREE.Color(color) }, uFaceBot: { value: new THREE.Color(color) }, uFaceMid: { value: new THREE.Color(color) }, uMap: { value: null as THREE.Texture | null }, uHasMap: { value: 0 }, uVivid: { value: 0 }, uHalf: { value: new THREE.Vector2(1, 1) }, uPortal: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uDotPx: { value: 9 }, uTime: { value: 0 } },
+    uniforms: { uTint: { value: new THREE.Color(color) }, uDark: { value: 0 }, uFill: { value: 1e5 }, uSpan: { value: 1 }, uFillTop: { value: new THREE.Color(color) }, uFillBot: { value: new THREE.Color(color) }, uAlpha: { value: 1 }, uFaceTop: { value: new THREE.Color(color) }, uFaceBot: { value: new THREE.Color(color) }, uFaceMid: { value: new THREE.Color(color) }, uMap: { value: null as THREE.Texture | null }, uHasMap: { value: 0 }, uVivid: { value: 0 }, uHalf: { value: new THREE.Vector2(1, 1) }, uPortal: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uDotPx: { value: 9 }, uTime: { value: 0 }, uFlat: { value: 0 }, uEdge: { value: new THREE.Color(color) }, uEdgeW: { value: 0 }, uRad: { value: 0 } },
     vertexShader: /* glsl */ `
       varying vec3 vN;
       varying vec3 vO;
@@ -245,6 +245,10 @@ export function makeChunkyTile(color: THREE.ColorRepresentation) {
       uniform vec2 uRes;
       uniform float uDotPx;
       uniform float uTime;
+      uniform float uFlat;
+      uniform vec3 uEdge;
+      uniform float uEdgeW;
+      uniform float uRad;
       varying vec3 vN;
       varying vec3 vO;
       varying vec3 vP;
@@ -270,7 +274,19 @@ export function makeChunkyTile(color: THREE.ColorRepresentation) {
         vec3 face = g3 < 0.5 ? mix(uFaceBot, uFaceMid, smoothstep(0.0, 0.5, g3)) : mix(uFaceMid, uFaceTop, smoothstep(0.5, 1.0, g3));
         if (uHasMap > 0.5) face = texture2D(uMap, clamp(vP.xy / (uHalf * 2.0) + 0.5, 0.0, 1.0)).rgb;
         float glow = exp(-dot(vP.xy - vec2(-0.5, 0.6) * uSpan, vP.xy - vec2(-0.5, 0.6) * uSpan) / (uSpan * uSpan * 1.4));
-        face = mix(face, vec3(1.0), glow * 0.08);
+        face = mix(face, vec3(1.0), glow * 0.08 * (1.0 - uFlat));
+        /*
+         * แบบการ์ด rolodex (uFlat): สีเรียบสีเดียว · ขอบหนาสีโทนเดียวกันรอบหน้า (ระยะจากขอบสี่เหลี่ยมมน) · ไม่มีเกรน ไม่มีขอบเรือง
+         */
+        if (uFlat > 0.5) {
+          face = uFaceMid;
+          if (uEdgeW > 0.0) {
+            vec2 q = abs(vP.xy) - (uHalf - vec2(uRad));
+            float sdr = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - uRad;
+            float aa = max(fwidth(sdr), 0.5);
+            face = mix(face, uEdge, smoothstep(-uEdgeW - aa, -uEdgeW + aa, sdr));
+          }
+        }
         /*
          * สันข้าง = สีหน้าเข้มลง (ไม่ใช่ทามะนาวทั้งสัน) · เส้นเรืองบาง ๆ ตรงขอบหน้า (bevel) ด้านล่าง/ขวา
          * ไล่เขียวมะนาว → ชมพูตามแนว แบบขอบไทล์ในภาพ ref
@@ -279,10 +295,10 @@ export function makeChunkyTile(color: THREE.ColorRepresentation) {
         float lowR = smoothstep(-0.2, 0.7, dot(sd, normalize(vec2(0.55, -0.85))));
         float lipB = smoothstep(0.45, 0.72, abs(normalize(vO).z)) * (1.0 - smoothstep(0.82, 0.97, abs(normalize(vO).z)));
         vec3 lime = mix(vec3(0.88, 1.0, 0.45), vec3(1.0, 0.78, 0.86), smoothstep(-1.0, 1.0, vP.x / max(uSpan, 1.0)));
-        vec3 col = mix(face, face * 0.68, side);
-        col = mix(col, lime, lipB * lowR * 0.95);
+        vec3 col = mix(face, uFlat > 0.5 && uEdgeW > 0.0 ? uEdge * 0.82 : face * 0.68, side);
+        col = mix(col, lime, lipB * lowR * 0.95 * (1.0 - uFlat));
         /* เกรนฟิล์ม (พิกเซลจอ) */
-        col += (hash(floor(gl_FragCoord.xy)) - 0.5) * 0.17;
+        col += (hash(floor(gl_FragCoord.xy)) - 0.5) * 0.17 * (1.0 - uFlat);
         float a = 1.0;
         /* โหมดมืด: แผ่นมืดย้อมสีจาง ขอบเรือง (บท Code ก่อนสแกนเติมสี) */
         vec3 dk = mix(vec3(0.02, 0.018, 0.035) + uTint * 0.03, mix(uTint, vec3(1.0), 0.45), side * 0.8);

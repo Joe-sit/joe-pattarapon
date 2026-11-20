@@ -24,11 +24,12 @@ import { DeskStage, deskPhase } from './DeskStage'
 import { SwitcherStage } from './SwitcherStage'
 import { FoldStage } from './FoldStage'
 import { StickerBacking, StickerStage, stickerPhase } from './StickerStage'
+import { RolodexStage } from './RolodexStage'
 import { SlingRider } from './SlingRider'
 import { AsciiClouds, type CloudBlob } from '@/components/AsciiClouds'
 import { DECK_WORKS } from './WorksGallery'
 import { ISLAND } from './ResearchPlatform'
-import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, TILE_SLOTS, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, STORY_FONT, GRASS_STORY, NO_CRASH, PLANET_STORY, MAP_STORY, ROAD_STORY, ASCII_STORY, DESK_STORY, SWITCHER_STORY, FOLD_STORY, STICKER_STORY, PLANET_EMERGE, GRASS_OPEN, CUT, type WorkBeats } from './workMotion'
+import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, TILE_SLOTS, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, STORY_FONT, GRASS_STORY, NO_CRASH, PLANET_STORY, MAP_STORY, ROAD_STORY, ASCII_STORY, DESK_STORY, SWITCHER_STORY, FOLD_STORY, STICKER_STORY, ROLO_STORY, CRASH_HIT, PLANET_EMERGE, GRASS_OPEN, CUT, type WorkBeats } from './workMotion'
 
 /**
  * เครื่องแก้วเป็นโต๊ะทำงาน — เรื่องต่อจาก "Here is what I do"
@@ -636,7 +637,7 @@ export function WorkStory() {
         /* เรื่องถนน: ตัดไปแผ่นไอคอนในแคนวาสถนนแล้ว — ซ่อนของบนจอเครื่อง (เครื่องล้นจอ ไอคอนรับไม้ต่อ) */
         /* เรื่อง ascii: อยู่ในจอเครื่องแล้ว (เครื่องคลุมทั้งหน้า) — ซ่อนของบนจอเครื่อง */
         benchCv.current.style.visibility =
-          (GRASS_STORY && b.code >= GRASS_OPEN[0] + GRASS_OPEN[1] && b.ship <= 0) || (ROAD_STORY && roadCut(roadPhase(b))) || (ASCII_STORY && asciiPhase(b).dolly > 0.999) || (DESK_STORY && deskPhase(b).opaque) || (STICKER_STORY && stickerPhase(b).gone) ? 'hidden' : ''
+          (GRASS_STORY && b.code >= GRASS_OPEN[0] + GRASS_OPEN[1] && b.ship <= 0) || ((ROAD_STORY || ROLO_STORY) && roadCut(roadPhase(b))) || (ASCII_STORY && asciiPhase(b).dolly > 0.999) || (DESK_STORY && deskPhase(b).opaque) || (STICKER_STORY && stickerPhase(b).gone) ? 'hidden' : ''
         /* เรื่องโลก: จอเครื่องล้างของบนจอออกตอนโลกเริ่มผุด (เห็นชัดว่าโลกออกมาจากจอ) · กลับมาพร้อมเครื่องตอนต้นบท Ship */
         benchCv.current.style.opacity = PLANET_STORY ? (1 - smooth((b.code - PLANET_EMERGE[0] + 0.03) / 0.07) * (1 - smooth(b.ship / 0.25))).toFixed(3) : ''
       }
@@ -659,7 +660,7 @@ export function WorkStory() {
       const ha = hitAt.current
       const cNow = live ? b.code : 0
       /* เรื่องพื้นหญ้า: เครื่องไม่ชนคำ (มือมาจับแทน) — ไม่มีแรงกระแทก */
-      if (!NO_CRASH && ha.prev < CODE_HIT && cNow >= CODE_HIT && cNow - ha.prev < 0.15) ha.t = performance.now()
+      if (CRASH_HIT && ha.prev < CODE_HIT && cNow >= CODE_HIT && cNow - ha.prev < 0.15) ha.t = performance.now()
       if (cNow < CODE_HIT - 0.05) ha.t = -1
       ha.prev = cNow
       /* จอสั่น/แสงวาบ/วงคลื่นเล่นตามเวลาใน loop ของมันเอง (ดู useEffect ของ hitAt) — ตรงนี้ตั้งแค่ระยะยก */
@@ -716,7 +717,7 @@ export function WorkStory() {
       if (blackout.current) blackout.current.style.opacity = bo.toFixed(3)
       /* เรื่องแผนที่: ผงคำ Code ที่สลายอยู่จางหายตอนเมืองโผล่ (ไม่ลอยทับพื้นเมือง) */
       /* เรื่องถนน: จางตอนจอเครื่องเป็นหน้าโฮม (พื้นสว่างของฉากถนนกลบฉาก Code) */
-      const fo = Math.max(bo, MAP_STORY && live ? Math.min(1, mapPhase(b).map * 1.6) : 0, ROAD_STORY && live ? Math.min(1, roadPhase(b).home * 1.4) : 0)
+      const fo = Math.max(bo, MAP_STORY && live ? Math.min(1, mapPhase(b).map * 1.6) : 0, (ROAD_STORY || ROLO_STORY) && live ? Math.min(1, roadPhase(b).home * 1.4) : 0)
       if (bigFront.current) bigFront.current.style.opacity = fo > 0 ? (1 - fo).toFixed(3) : ''
       if (disCanvas.current) disCanvas.current.style.opacity = fo > 0 ? (1 - fo).toFixed(3) : ''
 
@@ -867,6 +868,8 @@ export function WorkStory() {
         {MAP_STORY && <MapStage frame={frame} />}
         {/* เรื่องถนน: พื้นสว่าง + แผ่นไอคอน → หลังคา → ถนน (ใต้แคนวาสของบนจอเครื่อง — รับไม้ต่อตอนไอคอนเต็มจอ) */}
         {ROAD_STORY && <RoadStage frame={frame} />}
+        {/* เรื่อง rolodex: ต้นเรื่องเดียวกับถนน (หน้าโฮม → ไอคอน) แล้วไอคอนระเบิดเป็นสำรับงาน — ใต้ของบนจอเครื่องเหมือนฉากถนน */}
+        {ROLO_STORY && <RolodexStage frame={frame} />}
         {/* เรื่อง switcher: ตัวสลับแอปแบบ iOS — การ์ดผลงานลอดใต้ของบนจอเครื่อง (เครื่องคือการ์ดใบขวาสุด) */}
         {SWITCHER_STORY && <SwitcherStage frame={frame} />}
         {/* เรื่อง fold: แผงจอพับคลี่ออกจากหลังเครื่อง — ใต้ของบนจอเครื่อง (วิดเจ็ตทับพื้นจอแผง 0) */}
@@ -889,7 +892,7 @@ export function WorkStory() {
             <directionalLight position={[-500, 700, 1000]} intensity={2.6} />
             <DeviceHalo />
             <BenchScreen frame={frame} />
-            {ROAD_STORY && <RoadHome />}
+            {(ROAD_STORY || ROLO_STORY) && <RoadHome />}
             <SlingRider />
           </Suspense>
         </Canvas>
