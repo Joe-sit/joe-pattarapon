@@ -400,7 +400,16 @@ const FLAT_CARD: readonly { fill: string; edge: string }[] = [
   { fill: '#a688f6', edge: '#bea6fa' },
   { fill: '#e8423f', edge: '#c11fbd' },
 ]
-const FLAT_TILE: Record<string, string> = { '#44c4de': '#2d8af0', '#a696f1': '#5d1fa8', '#b3a5f4': '#7a3ad6' }
+/**
+ * เปิดแอป (ต้นบท Code — สัดส่วนบท): แตะไอคอน [เริ่ม, ยาว] → ขยายเป็น splash เต็มจอ [เริ่ม, ยาว] ตลอดบท Code จอเป็น splash
+ * ขยายพร้อมโหมดมืดเข้า → splash เป็นกระจกมืด แล้วลำแสงสแกนเรนเดอร์ splash จริงจากบนลงล่าง (แบบที่เคยเติมสีวิดเจ็ต)
+ * จอ = ทั้งตัวเครื่องแก้ว (หน่วยผังจอ 420 × 820 มุม ≈ 86) หดเข้าขอบนิด · พื้น splash ขาวไล่นวล (ต่อเป็นหน้าขาวของ Selected Work)
+ */
+const LAUNCH = { tap: [0, 0.03], open: [0.02, 0.07], w: 404, h: 804, r: 80 } as const
+const SPLASH = { top: '#ffffff', bot: '#eef2f8' } as const
+/** ชั้นเงาสีรุ้งหลังไอคอนแอป (ใน → นอก) — ไล่แบบแถบรุ้งใน favicon */
+const ECHO = ['#ffd23f', '#5ed66d', '#3d9bff', '#9a6bff', '#ff5d55'] as const
+const FLAT_TILE: Record<string, string> ={ '#44c4de': '#2d8af0', '#a696f1': '#5d1fa8', '#b3a5f4': '#7a3ad6' }
 /** ขอบหนาของการ์ด (สัดส่วนด้านสั้น — เท่าการ์ดในสำรับ) */
 const FLAT_EDGE = 0.055
 /** สีปุ่ม + ต่อการ์ด (ใบ 3 เป็นเกาะ Research — ไม่มีปุ่ม) — โทนเข้มของการ์ดตัวเอง */
@@ -632,6 +641,20 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
         cm.uniforms.uEdgeW.value = Math.min(c.w, c.h) * FLAT_EDGE
         cm.uniforms.uRad.value = c.r
       }
+      /*
+       * ใบบน = ไอคอนแอป (favicon) เต็มหน้าการ์ด — มุมมน 22.7% เท่ากันพอดี · ไอคอนเดียวกับที่ฉากหดลงไปท้ายบท Code
+       * เรื่องชนใช้ใบนี้เป็นโฟลเดอร์ My Works — คงหน้าฟ้าไว้
+       */
+      if (i === 0 && NO_CRASH) {
+        cm.uniforms.uEdgeW.value = 0
+        const tex = new THREE.TextureLoader().load('/favicon-512.png', () => {
+          cm.uniforms.uHasMap.value = 1
+          invalidate()
+        })
+        tex.colorSpace = THREE.SRGBColorSpace
+        tex.anisotropy = 4
+        cm.uniforms.uMap.value = tex
+      }
       c.tiles.forEach((t) => {
         const f = FACE_TILE[t.color]
         const tm = mat(t.color, true) as THREE.ShaderMaterial
@@ -685,6 +708,88 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
     }
   }, [])
   const live = useMemo(() => ({ geo: new THREE.SphereGeometry(9, 20, 14), mat: new THREE.MeshBasicMaterial({ color: '#22c55e', toneMapped: false }) }), [])
+  /** เงาสีรุ้งหลังไอคอนแอป — ดีดออกทางขวาบนตอนติดตั้งเสร็จ (แบบชั้นรุ้งใน favicon) แล้วหุบกลับเข้าหลังไอคอน */
+  const echo = useMemo(() => {
+    const c = CARDS[0]
+    return { geo: new THREE.ShapeGeometry(rrect(c.w, c.h, c.r), 16), mats: ECHO.map((col) => new THREE.MeshBasicMaterial({ color: col, transparent: true, depthWrite: false, toneMapped: false })) }
+  }, [])
+  useEffect(
+    () => () => {
+      echo.geo.dispose()
+      echo.mats.forEach((m) => m.dispose())
+    },
+    [echo],
+  )
+  const echoRefs = useRef<(THREE.Mesh | null)[]>([])
+  /**
+   * หน้า splash ของแอป: ไอคอน (favicon) ถูกแตะแล้วขยายจากช่องของมันจนเต็มจอเครื่อง (แบบเปิดแอปบน iOS)
+   * แผ่นมนแผ่นเดียว — ขนาด/มุมมนเป็น uniform (ไม่ยืดมุม) · พื้นขาวไล่นวล · favicon กลางแผ่นขนาดเท่าไอคอนเดิม
+   * ตอนเริ่มแผ่นเท่าไอคอนพอดี = สลับจากการ์ดไอคอนได้ไม่เห็นรอย
+   */
+  const splash = useMemo(() => {
+    const logo = (parts[0].mat as THREE.ShaderMaterial).uniforms.uMap.value as THREE.Texture | null
+    const mat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      /* วาดทับทุกอย่างในจอ — ของที่ยืนสูงบนเกาะ Research ไม่ทะลุแผ่นตอนขยาย */
+      depthTest: false,
+      toneMapped: false,
+      uniforms: { uSize: { value: new THREE.Vector2(1, 1) }, uR: { value: 0 }, uTop: { value: new THREE.Color(SPLASH.top) }, uBot: { value: new THREE.Color(SPLASH.bot) }, uLogo: { value: logo }, uLogoH: { value: 75 }, uDark: { value: 0 }, uFill: { value: 1e5 }, uCy: { value: 0 } },
+      vertexShader: /* glsl */ `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform vec2 uSize;
+        uniform float uR;
+        uniform vec3 uTop;
+        uniform vec3 uBot;
+        uniform sampler2D uLogo;
+        uniform float uLogoH;
+        uniform float uDark;
+        uniform float uFill;
+        uniform float uCy;
+        varying vec2 vUv;
+        void main() {
+          vec2 p = (vUv - 0.5) * uSize;
+          vec2 q = abs(p) - (uSize * 0.5 - vec2(uR));
+          float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - uR;
+          float aa = max(fwidth(sd), 0.5);
+          vec3 col = mix(uBot, uTop, smoothstep(0.0, 1.0, vUv.y));
+          vec2 lu = p / (uLogoH * 2.0) + 0.5;
+          vec4 lg = texture2D(uLogo, clamp(lu, 0.0, 1.0));
+          lg.a *= step(0.0, lu.x) * step(lu.x, 1.0) * step(0.0, lu.y) * step(lu.y, 1.0);
+          col = mix(col, lg.rgb, lg.a);
+          /*
+           * โหมดมืดบท Code: กระจกมืดขอบเรือง favicon เป็นเงาจาง · ใต้ลำแสงสแกน (ยังไม่เรนเดอร์) มืด เหนือลำแสง = splash จริง
+           * เส้นสว่างตรงลำแสง — ชุดเดียวกับการ์ดวิดเจ็ต (makeChunkyTile)
+           */
+          float wy = p.y + uCy;
+          float under = smoothstep(uFill - 1.5, uFill + 1.5, wy);
+          float rim = smoothstep(-14.0, 0.0, sd);
+          vec3 dk = mix(vec3(0.02, 0.018, 0.035), vec3(0.62, 0.58, 0.82), rim * 0.7);
+          dk = mix(dk, lg.rgb * 0.3, lg.a * 0.7);
+          float dm = uDark * (1.0 - under);
+          col = mix(col, dk, dm);
+          float a = mix(1.0, 0.84 + rim * 0.14, dm);
+          float lip = exp(-(wy - uFill) * (wy - uFill) / 18.0) * step(-uSize.y, uFill - uCy) * step(uFill - uCy, uSize.y);
+          col = mix(col, vec3(1.0), lip * 0.7 * uDark);
+          gl_FragColor = vec4(col, a * (1.0 - smoothstep(-aa, aa, sd)));
+          #include <colorspace_fragment>
+        }`,
+    })
+    return { geo: new THREE.PlaneGeometry(1, 1), mat, ok: !!logo }
+  }, [parts])
+  useEffect(
+    () => () => {
+      splash.geo.dispose()
+      splash.mat.dispose()
+    },
+    [splash],
+  )
+  const splashRef = useRef<THREE.Mesh>(null)
 
   useEffect(
     () => () => {
@@ -985,6 +1090,11 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
   const postSm = useRef(-9)
   /** บล็อกลงการ์ดฟ้าเสร็จแล้ว (หน้าบนสุดของกองงานโผล่แทนกระเบื้อง) — อ่านเฟรมถัดไป */
   const landedRef = useRef(false)
+  /**
+   * ไอคอนแอปติดตั้งเสร็จ (บล็อกแรกจากแท่ง Research ลงถึงไอคอน) เมื่อไร — ท่าเด้ง แสงวาบ เงารุ้ง นับเวลาจริงจากจุดนั้น
+   * เฟรมแรกเสร็จอยู่แล้ว (เปิดหน้ามากลางเรื่อง) = ไม่เล่นท่า · iris = รูเปิดตอนนี้ (สกรอลล์ถอยกลับ = หุบลง)
+   */
+  const install = useRef({ seen: false, done: false, at: -99, iris: 2 })
   /** ไทล์งาน: ความคืบหน้าเปิดเต็มจอ / hover (หน่วงตามเวลา) */
   const tileOpenK = useRef<number[]>(Array(FAN_N).fill(0))
   const tileHoverK = useRef<number[]>(Array(FAN_N).fill(0))
@@ -1124,6 +1234,63 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
     const tapFrom = PICK_SEQ[(tn + PICK_SEQ.length - 1) % PICK_SEQ.length]
     const press = Math.sin(Math.PI * clamp01((tf - 0.38) / 0.24))
     const pop = Math.sin(Math.PI * clamp01((tf - 0.6) / 0.3))
+    /*
+     * ── ไอคอนแอป (ใบบน): ติดตั้งระหว่างบล็อกแรกจากแท่ง Research บินมาลง — ไอคอนหม่น พายความคืบหน้าเดินตามบล็อก
+     * ลงถึง = เสร็จ: รูเปิดจากกลางไอคอนเผยสีจริง · เด้งเหมือนเยลลี่ ยกเข้าหาคนดู ส่ายนิด · แสงวาบกวาดทแยง · เงารุ้งดีดออกแล้วหุบ ──
+     */
+    const ins = install.current
+    const fl0 = blockFlight(b.sv2, 0)
+    const done = NO_CRASH && fl0 >= 1
+    if (ins.seen && done && !ins.done) ins.at = t
+    ins.seen = true
+    ins.done = done
+    const age = done ? t - ins.at : 99
+    const ease = (k: number) => (done ? Math.exp(-k * age) : 0)
+    ins.iris = done ? 1.6 * outCubic(clamp01(age / 0.42)) : Math.max(0, ins.iris - delta * 5)
+    const iu = (parts[0].mat as THREE.ShaderMaterial).uniforms
+    iu.uWait.value = 1
+    iu.uProg.value = done ? 1 : clamp01(fl0)
+    iu.uIris.value = ins.iris
+    iu.uShine.value = done && age < 0.75 ? -1.3 + 2.6 * smooth(clamp01((age - 0.1) / 0.55)) : -9
+    const popS = 1 + 0.2 * ease(5) * Math.sin(14 * age)
+    const jelly = 0.07 * ease(6) * Math.sin(18 * age)
+    const lift = 55 * ease(5) * (1 - Math.exp(-30 * Math.min(age, 9)))
+    const wob = 0.1 * ease(4.5) * Math.sin(12 * age)
+    echoRefs.current.forEach((m, n) => {
+      if (!m) return
+      const a = age - 0.04 - n * 0.035
+      const k = done ? outBack(clamp01(a / 0.26)) * (1 - smooth(clamp01((a - 0.42) / 0.38))) : 0
+      m.visible = k > 0.002
+      if (!m.visible) return
+      const d = k * (n + 1) * 10
+      m.position.set(d * 0.62, d * 0.78, -1 - n * 0.6)
+      m.scale.setScalar(1 + k * 0.012 * (n + 1))
+    })
+    /*
+     * ── เปิดแอป: แตะไอคอน (ยุบลงแล้วคืน) → ขยายเป็น splash เต็มจอ ──
+     * แผ่น splash เริ่มที่ช่องไอคอนพอดี (ผิวหน้าการ์ด z ≈ 28) แทนการ์ดไอคอน · ระนาบเดียวกับหน้าการ์ดตลอด (ไม่ยก — วาดทับด้วย depthTest ปิด)
+     * การ์ดอื่นถอยหลบใต้แผ่น · เต็มจอแล้วซ่อนการ์ดทั้งหมด (ชนคำ Code แล้วไม่มีวิดเจ็ตกระจาย — เหลือจอ splash)
+     */
+    const tapK = splash.ok ? Math.sin(Math.PI * clamp01((b.code - LAUNCH.tap[0]) / LAUNCH.tap[1])) : 0
+    const lk = splash.ok ? smooth(clamp01((b.code - LAUNCH.open[0]) / LAUNCH.open[1])) : 0
+    const spm = splashRef.current
+    if (spm) {
+      spm.visible = lk > 0
+      if (spm.visible) {
+        const c0 = CARDS[0]
+        const w = lerp(c0.w, LAUNCH.w, lk)
+        const h = lerp(c0.h, LAUNCH.h, lk)
+        spm.position.set(lerp(c0.x, 0, lk), lerp(c0.y, 0, lk), 29)
+        spm.scale.set(w, h, 1)
+        const su = splash.mat.uniforms
+        su.uSize.value.set(w, h)
+        su.uR.value = lerp(c0.r, LAUNCH.r, lk)
+        su.uLogoH.value = lerp(c0.w / 2, 64, lk)
+        su.uDark.value = dk
+        su.uFill.value = sy
+        su.uCy.value = lerp(c0.y, 0, lk)
+      }
+    }
     parts.forEach((pc, i) => {
       const cg = cardRefs.current[i]
       if (!cg) return
@@ -1500,6 +1667,15 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
       cg.position.set(px, py, pz)
       cg.rotation.set(rx, ry, rz)
       cg.scale.setScalar(Math.max(1e-3, outBack(a, 1.4) * (1 - ex * 0.06) * (1 + hold * 0.03) * (1 - tap * (press * 0.04 - pop * 0.015)) * grow))
+      if (i === 0) {
+        const tapS = popS * (1 - 0.1 * tapK)
+        cg.scale.x *= tapS * (1 + jelly)
+        cg.scale.y *= tapS * (1 - jelly)
+        cg.scale.z *= tapS
+        cg.position.z += lift
+        cg.rotation.z += wob
+      } else cg.scale.multiplyScalar(1 - 0.06 * lk)
+      if (lk > 0 && (i === 0 || lk >= 0.999)) cg.visible = false
       pc.tiles.forEach((pt, j) => {
         const tm = tileRefs.current[i]?.[j]
         if (!tm) return
@@ -1617,7 +1793,7 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
     <group ref={root} visible={false} matrixAutoUpdate={false}>
       {/* ขนาดจริงมาจากเชดเดอร์ (แผ่นหน่วยเดียว) — กรอบทรงกลมของ three เล็กกว่าที่วาดจริง ปิดการตัดทิ้งนอกมุมกล้อง */}
       <mesh ref={dropRef} geometry={drop.geo} material={drop.mat} visible={false} renderOrder={1} frustumCulled={false} />
-      <mesh ref={scanRef} geometry={scan.geo} material={scan.mat} visible={false} renderOrder={20} frustumCulled={false} />
+      <mesh ref={scanRef} geometry={scan.geo} material={scan.mat} visible={false} renderOrder={45} frustumCulled={false} />
       {wf.mats.map((m, n) => (
         <mesh
           key={`wf${n}`}
@@ -1638,6 +1814,19 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
           }}
           visible={false}
         >
+          {i === 0 &&
+            echo.mats.map((m, n) => (
+              <mesh
+                key={`e${n}`}
+                ref={(el) => {
+                  echoRefs.current[n] = el
+                }}
+                geometry={echo.geo}
+                material={m}
+                renderOrder={1.9 - n * 0.05}
+                visible={false}
+              />
+            ))}
           <mesh geometry={pc.geo} material={pc.mat} renderOrder={2} />
           {i < BADGE.length && (
             <group position={[pc.c.w / 2 - 26, pc.c.h / 2 - 26, pc.top + 14]}>
@@ -1697,6 +1886,7 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
           ))}
         </group>
       ))}
+      <mesh ref={splashRef} geometry={splash.geo} material={splash.mat} renderOrder={40} visible={false} frustumCulled={false} />
       <group ref={frameG} visible={false}>
         {[0, 1, 2, 3].map((j) => (
           <mesh

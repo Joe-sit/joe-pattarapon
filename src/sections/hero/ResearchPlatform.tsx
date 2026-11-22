@@ -102,7 +102,8 @@ export type IslandState = { show: boolean; grow: number; fill: number; sway: num
 export function blockFlight(sv2: number, j: number) {
   /* เริ่มตอนฟองลงจอดบนหัวเครื่องแล้วระลอกน้ำแผ่ (บทลงจอดราว 0.68) ไล่ทีละก้อน ไหลต่อเข้าบท bench */
   const t0 = BEAT.morph[0] + BEAT.morph[1] * 0.68
-  return clamp01((sv2 - t0 - j * 0.08) / 0.3)
+  /* ก้อนแรกไปเป็นไอคอนแอป — ลงเร็วกว่า: ติดตั้งเสร็จหลังไอคอนนั่งที่ ก่อนกระเบื้องการ์ดแชทบินผ่านหน้าไอคอน */
+  return clamp01((sv2 - t0 - j * 0.08) / (j === 0 ? 0.22 : 0.3))
 }
 
 /** quintic smootherstep — ออกตัวและเข้าที่นุ่มทั้งสองปลาย ไม่เลยเป้า */

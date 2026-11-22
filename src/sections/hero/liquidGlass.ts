@@ -215,7 +215,7 @@ export function makeChunkyTile(color: THREE.ColorRepresentation) {
   return new THREE.ShaderMaterial({
     transparent: true,
     toneMapped: false,
-    uniforms: { uTint: { value: new THREE.Color(color) }, uDark: { value: 0 }, uFill: { value: 1e5 }, uSpan: { value: 1 }, uFillTop: { value: new THREE.Color(color) }, uFillBot: { value: new THREE.Color(color) }, uAlpha: { value: 1 }, uFaceTop: { value: new THREE.Color(color) }, uFaceBot: { value: new THREE.Color(color) }, uFaceMid: { value: new THREE.Color(color) }, uMap: { value: null as THREE.Texture | null }, uHasMap: { value: 0 }, uVivid: { value: 0 }, uHalf: { value: new THREE.Vector2(1, 1) }, uPortal: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uDotPx: { value: 9 }, uTime: { value: 0 }, uFlat: { value: 0 }, uEdge: { value: new THREE.Color(color) }, uEdgeW: { value: 0 }, uRad: { value: 0 } },
+    uniforms: { uTint: { value: new THREE.Color(color) }, uDark: { value: 0 }, uFill: { value: 1e5 }, uSpan: { value: 1 }, uFillTop: { value: new THREE.Color(color) }, uFillBot: { value: new THREE.Color(color) }, uAlpha: { value: 1 }, uFaceTop: { value: new THREE.Color(color) }, uFaceBot: { value: new THREE.Color(color) }, uFaceMid: { value: new THREE.Color(color) }, uMap: { value: null as THREE.Texture | null }, uHasMap: { value: 0 }, uVivid: { value: 0 }, uHalf: { value: new THREE.Vector2(1, 1) }, uPortal: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uDotPx: { value: 9 }, uTime: { value: 0 }, uFlat: { value: 0 }, uEdge: { value: new THREE.Color(color) }, uEdgeW: { value: 0 }, uRad: { value: 0 }, uWait: { value: 0 }, uProg: { value: 0 }, uIris: { value: 2 }, uShine: { value: -9 } },
     vertexShader: /* glsl */ `
       varying vec3 vN;
       varying vec3 vO;
@@ -249,6 +249,10 @@ export function makeChunkyTile(color: THREE.ColorRepresentation) {
       uniform vec3 uEdge;
       uniform float uEdgeW;
       uniform float uRad;
+      uniform float uWait;
+      uniform float uProg;
+      uniform float uIris;
+      uniform float uShine;
       varying vec3 vN;
       varying vec3 vO;
       varying vec3 vP;
@@ -279,13 +283,34 @@ export function makeChunkyTile(color: THREE.ColorRepresentation) {
          * แบบการ์ด rolodex (uFlat): สีเรียบสีเดียว · ขอบหนาสีโทนเดียวกันรอบหน้า (ระยะจากขอบสี่เหลี่ยมมน) · ไม่มีเกรน ไม่มีขอบเรือง
          */
         if (uFlat > 0.5) {
-          face = uFaceMid;
+          if (uHasMap < 0.5) face = uFaceMid;
           if (uEdgeW > 0.0) {
             vec2 q = abs(vP.xy) - (uHalf - vec2(uRad));
             float sdr = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - uRad;
             float aa = max(fwidth(sdr), 0.5);
             face = mix(face, uEdge, smoothstep(-uEdgeW - aa, -uEdgeW + aa, sdr));
           }
+        }
+        /*
+         * ไอคอนแอปกำลังติดตั้ง (หน้ามีภาพ): ไอคอนหม่นมืด + วงแหวนกับพายความคืบหน้ากลางไอคอน (เริ่ม 12 นาฬิกา ตามเข็ม)
+         * เสร็จแล้วรูเปิดจากกลางออกไปถึงมุม (uIris) เผยสีจริง · แสงเงาวาบกวาดทแยงล่างซ้าย → ขวาบน (uShine)
+         */
+        if (uHasMap > 0.5) {
+          vec2 pq = vP.xy / uHalf;
+          float rr = length(pq);
+          float aw = fwidth(rr) * 1.2;
+          float wait = uWait * smoothstep(uIris - 0.06, uIris + aw, rr);
+          float lum = dot(face, vec3(0.299, 0.587, 0.114));
+          vec3 dimC = mix(face, vec3(lum), 0.6) * 0.36;
+          float ang = atan(pq.x, pq.y);
+          ang = ang < 0.0 ? ang + 6.2831853 : ang;
+          float ring = 1.0 - smoothstep(0.03 - aw, 0.03 + aw, abs(rr - 0.37));
+          float pie = (1.0 - smoothstep(0.29 - aw, 0.29 + aw, rr)) * step(ang, uProg * 6.2831853);
+          dimC = mix(dimC, vec3(1.0), max(ring * 0.55, pie * 0.92));
+          face = mix(face, dimC, wait);
+          float sd = (pq.x + pq.y) * 0.5 - uShine;
+          float sd2 = sd + 0.2;
+          face += (exp(-sd * sd / 0.018) * 0.55 + exp(-sd2 * sd2 / 0.004) * 0.3) * step(-2.0, uShine);
         }
         /*
          * สันข้าง = สีหน้าเข้มลง (ไม่ใช่ทามะนาวทั้งสัน) · เส้นเรืองบาง ๆ ตรงขอบหน้า (bevel) ด้านล่าง/ขวา

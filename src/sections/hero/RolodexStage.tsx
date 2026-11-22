@@ -31,20 +31,28 @@ const D0 = ICON_S / (2 * TAN * ICON_PX)
 /**
  * จังหวะ (worksPost):
  *   OPEN    rolodex เปิดตามคลิป (เวลาคลิป REF0 → HOLD_T: ตัดดำ · ก้อนหมุน · กาง · พลิกไม่กี่ใบ) แล้วค้างทรง V
- *   UNF     Selected Work: การ์ดหลุดจากปึกลงช่องสไลเดอร์ (ใบกลางก่อน) กลายเป็นปกงานระหว่างทาง · สไลเดอร์เลื่อนทีละใบวนเอง
- *           ไอคอนแอปกลับลงจอเครื่องแล้วหล่นไปกับเครื่อง · คำใหญ่ของบทย่อเป็นหัวเรื่องซ้ายบน
+ *   UNF     Selected Work: เดินเข้าไปในปึก — ปึกตั้งแกน โค้งล้อมคนดูเป็นวงกำแพง (การ์ดเป็นซี่ล้อ) แล้วเปิดเป็นมู่ลี่ = กำแพงผลงาน
+ *           ช่องซ้ำเปิดเป็นมู่ลี่ต่อไล่ออกไปขอบ · คำใหญ่ของบทจางหาย
  *   REFOLD  ปกบินกลับเข้าปึก (ทรง V เดิม) · CLOSE rolodex ปิดย้อนทางเดิมจนเหลือไอคอนหน้าตรง
  *   BACK_HOME ตัดกลับหน้าโฮม → ถอยออกเป็นเครื่อง (./roadWorld) — ต้องเสร็จก่อนหนังสติ๊กของบท Ship โผล่ (~worksPost 2.5)
  */
 const P0 = 0.4
 /* กางไวขึ้น (เดิม 0.75) — เผื่อระยะให้กำแพงค้างให้มองรอบก่อนเปิด */
-const OPEN = [P0, 0.55] as const
+const OPEN = [P0, 0.48] as const
 const HOLD_T = 1.3
-const UNF = [0.95, 0.34] as const
+/**
+ * ปิดปึกแบบท้ายคลิป ref (SHUT — เวลาคลิป HOLD_T → END_T): คลื่นพลิกเดินต่อ ระยะหดเป็นศูนย์ ขนาดกลับเท่าไอคอน ก้อนหมุนครบครึ่งรอบ
+ * จบที่ใบสุดท้ายของปึกหันหน้าตรงใบเดียว (ใบอื่นซ้อนอยู่ข้างหลังพอดี) = จุดตั้งต้นของ gallery
+ * UNF = ใบนั้นแปลงร่างเป็นช่องกลางกำแพง → ช่องอื่นแตกตัวออกจากมัน · ขากลับ SHUT_BACK เปิดปึกย้อนเป็นทรง V ก่อนหุบเป็นไอคอน (CLOSE)
+ */
+const END_T = 1.733
+const SHUT = [0.88, 0.24] as const
+const SHUT_BACK = [1.92, 0.13] as const
+const UNF = [1.16, 0.3] as const
 /** "เปิด" กำแพง (แบบ ref scroll to open): รูปพุ่งกระจายออกจากกลางจอ — ก่อนการ์ดบินกลับเข้าปึก (REFOLD) */
 /* ท้ายช่วงซ้อนกับการ์ดเริ่มบินกลับ (REFOLD) — การ์ด 12 ใบกลับตัวเข้าปึกระหว่างที่ช่องซ้ำยังพุ่งออก ไม่มีช่วงฟ้าว่าง */
-const WALL_OPEN = [1.56, 0.3] as const
-const REFOLD = [1.78, 0.24] as const
+const WALL_OPEN = [1.6, 0.3] as const
+const REFOLD = [1.7, 0.22] as const
 const CLOSE = [2.06, 0.17] as const
 const BACK_HOME = 2.24
 const at01 = (x: number, r: readonly [number, number]) => Math.min(1, Math.max(0, (x - r[0]) / r[1]))
@@ -56,8 +64,9 @@ export function rolodexPhase(b: { code: number; works: number }) {
   const rp = roadPhase(b)
   const post = worksPost(b)
   const close = at01(post, CLOSE)
-  /* เวลาคลิป: เปิด REF0 → HOLD_T · ปิดย้อน HOLD_T → ก่อนเฟรมตัด (เหลือไอคอนหน้าตรงใบเดียว) */
-  const t = post < P0 ? 0 : close > 0 ? HOLD_T - close * (HOLD_T - CUT_T + 0.01) : REF0 + at01(post, OPEN) * (HOLD_T - REF0)
+  /* เวลาคลิป: เปิด REF0 → HOLD_T → ปิดแบบท้ายคลิป END_T (SHUT) · ขากลับ END_T → HOLD_T (SHUT_BACK) แล้วปิดย้อน HOLD_T → ก่อนเฟรมตัด (เหลือไอคอนหน้าตรงใบเดียว) */
+  const shut = at01(post, SHUT) * (1 - at01(post, SHUT_BACK))
+  const t = post < P0 ? 0 : close > 0 ? HOLD_T - close * (HOLD_T - CUT_T + 0.01) : REF0 + at01(post, OPEN) * (HOLD_T - REF0) + shut * (END_T - HOLD_T)
   const unf = smooth(at01(post, UNF)) * (1 - smooth(at01(post, REFOLD)))
   /* ช่วงฉากนี้คุมภาพ: ตั้งแต่เฟรมตัดของขาเปิด จนตัดกลับหน้าโฮม (หน้าโฮมข้างหลังไอคอนซ่อนในช่วงนี้) */
   const staged = post >= P0 + ((CUT_T - REF0) / (HOLD_T - REF0)) * OPEN[1] && post < BACK_HOME
@@ -106,7 +115,8 @@ export function worksPaper(b: { code: number; works: number }) {
 export function rolodexSpan(b: { code: number; works: number }) {
   const t = rolodexPhase(b).t
   const s = t >= CUT_T ? track(K_SCALE, t) : 1
-  return ICON_PX * (0.35 + 1.4 * s)
+  /* s = 1 → กว้างเท่าไอคอนพอดี (ต่อจากการ์ดไอคอนของ WorkStory ไม่กระโดด) · ถึง s 1.5 กลับเป็นเส้นเดิม (ปึกเอียงทแยง ต้องเว้นกว้าง) */
+  return ICON_PX * (0.35 + 1.4 * s - 0.75 * (1 - smooth((s - 1) / 0.5)))
 }
 
 /** เครื่องหล่นลงพ้นจอตอนการ์ดคลี่เป็นสไลเดอร์ (สไลเดอร์กับหัวเรื่องได้ทั้งจอ) · กลับขึ้นมาตอนปกบินกลับเข้าปึก */
@@ -256,6 +266,12 @@ const ARTS: readonly Art[] = [
     ],
   },
 ]
+/**
+ * การ์ดในปึกตอนนี้เป็นช่องว่าง (placeholder) แบบเดียวกับช่องบนกำแพง — ยังไม่มีปกงานจริง · ลายสีชุด ARTS เก็บไว้ (DECK_PLACEHOLDER = false)
+ * ขอบ/สันเทาเข้มกว่าหน้านิด ให้เห็นชั้นของปึกบนพื้นขาว
+ */
+const DECK_PLACEHOLDER = true
+const DECK_ARTS: readonly Art[] = DECK_PLACEHOLDER ? [{ fill: '#ededed', edge: '#d9d9d9', bw: 0.03, shapes: [] }] : ARTS
 
 /** วาดลายการ์ด (512 px) — มุมมนแบบไอคอนแอป · ขอบหนาสีโทนเดียวกัน */
 function paintArt(a: Art) {
@@ -362,8 +378,6 @@ const TILES: Tile[] = (() => {
   }
   return out
 })()
-const HERO_TILE = WORKS.map((_, k) => TILES.find((t) => t.hero === k) as Tile)
-const HERO_IDX = WORKS.map((_, k) => TILES.findIndex((t) => t.hero === k))
 /** ช่องรูปมุมมน (แคนวาสขนาดตายตัวตามสัดส่วน) — ตอนนี้ไม่มีรูป = ช่องว่างสีอ่อน (placeholder) · ส่งรูปมา = วาดครอปเต็มช่อง */
 const TILE_W = 512
 function paintTile(cv: HTMLCanvasElement, img: HTMLImageElement | null) {
@@ -388,9 +402,30 @@ function paintTile(cv: HTMLCanvasElement, img: HTMLImageElement | null) {
 /** การ์ดทั้งปึก: 0 = ไอคอนแอป · 1..M = การ์ดสี (ลายวนชุด ARTS) ผูกกับการ์ดงาน WORKS[i − 1] */
 const M = WORKS.length
 const C = M + 1
-/** สลับลายการ์ด → การ์ดงาน ตอนยังหันสันอยู่ (ต้นทางคลี่) — ทั้งคู่จัตุรัสเท่ากัน ไม่ต้องยืดขนาด */
-const SWAP = 0.12
 const AX_Y = new THREE.Vector3(0, 1, 0)
+/**
+ * gallery งอกจากการ์ดใบสุดท้าย (ช่วง unf) — เป็นการเคลื่อนเดียวต่อเนื่อง ไม่มีจังหวะหยุดระหว่างทาง:
+ *   seed  ใบหน้าสุดของปึกที่ปิดแล้วสลับเป็นแผ่น seed แล้วแปลงร่างเป็นช่อง INIT (ยาว SEED_MORPH · ease-out ต่อจาก ease-in ของ unf)
+ *   zoom  ทั้งกำแพงยึดติดกับ seed — ตำแหน่ง/ขนาดตาม seed (การ์ดเล็กกว่าช่อง → กำแพงซูมเข้าหาคนดูนิด ๆ ไปพร้อมกัน)
+ *   wave  ช่องอื่นผลิเป็นระลอกวงกลมจาก INIT ตามระยะ (ตัดที่ GROW_VIS ช่อง ≈ มุมจอ): [เริ่ม, ช่วงระลอก, ยาวต่อช่อง] — จบพอดี unf 1
+ *         แต่ละช่องโต + ชัดขึ้น + ลอยออกจากกลางนิด ลงช่องแบบ ease-out — ไม่มีช่องซ้อนกันเป็นก้อน
+ */
+const SEED_MORPH = 0.5
+const GROW = [0.15, 0.4, 0.45] as const
+const GROW_VIS = 3.2
+/** ช่องกลางกำแพง (คอลัมน์ 0 = กลางจอ · แถวที่ใกล้แนวกลางสุด) = จุดตั้งต้นของ gallery */
+const INIT = TILES.filter((t) => t.col === 0).reduce((a, t) => (Math.abs(t.y) < Math.abs(a.y) ? t : a))
+const INIT_N = TILES.indexOf(INIT)
+/** เวลาเริ่มผลิของแต่ละช่อง (หน่วย unf) ตามระยะจาก INIT */
+const GROW_AT = TILES.map((t) => GROW[0] + GROW[1] * Math.min(1, Math.hypot(t.col - INIT.col, t.y - INIT.y) / GROW_VIS))
+const easeOut = (x: number) => 1 - (1 - x) ** 3
+const seedP = new THREE.Vector3()
+const seedQ = new THREE.Quaternion()
+/** ท่าใบหน้าสุดของปึกที่ปิดแล้ว (จุดเริ่ม seed) · จุดยึดกำแพงระหว่างแปลงร่าง (= ตำแหน่ง seed) */
+const _pF = new THREE.Vector3()
+const _zc = new THREE.Vector3()
+/** ช่องสมมติระหว่างทาง (คอลัมน์/แถว/ความสูงแบบเศษ) */
+const _vt: Tile = { col: 0, y: 0, h: 1, work: 0, hero: -1, rank: 0 }
 const _qT = new THREE.Quaternion()
 const _mT = new THREE.Matrix4()
 const _sT = new THREE.Vector3()
@@ -418,8 +453,7 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
   const icon = useTexture('/favicon-512.png')
   const cards = useRef<(THREE.Group | null)[]>([])
   const arts = useRef<(THREE.Group | null)[]>([])
-  const covers = useRef<(THREE.Group | null)[]>([])
-  const coverFace = useRef<(THREE.Group | null)[]>([])
+  const seed = useRef<THREE.Mesh>(null)
   const fills = useRef<(THREE.InstancedMesh | null)[]>([])
   const wall = useRef<THREE.Mesh>(null)
   const scene = useThree((s) => s.scene)
@@ -427,6 +461,8 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
   const camera = useThree((s) => s.camera)
   /* มุมหมุนเองของกำแพง (เดินเฉพาะตอนคลี่ครบ) · ตำแหน่งเมาส์ −1..1 (ดิบ / หน่วงแล้ว) */
   const rot = useRef(0)
+  /** ความแรงการลอยวน 0 → 1 (ผ่อนเข้า/ออก) */
+  const driftK = useRef(0)
   /* hover: ช่องที่ชี้อยู่ (ดัชนีใน TILES) · ความขยายของแต่ละช่อง 0..1 (หน่วงเข้า/ออก) */
   const hoverTile = useRef(-1)
   const hovK = useMemo(() => new Float32Array(TILES.length), [])
@@ -449,7 +485,7 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
     body.translate(0, 0, -ICON_S * 0.01)
     const face = new THREE.PlaneGeometry(ICON_S, ICON_S)
     const unit = new THREE.PlaneGeometry(1, 1)
-    const artTex = ARTS.map((a) => {
+    const artTex = DECK_ARTS.map((a) => {
       const tx = new THREE.CanvasTexture(paintArt(a))
       tx.colorSpace = THREE.SRGBColorSpace
       tx.anisotropy = 4
@@ -466,26 +502,61 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
       t.anisotropy = 8
       return t
     })
-    /* ช่องซ้ำของแต่ละงาน (ดัชนีใน TILES) — วาดเป็น instance ชุดละงาน */
-    const fillOf = WORKS.map((_, k) => TILES.flatMap((t, n) => (t.hero < 0 && t.work === k ? [n] : [])))
-    const fillAlpha = fillOf.map((list) => new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, list.length)), 1))
+    /* ช่องทั้งกำแพงของแต่ละงาน (ดัชนีใน TILES — รวมช่องกลาง) — วาดเป็น instance ชุดละงาน · เห็นผ่านหน้าการ์ดใบสุดท้าย */
+    const fillOf = WORKS.map((_, k) => TILES.flatMap((t, n) => (t.work === k ? [n] : [])))
+    const fillAlpha = fillOf.map((list) => new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, list.length)).fill(1), 1))
     const wallTex = paintHome()
     /* หน้าโฮมข้างหลังไอคอน: ขนาด/ตำแหน่งตามจอเครื่อง (ไอคอนบนจอ = ไอคอนนี้) */
     const u = ICON_S / HOME_ICON.s
+    const ph = DECK_ARTS[0]
     return {
       body,
       face,
       unit,
       artTex,
       artMats: artTex.map(flat),
-      edgeMats: ARTS.map((a) => new THREE.MeshBasicMaterial({ color: a.edge, toneMapped: false })),
+      edgeMats: DECK_ARTS.map((a) => new THREE.MeshBasicMaterial({ color: a.edge, toneMapped: false })),
       iconMat: flat(icon),
       iconEdge: new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false }),
-      tileTex,
-      /* มุมมนโปร่ง — ตัดทิ้ง (alphaTest) ไม่งั้นวาดเป็นมุมดำ */
-      tileMats: tileTex.map((t) => new THREE.MeshBasicMaterial({ map: t, alphaTest: 0.5, toneMapped: false })),
       /*
-       * ช่องซ้ำจางเข้า (แบบ ref — ความทึบรายช่อง): instance attribute aAlpha คูณ alpha ของรูป · โปร่งใสจริง (ไม่ใช้ alphaTest ตัดทิ้ง)
+       * เมล็ด gallery: การ์ดใบสุดท้ายหลังหันหน้าตรง (หน้าตาเดียวกับการ์ดพอดี — มุม 22.5% ขอบเทาเข้ม 3%) แปลงร่างเป็นช่องกลางกำแพง
+       * แผ่นสี่เหลี่ยมมน SDF: ขนาด/มุม/ขอบเป็น uniform — ยืดเป็นสัดส่วนช่อง มุมเหลือ 2.2% ขอบจางหาย โดยรูปทรงไม่บิด
+       */
+      seedMat: new THREE.ShaderMaterial({
+        transparent: true,
+        toneMapped: false,
+        uniforms: { uSize: { value: new THREE.Vector2(1, 1) }, uR: { value: 0 }, uRim: { value: 0 }, uRimA: { value: 1 }, uFill: { value: new THREE.Color(ph.fill) }, uEdge: { value: new THREE.Color(ph.edge) } },
+        vertexShader: /* glsl */ `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }`,
+        fragmentShader: /* glsl */ `
+          uniform vec2 uSize;
+          uniform float uR;
+          uniform float uRim;
+          uniform float uRimA;
+          uniform vec3 uFill;
+          uniform vec3 uEdge;
+          varying vec2 vUv;
+          float sdr(vec2 p, vec2 b, float r) {
+            vec2 q = abs(p) - (b - vec2(r));
+            return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+          }
+          void main() {
+            vec2 p = (vUv - 0.5) * uSize;
+            float d = sdr(p, uSize * 0.5, uR);
+            float di = sdr(p, uSize * 0.5 - vec2(uRim), max(uR - uRim * 0.8, 0.0));
+            float aa = max(fwidth(d), 1e-4);
+            vec3 col = mix(uFill, uEdge, uRimA * smoothstep(-aa, aa, di));
+            gl_FragColor = vec4(col, 1.0 - smoothstep(-aa, aa, d));
+            #include <colorspace_fragment>
+          }`,
+      }),
+      tileTex,
+      /*
+       * ช่องกำแพง (แบบ ref — ความทึบรายช่อง): instance attribute aAlpha คูณ alpha ของรูป · โปร่งใสจริง (ไม่ใช้ alphaTest ตัดทิ้ง)
        */
       fillMats: tileTex.map((t) => {
         const m = new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, toneMapped: false })
@@ -512,7 +583,7 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
   useEffect(
     () => () => {
       ;[res.body, res.face, res.unit, ...res.fillGeo].forEach((g) => g.dispose())
-      ;[...res.artMats, ...res.edgeMats, res.iconMat, res.iconEdge, ...res.tileMats, ...res.fillMats, res.wallMat].forEach((m) => m.dispose())
+      ;[...res.artMats, ...res.edgeMats, res.iconMat, res.iconEdge, res.seedMat, ...res.fillMats, res.wallMat].forEach((m) => m.dispose())
       ;[...res.artTex, ...res.tileTex, res.wallTex].forEach((x) => x.dispose())
       scene.background = null
     },
@@ -548,7 +619,8 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
     }
     /* ก่อนเริ่ม: ไอคอน (ใบแรก) ทาบไอคอนบนจอเครื่องพอดี — ไม่จัดกึ่งกลางปึก */
     mean = started ? mean / C : zs[0]
-    _mA.compose(_v.set(0, 0, 0), _q.setFromEuler(_e.set(0, 0, roll)), _s1.set(s, s, s)).multiply(_mB.makeRotationY(yaw))
+    const sd = s
+    _mA.compose(_v.set(0, 0, 0), _q.setFromEuler(_e.set(0, 0, roll)), _s1.set(sd, sd, sd)).multiply(_mB.makeRotationY(yaw))
 
     /* ── กำแพง (หน่วยโลกที่ระนาบ z = 0 ห่างกล้อง D0 — คอลัมน์หน้าสุดแตะระนาบนี้พอดี px ↔ หน่วยเป๊ะ) ── */
     const hu = 2 * D0 * TAN
@@ -564,7 +636,10 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
     const k = 1 - Math.exp(-Math.min(dt, 0.1) * 3)
     lookS.current.x += (look.current.x - lookS.current.x) * k
     lookS.current.y += (look.current.y - lookS.current.y) * k
-    if (L.unf >= 0.999 && L.open <= 0 && !L.paused) rot.current += Math.min(dt, 0.1) * WALL.drift
+    /* ลอยวนเริ่มระหว่างระลอกท้าย ๆ แล้วเร่ง/ผ่อนนุ่ม ๆ (หยุด/เปิดกำแพงก็ค่อย ๆ หยุด) — ความเร็วไม่กระตุก */
+    const driftOn = L.open <= 0 && !L.paused ? smooth((L.unf - 0.7) / 0.3) : 0
+    driftK.current += (driftOn - driftK.current) * (1 - Math.exp(-Math.min(dt, 0.1) * 2.5))
+    rot.current += Math.min(dt, 0.1) * WALL.drift * driftK.current
     /* เมาส์ไปขวา = มองไปทางขวา → กำแพงเลื่อนไปซ้าย (แบบ ref) · เมาส์ลง = มองลง → กำแพงเลื่อนขึ้น */
     const phi = rot.current - lookS.current.x * WALL.look * L.unf
     const panY = lookS.current.y * WALL.pan * hu * L.unf
@@ -585,12 +660,14 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
       const len = Math.hypot(dx, dy)
       const push = Math.pow(o, 1.6) * 5 * pushK
       const thO = th + (dx / len) * push * dA
-      const r = R * (1 - 0.4 * o)
+      const r = R * (1 - 0.4 * o * Math.min(1, pushK))
       out.set(r * Math.sin(thO), (yc + (dy / len) * push) * cw, R - r * Math.cos(thO))
       q.setFromAxisAngle(AX_Y, -thO)
       return Math.cos(thO)
     }
-    const span = 3.4 * 0.06
+    /* ── gallery งอกจากการ์ดใบสุดท้าย: ท่าช่อง INIT (ไม่โดนแรงดันของท่าเปิด — ขากลับทุกช่องมารวมกลางจอ) · ความคืบหน้าแปลงร่าง ── */
+    tilePose(INIT, seedP, seedQ, 0)
+    const morphK = easeOut(Math.min(1, L.unf / SEED_MORPH))
     for (let i = 0; i < C; i++) {
       const c = cards.current[i]
       if (!c) continue
@@ -602,46 +679,29 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
       const side = Math.max(-1, Math.min(1, d * 2))
       _mC.compose(_v.set(0, 0, -(zs[i] - mean)), _q.setFromEuler(_e.set(0, dv * side * vee, 0)), _one)
       _mB.multiplyMatrices(_mA, _mC).decompose(_p1, _q1, _s1)
-      /* คลี่ลงกำแพง: ช่องใกล้กลางก่อน · ไอคอนแอปหดหายกลางกำแพง (กลับมาตอนปึกหุบ) */
-      const tile = i > 0 ? HERO_TILE[i - 1] : null
-      const delay = tile ? Math.min(tile.rank, 3.4) * 0.06 : 0
-      const u = smooth(Math.min(1, Math.max(0, (L.unf - delay) / (1 - span))))
-      const art = arts.current[i]
-      const cov = covers.current[i]
-      if (u <= 0.0005) {
-        c.position.copy(_p1)
-        c.quaternion.copy(_q1)
-        c.scale.copy(_s1)
-        if (art) art.visible = true
-        if (cov) cov.visible = false
-        continue
-      }
-      if (!tile) {
-        c.position.lerpVectors(_p1, _v.set(0, 0, 0), u)
-        c.quaternion.copy(_q1)
-        c.scale.setScalar(_s1.x * (1 - u))
-        c.visible = u < 0.999
-        continue
-      }
-      /* การ์ดหลักพุ่งออกน้อยกว่าช่องซ้ำ (แค่พ้นจอ) — ตอนพับกลับโผล่กลับเข้าจอเร็ว ไม่มีช่วงฟ้าว่าง */
-      const front = tilePose(tile, _p2, _qT, 0.62)
-      /* ช่องที่ชี้: ขยาย + ขยับเข้าหากล้องนิด (ไม่ซ้อนทับช่องข้าง ๆ) */
-      const hv = hovK[HERO_IDX[i - 1]] * u
-      _p2.add(_v.set(0, 0, 1).applyQuaternion(_qT).multiplyScalar(hv * cw * 0.12))
-      /* ผสมท่า + โค้งเข้าหากล้องกลางทาง */
-      /* ไม่โค้งเข้าหากล้อง — การ์ดจากปึก (ใหญ่) ลงช่องเล็กบนกำแพง ถ้าโค้งเข้ามาจะเป็นแผ่นใหญ่บังจอกลางทาง */
-      c.position.lerpVectors(_p1, _p2, u)
-      c.quaternion.slerpQuaternions(_q1, _qT, u)
-      c.scale.setScalar((_s1.x + (cw / ICON_S - _s1.x) * u) * (1 + HOVER_K * hv))
-      /* พ้นด้านข้างกล้องแล้ว (ตอนเปิด) = ซ่อน (หลังคลี่ครบเท่านั้น — ระหว่างบินต้องเห็นทั้งทาง) */
-      c.visible = !(u >= 0.999 && front < 0.05)
-      /* การ์ดสี → รูปปก: สลับตอนต้นทาง (ยังหันสัน) แล้วยืดจากจัตุรัสเป็นสัดส่วนภาพ */
-      if (art && cov) {
-        const isTile = u >= SWAP
-        art.visible = !isTile
-        cov.visible = isTile
-        const fc = coverFace.current[i]
-        if (isTile && fc) fc.scale.y = 1 + (tile.h - 1) * smooth((u - SWAP) / 0.6)
+      c.position.copy(_p1)
+      c.quaternion.copy(_q1)
+      c.scale.copy(_s1)
+      /* ปึกปิดแล้ว (END_T) ใบสุดท้ายอยู่หน้าสุด หันหน้าตรงกลางจอ — จำท่าไว้เป็นจุดเริ่มของ seed · คลี่ลงกำแพง = seed รับช่วงทั้งปึก */
+      if (i === C - 1) _pF.copy(_p1)
+      if (L.unf > 0) c.visible = false
+    }
+    /* แผ่น seed: เริ่มเท่าการ์ด (มุม 22.5% ขอบ 3%) → ช่อง INIT (กว้าง cw สูงตามสัดส่วน มุม 2.2% ไม่มีขอบ) · ครบแล้วช่องกำแพงตัวจริงรับช่วง */
+    const sm = seed.current
+    if (sm) {
+      sm.visible = L.unf > 0 && morphK < 1
+      if (sm.visible) {
+        const w0 = ICON_S * sd
+        const w = w0 + (cw - w0) * morphK
+        const h = w0 + (cw * INIT.h - w0) * morphK
+        sm.position.lerpVectors(_pF, seedP, morphK)
+        sm.quaternion.copy(seedQ)
+        sm.scale.set(w, h, 1)
+        const su = res.seedMat.uniforms
+        su.uSize.value.set(w, h)
+        su.uR.value = w0 * 0.225 + (cw * 0.022 - w0 * 0.225) * morphK
+        su.uRim.value = w0 * 0.03 * (1 - morphK)
+        su.uRimA.value = 1 - morphK
       }
     }
     /*
@@ -682,32 +742,45 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
     const hk = 1 - Math.exp(-Math.min(dt, 0.1) * 12)
     for (let n = 0; n < TILES.length; n++) hovK[n] += ((n === hoverTile.current ? 1 : 0) - hovK[n]) * hk
     /*
-     * ── ช่องซ้ำ: จางเข้า (แบบท่าโผล่ของ ref) ไล่จากกลางจอออกไปขอบ ขยายนิดตอนเข้า หลังการ์ดเริ่มลงกำแพง ──
-     * ตั้งแต่เริ่มเปิด ค้างเต็มแล้วพุ่งออกไปกับท่าเปิด (ไม่จางหายตอนการ์ดเริ่มพับกลับ)
+     * ── ช่องกำแพง: ผลิเป็นระลอกจาก seed (ช่อง INIT) — ทั้งกำแพงยึดกับ seed ระหว่างแปลงร่าง (zS / _zc) · แต่ละช่องโตจาก 40% + ชัดขึ้น
+     * ลอยจาก 75% ของระยะจาก INIT (ตามผิวกระบอก) ลงช่องตัวเอง · ขากลับ (กำแพงเปิดแล้ว) ย้อนทาง: แรงดันของท่าเปิดลดตามความคืบหน้า
+     * — ช่องริมหุบก่อน ทุกช่องกลับเข้า INIT กลางจอ · ช่อง INIT กลับเข้ากลางจอทันพอดีตอน seed รับช่วง ──
      */
+    const zS = (ICON_S * sd + (cw - ICON_S * sd) * morphK) / cw
+    _zc.lerpVectors(_pF, seedP, morphK)
     res.fillOf.forEach((list, w) => {
       const im = fills.current[w]
       if (!im) return
       const al = res.fillAlpha[w]
       list.forEach((n, slot) => {
         const t = TILES[n]
-        const a = L.open > 0.001 ? 1 : smooth(Math.min(1, Math.max(0, (L.unf - 0.22 - Math.min(t.rank, 6) * 0.075) / 0.3)))
-        const front = tilePose(t, _p2, _qT)
+        const init = n === INIT_N
+        const a = init ? 1 : easeOut(Math.min(1, Math.max(0, (L.unf - GROW_AT[n]) / GROW[2])))
+        const kk = 0.75 + 0.25 * a
+        _vt.col = INIT.col + (t.col - INIT.col) * kk
+        _vt.y = INIT.y + (t.y - INIT.y) * kk
+        _vt.h = t.h
+        _vt.rank = t.rank
+        const front = tilePose(_vt, _p2, _qT, init ? smooth((L.unf - SEED_MORPH) / (1 - SEED_MORPH)) : a)
+        if (morphK < 1) _p2.sub(seedP).multiplyScalar(zS).add(_zc)
         if (hovK[n] > 0.001) _p2.add(_v.set(0, 0, 1).applyQuaternion(_qT).multiplyScalar(hovK[n] * cw * 0.12))
-        const sc = front > 0.05 && a > 0.001 ? (0.93 + 0.07 * a) * (1 + HOVER_K * hovK[n]) : 0
-        _mT.compose(_p2, _qT, _sT.set(cw * sc + 1e-5, cw * t.h * sc + 1e-5, 1))
+        /* ช่อง INIT = seed ระหว่างแปลงร่าง (seed วาดแทน) */
+        const sc = front > 0.05 && a > 0.001 && (!init || morphK >= 1) ? zS * (0.4 + 0.6 * a) * (1 + HOVER_K * hovK[n]) : 0
+        _mT.compose(_p2, _qT, _sT.set(cw * sc + 1e-5, cw * _vt.h * sc + 1e-5, 1))
         im.setMatrixAt(slot, _mT)
         al.setX(slot, a)
       })
       im.instanceMatrix.needsUpdate = true
       al.needsUpdate = true
-      im.visible = L.unf > 0.22 || (L.open > 0.001 && L.open < 0.999)
+      im.visible = L.unf > 0
     })
   })
 
   return (
     <>
       <mesh ref={wall} geometry={res.face} material={res.wallMat} position={res.wallPos} scale={res.wallScale} renderOrder={-2} />
+      {/* เมล็ด gallery: การ์ดใบสุดท้ายที่แปลงร่างเป็นช่องกลางกำแพง — วาดทับช่องที่ยังซ้อนอยู่ข้างหลัง */}
+      <mesh ref={seed} geometry={res.unit} material={res.seedMat} renderOrder={2} visible={false} frustumCulled={false} />
       {/* ใบแรก = ไอคอนแอป (ฉาก Code หดลงมาเป็นใบนี้) — พลิกออกเป็นใบแรก แล้วหดหายกลางกำแพง */}
       <group
         ref={(n) => {
@@ -720,7 +793,7 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
       </group>
       {WORKS.map((w, k) => {
         const i = k + 1
-        const a = k % ARTS.length
+        const a = k % DECK_ARTS.length
         return (
           <group
             key={w.name}
@@ -737,22 +810,6 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
               <mesh geometry={res.body} material={res.edgeMats[a]} />
               <mesh geometry={res.face} material={res.artMats[a]} position={[0, 0, ICON_S * 0.011]} />
               <mesh geometry={res.face} material={res.artMats[a]} position={[0, 0, -ICON_S * 0.011]} rotation={[0, Math.PI, 0]} />
-            </group>
-            <group
-              ref={(n) => {
-                covers.current[i] = n
-              }}
-              visible={false}
-            >
-              {/* รูปปก (กว้างเท่าการ์ด · สูงยืดตามสัดส่วนภาพ) สองด้าน — ด้านหลังเห็นตอนพลิกกลางทาง */}
-              <group
-                ref={(n) => {
-                  coverFace.current[i] = n
-                }}
-              >
-                <mesh geometry={res.face} material={res.tileMats[k]} />
-                <mesh geometry={res.face} material={res.tileMats[k]} rotation={[0, Math.PI, 0]} />
-              </group>
             </group>
           </group>
         )
