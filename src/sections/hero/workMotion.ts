@@ -312,7 +312,12 @@ export const STICKER_STORY = POST_CODE === 'sticker'
 export const ROLO_STORY = POST_CODE === 'rolodex'
 /** เครื่องไม่พุ่งชนคำ Code (ไม่มีแรงกระแทก วิดเจ็ตไม่กระจาย ฟ้าไม่ขยาย ไม่มีโฟลเดอร์/การ์ดของเรื่องเดิม) */
 export const NO_CRASH = POST_CODE !== 'crash'
-/** เครื่องพุ่งชนคำ Code (แรงกระแทก แสงวาบ วิดเจ็ตกระจาย) — เรื่อง rolodex ชนด้วย แต่ไม่มีท้ายเรื่องชนเดิม (ฟ้าขยาย/โฟลเดอร์) */
+/**
+ * ทางออกบท Code แบบ pay.ethena.fi (เรื่อง rolodex): หลังเครื่องพุ่งชนคำ ฉาก Code ทั้งจอหดลงเป็นไอคอนแอปกลางจอ
+ * (ดู iconOut ใน ./RolodexStage และการ์ด/คำประกบไอคอนใน ./WorkStory)
+ */
+export const ICON_OUT = ROLO_STORY
+/** เครื่องพุ่งชนคำ Code (แรงกระแทก แสงวาบ วิดเจ็ตกระจาย) — เรื่อง rolodex ชนแล้วต่อด้วยฉากหดเป็นไอคอน (ICON_OUT) */
 export const CRASH_HIT = POST_CODE === 'crash' || ROLO_STORY
 /**
  * เรื่องโลก (planet) — บท Code: โลกผุดจากจอเครื่องแล้วลอยไปที่ [เริ่ม, ยาว]

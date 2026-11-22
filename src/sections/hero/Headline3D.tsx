@@ -1917,7 +1917,8 @@ export function Headline3DField({
           <div className="absolute" style={{ inset: `${-pad}px`, pointerEvents: 'none' }}>
             <Canvas
               aria-hidden
-              style={{ width: '100%', height: '100%' }}
+              /* ไม่รับเมาส์จริง ๆ — div ของ r3f ตั้ง pointer-events: auto เอง ชนะ none ของกล่องแม่ แล้วบังคลิกของฉาก hero (สวิตช์) */
+              style={{ width: '100%', height: '100%', pointerEvents: 'none' }}
               frameloop="demand"
               dpr={[1, 1.75]}
               orthographic

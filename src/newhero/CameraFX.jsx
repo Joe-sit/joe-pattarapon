@@ -1,6 +1,7 @@
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame, useThree } from '@react-three/fiber'
+import { devK } from './devMode'
 
 /**
  * เอฟเฟกต์กล้อง — วาดฉากลงบัฟเฟอร์ก่อน แล้วค่อยเอามาบิดตอนพ่นลงจอ
@@ -53,6 +54,7 @@ const FRAG = /* glsl */ `
   uniform float uRimShade;
   uniform vec3 uRimL;
   uniform vec2 uProj;
+  uniform float uNight;
 
   /**
    * แปลง linear -> sRGB เอง
@@ -225,6 +227,15 @@ const FRAG = /* glsl */ `
     }
     // uTone 0 = ไม่ tone map (โหมดแบน) แค่คูณ exposure แล้วตัดที่ 1
     col = uTone > 0.5 ? acesFilmic(col) : clamp(col * uExposure, 0.0, 1.0);
+    /*
+     * dev mode (./devMode): ย้อมทั้งฉากเป็นกลางคืน — มืดลง อมน้ำเงิน ลดความอิ่มนิด ของที่สว่างจัดยังเรืองอยู่บ้าง
+     * ทำที่ขั้นสุดท้ายนี้ เพราะวัสดุ cel คิดสีจากอัตราส่วนแสง หรี่ไฟอย่างเดียวไม่ทำให้มืด
+     */
+    if (uNight > 0.0001) {
+      float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      vec3 night = mix(vec3(l), col, 0.62) * vec3(0.14, 0.17, 0.34) + vec3(0.6, 0.7, 1.0) * pow(l, 4.0) * 0.3 + vec3(0.002, 0.003, 0.01);
+      col = mix(col, night, uNight);
+    }
     gl_FragColor = vec4(toSRGB(col), alpha);
   }
 `
@@ -323,6 +334,7 @@ export function CameraFX({
         uRimDir: { value: new THREE.Vector2(0, 1) },
         uRimColor: { value: new THREE.Color('#fff3dc') },
         uExposure: { value: 1 },
+        uNight: { value: 0 },
         uTone: { value: 1 },
         uRimFall: { value: 1.5 },
         uRimShade: { value: 0.7 },
@@ -375,6 +387,7 @@ export function CameraFX({
     m.uRimColor.value.set(rimColor)
     m.uExposure.value = gl.toneMappingExposure
     m.uTone.value = tone
+    m.uNight.value = devK()
     m.uRimFall.value = rimFall
     m.uRimShade.value = rimShade
     // ทิศไฟ 3 มิติใน view space: ทิศบนจอ + ถอยไปหลังตัว (z ลบ = ไกลจากกล้อง)

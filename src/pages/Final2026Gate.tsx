@@ -778,7 +778,7 @@ export function Final2026Gate() {
           />
         ))}
       </svg>
-      <ThoughtLine progress={progress} done={ready || morphing} leaving={leaving || morphing} />
+      <ThoughtLine done={ready || morphing} leaving={leaving || morphing} />
     </div>
   )
 }
@@ -788,7 +788,7 @@ export function Final2026Gate() {
  * พูดแทน Joe: กำลังเตรียมตัว (ดาวน์โหลด) → รออยู่ (เตรียมฉาก) → พร้อมเจอแล้ว (นิ่ง ไม่มีแสงกวาด)
  * % = ความคืบหน้ารวมจริงของทุกด่านที่รอ (loadView — ตัวเดียวกับที่จุดเติม) · เรนเดอร์ใหม่เฉพาะชิ้นนี้ 10 ครั้ง/วินาที
  */
-function ThoughtLine({ progress, done, leaving }: { progress: number; done: boolean; leaving: boolean }) {
+function ThoughtLine({ done, leaving }: { done: boolean; leaving: boolean }) {
   const [, setTick] = useState(0)
   const box = useRef<HTMLDivElement>(null)
   const line = useRef<HTMLSpanElement>(null)
@@ -843,7 +843,7 @@ function ThoughtLine({ progress, done, leaving }: { progress: number; done: bool
     return () => window.clearInterval(id)
   }, [done])
   const pct = Math.round(loadView.shown * 100)
-  const label = done ? 'Joe is ready to meet you' : progress < 1 ? `Joe is getting ready · ${pct}%` : `Joe is waiting for you · ${pct}%`
+  const label = done ? 'Joe is ready to meet you' : `Loading the world · ${pct}%`
   return (
     <div
       ref={box}

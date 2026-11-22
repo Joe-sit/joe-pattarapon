@@ -29,7 +29,7 @@ export const ROAD_UNDOLLY = [2.25, 0.15] as const
  */
 const HOME = ROLO_STORY ? ([-0.4, 0.16] as const) : ROAD_HOME
 /* rolodex: เริ่มดันทันทีหลังแรงชน (ช้าแล้วเร่ง ต่อจากแรงพุ่งที่ค่อย ๆ หมด) — เครื่องไม่หยุดนิ่งระหว่างชนกับเข้าไอคอน */
-const DOLLY = ROLO_STORY ? ([-0.42, 0.8] as const) : ROAD_DOLLY
+export const DOLLY = ROLO_STORY ? ([-0.42, 0.8] as const) : ROAD_DOLLY
 /* rolodex: ถอยออกหลังช่วง Selected Projects (./RolodexStage — ตัดกลับหน้าโฮมที่ 2.26) ให้เสร็จก่อนบท Ship */
 const UNDOLLY = ROLO_STORY ? ([2.28, 0.14] as const) : ROAD_UNDOLLY
 

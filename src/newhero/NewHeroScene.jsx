@@ -18,6 +18,7 @@ import { StackedWindows } from './StackedWindows'
 import { Tetris } from './Tetris'
 import { CameraFX } from './CameraFX'
 import { Switch } from './Switch'
+import { devKnob, toggleDevMode } from './devMode'
 import { Appear } from './Appear'
 import { panelScreen } from './panelScreen'
 import { PortalFx } from './PortalFx'
@@ -2718,10 +2719,12 @@ function Scene({ bare = false }) {
   const swPos = useMemo(
     () => () => {
       const tt = getTuner()
-      if (tt.intro < 0.5) return tt.bcPos
+      /* หลังอินโทร: ปุ่มอยู่ขวา = design · กดสวิตช์ → dev ปุ่มเลื่อนไปซ้าย (./devMode) */
+      const mode = 1 - devKnob()
+      if (tt.intro < 0.5) return tt.bcPos * mode
       const u = (introTime() - clickAt) / 0.35
       if (u <= 0) return 0
-      return tt.bcPos * (u >= 1 ? 1 : introBack(u, 1.7))
+      return tt.bcPos * (u >= 1 ? 1 : introBack(u, 1.7)) * mode
     },
     [clickAt],
   )
@@ -3113,6 +3116,7 @@ function Scene({ bare = false }) {
             position={[t.bcX, t.bcY, t.bcZ]}
             rotation={[t.bcRotX * RAD, t.bcRotY * RAD, t.bcRotZ * RAD]}
             scale={t.bcScale}
+            onPress={toggleDevMode}
           />
           </Appear>
         )}

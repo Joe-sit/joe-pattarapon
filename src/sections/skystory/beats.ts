@@ -45,7 +45,8 @@ const SLOW_K = 1.7
  * ยืดช่วง Selected Work (บท works) — งาน compile ทีละชิ้น (hero/AsciiWorks) ต้องมีระยะเลื่อนพอให้อ่านทีละงาน
  * ไม่ยืด = งานละราว 0.15 จอ เลื่อนนิดเดียวผ่านไปแล้ว
  */
-const WORKS_K = 2.4
+/* 2.8: กำแพงผลงาน (hero/RolodexStage) ต้องมีช่วงค้างให้มองรอบ ก่อน "เปิด" แล้วพับกลับ */
+const WORKS_K = 2.8
 /** ช่วงที่ยืด [เริ่ม, จบ, เท่า] (หน่วย sv2 · เรียงตามลำดับ ไม่ทับกัน) */
 const STRETCH: readonly (readonly [number, number, number])[] = [
   [SLOW[0], SLOW[1], SLOW_K],

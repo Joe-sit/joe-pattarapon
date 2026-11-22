@@ -18,18 +18,19 @@ import { MapInfo, MapStage } from './MapStage'
 import { mapPhase } from './mapWorld'
 import { RoadInfo, RoadStage } from './RoadStage'
 import { RoadHome } from './RoadHome'
-import { roadCut, roadPhase } from './roadWorld'
+import { ICON_PX, roadCut, roadPhase } from './roadWorld'
 import { AsciiWorks, asciiPhase } from './AsciiWorks'
 import { DeskStage, deskPhase } from './DeskStage'
 import { SwitcherStage } from './SwitcherStage'
 import { FoldStage } from './FoldStage'
 import { StickerBacking, StickerStage, stickerPhase } from './StickerStage'
-import { RolodexStage } from './RolodexStage'
+import { RolodexStage, iconOut, rolodexPhase, rolodexSpan, rolodexWord, wordFont, worksPaper } from './RolodexStage'
 import { SlingRider } from './SlingRider'
 import { AsciiClouds, type CloudBlob } from '@/components/AsciiClouds'
 import { DECK_WORKS } from './WorksGallery'
 import { ISLAND } from './ResearchPlatform'
-import { CODE_HIT, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, TILE_SLOTS, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, STORY_FONT, GRASS_STORY, NO_CRASH, PLANET_STORY, MAP_STORY, ROAD_STORY, ASCII_STORY, DESK_STORY, SWITCHER_STORY, FOLD_STORY, STICKER_STORY, ROLO_STORY, CRASH_HIT, PLANET_EMERGE, GRASS_OPEN, CUT, type WorkBeats } from './workMotion'
+import { BRAND_ICONS } from '../stack/brand-icons'
+import { CODE_HIT, HIT_FLY, FOV, camDist, clamp01, devHook, devScreen, headPose, isTall, smooth, workBeats, worksPostSm, worksWordLayout, worksUI, TILE_SLOTS, WORKS_HAND, WORKS_HOLD, WORKS_TEXT, STORY_FONT, GRASS_STORY, NO_CRASH, PLANET_STORY, MAP_STORY, ROAD_STORY, ASCII_STORY, DESK_STORY, SWITCHER_STORY, FOLD_STORY, STICKER_STORY, ROLO_STORY, ICON_OUT, CRASH_HIT, PLANET_EMERGE, GRASS_OPEN, CUT, type WorkBeats } from './workMotion'
 
 /**
  * เครื่องแก้วเป็นโต๊ะทำงาน — เรื่องต่อจาก "Here is what I do"
@@ -165,7 +166,7 @@ function cssBaseline(g: OffscreenCanvasRenderingContext2D | CanvasRenderingConte
   const d = mt.fontBoundingBoxDescent
   return (lineH - (a + d)) / 2 + a
 }
-type DisMask = { w: number; h: number; font: string; cov: Float32Array; cols: number; rows: number }
+type DisMask = { w: number; h: number; font: string; text: string; cov: Float32Array; cols: number; rows: number }
 /** ความหนาแน่นของเนื้อตัวอักษรต่อช่อง — ถ่ายตัวอักษรจริง (ฟอนต์/ขนาดเดียวกับคำบนจอ) ลงแคนวาสแล้วเฉลี่ยต่อช่อง */
 function disMask(el: HTMLElement, text: string, prev: DisMask | null): DisMask | null {
   const r = el.getBoundingClientRect()
@@ -174,7 +175,7 @@ function disMask(el: HTMLElement, text: string, prev: DisMask | null): DisMask |
   const w = Math.ceil(el.offsetWidth)
   const h = Math.ceil(el.offsetHeight)
   if (!w || !h || !r.width) return null
-  if (prev && prev.w === w && prev.h === h && prev.font === font) return prev
+  if (prev && prev.w === w && prev.h === h && prev.font === font && prev.text === text) return prev
   const c = new OffscreenCanvas(w, h)
   /* willReadFrequently: เก็บแคนวาสไว้ฝั่ง CPU — อ่าน getImageData แล้วไม่ต้องรอดึงพิกเซลกลับจาก GPU */
   const g = c.getContext('2d', { willReadFrequently: true })
@@ -191,14 +192,65 @@ function disMask(el: HTMLElement, text: string, prev: DisMask | null): DisMask |
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) cov[Math.floor(y / DIS_CELL) * cols + Math.floor(x / DIS_CELL)] += d[(y * w + x) * 4 + 3] / 255
   for (let i = 0; i < cov.length; i++) cov[i] /= DIS_CELL * DIS_CELL
-  return { w, h, font, cov, cols, rows }
+  return { w, h, font, text, cov, cols, rows }
 }
 
-const SKILL_WORDS: { key: 'study' | 'design' | 'code'; w: string }[] = [
+/* เรื่อง rolodex: Selected Work เป็นบทที่สี่ในชุดเดียวกัน (คำใหญ่ขาว ตัวทึบหลังเครื่อง + เส้นขอบ) — จังหวะอยู่ที่ rolodexWord */
+const SKILL_WORDS: { key: 'study' | 'design' | 'code' | 'works'; w: string }[] = [
   { key: 'study', w: 'Research' },
   { key: 'design', w: 'Design' },
   { key: 'code', w: 'Code' },
+  ...(ROLO_STORY ? [{ key: 'works' as const, w: 'Selected Work' }] : []),
 ]
+const WORD_CLS = 'absolute top-[28%] left-1/2 leading-none font-bold tracking-[-0.055em] whitespace-nowrap text-white will-change-[transform,opacity,filter]'
+/* CODE_FRONT: บท Code เป็นหัวเรื่องหน้าเครื่องระดับขอบฟ้า · ปิด = คำใหญ่หลังเครื่องแบบบทอื่น (ของเดิม) */
+const wordStyle = (key: string) =>
+  key === 'code' && CODE_FRONT
+    ? { visibility: 'hidden' as const, fontFamily: STORY_FONT, fontSize: CODE_FONT, top: `${CODE_HEAD_Y * 100}%`, fontWeight: 500, letterSpacing: '-0.035em' }
+    : key === 'works'
+      ? /* เงานุ่ม: หัวเรื่องอยู่บนกำแพงรูปผลงาน (ICON_OUT) — อ่านออกบนรูปสว่าง */
+        { visibility: 'hidden' as const, fontFamily: STORY_FONT, fontSize: wordFont(), top: '50%', textShadow: '0 2px 24px rgba(10,30,80,0.4)' }
+      : { visibility: 'hidden' as const, fontFamily: STORY_FONT, fontSize: 'clamp(110px,23vw,420px)' }
+
+/*
+ * ── บท Code (ref: pay.ethena.fi hero "The Internet Money App") ──
+ * พื้นมืด · ขอบดาวเคราะห์โค้งเรืองแสงครึ่งล่างของจอ · เครื่องยืนกลางจอ ท่อนล่างจมหายหลังขอบฟ้า
+ * หัวเรื่องใหญ่ทับหน้าเครื่องตรงระดับขอบฟ้า · บรรทัดรอง · แคปซูลใต้บรรทัดรอง
+ * ชั้นหน้า (CODE_FRONT): หัวเรื่อง/บรรทัดรอง/แคปซูล/ผงสลายอยู่เหนือเครื่องแก้ว — เครื่องพุ่งชนจากข้างหลังแล้วคำแตกออกมาหน้าจอ
+ */
+/* ปิดไว้ — บท Code กลับเป็นของเดิม (คำใหญ่หลังเครื่อง + เครื่องพุ่งชนคำ) · ทางออกแบบ ethena (ICON_OUT) ยังใช้ต่อหลังชน */
+const CODE_FRONT = false
+const CODE_FONT = 'clamp(96px,11vw,210px)'
+/** กลางหัวเรื่อง (สัดส่วนความสูงจอ) — ต่ำกว่าขอบฟ้านิด แบบ ref */
+const CODE_HEAD_Y = 0.56
+/** ขอบฟ้า: ยอดวงดาวเคราะห์ (สัดส่วนความสูงจอ) · รัศมี (เท่าความกว้างจอ — วัดจากความโค้งใน ref) */
+const PLANET = { top: 0.46, r: 0.72 }
+/** บรรทัดรองของบท = คำอธิบายจริงของ Coding (sections/whatido SKILLS) */
+const CODE_SUB = 'Bringing a design into real functional application.'
+/** แคปซูล: stack ที่ใช้จริงกับงานนี้ (ชุดเดียวกับแป้นของ sections/stack/StackKeys) */
+const CODE_STACK = ['React', 'TypeScript', 'three.js', 'GSAP'] as const
+
+/*
+ * ── ทางออกบท Code แบบ pay.ethena.fi (ICON_OUT — iconOut ใน ./RolodexStage) ──
+ * ฉาก Code ทั้งจอ (ชั้นมืด + ดาว) หดเป็นการ์ดมุมมนกลางจอ → จัตุรัส → ไอคอนแอป (กว้าง ICON_PX = การ์ดใบแรกของ rolodex)
+ * นอกการ์ดเป็นฟ้าของเรื่อง (ref เป็นขาว) · ข้างในกล้องถอยจากขอบฟ้าจนเห็นดาวทั้งลูก แล้วจางเป็น favicon ส่งต่อให้ปึก
+ * คำ "Selected" / "Work" เข้ามาประกบไอคอน (ref: "The Internet [ไอคอน] Money App") · ถ่างออกตามปึกตอนกาง
+ */
+/** การ์ด ณ ความคืบหน้า io (px): สูงหดแบบทวีคูณ (ซูมสม่ำเสมอ) · กว้างหดไวกว่าจนเท่าสูงที่ io 0.6 แล้วเป็นจัตุรัส · มุมมนโตจนเท่าไอคอน */
+function iconCard(io: number, W: number, H: number) {
+  const I = ICON_PX * H
+  const hAt = (x: number) => H * Math.pow(I / H, smooth(x))
+  const h = hAt(io)
+  const w = io >= 0.6 ? h : W * Math.pow(hAt(0.6) / W, smooth(io / 0.6))
+  return { w, h, r: Math.min(w, h) * (0.03 + 0.195 * smooth(io)) }
+}
+/** ระยะเว้นระหว่างไอคอน/ปึกกับคำที่ประกบ (px) */
+const flankPad = (W: number) => Math.max(W * 0.03, 26)
+const brandFill = (name: string) => {
+  const hex = BRAND_ICONS[name]?.hex ?? '#ffffff'
+  /* โลโก้สีดำ (three.js) บนพื้นมืดของบทนี้มองไม่เห็น — ใช้ขาว */
+  return hex.toLowerCase() === '#000000' ? '#ffffff' : hex
+}
 
 export function WorkStory() {
   const frame = useRef<Frame>({ on: false, b: workBeats(0) })
@@ -245,6 +297,20 @@ export function WorkStory() {
   const dark = useRef<HTMLDivElement>(null)
   const blackout = useRef<HTMLDivElement>(null)
   const liftNow = useRef(0)
+  /* บท Code: ชั้นหน้าเครื่อง (หัวเรื่อง/บรรทัดรอง/แคปซูล) · ดาวเคราะห์ในชั้นมืด · ชั้นเครื่องแก้ว (จางท่อนล่างหลังขอบฟ้า) */
+  const codeTop = useRef<HTMLDivElement>(null)
+  const codeSub = useRef<HTMLDivElement>(null)
+  const planet = useRef<HTMLDivElement>(null)
+  const glassLayer = useRef<HTMLElement | null>(null)
+  /* ICON_OUT: เนื้อในชั้นมืด (ซูมออก) · favicon ในการ์ดตอนท้าย · ช่องว่างกลางคำ Selected Work (ชั้นตัวทึบ + ชั้นเส้นขอบ) */
+  const darkIn = useRef<HTMLDivElement>(null)
+  const iconFace = useRef<HTMLImageElement>(null)
+  const worksGap = useRef<(HTMLSpanElement | null)[]>([])
+  const worksPart = useRef<(HTMLSpanElement | null)[]>([])
+  /* พื้นขาวของบท Selected Work — เหนือฟ้า ใต้ชั้นมืด (การ์ดฉาก Code ที่กำลังหดยังมืดอยู่บนพื้นขาว) */
+  const paperBg = useRef<HTMLDivElement>(null)
+  /* กล่องคำ Selected Work ก่อนแปลง (วัดใหม่เมื่อจอเปลี่ยนขนาด/ฟอนต์โหลดเสร็จ) — ใช้หาท่าหัวเรื่องซ้ายบน */
+  const worksBox = useRef({ key: '', w: 0, h: 0, a: 0, c: 0, sp: 0 })
   const tileLabels = useRef<(HTMLSpanElement | null)[]>([])
   const tileArrows = useRef<(HTMLSpanElement | null)[]>([])
   const hitFlash = useRef<HTMLDivElement>(null)
@@ -320,7 +386,8 @@ export function WorkStory() {
     }
     g.setTransform(dpr, 0, 0, dpr, 0, 0)
     g.clearRect(0, 0, vw, vh)
-    const m = disMask(el, SKILL_WORDS[ci].w, disMaskRef.current)
+    const text = el.textContent ?? ''
+    const m = disMask(el, text, disMaskRef.current)
     disMaskRef.current = m
     if (!m) return
     const r = el.getBoundingClientRect()
@@ -354,7 +421,7 @@ export function WorkStory() {
       g.fillStyle = '#fff'
       g.translate(r.left, r.top)
       g.scale(sx, sx)
-      g.fillText(SKILL_WORDS[ci].w, 0, cssBaseline(g, SKILL_WORDS[ci].w, m.h))
+      g.fillText(text, 0, cssBaseline(g, text, m.h))
       g.restore()
       g.save()
       g.globalCompositeOperation = 'destination-out'
@@ -465,8 +532,9 @@ export function WorkStory() {
         g.fillStyle = `rgba(${rgb},${a.toFixed(3)})`
         g.fillText(DIS_RAMP[lvl], x, y)
       }
-    /* รูตามกรอบเครื่อง เจาะในแคนวาสเอง — ไม่ใช้ clip-path บนชั้นแคนวาสเต็มจอ (เปลี่ยนทุกเฟรม = repaint ทั้งจอ หน่วงหนัก) */
-    if (devScreen.ok && devScreen.hw > 1) {
+    /* รูตามกรอบเครื่อง เจาะในแคนวาสเอง — ไม่ใช้ clip-path บนชั้นแคนวาสเต็มจอ (เปลี่ยนทุกเฟรม = repaint ทั้งจอ หน่วงหนัก)
+       หัวเรื่องอยู่หน้าเครื่อง (CODE_FRONT) = ไม่มีรู */
+    if (!CODE_FRONT && devScreen.ok && devScreen.hw > 1) {
       const { cx, cy, hw, hh } = devScreen
       g.globalCompositeOperation = 'destination-out'
       g.beginPath()
@@ -504,7 +572,8 @@ export function WorkStory() {
       /* เจาะรูคำใหญ่ตามกรอบเครื่องทุกเฟรม (เครื่องขยับเองตามเวลา ไม่ใช่แค่ตอนเลื่อน) */
       const bs = wordsClip.current
       if (bs) {
-        if (devScreen.ok && devScreen.hw > 1) {
+        /* ICON_OUT: เครื่องจางหายระหว่างฉากหดเป็นไอคอน (กรอบยังมีแต่มองไม่เห็น) — ไม่เจาะรูคำ */
+        if (devScreen.ok && devScreen.hw > 1 && !(ICON_OUT && iconOut(frame.current.b) > 0.2)) {
           const { cx, cy, hw, hh } = devScreen
           const r = Math.min(devScreen.r, hw, hh)
           const x0 = cx - hw
@@ -639,7 +708,11 @@ export function WorkStory() {
         benchCv.current.style.visibility =
           (GRASS_STORY && b.code >= GRASS_OPEN[0] + GRASS_OPEN[1] && b.ship <= 0) || ((ROAD_STORY || ROLO_STORY) && roadCut(roadPhase(b))) || (ASCII_STORY && asciiPhase(b).dolly > 0.999) || (DESK_STORY && deskPhase(b).opaque) || (STICKER_STORY && stickerPhase(b).gone) ? 'hidden' : ''
         /* เรื่องโลก: จอเครื่องล้างของบนจอออกตอนโลกเริ่มผุด (เห็นชัดว่าโลกออกมาจากจอ) · กลับมาพร้อมเครื่องตอนต้นบท Ship */
-        benchCv.current.style.opacity = PLANET_STORY ? (1 - smooth((b.code - PLANET_EMERGE[0] + 0.03) / 0.07) * (1 - smooth(b.ship / 0.25))).toFixed(3) : ''
+        benchCv.current.style.opacity = PLANET_STORY
+          ? (1 - smooth((b.code - PLANET_EMERGE[0] + 0.03) / 0.07) * (1 - smooth(b.ship / 0.25))).toFixed(3)
+          : ICON_OUT
+            ? /* ของบนจอจางไปพร้อมตัวเครื่อง (BubbleTraveler devFade) */ (1 - smooth((live ? iconOut(b) : 0) / 0.22)).toFixed(3)
+            : ''
       }
       frame.current.on = live
       /* ทั้งชั้นเลื่อนขึ้นด้วย CSS ตอนจอถัดไปดันขึ้นมาแล้ว — ฟ้าไม่ต้องยกเอง (lift 0) */
@@ -679,9 +752,42 @@ export function WorkStory() {
         const ap = ASCII_STORY ? asciiPhase(b) : null
         /* เรื่อง desk: ฉากมืดอยู่ใต้ฉากโต๊ะจนส่งไม้กลับ แล้วหายทันที (ฉากโต๊ะยังทับอยู่ — ข้างใต้กลายเป็นฟ้ารอ) */
         const dp = DESK_STORY ? deskPhase(b) : null
-        const q = ap ? ap.open : dp ? (dp.sky ? 1 : 0) : smooth((b.code - DARK_OUT) / (1 - DARK_OUT))
-        const show = kin > 0.002 && q < 0.999 && (ap ? ap.post < ap.end : dp ? !dp.sky : b.code < 1)
+        /* ICON_OUT: ไม่เปิดรูเป็นฟ้า — ทั้งชั้นหดเป็นไอคอนแทน (ดูข้างล่าง) อยู่จนถึงเฟรมตัดเข้าปึก */
+        const io = live ? iconOut(b) : 0
+        const q = ICON_OUT ? 0 : ap ? ap.open : dp ? (dp.sky ? 1 : 0) : smooth((b.code - DARK_OUT) / (1 - DARK_OUT))
+        const show = kin > 0.002 && q < 0.999 && (ICON_OUT ? io < 0.999 && (b.code < 1 || io > 0) : ap ? ap.post < ap.end : dp ? !dp.sky : b.code < 1)
         dk.style.visibility = show ? 'visible' : 'hidden'
+        const di = darkIn.current
+        const face = iconFace.current
+        if (ICON_OUT && di) {
+          if (show && io > 0) {
+            const cd = iconCard(io, vw, vh)
+            const l = (vw - cd.w) / 2
+            const t = (vh - cd.h) / 2
+            dk.style.clipPath = `inset(${t.toFixed(1)}px ${l.toFixed(1)}px ${t.toFixed(1)}px ${l.toFixed(1)}px round ${cd.r.toFixed(1)}px)`
+            /* กล้องถอย: ซูมออกรอบจุดที่ไหลจากกลางจอไปกลางดาว — จบที่ดาวทั้งลูกพอดีในไอคอน */
+            const pR = Math.max(vw * PLANET.r, vh * 0.9)
+            /* ถอยจนเห็นดาวทั้งลูกก่อน favicon จางเข้ามาแทน (แบบ ref — โลกทั้งใบอยู่ในไอคอน) */
+            const g = smooth((io - 0.08) / 0.62)
+            /* มีดาว (CODE_FRONT): ถอยจนดาวทั้งลูกอยู่ในไอคอน · ไม่มี: ทั้งฉาก (ดำ + แสงม่วง + เมฆ ASCII) ย่อลงเป็นฉากจิ๋วในไอคอน */
+            const sc = Math.pow(CODE_FRONT ? (ICON_PX * vh * 0.86) / (2 * pR) : ICON_PX * 1.3, g)
+            const px = vw / 2
+            const py = CODE_FRONT ? vh / 2 + (vh * PLANET.top + pR - vh / 2) * g : vh / 2
+            di.style.transform = `translate(${(vw / 2).toFixed(1)}px, ${(vh / 2).toFixed(1)}px) scale(${sc.toFixed(5)}) translate(${(-px).toFixed(1)}px, ${(-py).toFixed(1)}px)`
+            if (face) {
+              const fo = smooth((io - 0.7) / 0.22)
+              face.style.visibility = fo > 0.002 ? 'visible' : 'hidden'
+              face.style.opacity = fo.toFixed(3)
+              face.style.width = `${cd.w.toFixed(1)}px`
+              face.style.height = `${cd.h.toFixed(1)}px`
+              face.style.transform = `translate(${l.toFixed(1)}px, ${t.toFixed(1)}px)`
+            }
+          } else {
+            if (dk.style.clipPath) dk.style.clipPath = ''
+            if (di.style.transform) di.style.transform = ''
+            if (face) face.style.visibility = 'hidden'
+          }
+        }
         if (show) {
           dk.style.opacity = kin.toFixed(3)
           if (q > 0.001) {
@@ -717,9 +823,62 @@ export function WorkStory() {
       if (blackout.current) blackout.current.style.opacity = bo.toFixed(3)
       /* เรื่องแผนที่: ผงคำ Code ที่สลายอยู่จางหายตอนเมืองโผล่ (ไม่ลอยทับพื้นเมือง) */
       /* เรื่องถนน: จางตอนจอเครื่องเป็นหน้าโฮม (พื้นสว่างของฉากถนนกลบฉาก Code) */
-      const fo = Math.max(bo, MAP_STORY && live ? Math.min(1, mapPhase(b).map * 1.6) : 0, (ROAD_STORY || ROLO_STORY) && live ? Math.min(1, roadPhase(b).home * 1.4) : 0)
+      const fo = Math.max(bo, MAP_STORY && live ? Math.min(1, mapPhase(b).map * 1.6) : 0, ROAD_STORY && live ? Math.min(1, roadPhase(b).home * 1.4) : 0)
+      /* เรื่อง rolodex: ไม่มีพื้นสว่างกลบ — ผงคำ Code จางตอนจอเป็นหน้าโฮม (ชั้นเส้นขอบคงไว้ — คำ Selected Work ใช้ต่อ) */
+      const foR = ROLO_STORY && live ? Math.min(1, roadPhase(b).home * 1.4) : 0
       if (bigFront.current) bigFront.current.style.opacity = fo > 0 ? (1 - fo).toFixed(3) : ''
-      if (disCanvas.current) disCanvas.current.style.opacity = fo > 0 ? (1 - fo).toFixed(3) : ''
+      const fd = Math.max(fo, foR)
+      if (disCanvas.current) disCanvas.current.style.opacity = fd > 0 ? (1 - fd).toFixed(3) : ''
+
+      /*
+       * ── บท Code (แบบ hero ของ ethena) ──
+       * ดาวเคราะห์ลอยขึ้นจากใต้จอตอนเข้าบท · ท่อนเครื่องใต้ขอบฟ้าจางลง (mask ชั้นเครื่องแก้ว + ของบนจอ) จนเหลือเงาจาง ๆ
+       * พอเครื่องเริ่มพุ่งเข้าชน (CODE_HIT − HIT_FLY) เครื่องออกมาหน้าดาว — mask คลายเป็นทึบ
+       */
+      const cNow2 = live ? b.code : 0
+      const pIn = smooth(cNow2 / 0.18)
+      const pR = Math.max(vw * PLANET.r, vh * 0.9)
+      const pTop = vh * PLANET.top + (1 - pIn) * vh * 0.55
+      const pl = planet.current
+      if (pl) {
+        pl.style.width = `${(pR * 2).toFixed(1)}px`
+        pl.style.height = `${(pR * 2).toFixed(1)}px`
+        pl.style.transform = `translate3d(${(vw / 2 - pR).toFixed(1)}px, ${pTop.toFixed(1)}px, 0)`
+      }
+      if (!glassLayer.current) glassLayer.current = document.getElementById('bubble-layer')
+      const ioC = live ? iconOut(b) : 0
+      const front = ICON_OUT ? 0 : smooth((cNow2 - (CODE_HIT - HIT_FLY)) / 0.08)
+      const maskOn = CODE_FRONT && cNow2 > 0 && cNow2 < 1 && front < 0.999 && ioC < 0.3
+      const pm = maskOn
+        ? `radial-gradient(circle ${(pR + 8).toFixed(1)}px at ${(vw / 2).toFixed(1)}px ${(pTop + lift + pR).toFixed(1)}px, rgba(0,0,0,${(1 - (1 - front) * pIn * 0.9).toFixed(3)}) ${(pR - 60).toFixed(1)}px, #000 ${(pR + 8).toFixed(1)}px)`
+        : ''
+      for (const m of [glassLayer.current, benchCv.current]) {
+        if (!m || m.style.maskImage === pm) continue
+        m.style.maskImage = pm
+        m.style.webkitMaskImage = pm
+      }
+      /* บรรทัดรอง + แคปซูล: ตามหัวเรื่องมาติด ๆ · หลบก่อนเครื่องพุ่งชน */
+      const cs = codeSub.current
+      if (cs) {
+        const kin = smooth((cNow2 - 0.06) / 0.14)
+        /* ICON_OUT: หลบตอนต้นของการหด (แบบ ref — ปุ่ม/บรรทัดรองหายก่อน) · เดิม: ก่อนเครื่องพุ่งชน */
+        const out = ICON_OUT ? smooth(ioC / 0.12) : smooth((cNow2 - (CODE_HIT - HIT_FLY - 0.04)) / 0.06)
+        /* เฉพาะในบท Code (ขาออกของสำรับ iconOut กลับเป็น 0 แต่บทจบแล้ว — ไม่โผล่ซ้ำ) */
+        const v = cNow2 > 0 && cNow2 < 1 && (ICON_OUT ? ioC < 0.12 : cNow2 < CODE_HIT) ? kin * (1 - out) : 0
+        cs.style.visibility = v > 0.002 ? 'visible' : 'hidden'
+        cs.style.opacity = v.toFixed(3)
+        cs.style.transform = `translate(-50%, 0) translate3d(0, ${((1 - kin) * 3).toFixed(2)}vh, 0)`
+        cs.style.filter = kin < 0.999 ? `blur(${((1 - kin) * 8).toFixed(1)}px)` : ''
+      }
+      /* พื้นขาวของบท Selected Work (แทนฟ้าเมฆลายจุด) */
+      const pw = paperBg.current
+      const paperK = live ? worksPaper(b) : 0
+      if (pw) {
+        pw.style.visibility = paperK > 0.001 ? 'visible' : 'hidden'
+        pw.style.opacity = paperK.toFixed(3)
+      }
+      /* ชั้นหน้าขยับตามชั้นหลัก (ยกตามระยะเลื่อน / สั่นตอนชน) */
+      if (codeTop.current && layer.current) codeTop.current.style.transform = layer.current.style.transform
 
       /* ── คำใหญ่พื้นหลังของบท (Research / Design / Code) ── */
       liftNow.current = lift
@@ -727,6 +886,59 @@ export function WorkStory() {
         const el = bigWords.current[i]
         const ln = bigLines.current[i]
         if (!el || !ln) return
+        if (sw.key === 'works') {
+          const wd = rolodexWord(b)
+          /* ไม่มีหัวเรื่องแล้ว — คำประกบจางหาย (ขยายนิด + เบลอ) ตอนการ์ดเริ่มคลี่ลงกำแพง · กลับมาตอนปึกหุบ */
+          const gone = smooth(wd.head / 0.5)
+          const v = live && wd.in > 0 && wd.out < 1 ? wd.in * (1 - wd.out) * (1 - gone) : 0
+          const vis = v > 0.002 ? 'visible' : 'hidden'
+          el.style.visibility = vis
+          ln.style.visibility = vis
+          if (v <= 0.002) return
+          /*
+           * ท่าประกบ (แบบ ref): สองคำอยู่กลางจอ ช่องว่างตรงกลางกว้างเท่าการ์ด/ปึก + ระยะเว้น — ใจกลางช่องอยู่กลางจอพอดี
+           * ขนาดกล่องคำ (ก่อนแปลง) วัดครั้งเดียวต่อขนาดจอ/ฟอนต์: a = "Selected" · c = "Work" · h = สูง
+           */
+          const bx = worksBox.current
+          const bk = `${vw}x${vh}:${document.fonts.status}`
+          if (bx.key !== bk) {
+            bx.key = bk
+            bx.a = worksPart.current[0]?.offsetWidth ?? 0
+            bx.c = worksPart.current[1]?.offsetWidth ?? 0
+            bx.h = el.offsetHeight
+          }
+          const FLANK_S = 0.34
+          /* ช่วงปึกกางเต็ม (ทับคำ) = เปิดเส้นขอบ · นอกนั้นคำอยู่บนฟ้าเปล่า เส้นขอบทำตัวหนาเบลอ — ปิด */
+          const rp = rolodexPhase(b)
+          const deckOver = rp.staged ? smooth((rp.t - 0.45) / 0.12) * (1 - smooth(rp.unf / 0.3)) : 0
+          const io = iconOut(b)
+          const span = io < 0.999 ? iconCard(io, vw, vh).w : rolodexSpan(b) * vh
+          /* ถ่างตามไอคอน/ปึก แต่คำต้องไม่ตกขอบจอ (ปึกกางเต็มกว้างกว่าที่ว่าง — คำจมหลังปึก เหลือเส้นขอบ แบบบท R/D/C) */
+          const gapMax = vw * 0.9 - 2 * Math.max(bx.a, bx.c) * FLANK_S
+          const gap = Math.min(span + flankPad(vw) * 2, gapMax) / FLANK_S
+          const s = FLANK_S * (1 + Math.max(wd.out, gone) * 0.06)
+          worksGap.current.forEach((g) => {
+            if (g) g.style.width = `${gap.toFixed(1)}px`
+          })
+          /* ใจกลางกล่อง: เลื่อนให้ใจกลางช่องว่างอยู่กลางจอ */
+          const cx = vw / 2 + ((bx.c - bx.a) / 2) * FLANK_S
+          const cy = vh / 2 + (1 - wd.in) * vh * 0.06
+          const tf = `translate(-50%, -50%) translate3d(${(cx - vw / 2).toFixed(1)}px, ${(cy - vh / 2).toFixed(1)}px, 0) scale(${s.toFixed(4)})`
+          el.style.transform = tf
+          ln.style.transform = tf
+          /* บนพื้นขาว (worksPaper) คำเป็นหมึกเข้ม — บนฟ้าเป็นขาว */
+          const pk = worksPaper(b)
+          el.style.color = `rgb(${Math.round(255 - 240 * pk)}, ${Math.round(255 - 228 * pk)}, ${Math.round(255 - 194 * pk)})`
+          el.style.textShadow = pk > 0.5 ? 'none' : ''
+          const blur = Math.max((1 - wd.in) * 14, gone * 10)
+          const bl = blur > 0.05 ? `blur(${blur.toFixed(1)}px)` : ''
+          el.style.opacity = v.toFixed(3)
+          /* เส้นขอบ (ขยาย 2 px): เปิดเฉพาะตอนปึกกางเต็มทับคำ (ICON_OUT) */
+          ln.style.opacity = (ICON_OUT ? v * deckOver : v).toFixed(3)
+          el.style.filter = bl
+          ln.style.filter = bl
+          return
+        }
         const k = b[sw.key]
         /* Research ขึ้นตั้งแต่ island งอกเสร็จบนฟอง (ก่อนเครื่องมา) ค้างยาวจนจบบท study */
         const inK = sw.key === 'study' ? smooth((b.sv2 - (ISLAND.grow[0] + ISLAND.grow[1] - 0.05)) / 0.3) : smooth(k / 0.16)
@@ -737,19 +949,25 @@ export function WorkStory() {
          * Code: ตัวทึบส่งต่อให้แคนวาสสลาย — การซ่อนตัว DOM ทำในเฟรมเดียวกับที่แคนวาสวาดตัวทึบแทน (drawDissolve)
          * ถ้าซ่อนตรงนี้ (ตอนเลื่อน) จะมีเฟรมที่ตัว DOM หายแล้วแคนวาสยังไม่วาด = คำกระพริบดำ
          */
-        const fade = sw.key === 'code' ? (dis >= 0.999 ? 1 : 0) : outK
+        /* CODE_FRONT + ICON_OUT: หัวเรื่องหน้าเครื่องจางหาย (ย่อ + เบลอ) ตอนต้นของการหด แทนการสลาย */
+        const ioW = sw.key === 'code' && CODE_FRONT && ICON_OUT && live ? smooth(iconOut(b) / 0.28) : 0
+        const fade = sw.key === 'code' ? (CODE_FRONT && ICON_OUT ? ioW : dis >= 0.999 ? 1 : 0) : outK
         /* เส้นขอบ (ตรงที่เครื่องบัง) จางตามช่วงสลาย ไม่หายวาบ */
         const lineFade = sw.key === 'code' ? smooth(dis / 0.16) : fade
         const on = live && (sw.key === 'study' ? inK > 0 && k < 1 : k > 0 && k < 1)
-        const v = on ? inK * (1 - fade) : 0
-        const vl = on ? inK * (1 - lineFade) : 0
+        /* เรื่อง rolodex: คำ Code (ตัวทึบ/เส้นขอบ) จางไปกับผงสลายตอนจอเป็นหน้าโฮม */
+        const keep = sw.key === 'code' ? 1 - foR : 1
+
+        const v = on ? inK * (1 - fade) * keep : 0
+        const vl = on ? inK * (1 - lineFade) * keep : 0
         el.style.visibility = v > 0.002 ? 'visible' : 'hidden'
         ln.style.visibility = vl > 0.002 ? 'visible' : 'hidden'
         /* ตั้งตำแหน่งเสมอแม้ซ่อน — แคนวาสสลายของ Code วัดกล่องคำนี้ (ถ้าข้าม ตอนเปิดหน้ากลางบทกล่องค้างผิดที่) */
-        const tf = `translate(-50%, -50%) translate3d(0, ${((1 - inK) * 6).toFixed(2)}vh, 0) scale(${(1 + (sw.key === 'code' ? 0 : outK) * 0.06).toFixed(4)})`
+        const tf = `translate(-50%, -50%) translate3d(0, ${((1 - inK) * 6).toFixed(2)}vh, 0) scale(${(sw.key === 'code' ? 1 - ioW * 0.1 : 1 + outK * 0.06).toFixed(4)})`
         el.style.transform = tf
         ln.style.transform = tf
-        const bl = inK < 0.999 ? `blur(${((1 - inK) * 14).toFixed(1)}px)` : ''
+        const blur = Math.max((1 - inK) * 14, ioW * 10)
+        const bl = blur > 0.05 ? `blur(${blur.toFixed(1)}px)` : ''
         el.style.opacity = v.toFixed(3)
         ln.style.opacity = vl.toFixed(3)
         el.style.filter = bl
@@ -804,6 +1022,32 @@ export function WorkStory() {
     }
   }, [])
 
+  /* คำ Selected Work = สองท่อน + ช่องว่างกลางที่ปรับกว้างทุกเฟรม (ประกบไอคอน/ปึก) — ชั้นตัวทึบ (0) วัดขนาดท่อน · ชั้นเส้นขอบ (1) ตามช่องเดียวกัน */
+  const worksText = (layerI: number) => (
+    <>
+      <span
+        ref={(n) => {
+          if (layerI === 0) worksPart.current[0] = n
+        }}
+      >
+        Selected
+      </span>
+      <span
+        ref={(n) => {
+          worksGap.current[layerI] = n
+        }}
+        className="inline-block"
+      />
+      <span
+        ref={(n) => {
+          if (layerI === 0) worksPart.current[1] = n
+        }}
+      >
+        Work
+      </span>
+    </>
+  )
+
   return (
     <>
       <div ref={layer} className="pointer-events-none fixed inset-0 z-[51]" style={{ visibility: on ? 'visible' : 'hidden' }} aria-hidden>
@@ -823,36 +1067,74 @@ export function WorkStory() {
           <Pump frame={frame} />
           <FallSky pose={fall} />
         </Canvas>
+        {ICON_OUT && <div ref={paperBg} className="pointer-events-none absolute inset-0 bg-white" style={{ visibility: 'hidden' }} aria-hidden />}
         {/* บท Code: ดำ + แสงม่วงจากมุมล่าง + สัญลักษณ์ ASCII — เหนือฟ้า ใต้คำใหญ่กับเครื่อง */}
         <div
           ref={dark}
           className="pointer-events-none absolute inset-0 overflow-hidden"
-          style={{
-            visibility: 'hidden',
-            background:
-              'radial-gradient(70% 62% at 96% 104%, rgba(255,236,255,0.95), rgba(226,150,240,0.75) 28%, rgba(170,90,220,0.35) 55%, rgba(0,0,0,0) 78%), radial-gradient(62% 58% at 6% 100%, rgba(200,160,255,0.85), rgba(110,60,240,0.7) 30%, rgba(60,30,170,0.3) 58%, rgba(0,0,0,0) 80%), #000',
-          }}
+          /* พื้นทึบดำของชั้นนอก — ตอนเนื้อในซูมออกเล็กกว่าการ์ด ขอบการ์ดยังมืดเต็ม (ไม่เห็นฟ้าทะลุ) */
+          style={{ visibility: 'hidden', background: '#000' }}
           aria-hidden
         >
+          {/* เนื้อของชั้น (พื้น + เมฆ ASCII + ดาว) — ICON_OUT: ซูมออกทั้งก้อนตอนหดเป็นไอคอน (ชั้นนอกตัดเป็นการ์ด) */}
+          <div
+            ref={darkIn}
+            className="absolute inset-0 origin-top-left"
+            style={{
+              background:
+                'radial-gradient(70% 62% at 96% 104%, rgba(255,236,255,0.95), rgba(226,150,240,0.75) 28%, rgba(170,90,220,0.35) 55%, rgba(0,0,0,0) 78%), radial-gradient(62% 58% at 6% 100%, rgba(200,160,255,0.85), rgba(110,60,240,0.7) 30%, rgba(60,30,170,0.3) 58%, rgba(0,0,0,0) 80%), #000',
+            }}
+          >
           {/* หยุดวาดเองตอนชั้นนี้ซ่อน (นอกบท Code) */}
           <AsciiClouds blobs={CODE_CLOUDS} mask={CODE_CLOUD_MASK} rgb="214,190,255" alpha={[0.14, 0.5]} />
+          {/*
+           * ดาวเคราะห์ (แบบ hero ของ ethena): วงใหญ่กว่าจอ ยอดวง = ขอบฟ้า · ขอบรับแสงเรืองขาวอมม่วง (สีของบทนี้) แรงทางขวา
+           * ผิวมืดไล่เข้มลงล่าง + ลายจุด ASCII จาง ๆ ใต้ขอบ (ภาษาเดียวกับเมฆ ASCII ของบท) · ขนาด/ตำแหน่งตั้งทุกเฟรม
+           */}
+          {CODE_FRONT && (
+            <div
+              ref={planet}
+              className="absolute top-0 left-0 rounded-full will-change-transform"
+              style={{
+                background: 'radial-gradient(55% 13% at 60% 0%, rgba(236,230,255,0.2), rgba(150,130,230,0.05) 60%, rgba(0,0,0,0) 100%), radial-gradient(circle at 50% 0%, #17161f 0%, #0b0b10 24%, #030305 52%)',
+                boxShadow:
+                  '0 0 0 1.5px rgba(238,232,255,0.7), 0 -3px 22px 3px rgba(226,214,255,0.55), 0 -18px 90px 26px rgba(160,130,255,0.34), 0 -40px 220px 60px rgba(120,90,240,0.18), inset 0 22px 50px -14px rgba(236,230,255,0.5)',
+              }}
+            >
+              <div
+                className="absolute inset-0 rounded-full"
+                style={{
+                  backgroundImage: 'radial-gradient(rgba(214,190,255,0.22) 1px, transparent 1.6px)',
+                  backgroundSize: '9px 9px',
+                  maskImage: 'radial-gradient(circle at 50% 0%, #000 0%, rgba(0,0,0,0.5) 18%, transparent 34%)',
+                  WebkitMaskImage: 'radial-gradient(circle at 50% 0%, #000 0%, rgba(0,0,0,0.5) 18%, transparent 34%)',
+                }}
+              />
+            </div>
+          )}
+          </div>
         </div>
+        {/* ICON_OUT: ไอคอนแอป (favicon) จางเข้ามาในการ์ดช่วงท้าย — ตัดเข้าแคนวาส rolodex ที่ขนาด/ตำแหน่งเดียวกันพอดี */}
+        {ICON_OUT && <img ref={iconFace} src="/favicon-512.png" alt="" className="absolute top-0 left-0 will-change-transform" style={{ visibility: 'hidden' }} />}
         {/* คำใหญ่ของแต่ละบท (ตัวทึบ) — เหนือฟ้า ใต้ของบนจอ · เจาะรูตามกรอบเครื่อง: ในกรอบเครื่องเหลือแต่เส้นขอบ */}
         <div ref={bigSolid} className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
         <div ref={wordsClip} className="absolute inset-0">
-        {SKILL_WORDS.map((sw, i) => (
-          <div
-            key={sw.key}
-            ref={(el) => {
-              bigWords.current[i] = el
-            }}
-            className="absolute top-[28%] left-1/2 text-[clamp(110px,23vw,420px)] leading-none font-bold tracking-[-0.055em] whitespace-nowrap text-white will-change-[transform,opacity,filter]"
-            style={{ visibility: 'hidden', fontFamily: STORY_FONT }}
-            aria-hidden
-          >
-            {sw.w}
-          </div>
-        ))}
+        {SKILL_WORDS.map((sw, i) =>
+          /* หัวเรื่องบท Code / คำ Selected Work (ICON_OUT — กำแพงผลงานเต็มจอ ต้องอยู่หน้า) อยู่ชั้นหน้า (ดูท้ายไฟล์) */
+          (CODE_FRONT && sw.key === 'code') || (ICON_OUT && sw.key === 'works') ? null : (
+            <div
+              key={sw.key}
+              ref={(el) => {
+                bigWords.current[i] = el
+              }}
+              className={WORD_CLS}
+              style={wordStyle(sw.key)}
+              aria-hidden
+            >
+              {sw.key === 'works' ? worksText(0) : sw.w}
+            </div>
+          ),
+        )}
         </div>
         <div
           ref={worksWord}
@@ -902,7 +1184,7 @@ export function WorkStory() {
         */}
         {/* เรื่อง sticker: แผ่นที่ลอก + ฝาโน้ตบุ๊ก — เหนือของบนจอเครื่อง ใต้ตัวเครื่องแก้ว */}
         {STICKER_STORY && <StickerStage frame={frame} bench={benchCv} />}
-        <canvas ref={disCanvas} className="absolute inset-0 size-full" />
+        {!CODE_FRONT && <canvas ref={disCanvas} className="absolute inset-0 size-full" />}
         {/* เรื่อง ascii: อักขระของคำ Code พุ่งกลับลงไปเรียงเป็นปกผลงาน แล้วคมชัดเป็นภาพจริง */}
         {ASCII_STORY && <AsciiWorks frame={frame} />}
         {/* เรื่อง desk: ถอยกล้องจากจอเห็นโต๊ะ Joe แล้วไปดูบอร์ดผลงาน */}
@@ -930,14 +1212,57 @@ export function WorkStory() {
               ref={(el) => {
                 bigLines.current[i] = el
               }}
-              className="absolute top-[28%] left-1/2 text-[clamp(110px,23vw,420px)] leading-none font-bold tracking-[-0.055em] whitespace-nowrap text-white will-change-[transform,opacity,filter]"
-              style={{ visibility: 'hidden', fontFamily: STORY_FONT }}
+              className={WORD_CLS}
+              /* หัวเรื่องบท Code อยู่หน้าเครื่อง ไม่มีส่วนที่ถูกบัง — ไม่ต้องมีเส้นขอบ */
+              style={(CODE_FRONT && sw.key === 'code') || (ICON_OUT && sw.key === 'works') ? { display: 'none' } : wordStyle(sw.key)}
             >
-              {sw.w}
+              {sw.key === 'works' ? worksText(1) : sw.w}
             </div>
           ))}
         </div>
       </div>
+      {/*
+       * บท Code — ชั้นหน้าเครื่องแก้ว (เหนือแคนวาสของฟอง z 52): หัวเรื่องใหญ่ระดับขอบฟ้า · บรรทัดรอง · แคปซูล stack
+       * และผงสลายของหัวเรื่อง (ตอนชนคำแตกพุ่งออกมาหน้าจอ) — ขยับตามชั้นหลัก (ดูท้ายลูป)
+       */}
+      {(CODE_FRONT || ICON_OUT) && (
+        <div ref={codeTop} className="pointer-events-none fixed inset-0 z-[53]" style={{ visibility: on ? 'visible' : 'hidden' }} aria-hidden>
+          {SKILL_WORDS.map((sw, i) =>
+            (CODE_FRONT && sw.key === 'code') || (ICON_OUT && sw.key === 'works') ? (
+              <div
+                key={sw.key}
+                ref={(el) => {
+                  bigWords.current[i] = el
+                }}
+                className={WORD_CLS}
+                style={wordStyle(sw.key)}
+              >
+                {sw.key === 'works' ? worksText(0) : sw.w}
+              </div>
+            ) : null,
+          )}
+          {CODE_FRONT && <canvas ref={disCanvas} className="absolute inset-0 size-full" />}
+          {CODE_FRONT && (
+          <div
+            ref={codeSub}
+            className="absolute left-1/2 flex flex-col items-center text-center will-change-[transform,opacity,filter]"
+            style={{ visibility: 'hidden', fontFamily: STORY_FONT, top: `calc(${CODE_HEAD_Y * 100}% + ${CODE_FONT} * 0.5 + 1.4vw)` }}
+          >
+            <p className="max-w-[30ch] text-[clamp(15px,1.3vw,22px)] leading-snug text-white/80">{CODE_SUB}</p>
+            <div className="mt-[clamp(18px,2.2vw,36px)] flex items-center gap-[clamp(10px,1vw,16px)] rounded-full bg-white/10 px-[clamp(16px,1.6vw,26px)] py-[clamp(10px,0.9vw,14px)] ring-1 ring-white/20 backdrop-blur-md">
+              {CODE_STACK.map((n) => (
+                <span key={n} className="flex items-center gap-1.5 text-[clamp(12px,0.95vw,15px)] font-medium text-white/90">
+                  <svg viewBox="0 0 24 24" className="size-[1.15em]" fill={brandFill(n)} aria-hidden>
+                    <path d={BRAND_ICONS[n]?.path} />
+                  </svg>
+                  {n}
+                </span>
+              ))}
+            </div>
+          </div>
+          )}
+        </div>
+      )}
       {/*
        * section My Works: ปุ่มไทล์งานทับตำแหน่งไทล์ 3D (ช่อง TILE_SLOTS) — hover ยกไทล์ · คลิกเปิดเต็มจอ
        * เปิดแล้ว: แผงรายละเอียด (ยังไม่มีเนื้อหางาน — บล็อกเทาว่างตามที่ตั้งไว้) + ปุ่มปิด · Esc / เลื่อนจอ = ปิด

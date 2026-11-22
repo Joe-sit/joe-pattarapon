@@ -10,6 +10,7 @@ import { extractLumberArms, LUMBER_MODEL } from './lumberArms'
 import { buildToonHand } from './toonHand'
 import { registerRig } from './rigHandle'
 import { scrollState } from '../scroll'
+import { devGlasses } from '@/newhero/devMode'
 import { introState } from '../intro'
 
 /** 0..1 พร้อม ease-in-out — ใช้ทำ sub-timeline ในช่วง scroll ของฉาก 2 */
@@ -1257,6 +1258,56 @@ export function Mascot({
       back.castShadow = back.receiveShadow = true
       back.name = 'BackHair'
       parts.head.add(back)
+    }
+
+    /**
+     * แว่น MLG 8-bit (dev mode — @/newhero/devMode): แว่นพิกเซล "deal with it" ปั้นเป็นก้อน voxel เข้ากับตัวละคร
+     * ลูกของหัว (ตามหัวทุกท่า) · หน้าหัวคือ +z ของหัว (ท้ายทอยอยู่ −z — ดู BackHair) · ระดับตาวัดจากตาจริง
+     * X = เลนส์ดำ · W = ประกายขาว · . = ว่าง (เลนส์สองข้างต่อกันด้วยแถบบน)
+     */
+    if (parts.head && parts.eye.length) {
+      model.updateMatrixWorld(true)
+      const head = parts.head
+      const bb = head.geometry.boundingBox
+      const hs = bb.getSize(new THREE.Vector3())
+      const hc = bb.getCenter(new THREE.Vector3())
+      const eyeY = parts.eye.reduce((a, e) => a + head.worldToLocal(e.getWorldPosition(new THREE.Vector3())).y, 0) / parts.eye.length
+      const PIX = ['XXXXXXXXXXXXXXXX', '.XWWXXX..XWWXXX.', '.XXWWXX..XXWWXX.', '..XXXX....XXXX..']
+      const cols = PIX[0].length
+      const px = (hs.x * 1.1) / cols
+      const dark = []
+      const light = []
+      PIX.forEach((row, r) =>
+        [...row].forEach((ch, c) => {
+          if (ch === '.') return
+          const b = new THREE.BoxGeometry(px, px, px * 0.7)
+          b.translate((c - (cols - 1) / 2) * px, ((PIX.length - 1) / 2 - r) * px, 0)
+          ;(ch === 'W' ? light : dark).push(b)
+        }),
+      )
+      const glasses = new THREE.Group()
+      glasses.name = 'DevGlasses'
+      for (const [list, color] of [
+        [dark, '#0b0b10'],
+        [light, '#ffffff'],
+      ]) {
+        if (!list.length) continue
+        const geo = mergeGeometries(list)
+        list.forEach((b) => b.dispose())
+        /* วาดหลังแผ่นหน้าการ์ตูน (FacePlane โปร่ง ไม่เขียน depth ดึงเข้าหากล้องด้วย polygonOffset) — ไม่งั้นตาการ์ตูนทับเลนส์ */
+        const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, toneMapped: false, transparent: true }))
+        m.renderOrder = 5
+        m.userData.keepColor = true
+        m.userData.noClay = true
+        m.userData.noMerge = true
+        glasses.add(m)
+      }
+      /* เลนส์ทับตาทั้งดวง (แถบบนพาดเหนือตา) · ห่างหน้าหัวครึ่งก้อน */
+      const base = eyeY + px * 1.0
+      glasses.position.set(hc.x, base, hc.z + hs.z / 2 + px * 0.4)
+      glasses.visible = false
+      head.add(glasses)
+      g.userData.glasses = { group: glasses, base, drop: hs.y * 1.25 }
     }
 
     // ---- จัดท่าตาม ref: แขนขวาชี้ขึ้น แขนซ้ายงอถือแก้ว ----
@@ -2983,6 +3034,13 @@ export function Mascot({
 
   useFrame((state, delta) => {
     const dt = Math.min(delta, 0.05)
+    /* แว่น dev mode: หล่นลงจากเหนือหัวมาที่ตา (เด้งนิด) · ออกแล้วยกขึ้นหาย */
+    const gls = headGroup.current?.userData.glasses
+    if (gls) {
+      const k = devGlasses()
+      gls.group.visible = k > 0.002
+      if (gls.group.visible) gls.group.position.y = gls.base + (1 - k) * gls.drop
+    }
     /**
      * อบพิกัดลายให้ชิ้นที่เพิ่งโผล่ (โมเดลโหลด async, แขนเสื้อถูกแขวนทีหลัง)
      * ทำครั้งเดียวต่อ geometry — bakePrintCoords ข้ามชิ้นที่มีแอตทริบิวต์แล้วเอง

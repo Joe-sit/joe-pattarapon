@@ -22,12 +22,10 @@ import { useCursorStop } from '@/cursorguide/useCursorStop'
 import { SITE } from '@/config/site'
 import { setCruise, setSceneOn } from '@/newhero/scrolly'
 import { useNavigate } from 'react-router'
-import type { HeadLook } from './NavHead3D'
 import { useGateOpen, useIntroDone } from '@/stores/intro'
 /** ฉาก 3D ของจอแรก — แยก chunk ไม่ให้ถ่วงจอที่เหลือ */
 const NewHeroScene = lazy(() => import('@/newhero/NewHeroScene'))
 /** หัว 3D ในวงความคืบหน้าของแถบ (ฉาก favicon) — แยก chunk */
-const NavHead3D = lazy(() => import('./NavHead3D').then((m) => ({ default: m.NavHead3D })))
 import { heroView } from '@/newhero/heroView'
 import { ExperiencePortals } from '@/sections/portals/ExperiencePortals'
 import { fadeToArt, Headline3D, Headline3DField, useHeadlineArt } from '@/sections/hero/Headline3D'
@@ -457,73 +455,23 @@ function ProgressLogo({ bind, play, onBuilt }: { bind: React.RefObject<((p: numb
 }
 
 /**
- * ความคืบหน้าการเลื่อนของทั้งหน้า = วงแหวนรอบหน้าตัวละคร (แบบภาพ ref: ราวเทาจาง + ส่วนที่เลื่อนแล้วไล่ฟ้า)
- * หน้า = หัวตัวละคร 3D ตัวจริง (ฉากเดียวกับ favicon — NavHead3D) ครอปวงกลม หันคอมองปลายวงตลอด
- */
-function ProgressHead({ bind }: { bind: React.RefObject<((p: number) => void) | null> }) {
-  const arc = useRef<SVGCircleElement>(null)
-  const look = useRef<HeadLook>({ p: 0, kick: null }).current
-  const C = 2 * Math.PI * 21
-  useEffect(() => {
-    bind.current = (p) => {
-      arc.current?.setAttribute('stroke-dashoffset', (C * (1 - p)).toFixed(2))
-      if (Math.abs(p - look.p) > 1e-4) {
-        look.p = p
-        look.kick?.()
-      }
-    }
-    return () => {
-      bind.current = null
-    }
-  }, [bind, C, look])
-  return (
-    <span className="v3-nav-head" aria-hidden>
-      {/* หัวในวง (วงใน r18 ของ 48 = 75%) */}
-      <span className="v3-nav-head-face">
-        <Suspense fallback={null}>
-          <NavHead3D look={look} className="absolute inset-0" />
-        </Suspense>
-      </span>
-      <svg viewBox="0 0 48 48" className="absolute inset-0 size-full">
-        <defs>
-          <linearGradient id="v3h-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#2f6bff" />
-            <stop offset="1" stopColor="#5ab4ff" />
-          </linearGradient>
-        </defs>
-        {/* ราว + ส่วนที่เลื่อนแล้ว (เริ่มที่ 12 นาฬิกา ตามเข็ม) */}
-        <circle cx="24" cy="24" r="21" fill="none" stroke="rgba(160,170,190,0.35)" strokeWidth="3" />
-        <circle ref={arc} cx="24" cy="24" r="21" fill="none" stroke="url(#v3h-grad)" strokeWidth="3" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C} transform="rotate(-90 24 24)" />
-      </svg>
-    </span>
-  )
-}
-
-/**
- * โลโก้ในแถบ: บนสุดของหน้า = โลโก้ JOE (ท่าประกอบเดิม) · เริ่มเลื่อน = สลับเป็นหัวตัวละครในวงความคืบหน้า
- * กลับขึ้นบนสุด = โลโก้กลับมา — ดู .v3-nav-mark ใน portfolio2026final.css
+ * โลโก้ในแถบ: โลโก้ JOE (ท่าประกอบเดิม) ตลอด — หัวตัวละครในวงความคืบหน้าตอนเลื่อนถอดออกแล้ว
+ * (ตอนเลื่อนลงทั้งแถบหายไป ไม่เหลือก้อนลอยกลางจอ — ดู .v3-nav[data-mode='down'] ใน portfolio2026final.css)
  */
 function NavMark({ bind, play, onBuilt }: { bind: React.RefObject<((p: number) => void) | null>; play: boolean; onBuilt: () => void }) {
   const logo = useRef<((p: number) => void) | null>(null)
-  const head = useRef<((p: number) => void) | null>(null)
-  const root = useRef<HTMLSpanElement>(null)
   useEffect(() => {
     bind.current = (p) => {
       logo.current?.(p)
-      head.current?.(p)
-      root.current?.classList.toggle('is-head', p > 0.015)
     }
     return () => {
       bind.current = null
     }
   }, [bind])
   return (
-    <span ref={root} className="v3-nav-mark">
+    <span className="v3-nav-mark">
       <span className="v3-nav-mark-logo">
         <ProgressLogo bind={logo} play={play} onBuilt={onBuilt} />
-      </span>
-      <span className="v3-nav-mark-head">
-        <ProgressHead bind={head} />
       </span>
     </span>
   )
@@ -700,16 +648,23 @@ function HeroAboutTip() {
     const move = (e: PointerEvent) => {
       if (tip.current) tip.current.style.transform = `translate(${e.clientX + 18}px, ${e.clientY + 18}px)`
     }
+    /* ม่านเมฆเริ่มถมแล้ว = พ้นตัวละคร — ป้ายไม่ค้างลอยทับม่าน และคลิกทะลุม่านไม่พาไปหน้า About */
+    const past = () => window.scrollY / Math.max(1, window.innerHeight) > 0.42
     const onAbout = (e: Event) => {
       const d = (e as CustomEvent<{ on: boolean; open?: boolean }>).detail
-      if (tip.current) tip.current.dataset.on = String(d.on)
-      if (d.open) navigate('/about')
+      if (tip.current) tip.current.dataset.on = String(d.on && !past())
+      if (d.open && !past()) navigate('/about')
+    }
+    const onScroll = () => {
+      if (past() && tip.current) tip.current.dataset.on = 'false'
     }
     window.addEventListener('pointermove', move, { passive: true })
     window.addEventListener('hero-about', onAbout)
+    window.addEventListener('scroll', onScroll, { passive: true })
     return () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('hero-about', onAbout)
+      window.removeEventListener('scroll', onScroll)
     }
   }, [navigate])
   return (

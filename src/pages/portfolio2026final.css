@@ -82,6 +82,7 @@
   --v3-body: 'Open Runde', 'Mona Sans', system-ui, sans-serif;
 
   background: var(--v3-shell);
+  transition: background-color 0.7s ease;
   color: var(--v3-ink);
   font-family: var(--v3-body);
 }
@@ -460,14 +461,18 @@
   pointer-events: none;
 }
 /*
- * ก้อนตอนเลื่อนลง = ต้องไม่แย่งสายตาจากเรื่องในหน้า: เล็กลง (เตี้ยกว่าแถบ) แก้วฝ้าโปร่งแทนขาวทึบ ไม่มีเงา
- * โลโก้หรี่ลงนิด — ยังอ่านความคืบหน้าออก แต่เป็นเสียงพื้นหลัง
+ * ตอนเลื่อนลง = ไม่เหลือแถบเลย (เดิมหุบเป็นก้อนแก้วเล็กกลางจอ มีหัวตัวละครในวงความคืบหน้า — ถอดออกแล้ว)
+ * หุบเข้ากลางพร้อมจางหาย · เลื่อนขึ้นแล้วคลี่กลับเป็นแคปซูลเต็มกว้าง
  */
 .v3-nav[data-mode='down'] {
   --nav-text: #1d2433;
   --clip-x: calc(50% - 34px);
   --clip-y: 9px;
   --clip-r: 14px;
+}
+.v3-nav[data-mode='down'] .v3-nav-main {
+  opacity: 0;
+  pointer-events: none;
 }
 /* แคปซูลตอนเลื่อนขึ้น = เต็มกว้างของแถบ ไม่ตัดข้าง (ตัด 40px เดิมเฉือนปุ่มเมนูกับ Resume ครึ่งชิ้น)
  * มุมเท่า border-radius ของแถบ เส้นขอบ (.v3-nav-shadow) จึงทับขอบที่ตัดพอดี */
@@ -489,7 +494,8 @@
   pointer-events: auto;
   transition:
     clip-path 0.6s var(--nav-ease),
-    background-color 0.25s var(--nav-ease);
+    background-color 0.25s var(--nav-ease),
+    opacity 0.3s var(--nav-ease);
 }
 .v3-nav[data-mode='top'] .v3-nav-main {
   pointer-events: none;
@@ -635,15 +641,6 @@
   padding: 0 10px;
   cursor: pointer;
 }
-/* วงความคืบหน้ารอบหน้าตัวละคร (ProgressHead) — พื้นขาวในวง ให้หน้าเด่นบนฟ้า/บนแถบ */
-.v3-nav-head {
-  display: block;
-  width: clamp(40px, 3.3vw, 52px);
-  height: clamp(40px, 3.3vw, 52px);
-  border-radius: 50%;
-  background: radial-gradient(circle, #ffffff 0 68%, transparent 69%);
-}
-
 /* ปุ่มข้าง (เมนู / Resume) — ตอนหุบเป็นก้อน จางออกก่อนแถบหุบ ตอนคลี่ค่อยโผล่ตามหลัง */
 .v3-nav-side {
   transition:
@@ -926,38 +923,10 @@
   box-shadow: 0 0 0 3px rgba(90, 209, 122, 0.25);
 }
 
-/* NavMark: โลโก้ JOE ↔ หัวในวงความคืบหน้า ซ้อนกันในช่องเดียว สลับด้วยจาง + ย่อ/ขยาย */
+/* NavMark: ช่องโลโก้ JOE กลางแถบ */
 .v3-nav-mark {
   display: grid;
   place-items: center;
-}
-.v3-nav-mark > span {
-  grid-area: 1 / 1;
-  transition:
-    opacity 0.35s ease,
-    transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.v3-nav-mark-head {
-  opacity: 0;
-  transform: scale(0.5) rotate(-30deg);
-  pointer-events: none;
-}
-.v3-nav-mark.is-head .v3-nav-mark-logo {
-  opacity: 0;
-  transform: scale(0.7);
-}
-.v3-nav-mark.is-head .v3-nav-mark-head {
-  opacity: 1;
-  transform: none;
-}
-.v3-nav-head {
-  position: relative;
-}
-.v3-nav-head-face {
-  position: absolute;
-  inset: 12.5%;
-  overflow: hidden;
-  border-radius: 50%;
 }
 
 /*
@@ -1023,4 +992,10 @@
   to {
     background-position: calc(var(--lw, 200px) * -0.2 - var(--ox, 0px)) 0;
   }
+}
+
+/* dev mode (สวิตช์ในฉาก hero — src/newhero/devMode.ts): พื้นหน้ารอบการ์ดมืดตามฉากที่ย้อมเป็นกลางคืน */
+html[data-mode='dev'] .v3 {
+  --v3-shell: #0b0e17;
+  --v3-shell-ink: #e7eaf3;
 }

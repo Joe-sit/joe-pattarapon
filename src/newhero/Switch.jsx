@@ -153,6 +153,8 @@ export function Switch({
   knobThick = 0.66,
   /** หน้าปุ่มล้ำพ้นผิวหน้าราง เทียบความหนาราง */
   knobProud = 0.01,
+  /** กดแล้วทำอะไร — มีแล้วสวิตช์กดได้ (ชี้แล้วเป็นมือ) · ไม่มี = ของประดับ */
+  onPress = null,
   ...props
 }) {
   const h = radius * 2
@@ -282,8 +284,25 @@ export function Switch({
    */
   const edges = useMemo(() => new THREE.EdgesGeometry(track, edgeAngle), [track, edgeAngle])
 
+  /** กดได้: ทั้งรางและปุ่มรับคลิก · ชี้แล้วเคอร์เซอร์เป็นมือ (ของที่กดได้ทุกชิ้นต้องเป็น pointer) */
+  const press = onPress
+    ? {
+        onClick: (e) => {
+          e.stopPropagation()
+          onPress()
+        },
+        onPointerOver: (e) => {
+          e.stopPropagation()
+          document.body.style.cursor = 'pointer'
+        },
+        onPointerOut: () => {
+          document.body.style.cursor = ''
+        },
+      }
+    : {}
+
   return (
-    <group {...props}>
+    <group {...props} {...press}>
       <mesh geometry={track}>
         {/**
          * รางเป็นกระจกจริง — transmission ไม่ใช่แค่ opacity

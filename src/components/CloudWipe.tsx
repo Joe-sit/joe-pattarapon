@@ -82,9 +82,13 @@ function bank(seed: number, scale: number): Puff[] {
 }
 
 /** ชั้นเมฆ ไกล → ใกล้: สีจางลงเมื่อไกล ฟุ้งขึ้นเมื่อไกล และลอยนำหน้าชั้นที่อยู่ใกล้กว่า */
+/*
+ * lead ห่างกันน้อย: ชั้นไกลจางแต่ก็เกือบขาว — ถ้านำไกล (เดิม 1.26) มันคลุมจอขาวไปก่อนตั้งแต่ครึ่งทาง
+ * ชั้นหน้ายังไต่อยู่ข้างใต้โดยไม่มีใครเห็น = ครึ่งหลังของม่านเป็นขาวเปล่า
+ */
 const LAYERS = [
-  { seed: 20260909, scale: 0.3, fill: '#e6eefb', opacity: 0.85, blur: 9, lead: 1.26 },
-  { seed: 771, scale: 0.26, fill: '#f4f8ff', opacity: 0.95, blur: 4, lead: 1.12 },
+  { seed: 20260909, scale: 0.3, fill: '#e6eefb', opacity: 0.85, blur: 9, lead: 1.1 },
+  { seed: 771, scale: 0.26, fill: '#f4f8ff', opacity: 0.95, blur: 4, lead: 1.05 },
   { seed: 4903, scale: 0.24, fill: '#ffffff', opacity: 1, blur: 0, lead: 1 },
 ]
 
@@ -128,11 +132,27 @@ const WIPE_SPAN = 0.44
  */
 export const WIPE_FULL = WIPE_AT + WIPE_SPAN
 
-/** ช่วง q ที่เริ่มแตกพิกเซล และช่วงที่บล็อกโตเต็มที่ */
-const PIX_IN = 0.08
-const PIX_FULL = 0.54
-/** ขนาดบล็อกใหญ่สุด หน่วย CSS px — ใหญ่กว่านี้อ่านเป็นแถบสี่เหลี่ยม ไม่ใช่เมฆที่แตกตัว */
-const PIX_MAX = 20
+/**
+ * ช่วง q ที่เริ่มแตกพิกเซล และช่วงที่บล็อกโตเต็มที่ — แตกเฉพาะช่วงท้ายตอนเมฆเกือบคลุมจอแล้ว
+ * (เดิมเริ่มตั้งแต่ต้น บล็อกโตเต็มตอนยอดเมฆอยู่กลางจอพอดี ขอบเมฆเป็นขั้นบันไดหยาบตลอดทาง)
+ */
+const PIX_IN = 0.6
+const PIX_FULL = 0.97
+/** ขนาดบล็อกใหญ่สุด หน่วย CSS px — แค่พอเห็นเป็นเนื้อพิกเซลตอนกลืนเป็นขาว ไม่ใช่บล็อกหยาบ */
+const PIX_MAX = 9
+/** q ที่ยอดเมฆชั้นไกลพ้นขอบบนจอ — ไต่สม่ำเสมอจนถึงตรงนี้ ที่เหลือเป็นช่วงปิดร่องเป็นขาว */
+const COVER_Q = 0.84
+/** ระยะไต่ของชั้นหน้า (lead 1) ณ COVER_Q — ยอดชั้นไกลพ้นขอบบนพอดีตรงนั้น */
+const COVER_E = 0.62
+/**
+ * ความคืบหน้าการไต่ของเมฆ: สม่ำเสมอเกือบตลอดช่วง (ออกตัวนุ่มนิด) ถึง COVER_E ที่ COVER_Q แล้วไต่ต่อเป็นเส้นตรงจนสุด
+ * เดิมใช้ smooth(q) ตรง ๆ: ช่วงกลางเร็วจัด เมฆคลุมทั้งจอใน ~0.15 จอของการเลื่อน แล้วค้างขาวอีกเกือบครึ่งช่วง
+ */
+function rise(q: number) {
+  if (q >= COVER_Q) return COVER_E + ((1 - COVER_E) * (q - COVER_Q)) / (1 - COVER_Q)
+  const u = q / COVER_Q
+  return COVER_E * (0.55 * u + 0.45 * u * u * (3 - 2 * u))
+}
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v)
 const smooth = (v: number) => v * v * (3 - 2 * v)
@@ -223,8 +243,8 @@ export function CloudWipe() {
       ctx.setTransform(s, 0, 0, bh / h, 0, 0)
       ctx.clearRect(0, 0, w, h)
 
-      // ออกตัวนุ่มแล้วนิ่งตอนจบ — ของที่โผล่พรวดหรือหยุดกึก อ่านเป็นแผ่นเลื่อน ไม่ใช่ของลอย
-      const e = smooth(q)
+      // ไต่สม่ำเสมอ ออกตัวนุ่ม — ของที่โผล่พรวดหรือหยุดกึก อ่านเป็นแผ่นเลื่อน ไม่ใช่ของลอย (ดู rise)
+      const e = rise(q)
       const near = banks[banks.length - 1]
 
       for (let i = 0; i < banks.length; i++) {
@@ -236,7 +256,7 @@ export function CloudWipe() {
           drawBank(near, Math.min(1, e * LAYERS[2].lead), q, SHADE, h * 0.028)
 
           // ปุยที่ลอยนำกลุ่ม — จางหายตอนกลุ่มใหญ่ตามมาทัน ไม่งั้นเห็นเป็นก้อนลอยค้างบนพื้นขาว
-          const fade = 1 - clamp01((q - 0.5) / 0.3)
+          const fade = 1 - clamp01((q - 0.6) / 0.24)
           if (fade > 0.003) {
             ctx.filter = blurOf(10, s)
             ctx.fillStyle = '#ffffff'
@@ -266,7 +286,7 @@ export function CloudWipe() {
 
       // ปิดท้ายด้วยขาวเต็มจอ — ช่องว่างระหว่างก้อนต้องไม่เหลือให้เห็นตอนท่วมเต็ม
       ctx.filter = 'none'
-      ctx.globalAlpha = smooth(clamp01((q - 0.72) / 0.28))
+      ctx.globalAlpha = smooth(clamp01((q - 0.8) / 0.2))
       if (ctx.globalAlpha > 0.003) {
         ctx.fillStyle = '#ffffff'
         ctx.fillRect(0, 0, w, h)
