@@ -11,11 +11,12 @@ import './portfolio2026.css'
  * แทน sections/whatidopixel ชิ้นที่ยังใช้ร่วมกันคือตัวละคร ท่าปิดจอ และชั้นรอยสาด
  */
 import { Logo } from '@/joespresso/Logo'
-/* What I do = สำรับการ์ด (sections/skilldeck) · ของเดิม SkyStory + WorkStory ยังอยู่ครบ
-   สลับกลับ: import สองตัวนั้นคืน แล้วใส่ <WorkStory /> กับ <SkyStory id="what-i-do" /> ที่เดิม
-   (BubbleTraveler อยู่ทั้งสองแบบ — มีสำรับการ์ดอยู่ในหน้า มันเข้าโหมด deckBubble เอง) */
-import { SkillDeck } from '@/sections/skilldeck/SkillDeck'
-import { BubbleTraveler } from '@/sections/hero/BubbleTraveler'
+/* What I do = สเกตเข้าหากล้อง (sections/skatestory — โครงตาม stormlikes.com/about ยังไม่ใส่ตัวละครจริง)
+   แบบอื่นยังอยู่ครบ สลับกลับได้:
+   · เครื่อง (เดิม): import SkyStory / BubbleTraveler / WorkStory คืน แล้วใส่ <BubbleTraveler /> <WorkStory /> และ <SkyStory id="what-i-do" />
+   · สำรับการ์ด: <BubbleTraveler /> + <SkillDeck id="what-i-do" /> (sections/skilldeck)
+   ฟองเดินทาง (BubbleTraveler) ถอดออก: มันอ่าน #what-i-do แล้วเล่นเรื่องเครื่องทับ section นี้ — ไม่มีชั้นนั้น ฟองในหัวเรื่องวาดเองในแคนวาสหัวเรื่อง */
+import { SkateStory } from '@/sections/skatestory/SkateStory'
 import { WhatIDoCard } from '@/sections/whatidocard/WhatIDoCard'
 
 import { CloudWipe, WIPE_FULL } from '@/components/CloudWipe'
@@ -908,9 +909,7 @@ export function Portfolio2026FinalPage() {
       {/* เคอร์เซอร์นำสายตา — ชั้นเดียวทั้งหน้า ต้องอยู่นอก section ทุกอัน ไม่งั้นข้ามจอไม่ได้ */}
       <CursorGuideLayer />
 
-      {/* ฟองคำพูดของหัวเรื่องเดินทางลงไปเป็นการ์ดของสำรับใน What I do — ชั้นเหนือม่านเมฆ (ดู BubbleTraveler, deckBubble)
-          เรื่องงาน (WorkStory) ถอดออกตอนเปลี่ยน What I do เป็นสำรับการ์ด */}
-      <BubbleTraveler />
+      {/* ฟองเดินทาง (BubbleTraveler) + เรื่องเครื่อง (WorkStory) ถอดออกตอน What I do เป็นแบบสเกต — ดูหมายเหตุที่ import */}
 
       <TopBar />
       <HeroAboutTip />
@@ -1077,7 +1076,7 @@ export function Portfolio2026FinalPage() {
 
       {/* จอ What I do = ฉากมือชูจอ (sections/handcompose) พร้อมจังหวะเปิดตัวตอนเลื่อนเข้าจอ
           จอเดิม (ตัวละครในกรอบ + วงเล็บส้ม) ยังอยู่ที่ sections/whatidoscroll — สลับกลับได้ที่ import */}
-      <SkillDeck id="what-i-do" />
+      <SkateStory id="what-i-do" />
       {/* ปุ่มค้นหาในฟองคำพูดยืดตัวมาเป็นหน้าต่างพอร์ทัลของจอนี้ (ดู hero/MacWindow) */}
       <WhatIDoCard id="what-i-do-windows" />
 

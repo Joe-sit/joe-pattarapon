@@ -948,6 +948,15 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
     [drop],
   )
   const dropRef = useRef<THREE.Mesh>(null)
+  /**
+   * ระลอกน้ำรอบสอง — island ลงจากฟองบนหัวเครื่องไปถึงการ์ดล่าง (BubbleTraveler: ISLAND.handTo) แล้วผิวจอแผ่ระลอกจากจุดนั้น
+   * วัสดุแยกจากรอบแรก (สองรอบทับช่วงกันได้) · เล่นด้วยเวลาตอนข้ามเส้นลงจอดขาลง ไม่ผูกระยะเลื่อน —
+   * ลงจอดคือปลายบท morph พอดี หลังจากนั้นระยะเลื่อนไม่มีช่วงให้ระลอกวิ่ง
+   */
+  const islandDrop = useMemo(() => ({ mat: rippleMat() }), [])
+  useEffect(() => () => islandDrop.mat.dispose(), [islandDrop])
+  const islandDropRef = useRef<THREE.Mesh>(null)
+  const islandDropAt = useRef({ prev: 0, t0: -1 })
   const scan = useMemo(() => ({ geo: new THREE.PlaneGeometry(1, 1), mat: scanMat() }), [])
   useEffect(
     () => () => {
@@ -1323,6 +1332,24 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
         drop.mat.uniforms.uT.value = e
         drop.mat.uniforms.uAA.value = 1 / Math.max(1e-3, u)
         dm.position.set(0, 0, 1.5)
+      }
+    }
+    /* ── ระลอกน้ำรอบสอง: island ลงถึงการ์ดล่าง (กลางการ์ด island ที่ y -246 ของผังจอ) ── */
+    const im = islandDropRef.current
+    if (im) {
+      const at = islandDropAt.current
+      if (import.meta.env.DEV) (window as unknown as { __islandDrop?: unknown }).__islandDrop = { morph: b.morph, t0: at.t0, t }
+      const LANDED = 0.995
+      if (at.prev < LANDED && b.morph >= LANDED) at.t0 = t
+      if (b.morph < 0.9) at.t0 = -1
+      at.prev = b.morph
+      const e = at.t0 < 0 ? 0 : (t - at.t0) / 1.1
+      im.visible = e > 0 && e < 1
+      if (im.visible) {
+        islandDrop.mat.uniforms.uC.value.set(0, -246)
+        islandDrop.mat.uniforms.uT.value = e
+        islandDrop.mat.uniforms.uAA.value = 1 / Math.max(1e-3, u)
+        im.position.set(0, 0, 1.6)
       }
     }
 
@@ -1973,6 +2000,7 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
     <group ref={root} visible={false} matrixAutoUpdate={false}>
       {/* ขนาดจริงมาจากเชดเดอร์ (แผ่นหน่วยเดียว) — กรอบทรงกลมของ three เล็กกว่าที่วาดจริง ปิดการตัดทิ้งนอกมุมกล้อง */}
       <mesh ref={dropRef} geometry={drop.geo} material={drop.mat} visible={false} renderOrder={1} frustumCulled={false} />
+      <mesh ref={islandDropRef} geometry={drop.geo} material={islandDrop.mat} visible={false} renderOrder={1} frustumCulled={false} />
       <mesh ref={scanRef} geometry={scan.geo} material={scan.mat} visible={false} renderOrder={45} frustumCulled={false} />
       {wf.mats.map((m, n) => (
         <mesh

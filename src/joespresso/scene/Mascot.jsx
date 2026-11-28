@@ -531,6 +531,8 @@ function Legs({ rig, shoe }) {
             (พื้นทรายมีรอยยุบรับอยู่ ดูเป็นน้ำหนักกดลงไปมากกว่าเท้าลอยราบ) */}
         <group
           position={[0, -SHIN_LEN - 0.4, 0]}
+          /* ชื่อให้ฉากภายนอกหาข้อเท้าได้ (SkateStory วางบอร์ดใต้เท้า) — ไม่มีผลกับการเรนเดอร์ */
+          name={`ankle${key}`}
           ref={(g) => {
             if (rig && g) rig.current[`ankle${key}`] = g
           }}
@@ -2500,6 +2502,25 @@ export function Mascot({
       forearm.receiveShadow = true
       stub.visible = false
       arm.shoulder.add(forearm)
+
+      /**
+       * 4) ท่า skate: ย้ายจุดหมุนศอกไปไว้ "รอยต่อต้นแขนกับท่อนล่าง" (ปลายกล่องข้อ 3) ของไม่ขยับ
+       *
+       * กล่องข้อ 3 คือต้นแขนใต้แขนเสื้อ เป็นลูกของไหล่ ส่วนท่อนล่าง (ชิ้นผิวของ GLB) กับมือเป็นลูก
+       * ของศอก — แต่จุดหมุนศอกของ GLB อยู่ปลายแขนเสื้อ (วัดแล้ว 0.397 ตามแกน) ไม่ใช่ปลายต้นแขน
+       * (armEnd 0.774) งอศอก (elbowX/Y/Z) หรือขยายศอก (foreScale) ท่อนล่างจึงเหวี่ยง/ยืดจากกลาง
+       * ต้นแขน หลุดจากปลายต้นแขน — แขนขาดที่ข้อศอก (มุมกล้อง hero บังไว้ มุมข้างของ SkateStory เห็นชัด)
+       * ย้ายจุดหมุนแล้วชดเชยตำแหน่งลูกกลับเท่าเดิม ท่านี้ไม่เปลี่ยน แต่งอ/ขยายแล้วท่อนล่างต่อจาก
+       * ปลายต้นแขนเสมอ · ท่ายืน (ฉาก joespresso) คงจุดหมุนเดิม
+       */
+      if (skate) {
+        const want = axis.clone().multiplyScalar(armEnd)
+        const delta = want.clone().sub(arm.elbow.position)
+        arm.elbow.position.copy(want)
+        const inLocal = delta.applyQuaternion(arm.elbow.quaternion.clone().invert()).divide(arm.elbow.scale)
+        arm.elbow.children.forEach((c) => c.position.sub(inLocal))
+        arm.elbow.updateMatrixWorld(true)
+      }
 
       // ท่อนล่างทั้งก้อน = กล่องท่อนแขน + กลุ่มศอก (ซึ่งพามือกับนิ้วไปด้วย)
       // เก็บตำแหน่งตั้งต้นไว้ ให้ slider pointArmFwd เลื่อนทั้งสองชิ้นพร้อมกันเป็นก้อนเดียว

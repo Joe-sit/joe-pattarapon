@@ -303,8 +303,8 @@ function CardLayer({ beat, u, arrived, slot }: { beat: number; u: number; arrive
   const [shown, setShown] = useState(0)
   /** การ์ดอยู่บนจอแทนฟองแล้ว */
   const [isCard, setIsCard] = useState(false)
-  /** favicon บนฟอง (ช่วงก่อนพลิกเป็นการ์ด) */
-  const [favOnBubble, setFavOnBubble] = useState(false)
+  /** ฟอง → การ์ด (ดู BubbleToCard): bubble = ยังเป็นฟอง · rise = favicon ลอยขึ้นจากในฟอง · morph = ทรงฟองยืดเป็นการ์ด */
+  const [phase, setPhase] = useState<'bubble' | 'rise' | 'morph'>('bubble')
   const spin = useMotionValue(0)
   const cardMode = useRef(false)
   const busy = useRef(false)
@@ -327,7 +327,7 @@ function CardLayer({ beat, u, arrived, slot }: { beat: number; u: number; arrive
   }
   const textOut = (to: number) =>
     animate(deckBubble.textOut, to, {
-      duration: 0.18,
+      duration: to > deckBubble.textOut ? 0.12 : 0.18,
       ease: 'easeIn',
       onUpdate: (v) => {
         deckBubble.textOut = v
@@ -345,33 +345,40 @@ function CardLayer({ beat, u, arrived, slot }: { beat: number; u: number; arrive
         const next = cur + (want.current > cur ? 1 : -1)
         const dir = next > cur ? 1 : -1
         if (cur === 0 && next === 1) {
+          /* ฟองกลายเป็นการ์ด — ไม่พลิก: ทรงยืดต่อเนื่องจากฟองไปเป็นการ์ด (ขนาดไม่กระโดด) */
           await textOut(1)
-          setFavOnBubble(true)
-          await sleep(0.32)
-          await animate(spin, 90 * dir, { duration: 0.16, ease: 'easeIn' })
+          /* รอฟองหดกลับกว้างเท่าเดิม (ฟองยืดตามความยาวข้อความ แล้วผ่อนคืนเอง) */
+          await sleep(0.16)
+          setPhase('rise')
+          await sleep(0.42)
           cardMode.current = true
           setBubble(0)
+          setPhase('morph')
+          await sleep(0.5)
           setIsCard(true)
-          setFavOnBubble(false)
-        } else if (cur === 1 && next === 0) {
-          await animate(spin, 90 * dir, { duration: 0.16, ease: 'easeIn' })
-          cardMode.current = false
-          setIsCard(false)
-          setFavOnBubble(true)
-          setBubble(1)
-        } else {
-          await animate(spin, 90 * dir, { duration: 0.15, ease: 'easeIn' })
+          cur = next
+          setShown(next)
+          continue
         }
+        if (cur === 1 && next === 0) {
+          /* ย้อน: การ์ดหดกลับเป็นทรงฟอง → ฟองแก้วกลับมา → favicon จมลงในฟอง → ข้อความกลับมา */
+          setIsCard(false)
+          setPhase('rise')
+          await sleep(0.36)
+          cardMode.current = false
+          setBubble(1)
+          setPhase('bubble')
+          await sleep(0.2)
+          await textOut(0)
+          cur = next
+          setShown(next)
+          continue
+        }
+        await animate(spin, 90 * dir, { duration: 0.15, ease: 'easeIn' })
         cur = next
         setShown(next)
         spin.jump(-90 * dir)
         await animate(spin, 0, FLIP_BACK)
-        if (next === 0) {
-          /* กลับเป็นฟอง: favicon ยุบ แล้วข้อความกลับมา (การพิมพ์ตามนิ้วรับต่อ) */
-          await sleep(0.1)
-          setFavOnBubble(false)
-          await textOut(0)
-        }
       }
       busy.current = false
     }
@@ -384,7 +391,7 @@ function CardLayer({ beat, u, arrived, slot }: { beat: number; u: number; arrive
     if (arrived) return
     cardMode.current = false
     setIsCard(false)
-    setFavOnBubble(false)
+    setPhase('bubble')
     setShown(0)
     spin.jump(0)
     deckBubble.k = 1
@@ -423,23 +430,8 @@ function CardLayer({ beat, u, arrived, slot }: { beat: number; u: number; arrive
       className="pointer-events-none fixed top-0 left-0 z-[53]"
       style={{ width: c.w, height: c.h, perspective: 1100 * u, visibility: arrived ? 'visible' : 'hidden' }}
     >
-      {/* favicon บนฟอง — เด้งขึ้นกลางฟองหลังข้อความหาย พลิกไปกับฟอง */}
-      <motion.img
-        src="/favicon-512.png"
-        alt=""
-        draggable={false}
-        className="absolute top-1/2 left-1/2"
-        initial={false}
-        animate={{ scale: favOnBubble ? 1 : 0, transition: favOnBubble ? POP : { duration: 0.1 } }}
-        style={{
-          rotateY: spin,
-          width: bh * 0.86,
-          height: bh * 0.86,
-          marginLeft: -bh * 0.43 + bw * 0.03,
-          marginTop: -bh * 0.46,
-          filter: 'drop-shadow(0 6px 14px rgba(10,30,120,0.35))',
-        }}
-      />
+      {/* ฟอง → การ์ด: favicon ลอยขึ้นจากในฟอง แล้วทรงฟองยืดเป็นการ์ด (การ์ดหนารับไม้ต่อเมื่อหน้าตาเท่ากันแล้ว) */}
+      {!isCard && <BubbleToCard phase={phase} u={u} bw={bw} bh={bh} />}
       {/* ประดับพุ่งออกจากหลังการ์ด ทุกครั้งที่การ์ดเปลี่ยนหน้า (ref: ยุบเข้าตอนหันสัน แล้วพุ่งออกไปที่ใหม่) */}
       {isCard && !products && <Sparks seed={shown} w={c.w} h={c.h} u={u} />}
       <motion.div
@@ -449,6 +441,73 @@ function CardLayer({ beat, u, arrived, slot }: { beat: number; u: number; arrive
         style={{ transformStyle: 'preserve-3d' }}
       >
         <SlabCard spin={spin} u={u} face={shown} />
+      </motion.div>
+    </div>
+  )
+}
+
+/** favicon เต็มหน้าการ์ด ขยายเท่านี้เพื่อตัดขอบมน/ขอบขาวที่อยู่ในไฟล์ภาพเอง */
+const FAV_ZOOM = 1.08
+
+/**
+ * ฟองกลายเป็นการ์ด — ไม่ใช่การสลับชิ้น แต่เป็นทรงเดียวที่เปลี่ยนรูปต่อเนื่อง
+ *
+ *   rise  ช่องในตัวฟอง (แคปซูลขนาดเท่าฟอง ตัดขอบ) — favicon ลอยขึ้นจากใต้ขอบล่างของฟองมากลางตัวฟอง
+ *         เด้งเลยนิดแล้วคืน เอียงแล้วตั้งตรง (หัวโผล่ออกจากฟอง) · ฟองแก้ว 3D ยังอยู่ข้างหลัง เห็นเป็นตัวฟองจริง
+ *   morph ฟองแก้วหายเข้าไปในทรงนี้ แล้วทรงยืดจากแคปซูลแก้วใส → การ์ดขาวขอบหมึกเงาแข็ง (ขนาด มุมมน สี
+ *         ขอบ เงา ไหลไปพร้อมกันด้วยสปริงเดียว) favicon ขยายตามจนเต็มหน้าการ์ด
+ *   ถึงขนาดการ์ดแล้ว SlabCard (การ์ดหนา) รับไม้ต่อ — หน้าตาเท่ากันทุกอย่าง จึงไม่เห็นรอยสลับ
+ */
+function BubbleToCard({ phase, u, bw, bh }: { phase: 'bubble' | 'rise' | 'morph'; u: number; bw: number; bh: number }) {
+  const c = cardSize(u)
+  const card = phase === 'morph'
+  const on = phase !== 'bubble'
+  const fav = bh * 0.78
+  return (
+    <div className="absolute inset-0 flex items-center justify-center">
+      <motion.div
+        className="relative flex items-center justify-center overflow-hidden"
+        initial={false}
+        animate={
+          card
+            ? {
+                width: c.w,
+                height: c.h,
+                borderRadius: c.r,
+                backgroundColor: 'rgba(255,255,255,1)',
+                borderColor: 'rgba(22,22,22,1)',
+                borderWidth: 3 * u,
+                boxShadow: `${5 * u}px ${6 * u}px 0px rgba(22,22,22,1)`,
+                transition: { ...SETTLE, stiffness: 300 },
+              }
+            : {
+                width: bw * 0.9,
+                height: bh,
+                borderRadius: bh / 2,
+                backgroundColor: 'rgba(255,255,255,0)',
+                borderColor: 'rgba(255,255,255,0)',
+                borderWidth: 0,
+                boxShadow: '0px 0px 0px rgba(22,22,22,0)',
+                transition: { duration: 0.25, ease: 'easeOut' },
+              }
+        }
+        style={{ borderStyle: 'solid', visibility: on ? 'visible' : 'hidden', marginLeft: card ? 0 : bw * 0.06 }}
+      >
+        <motion.img
+          src="/favicon-512.png"
+          alt=""
+          draggable={false}
+          className="block shrink-0 object-cover"
+          initial={false}
+          animate={
+            phase === 'bubble'
+              ? { width: fav, height: fav, y: bh * 0.95, rotate: -14, scale: 0.8, borderRadius: fav * 0.22, transition: { duration: 0.18, ease: 'easeIn' } }
+              : phase === 'rise'
+                ? { width: fav, height: fav, y: 0, rotate: 0, scale: 1, borderRadius: fav * 0.22, transition: { y: { ...POP, stiffness: 340, damping: 15 }, rotate: SETTLE, scale: POP } }
+                : { width: c.w * FAV_ZOOM, height: c.h * FAV_ZOOM, y: 0, rotate: 0, scale: 1, borderRadius: 0, transition: { ...SETTLE, stiffness: 300 } }
+          }
+          style={{ filter: card ? 'none' : 'drop-shadow(0 8px 14px rgba(10,30,120,0.35))' }}
+        />
       </motion.div>
     </div>
   )
@@ -487,7 +546,8 @@ function SlabCard({ spin, u, face }: { spin: ReturnType<typeof useMotionValue<nu
           backfaceVisibility: 'hidden',
         }}
       >
-        {face === 1 && <img src="/favicon-512.png" alt="" draggable={false} className="h-full w-full object-cover" />}
+        {/* ขยาย 1.08 ตัดขอบมน/ขอบขาวของไฟล์ favicon เอง — ไม่งั้นเห็นกรอบซ้อนกรอบในการ์ด (ค่าเดียวกับ BubbleToCard) */}
+        {face === 1 && <img src="/favicon-512.png" alt="" draggable={false} className="h-full w-full object-cover" style={{ transform: `scale(${FAV_ZOOM})` }} />}
       </div>
       {/* ภาพลอยหน้าผิว — หน้าใหม่โผล่เปล่าก่อน แล้วภาพพองตามมา เลยขนาดนิดแล้วคืน (ref: DNA ยื่นพ้นขอบการ์ด) */}
       <AnimatePresence initial={false}>

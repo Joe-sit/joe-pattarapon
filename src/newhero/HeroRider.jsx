@@ -115,6 +115,8 @@ export function HeroRider({
    */
   armPose = null,
   followOverride = null,
+  /** ทับหน้าการ์ตูน (วัตถุใบเดิม เขียนทุกเฟรมได้) — SkateStory ให้ตาดำมองกล้องตอนจบ · ไม่ส่ง = ค่าจาก tuner */
+  facePose = null,
   noWind = false,
   noIdle = false,
   noLumber = false,
@@ -237,7 +239,7 @@ export function HeroRider({
         headBounce: t.hfBounce,
         headIdleBack: t.hfIdleBack,
       }}
-      facePose={facePoseFromTuner(t, noIdle)}
+      facePose={facePose ?? facePoseFromTuner(t, noIdle)}
       torsoPose={torsoPose ?? ownTorso}
       legPose={legPose ?? ownLeg}
       armPose={armPose ?? armPoseFromTuner(t)}

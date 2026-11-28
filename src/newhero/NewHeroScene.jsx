@@ -639,7 +639,7 @@ const GRID = {
  *
  * ข้าม: แก้ว (transmission) ที่มีสูตรของตัวเอง, วัสดุที่ไม่มี roughness (basic), หน้ากาก stencil
  */
-function Gloss({ on, rough, env, cel, children }) {
+export function Gloss({ on, rough, env, cel, children }) {
   const g = useRef()
   const frame = useRef(0)
   /**
