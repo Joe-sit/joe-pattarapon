@@ -293,6 +293,15 @@ export function CameraFX({
       },
     )
     t.depthTexture.format = THREE.DepthStencilFormat
+    /**
+     * resolve MSAA เฉพาะสีกับความลึก ไม่ resolve stencil
+     *
+     * stencil ใช้แค่ระหว่างวาด (พอร์ทัลจำกัดพื้นที่) หลังวาดเสร็จไม่มีใครอ่าน แต่ three resolve ให้ทุกเฟรม
+     * บน Windows (ANGLE/D3D11) การ resolve stencil ของบัฟเฟอร์ MSAA ไม่มีทางลัดในฮาร์ดแวร์ — วัดที่
+     * 1920×1080 บน RTX 5070: พาสหลัก 12.5ms → 5.5ms ต่อเฟรม (ส่วนต่างนี้ทั้งหมดคือการ resolve)
+     * ความลึกยัง resolve ตามเดิม เพราะ rim แบบตรวจขอบอ่าน depthTexture
+     */
+    t.resolveStencilBuffer = false
     // บัฟเฟอร์นี้คือ "ภาพหลัก" ของเฟรม — ของที่ซ่อนตัวจากบัฟเฟอร์กระจก (เส้นขอบสวิตช์) ต้องยังวาดลงนี่
     t.userData = { ...t.userData, mainPass: true }
     t.texture.minFilter = THREE.LinearFilter

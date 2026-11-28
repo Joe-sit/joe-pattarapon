@@ -11,7 +11,11 @@ import './portfolio2026.css'
  * แทน sections/whatidopixel ชิ้นที่ยังใช้ร่วมกันคือตัวละคร ท่าปิดจอ และชั้นรอยสาด
  */
 import { Logo } from '@/joespresso/Logo'
-import { SkyStory } from '@/sections/skystory/SkyStory'
+/* What I do = สำรับการ์ด (sections/skilldeck) · ของเดิม SkyStory + WorkStory ยังอยู่ครบ
+   สลับกลับ: import สองตัวนั้นคืน แล้วใส่ <WorkStory /> กับ <SkyStory id="what-i-do" /> ที่เดิม
+   (BubbleTraveler อยู่ทั้งสองแบบ — มีสำรับการ์ดอยู่ในหน้า มันเข้าโหมด deckBubble เอง) */
+import { SkillDeck } from '@/sections/skilldeck/SkillDeck'
+import { BubbleTraveler } from '@/sections/hero/BubbleTraveler'
 import { WhatIDoCard } from '@/sections/whatidocard/WhatIDoCard'
 
 import { CloudWipe, WIPE_FULL } from '@/components/CloudWipe'
@@ -29,8 +33,6 @@ const NewHeroScene = lazy(() => import('@/newhero/NewHeroScene'))
 import { heroView } from '@/newhero/heroView'
 import { ExperiencePortals } from '@/sections/portals/ExperiencePortals'
 import { fadeToArt, Headline3D, Headline3DField, useHeadlineArt } from '@/sections/hero/Headline3D'
-import { BubbleTraveler } from '@/sections/hero/BubbleTraveler'
-import { WorkStory } from '@/sections/hero/WorkStory'
 import { ScrollMouse } from '@/sections/hero/ScrollMouse'
 import { GithubIcon, InstagramIcon, LinkedinIcon } from '@/joespresso/Icons'
 
@@ -884,8 +886,9 @@ export function Portfolio2026FinalPage() {
         className="v3-scene-frame pointer-events-none [&_canvas]:pointer-events-auto"
       >
         <Suspense fallback={null}>
-          {/* ผ้าใบสูงแค่จอ ไม่ใช่เต็มกรอบที่ยื่นเลยขอบล่าง — ท่อนนั้นไม่มีใครเห็น (ดู fullH ใน newhero/heroView) */}
-          <NewHeroScene className="absolute inset-x-0 top-0 h-[100svh]" />
+          {/* ผ้าใบสูงแค่จอ ไม่ใช่เต็มกรอบที่ยื่นเลยขอบล่าง — ท่อนนั้นไม่มีใครเห็น (ดู fullH ใน newhero/heroView)
+              ความสูงต้องเป็น style ไม่ใช่คลาส h-[100svh]: r3f ใส่ inline height: 100% ทับคลาส ผ้าใบเลยสูงเท่ากรอบ (1252px ที่จอ 1080) */}
+          <NewHeroScene className="absolute inset-x-0 top-0" style={{ height: '100svh' }} />
         </Suspense>
       </div>
       {/* แผงจูนของฉาก — dev เท่านั้น และซ่อนเป็นค่าเริ่มต้น: เปิดด้วย ?tune ท้าย URL (ดู newhero/CameraTuner) */}
@@ -905,10 +908,9 @@ export function Portfolio2026FinalPage() {
       {/* เคอร์เซอร์นำสายตา — ชั้นเดียวทั้งหน้า ต้องอยู่นอก section ทุกอัน ไม่งั้นข้ามจอไม่ได้ */}
       <CursorGuideLayer />
 
-      {/* ฟองคำพูดของหัวเรื่องเดินทางลงไปเปิด What I do — ชั้นเหนือม่านเมฆ (ดู BubbleTraveler) */}
+      {/* ฟองคำพูดของหัวเรื่องเดินทางลงไปเป็นการ์ดของสำรับใน What I do — ชั้นเหนือม่านเมฆ (ดู BubbleTraveler, deckBubble)
+          เรื่องงาน (WorkStory) ถอดออกตอนเปลี่ยน What I do เป็นสำรับการ์ด */}
       <BubbleTraveler />
-      {/* งานที่เข้ามาไม่หยุด → พอร์ทัล → มือถือ — ต่อจาก "Here is what I do" ในฟองนั้น (ดู WorkStory) */}
-      <WorkStory />
 
       <TopBar />
       <HeroAboutTip />
@@ -943,6 +945,27 @@ export function Portfolio2026FinalPage() {
             จอถัดไปจึงเลื่อนเข้ามาอยู่ "ใต้" จอแรกโดยไม่โผล่ที่ขอบล่าง แล้วจอแรกถูกซ่อน
             ทีเดียวตอนม่านเมฆขาวทึบ (ดู read() ด้านบน) — ต่ำกว่าแถบเมนู (z 30) ม่าน (z 50) และเคอร์เซอร์ (55) */}
         <div ref={pinRef} id="hero-pin" className="fixed inset-x-0 top-0 z-20 h-[100svh]">
+        {/**
+         * โซเชียล มุมซ้ายล่างของการ์ด (แบบ joespresso) — แนวเดียวกับปุ่มเมนู (☰) ด้านบน
+         *
+         * อยู่นอกกล่อง 1440 เพราะต้องชิดขอบการ์ด ไม่ใช่ขอบกล่องเนื้อหา — จอกว้างกว่า 1440 มันลอยเข้ามา
+         * ทับทางลาดในฉาก · ลิงก์จริงจาก config/site · GitHub ชุดเดียวกับหน้า /2026
+         */}
+        <ul className="v3-in v3-hero-social absolute bottom-[clamp(18px,4svh,40px)] left-[calc(var(--v3-frame-gap)+clamp(16px,1.8vw,36px))] z-20 m-0 flex list-none flex-col gap-[10px] p-0 [--v3-in-delay:1200ms]">
+          {HERO_SOCIAL.map(({ name, Icon, href }) => (
+            <li key={name}>
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={name}
+                className="pointer-events-auto grid size-10 cursor-pointer place-items-center rounded-full text-white/95 transition-colors duration-200 hover:bg-white hover:text-[#1d3f8f]"
+              >
+                <Icon />
+              </a>
+            </li>
+          ))}
+        </ul>
         <div className="relative mx-auto h-full w-full max-w-[1440px]">
         {/* ชั้นรับคลิกของโหมดคอมเมนต์ — คลุมทั้งจอแรก ปักหมุดตรงที่คลิก
             อยู่ต่ำกว่าเนื้อหา (z-0 ของ Screen) แต่สูงกว่าแคนวาส 3D ซึ่งไม่รับคลิกอยู่แล้ว */}
@@ -972,7 +995,7 @@ export function Portfolio2026FinalPage() {
             หัวเรื่องอยู่กลาง ประโยคปิดถูกดันลงไปติดล่างด้วย mt-auto */}
         <div
           ref={copyRef}
-          className="pointer-events-none relative z-10 ml-auto flex h-[100svh] w-[min(46%,560px)] flex-col pt-[clamp(56px,8svh,100px)] pl-[clamp(24px,7.3vw,116px)] pr-[clamp(4px,0.4vw,8px)] pb-[clamp(24px,14svh,143px)] text-[var(--v3-hero-ink)] will-change-transform">
+          className="v3-hero-copy pointer-events-none relative z-10 ml-auto flex h-[100svh] w-[min(46%,560px)] flex-col pt-[clamp(56px,8svh,100px)] pl-[clamp(24px,7.3vw,116px)] pr-[clamp(4px,0.4vw,8px)] pb-[clamp(24px,14svh,143px)] text-[var(--v3-hero-ink)] will-change-transform">
           {/* my-auto ไม่ใช่ justify-center — ประโยคปิดถูกตรึงไว้ล่างสุด ที่ว่างที่เหลือ
               จึงต้องถูกแบ่งรอบหัวเรื่องเอง ไม่งั้นมันจะถูกดันไปชนแถบเมนูด้านบน */}
           <Headline3DField
@@ -1009,22 +1032,6 @@ export function Portfolio2026FinalPage() {
               มันต้องค้างอยู่บนจอข้ามช่วงที่ม่านเมฆถม ซึ่งอยู่ในโฟลว์ของจอแรกไม่ได้ */}
         </div>
 
-        {/* โซเชียล ซ้ายล่างของการ์ด (แบบ joespresso) — ลิงก์จริงจาก config/site · GitHub ชุดเดียวกับหน้า /2026 */}
-        <ul className="v3-in v3-hero-social absolute bottom-[clamp(18px,4svh,40px)] left-[clamp(18px,2.2vw,36px)] z-20 m-0 flex list-none flex-col gap-[10px] p-0 [--v3-in-delay:1200ms]">
-          {HERO_SOCIAL.map(({ name, Icon, href }) => (
-            <li key={name}>
-              <a
-                href={href}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={name}
-                className="pointer-events-auto grid size-10 cursor-pointer place-items-center rounded-full text-white/95 transition-colors duration-200 hover:bg-white hover:text-[#1d3f8f]"
-              >
-                <Icon />
-              </a>
-            </li>
-          ))}
-        </ul>
         {/* บทบาท + ที่อยู่ ขวาล่างของการ์ด */}
         <p className="v3-in v3-hero-based absolute right-[clamp(20px,2.6vw,40px)] bottom-[clamp(20px,4.4svh,44px)] z-20 m-0 text-right leading-snug [--v3-in-delay:1250ms]">
           <span className="block text-[15px] font-semibold">UX/UI Designer</span>
@@ -1070,7 +1077,7 @@ export function Portfolio2026FinalPage() {
 
       {/* จอ What I do = ฉากมือชูจอ (sections/handcompose) พร้อมจังหวะเปิดตัวตอนเลื่อนเข้าจอ
           จอเดิม (ตัวละครในกรอบ + วงเล็บส้ม) ยังอยู่ที่ sections/whatidoscroll — สลับกลับได้ที่ import */}
-      <SkyStory id="what-i-do" />
+      <SkillDeck id="what-i-do" />
       {/* ปุ่มค้นหาในฟองคำพูดยืดตัวมาเป็นหน้าต่างพอร์ทัลของจอนี้ (ดู hero/MacWindow) */}
       <WhatIDoCard id="what-i-do-windows" />
 

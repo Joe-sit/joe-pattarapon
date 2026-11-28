@@ -17,7 +17,7 @@ import { makeLiquidGlass } from './liquidGlass'
 import { useTuner } from '@/newhero/tuner'
 import { StageLight } from './Headline3D'
 import { BAR_AT, BASE_Y as ISLE_Y, ISLAND, ISLAND_CARD, ISLAND_PROPS, K as ISLE_K, PadIsland, blockFlight, blockY, padIsland, type IslandApi } from './ResearchPlatform'
-import { bubbleTravel, setBubbleAway, setHeadBubbleLive, subscribeBubbleAway } from './bubbleTravel'
+import { bubbleTravel, deckBubble, setBubbleAway, setHeadBubbleLive, subscribeBubbleAway } from './bubbleTravel'
 import { DEVICE, LAYOUT_H, WF, WF_HEAD, benchPose, camDist, codeDark, devHook, CODE_HIT, HIT_FLY, GRASS_STORY, NO_CRASH, PLANET_STORY, MAP_STORY, ROAD_STORY, ASCII_STORY, DESK_STORY, SWITCHER_STORY, FOLD_STORY, STICKER_STORY, ROLO_STORY, ICON_OUT, planetLive, planetPhase, barLayout, caretSpot, deviceMat, devScreen, groundMat, deviceSpot, headPose, inOut as inOut3, researchPhase, wfK, workBeats } from './workMotion'
 import { mapGround, mapLive, mapPhase, phoneOnGround, stepMap } from './mapWorld'
 import { HOME_ICON, ICON_PX, roadCut, roadPhase } from './roadWorld'
@@ -207,8 +207,66 @@ const rnd = (n: number, k: number) => {
   const v = Math.sin(n * 12.9898 + k * 78.233) * 43758.5453
   return v - Math.floor(v)
 }
-const POSE0 = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0, iso: 0, grow: 0, page: 0, mag: 0, tuck: 0, fall: 0, prog: 0, act: [0, 0, 0], sel: 0, gone: 0, whirl: 0, caretOut: 0, zoom: 1, dev: 0, float: 0, tilt: 0, bx: 0, by: 0, bk: 1, bt: 1, flat: 0, wire: 0, land: 0, away: 0, brx: 0, bry: 0, bspin: 0, hx: 0, hy: 0, isle: 0, flip: 0, flatK: 0, sv2v: 0, dark: 0, push: 0, devFade: 1, pBulge: 0, pFly: 0, pMove: 0, pPost: 0, mLand: 0, mMap: 0, mAlt: 0, rDolly: 0, swSwipe: 0, swDx: 0, fdK: 0, fdT: 0, fdYaw: 0, stSink: 0, rHome: 0, rDrop: 0, rRise: 0, frost: 0 }
-type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number; iso: number; grow: number; page: number; mag: number; tuck: number; fall: number; prog: number; act: number[]; sel: number; gone: number; whirl: number; caretOut: number; zoom: number; dev: number; float: number; tilt: number; bx: number; by: number; bk: number; bt: number; flat: number; wire: number; land: number; away: number; brx: number; bry: number; bspin: number; hx: number; hy: number; isle: number; flip: number; flatK: number; sv2v: number; dark: number; push: number; devFade: number; pBulge: number; pFly: number; pMove: number; pPost: number; mLand: number; mMap: number; mAlt: number; rDolly: number; swSwipe: number; swDx: number; fdK: number; fdT: number; fdYaw: number; stSink: number; rHome: number; rDrop: number; rRise: number; frost: number }
+const POSE0 = { on: false, x: 0, y: 0, h: 0, rot: 0, dots: 0, line: 0, chars: 0, clear: 0, sv: 0, turn: 0, spin: 0, search: 0, sprout: 0, head: 0, paint: 0, stage: 0, slide: 0, hand: 0, lift: 0, rise: 0, white: 0, iso: 0, grow: 0, page: 0, mag: 0, tuck: 0, fall: 0, prog: 0, act: [0, 0, 0], sel: 0, gone: 0, whirl: 0, caretOut: 0, zoom: 1, dev: 0, float: 0, tilt: 0, bx: 0, by: 0, bk: 1, bt: 1, flat: 0, wire: 0, land: 0, away: 0, brx: 0, bry: 0, bspin: 0, hx: 0, hy: 0, isle: 0, flip: 0, flatK: 0, sv2v: 0, dark: 0, push: 0, devFade: 1, pBulge: 0, pFly: 0, pMove: 0, pPost: 0, mLand: 0, mMap: 0, mAlt: 0, rDolly: 0, swSwipe: 0, swDx: 0, fdK: 0, fdT: 0, fdYaw: 0, stSink: 0, rHome: 0, rDrop: 0, rRise: 0, frost: 0, tileK: 0, spinY: 0 }
+type Pose = { on: boolean; x: number; y: number; h: number; rot: number; dots: number; line: number; chars: number; clear: number; sv: number; turn: number; spin: number; search: number; sprout: number; head: number; paint: number; stage: number; slide: number; hand: number; lift: number; rise: number; white: number; iso: number; grow: number; page: number; mag: number; tuck: number; fall: number; prog: number; act: number[]; sel: number; gone: number; whirl: number; caretOut: number; zoom: number; dev: number; float: number; tilt: number; bx: number; by: number; bk: number; bt: number; flat: number; wire: number; land: number; away: number; brx: number; bry: number; bspin: number; hx: number; hy: number; isle: number; flip: number; flatK: number; sv2v: number; dark: number; push: number; devFade: number; pBulge: number; pFly: number; pMove: number; pPost: number; mLand: number; mMap: number; mAlt: number; rDolly: number; swSwipe: number; swDx: number; fdK: number; fdT: number; fdYaw: number; stSink: number; rHome: number; rDrop: number; rRise: number; frost: number; tileK: number; spinY: number }
+
+/**
+ * ท่าของฟองในโหมดสำรับการ์ด (ดู deckBubble ใน ./bubbleTravel) — แทนเรื่อง What I do เดิมทั้งหมด
+ *
+ * ช่วงเดินทาง (ตั้งแต่เลื่อน 0.03 จอ จนขอบบนของ section ถึงขอบบนจอ = ม่านเมฆขาวทึบพอดี):
+ * จากช่องข้าง Ideas → ช่องในประโยค ตำแหน่ง/ขนาดตามนิ้วคนเลื่อน โค้งขึ้นนิดกลางทาง หายบิดตามหัวเรื่อง
+ * แก้วใสค่อย ๆ ทาทึบเป็นสีของสกิล (uTile ของ ./liquidGlass) ระหว่างลอยผ่านเมฆ
+ * ถึงแล้ว: นั่งทับช่องสด ๆ (ช่องขยับตามผังคำได้) พลิก/เปลี่ยนสี/ยุบตามที่ SkillDeck สั่ง
+ * ไม่มีข้อความ ไม่มีจุดพิมพ์ — ช่องอื่นของท่าเป็นค่าตั้งต้นหมด ฟองจึงเป็นแก้วเปล่าใบเดียวกับในหัวเรื่อง
+ */
+function deckPose(el: HTMLElement, r: DOMRect, sv: number, vh: number): Pose {
+  const off: Pose = { ...POSE0 }
+  if (!bubbleTravel.live || r.height < 1) return off
+  const h0 = el.offsetHeight * (r.width / Math.max(1, el.offsetWidth))
+  const ax = r.left + r.width / 2
+  const ay = r.top + r.height / 2
+  const sec = deckBubble.section
+  const endVh = sec ? (sec.getBoundingClientRect().top + window.scrollY) / vh : 1
+  const raw = (sv - 0.03) / Math.max(0.05, endVh - 0.03)
+  const slot = deckBubble.slot
+  const stage = deckBubble.stage
+  let bx = ax
+  let by = ay
+  let bh = h0
+  if (slot && stage) {
+    const b = slot.getBoundingClientRect()
+    bx = b.left + b.width / 2
+    /* ตำแหน่งตอนตรึงแล้ว: ระหว่างเดินทาง section ยังอยู่ใต้จอ — เทียบขอบบนของชั้นที่ตรึง */
+    by = b.top - stage.getBoundingClientRect().top + b.height / 2
+    bh = slot.offsetHeight
+  }
+  const e = inOut01(clamp01(raw))
+  const k = raw >= 1 ? deckBubble.k : 1
+  if (raw >= 1 && (!slot || k < 0.01)) return off
+  /**
+   * พิมพ์ในฟองแบบเวอร์ชันฟองเดินทางเดิม: ระหว่างลอยผ่านเมฆมีแต่จุดกำลังพิมพ์ ถึงที่แล้วพิมพ์ "Hello, I'm Joe"
+   * ทีละตัวตามการเลื่อน (deckBubble.typeK) · จะกลายเป็นการ์ดเมื่อไร ข้อความหายไปก่อน (textOut)
+   */
+  const typed = raw >= 1 ? deckBubble.typeK : 0
+  const left = 1 - deckBubble.textOut
+  const chars = Math.round(typed * left * LINES[0].length)
+  return {
+    ...off,
+    on: true,
+    sv,
+    x: lerp(ax, bx, e),
+    y: lerp(ay, by, e) - Math.sin(Math.PI * e) * vh * 0.06,
+    h: lerp(h0, bh, e) * k,
+    rot: (1 - e) * Math.tan((5 * Math.PI) / 180),
+    tileK: smooth((raw - 0.3) / 0.5) * deckBubble.tint,
+    spinY: raw >= 1 ? deckBubble.spinY : 0,
+    dots: smooth((raw - 0.3) / 0.15) * (1 - smooth(typed / 0.06)) * left,
+    line: 0,
+    chars,
+    /* หมึกขาวบนฟ้า (ฟองแก้วใส ฟ้าอยู่ข้างหลัง) */
+    white: 1,
+  }
+}
 
 function readPose(): Pose {
   const off: Pose = { ...POSE0 }
@@ -219,6 +277,7 @@ function readPose(): Pose {
   if (!el || !story) return off
   const sv = window.scrollY / vh
   const r = el.getBoundingClientRect()
+  if (deckBubble.on) return deckPose(el, r, sv, vh)
   const sr = story.getBoundingClientRect()
   /** ระยะที่เลื่อนเข้ามาใน What I do แล้ว (หน่วยความสูงจอ) — จังหวะที่สองของฟองนับจากตรงนี้ */
   const sv2 = storySv2(Math.max(0, -sr.top / vh))
@@ -260,6 +319,9 @@ function readPose(): Pose {
   const barY = pl.cy
   const barH = VB_H * ((26 * sh) / FS)
   return {
+    /* ช่องของโหมดสำรับการ์ด (ดู deckPose) — เรื่องเดิมไม่ใช้ */
+    tileK: 0,
+    spinY: 0,
     on: true,
     x: lerp(r.left + r.width / 2, vw / 2, d),
     y: lerp(lerp(r.top + r.height / 2, vh * 0.5, d), barY, head) + lift,
@@ -984,6 +1046,8 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
         g.matrix.multiply(FLOAT_M.makeRotationX(-Math.PI * p.flip))
         g.matrix.premultiply(FLOAT_M.makeTranslation(0, size.height * 0.025 * arc, size.height * 0.06 * arc))
       }
+      /* โหมดสำรับการ์ด: พลิกรอบแกนตั้งของตัวฟองเอง (การ์ดใน ref พลิกแบบนี้) — มุมมาจาก SkillDeck */
+      if (p.spinY) g.matrix.multiply(FLOAT_M.makeRotationY(p.spinY))
       const isl = islandG.current
       if (isl) {
         const tr = inOut01(clamp01((p.land - ISLAND.handFrom) / (ISLAND.handTo - ISLAND.handFrom)))
@@ -1049,6 +1113,12 @@ function Bubble({ pose, wake }: { pose: React.RefObject<Pose>; wake: React.RefOb
     }
     /* จบที่สีเทาแบนตามแบบ Figma — ทาผิวเมชเดิม (ดู ./liquidGlass) */
     glass.uniforms.uPaint.value = p.paint
+    /* โหมดสำรับการ์ด: แก้วทาทึบเป็นสีของสกิล ไล่จากโทนอ่อนมุมบนซ้ายลงสีเต็ม (เนื้อเดียวกับกระเบื้องลูกโลก) */
+    glass.uniforms.uTile.value = p.tileK
+    if (p.tileK > 0) {
+      glass.uniforms.uTileB.value.set(deckBubble.color)
+      glass.uniforms.uTileA.value.copy(glass.uniforms.uTileB.value).lerp(WHITE, 0.38)
+    }
     /* ร่างเครื่อง = แก้วใสเกือบหมด (ไม่ให้ม่านขาวทับวิดเจ็ตสีสด) · ถูกเลือก = แก้วขาวขุ่น */
     glass.uniforms.uFill.value = Math.min(0.9, 0.1 + 0.55 * p.frost - 0.08 * p.dev + 0.74 * p.sel)
     /* ทรงเครื่องบนจอ — แสงรอบเครื่อง (./DeviceHalo) กับกรอบเลือก (./workMotion) อ่านค่านี้ */
@@ -1353,17 +1423,20 @@ export function BubbleTraveler() {
         setOn(was)
       }
       /* เปลี่ยนจริงค่อยวาด — ตอนนิ่งในหัวเรื่องไม่วาดซ้ำ */
-      const sig = `${p.on}|${p.x.toFixed(1)}|${p.y.toFixed(1)}|${p.h.toFixed(1)}|${p.sv.toFixed(4)}|${p.sel.toFixed(3)}|${p.zoom.toFixed(4)}`
+      const sig = `${p.on}|${p.x.toFixed(1)}|${p.y.toFixed(1)}|${p.h.toFixed(1)}|${p.sv.toFixed(4)}|${p.sel.toFixed(3)}|${p.zoom.toFixed(4)}|${p.tileK.toFixed(3)}|${p.spinY.toFixed(3)}|${p.chars}|${p.dots.toFixed(3)}|${deckBubble.on ? deckBubble.color : ''}`
       if (sig !== last) {
         last = sig
         wake.current()
       }
       /* อยู่ในหัวเรื่อง: หัวเรื่องขยับเองได้ (ท่าเปิดตัว) โดยไม่มีการเลื่อน — ตามกรอบมันทุกเฟรม (อ่านกรอบถูกมาก) */
-      if (p.on && p.sv < 0.05) kick()
+      /* โหมดสำรับการ์ด: ช่องปลายทางขยับตามผังคำ (layout animation) โดยไม่มีการเลื่อน — ตามทุกเฟรมเหมือนกัน */
+      if (p.on && (p.sv < 0.05 || deckBubble.on)) kick()
     }
     const kick = () => {
       if (!raf) raf = requestAnimationFrame(read)
     }
+    /* SkillDeck ปลุกตอนพลิก/ย่อ (ไม่มีการเลื่อน) */
+    deckBubble.wake = kick
     /* เรื่องแผนที่: พื้นเลื่อน (ลาก/ปุ่มลูกศร) โดยไม่มีการสกรอลล์ — ปลุกให้วาดเครื่องที่นอนบนพื้นตาม */
     mapLive.wake = () => wake.current()
     /* ใบในหัวเรื่องไม่วาดเลยบนหน้านี้ — ใบนี้แทนตลอด */
@@ -1379,6 +1452,7 @@ export function BubbleTraveler() {
       window.removeEventListener('resize', kick)
       setBubbleAway(false)
       setHeadBubbleLive(false)
+      deckBubble.wake = null
     }
   }, [])
 

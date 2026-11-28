@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { MeshTransmissionMaterial } from '@react-three/drei'
+import { MeshTransmissionMaterial, useFBO } from '@react-three/drei'
 
 /**
  * แผ่นแคปซูล — หน้าตรงเป็นสเตเดียมมุมมนสุด และสันตามความหนาก็มนสุดเช่นกัน
@@ -115,6 +115,63 @@ export function hideInBuffers(renderer, material) {
 }
 
 const OUTLINE = '#2b6b45'
+
+/** วัสดุที่ทิ้งทุกพิกเซล — ใส่แทนรางตอนถ่ายฉากหลัง ตัวรางจึงไม่ติดไปในภาพของตัวเอง (ท่าเดียวกับ drei) */
+const DISCARD = new THREE.ShaderMaterial({
+  vertexShader: 'void main() { gl_Position = vec4(0.0); }',
+  fragmentShader: 'void main() { discard; }',
+})
+const _frustum = new THREE.Frustum()
+const _pv = new THREE.Matrix4()
+const _sphere = new THREE.Sphere()
+
+/**
+ * บัฟเฟอร์ฉากหลังของรางกระจก — ถ่ายเอง แทนให้ drei ถ่ายทุกเฟรม
+ *
+ * MeshTransmissionMaterial ของ drei เรนเดอร์ทั้งฉากซ้ำลงบัฟเฟอร์ของตัวเองทุกเฟรม ไม่ว่าราง
+ * จะอยู่ในจอหรือไม่ วัดที่ /2026-final (1920×1080): ~200 draw call ต่อเฟรม เท่ากับฉากหลักทั้งฉาก
+ * ส่ง `buffer` ของเราเองเข้าไปแล้ว drei จะข้ามการถ่ายของมัน (มันถ่ายเฉพาะตอน buffer เป็นของมันเอง)
+ *
+ * ถ่ายเมื่อ:
+ *   - รางอยู่ในกรอบกล้อง — นอกกรอบไม่มีใครเห็นภาพหักเห
+ *   - เว้นเฟรม (ทุก 2 เฟรม) — ภาพหลังกระจกช้ากว่าจริงหนึ่งเฟรม ตามองไม่ออก ประหยัดครึ่งหนึ่ง
+ *   - เฟรมแรกที่กลับเข้ากรอบ ถ่ายทันที ไม่รอรอบ — ไม่งั้นเห็นภาพค้างจากตอนที่ออกไป
+ * glass = 0 ไม่ถ่ายเลย: transmission เป็นศูนย์ ภาพในบัฟเฟอร์ไม่ถูกใช้
+ */
+function useGlassBuffer(meshRef, resolution, enabled) {
+  const fbo = useFBO(resolution)
+  const tick = useRef(0)
+  const stale = useRef(true)
+  useFrame((state) => {
+    const mesh = meshRef.current
+    if (!enabled || !mesh || !mesh.geometry) return
+    const { gl, scene, camera } = state
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere()
+    _sphere.copy(mesh.geometry.boundingSphere).applyMatrix4(mesh.matrixWorld)
+    _pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    _frustum.setFromProjectionMatrix(_pv)
+    if (!_frustum.intersectsSphere(_sphere)) {
+      stale.current = true
+      return
+    }
+    tick.current += 1
+    if (!stale.current && tick.current % 2 !== 0) return
+    stale.current = false
+
+    const material = mesh.material
+    const prevTarget = gl.getRenderTarget()
+    const prevTone = gl.toneMapping
+    // ปิด tone map ตอนถ่าย ไม่งั้นภาพหลังกระจกถูก tone map ซ้ำสองรอบ (ท่าเดียวกับ drei)
+    gl.toneMapping = THREE.NoToneMapping
+    mesh.material = DISCARD
+    gl.setRenderTarget(fbo)
+    gl.render(scene, camera)
+    mesh.material = material
+    gl.setRenderTarget(prevTarget)
+    gl.toneMapping = prevTone
+  })
+  return fbo.texture
+}
 
 export function Switch({
   /** ความยาวรางเทียบความสูง — 2 คือสัดส่วนของ toggle มาตรฐาน */
@@ -251,6 +308,9 @@ export function Switch({
   const travel = w / 2 - radius + radius * 0.3
   const knobX = (Math.min(1, Math.max(0, pos)) * 2 - 1) * travel
   const knobRef = useRef()
+  const trackRef = useRef()
+  /** ดูที่มาของตัวเลขในคอมเมนต์ของ resolution ด้านล่าง (512 หยัก, 2048 แพงเกิน) */
+  const glassBuffer = useGlassBuffer(trackRef, LOW_END ? 384 : 1024, glass > 0)
   useFrame(({ clock }) => {
     if (!posAt || !knobRef.current) return
     const v = Math.min(1.2, Math.max(-0.2, posAt(clock)))
@@ -303,7 +363,7 @@ export function Switch({
 
   return (
     <group {...props} {...press}>
-      <mesh geometry={track}>
+      <mesh ref={trackRef} geometry={track}>
         {/**
          * รางเป็นกระจกจริง — transmission ไม่ใช่แค่ opacity
          *
@@ -336,8 +396,12 @@ export function Switch({
            * ต่อเฟรม" ที่ความละเอียดนั้น — วัดแล้วเป็นครึ่งหนึ่งของ draw call ทั้งเฟรม
            * 1024 เหลือขั้นบันไดจาง ๆ ที่ขอบก้อนเขียวซึ่งแทบไม่มีใครเห็นเพราะรางเล็กและขยับ
            * ตลอด แลกกับค่าเรนเดอร์สี่เท่า — ไม่คุ้ม
+           *
+           * บัฟเฟอร์จริงถ่ายโดย useGlassBuffer (ขนาดตั้งที่นั่น) — drei ข้ามการถ่ายของมันเมื่อได้ buffer
+           * จากข้างนอก ค่าตรงนี้จึงเหลือแค่ขนาดบัฟเฟอร์ของ drei ที่ไม่ได้ใช้ ตั้ง 1 ไม่ให้จองหน่วยความจำเปล่า
            */
-          resolution={LOW_END ? 384 : 1024}
+          buffer={glassBuffer}
+          resolution={1}
           attenuationDistance={depth * 9}
           attenuationColor={TRACK[1]}
           transparent

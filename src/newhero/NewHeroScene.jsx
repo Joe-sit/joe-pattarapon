@@ -3458,7 +3458,13 @@ function AfterIntro({ children }) {
   return ready ? children : null
 }
 
-export default function NewHeroScene({ bare = false, className = 'absolute inset-0' }) {
+/**
+ * style ส่งต่อให้ Canvas — ความสูงต้องสั่งผ่านตรงนี้ ไม่ใช่ className
+ * Canvas ของ r3f ใส่ inline height: 100% ให้กล่องของมันเอง คลาสอย่าง h-[100svh] จึงแพ้เสมอ
+ *
+ * @param {{ bare?: boolean, className?: string, style?: import('react').CSSProperties }} props
+ */
+export default function NewHeroScene({ bare = false, className = 'absolute inset-0', style = undefined }) {
   // เลื่อนพ้นไปไกลจนไม่มีใครเห็นแล้ว = หยุดวาด (ดู setSceneOn ใน scrolly.js)
   const on = useSceneOn()
   /**
@@ -3479,6 +3485,7 @@ export default function NewHeroScene({ bare = false, className = 'absolute inset
       /* วาดผ่าน FrameCap (เพดาน 60 fps) — always วาดตามรอบจอ จอ 144 Hz ขึ้นไป GPU ทำงานเกินเท่าตัว */
       frameloop="never"
       className={className}
+      style={style}
       /**
        * dpr สูงสุด 1.5 ไม่ใช่ 2 — ฉากนี้ติดคอขวดที่จำนวนพิกเซล (ฟ้า fbm, พาส rim ของ CameraFX
        * เต็มจอ) ไม่ใช่ draw call: ปิดเงา/พอร์ทัลแล้ว fps แทบไม่ขยับ แต่พิกเซลลด 44% ที่ 1.5
