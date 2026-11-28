@@ -8,6 +8,7 @@ import { SKILLS } from '@/sections/whatido/WhatIDo'
 import { StageLight } from './Headline3D'
 import { DeviceHalo } from './DeviceHalo'
 import { BenchScreen } from './BenchScreen'
+import { FaceShotMaker } from './FaceShot'
 import { FallSky, type FallPose } from './FallSky'
 import { BEAT, endOf, storySv2 } from '@/sections/skystory/beats'
 import { SlingGate } from './SlingGate'
@@ -572,8 +573,8 @@ export function WorkStory() {
       /* เจาะรูคำใหญ่ตามกรอบเครื่องทุกเฟรม (เครื่องขยับเองตามเวลา ไม่ใช่แค่ตอนเลื่อน) */
       const bs = wordsClip.current
       if (bs) {
-        /* ICON_OUT: เครื่องจางหายระหว่างฉากหดเป็นไอคอน (กรอบยังมีแต่มองไม่เห็น) — ไม่เจาะรูคำ */
-        if (devScreen.ok && devScreen.hw > 1 && !(ICON_OUT && iconOut(frame.current.b) > 0.2)) {
+        /* ICON_OUT: เครื่องลอยพ้นจอระหว่างฉากหดเป็นไอคอน (BubbleTraveler RISE_IO) — พ้นแล้วไม่เจาะรูคำ */
+        if (devScreen.ok && devScreen.hw > 1 && !(ICON_OUT && iconOut(frame.current.b) > 0.5)) {
           const { cx, cy, hw, hh } = devScreen
           const r = Math.min(devScreen.r, hw, hh)
           const x0 = cx - hw
@@ -711,7 +712,7 @@ export function WorkStory() {
         benchCv.current.style.opacity = PLANET_STORY
           ? (1 - smooth((b.code - PLANET_EMERGE[0] + 0.03) / 0.07) * (1 - smooth(b.ship / 0.25))).toFixed(3)
           : ICON_OUT
-            ? /* ของบนจอจางไปพร้อมตัวเครื่อง (BubbleTraveler devFade) */ (1 - smooth((live ? iconOut(b) : 0) / 0.22)).toFixed(3)
+            ? /* ของบนจอจางไปพร้อมตัวเครื่อง (BubbleTraveler devFade) */ (1 - smooth(((live ? iconOut(b) : 0) - 0.5) / 0.08)).toFixed(3)
             : ''
       }
       frame.current.on = live
@@ -890,7 +891,9 @@ export function WorkStory() {
           const wd = rolodexWord(b)
           /* ไม่มีหัวเรื่องแล้ว — คำประกบจางหาย (ขยายนิด + เบลอ) ตอนการ์ดเริ่มคลี่ลงกำแพง · กลับมาตอนปึกหุบ */
           const gone = smooth(wd.head / 0.5)
-          const v = live && wd.in > 0 && wd.out < 1 ? wd.in * (1 - wd.out) * (1 - gone) : 0
+          /* rolodex เริ่มกาง: สองคำหุบเข้าหาไอคอน (ช่องว่างหด + ย่อ + เบลอ) แล้วจางหายท้ายท่า */
+          const fold = wd.fold
+          const v = live && wd.in > 0 && wd.out < 1 ? wd.in * (1 - wd.out) * (1 - gone) * (1 - smooth((fold - 0.2) / 0.6)) : 0
           const vis = v > 0.002 ? 'visible' : 'hidden'
           el.style.visibility = vis
           ln.style.visibility = vis
@@ -915,8 +918,8 @@ export function WorkStory() {
           const span = io < 0.999 ? iconCard(io, vw, vh).w : rolodexSpan(b) * vh
           /* ถ่างตามไอคอน/ปึก แต่คำต้องไม่ตกขอบจอ (ปึกกางเต็มกว้างกว่าที่ว่าง — คำจมหลังปึก เหลือเส้นขอบ แบบบท R/D/C) */
           const gapMax = vw * 0.9 - 2 * Math.max(bx.a, bx.c) * FLANK_S
-          const gap = Math.min(span + flankPad(vw) * 2, gapMax) / FLANK_S
-          const s = FLANK_S * (1 + Math.max(wd.out, gone) * 0.06)
+          const gap = (Math.min(span + flankPad(vw) * 2, gapMax) / FLANK_S) * (1 - fold)
+          const s = FLANK_S * (1 + Math.max(wd.out, gone) * 0.06) * (1 - 0.3 * fold)
           worksGap.current.forEach((g) => {
             if (g) g.style.width = `${gap.toFixed(1)}px`
           })
@@ -930,7 +933,7 @@ export function WorkStory() {
           const pk = worksPaper(b)
           el.style.color = `rgb(${Math.round(255 - 240 * pk)}, ${Math.round(255 - 228 * pk)}, ${Math.round(255 - 194 * pk)})`
           el.style.textShadow = pk > 0.5 ? 'none' : ''
-          const blur = Math.max((1 - wd.in) * 14, gone * 10)
+          const blur = Math.max((1 - wd.in) * 14, gone * 10, fold * 8)
           const bl = blur > 0.05 ? `blur(${blur.toFixed(1)}px)` : ''
           el.style.opacity = v.toFixed(3)
           /* เส้นขอบ (ขยาย 2 px): เปิดเฉพาะตอนปึกกางเต็มทับคำ (ICON_OUT) */
@@ -1274,6 +1277,8 @@ export function WorkStory() {
       {MAP_STORY && <MapInfo />}
       {ROAD_STORY && <RoadInfo />}
       <SlingGate frame={frame} />
+      {/* หน้า favicon เต็มจอเครื่อง — ปั้นครั้งเดียวนอกจอ ให้จอเครื่องเล่าเรื่อง Research/Design/Code (./FaceShot) */}
+      <FaceShotMaker />
       <div ref={tilesBox} className="pointer-events-none fixed inset-0 z-[52]" style={{ visibility: 'hidden' }}>
         {openTile < 0 &&
           TILE_SLOTS.map((_, n) => (

@@ -1,6 +1,7 @@
 import {
   createContext,
   Suspense,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -11,6 +12,7 @@ import {
 } from 'react'
 import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber'
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js'
+import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js'
 import { Environment, Lightformer, MeshTransmissionMaterial, Text3D } from '@react-three/drei'
 import * as THREE from 'three'
 import { useNewHeroReady } from '@/newhero/ready'
@@ -21,6 +23,7 @@ import { BubbleCrowd, CHROME, chromeOutline } from './bubbleCrowd'
 import { useTuner } from '@/newhero/tuner'
 import { bubbleTravel, setHeadBubbleLive, subscribeBubbleAway } from './bubbleTravel'
 import { WarmShaders } from '@/lib/WarmShaders'
+import { devMode, subscribeDevMode } from '@/newhero/devMode'
 
 /**
  * หัวเรื่องจอแรกเป็นตัวอักษรสามมิติจริง — เรขาคณิตอัดขึ้นรูปจากเส้นของฟอนต์เดียวกับหน้า
@@ -595,6 +598,701 @@ const BUBBLE_TOYS = false
 /** สูงตัวพิมพ์ใหญ่ของฟอนต์หัวเรื่องเทียบขนาด 1 · สูงตัวอักษรในไฟล์ LIFE (หน่วย viewBox) */
 const CAP_H = 0.72
 const LIFE_GLYPH = 84
+
+/**
+ * LIFE แบบตัวอักษรลูกโป่ง (balloon bubble letters — ref "KEEP GOING" อ้วนกลมเนื้อยาง) แทนชิ้นอัดขอบมน
+ *
+ * ทรง: แต่ละตัว (ชิ้นสีเดียวกันในไฟล์) วาดลงหน้ากาก → เบลอ (box blur 3 รอบ ≈ เกาส์) = สนาม f 0..1
+ *   ขอบ = เส้นระดับ f = T (เบลอแล้วมุมทั้งนูน/เว้ามนเอง แบบยางเป่าลม)
+ *   สูงโดม = หน้าตัดวงกลมจากระยะถึงขอบ (ระยะ chamfer ของทรงอ้วนสุด แล้วเกลี่ย) — เส้นหนาเท่าไรก็ป่องกลม ไม่เป็นที่ราบ
+ *   ตารางจุดละเอียด ~1 ช่องต่อพิกเซลบนจอ สองหน้า (หน้า/หลัง) — ทรงคิดใน vertex shader จากโดม + ความชัน (ไม่สร้างใหม่ทุกเฟรม)
+ * ท่าโผล่ = เติมลม: ทีละตัว L · i · F · E ต่อจากตัวอักษรตัวสุดท้ายของหัวเรื่อง — แบนบางตัวเล็ก → ป่องอ้วนเกินนิดแล้วเด้งเข้าที่
+ *   inf คุม สูงโดม + ความอ้วน (T ลด) + ขนาดตัว · ขอบนุ่มด้วย alphaToCoverage (MSAA ของแคนวาส)
+ */
+const BALLOON_LIFE = true
+/**
+ * ทรงตัวอักษรของลูกโป่ง: 'font' = ฟอนต์หัวเรื่อง (Momo Trust Display — มนอ้วนอยู่แล้ว เป่าแล้วเป็น bubble letter แบบ ref)
+ * 'svg' = ตัว LIFE พิกเซลในไฟล์เดิม (เป่าแล้วเป็นก้อนเหลี่ยม ๆ) — สีตามตัวเดียวกันทั้งสองแบบ
+ */
+const BAL_GLYPHS: 'font' | 'svg' = 'font'
+/**
+ * คำที่วนต่อจาก "to" (word pool): เป่าลมเข้าทีละตัว → ค้าง → ปล่อยลมออก (ลอยหนีขึ้น) → คำถัดไปเป่าเข้า
+ * ทุกคำมีตัวละคร: eyes = ตัวที่มีตาโต (ตัวกลม O/C หรือ E) · fuzz = ตัวกำมะหยี่ (i ตัวเล็ก — จุดมีตาจิ๋ว)
+ */
+type BalWord = { text: string; eyes: number; fuzz: number }
+const BAL_WORDS: readonly BalWord[] = [
+  { text: 'LiFE', eyes: 3, fuzz: 1 },
+  { text: 'PRODUCT', eyes: 2, fuzz: 4 },
+  { text: 'SOLUTiON', eyes: 1, fuzz: 5 },
+  { text: 'iMPACT', eyes: 4, fuzz: 0 },
+]
+/**
+ * สีวนตามตัว — สี่สีแรก = สีตามตัวของ LIFE เดิม (hero-life.svg: L เขียว · i ม่วง · F ฟ้าเขียว · E ส้ม) อิ่มขึ้นแบบห่วงยางเป่าลม
+ * ต่อด้วยชมพู · เหลือง · ฟ้า (ref Summer DAYDREAM) สำหรับคำที่ยาวกว่าสี่ตัว
+ */
+/** ตัวที่ช่องในตัวแคบ/ขาชิดกัน — พองเต็มที่แล้วช่องปิด (R กลายเป็น A) */
+const BAL_TIGHT = 'RAEBKMNWS'
+const BAL_COLORS = ['#34C25F', '#B07AE6', '#1FC3D8', '#FF7442', '#FF5FA8', '#FFC21F', '#3F86FF']
+const BAL = {
+  /** ช่องตารางต่อหน่วย SVG */
+  res: 1.2,
+  /** รัศมีเบลอ (หน่วย SVG) — มุมมนแบบยางเป่าลม + พองเส้นออกได้มาก (ตัวฟอนต์ช่องกว้างพอ แขน E/F ยังไม่หลอม) */
+  blur: 7.5,
+  /** เส้นระดับขอบ: ตอนแฟบ (เส้นบางเท่าฟอนต์) → ตอนป่องเต็ม (อ้วนจนช่องในตัวเหลือแคบ แบบ ref) */
+  tThin: 0.5,
+  tFat: 0.155,
+  /** ตัวช่องแคบ (BAL_TIGHT) พองน้อยกว่า */
+  tTight: 0.27,
+  /** รัศมีโค้งของโดม (หน่วย SVG — ราวครึ่งความหนาเส้น) · สูงโดม (หน่วย SVG) */
+  radius: 30,
+  height: 21,
+  /** ระยะห่างตัวอักษร (× ขนาดฟอนต์ — ติดลบ = ชิดกัน ป่องแล้วเกือบชนแบบ ref) */
+  track: -0.015,
+  /** วินาทีต่อตัว · ระยะห่างระหว่างตัว */
+  dur: 1.25,
+  stag: 0.14,
+  /** ค้างให้อ่านหลังป่องครบ (วินาที) · ปล่อยลมต่อตัว · ระยะห่างระหว่างตัวตอนปล่อยลม */
+  hold: 2.6,
+  outDur: 0.55,
+  outStag: 0.06,
+}
+/**
+ * จัดวางแบบเล่น ๆ (ref "KEEP GOING" — ตัวเอียงคนละทาง สูงต่ำไม่เท่ากัน ขนาดไม่เท่ากัน เบียดกัน)
+ * rot องศา (ในกลุ่มที่พลิกแกน y — บวก = ตามเข็มบนจอ) · dx/dy หน่วย SVG (dy บวก = ลง) · s ขนาด
+ */
+/* dz = ซ้อนหน้า/หลัง (หน่วย SVG) — ตัวที่เบียดกันจมเข้าหากันแบบลูกโป่งอัดกัน ไม่ใช่วางเรียงแยกกัน (ref DAYDREAM) */
+/* วนตามลำดับตัว (คำยาวสุด 8 ตัว) — สี่ตัวแรก = ท่าของ LIFE */
+const BAL_ARR = [
+  { rot: -10, dx: 4, dy: 5, dz: 0, s: 1.08 },
+  { rot: 12, dx: 2, dy: -9, dz: 9, s: 1.04 },
+  { rot: -6, dx: -3, dy: 6, dz: -7, s: 0.98 },
+  { rot: 10, dx: -4, dy: -4, dz: 4, s: 1.08 },
+  { rot: -8, dx: -2, dy: 7, dz: -4, s: 1.02 },
+  { rot: 9, dx: -4, dy: -6, dz: 7, s: 1.06 },
+  { rot: -11, dx: -5, dy: 4, dz: -3, s: 0.97 },
+  { rot: 7, dx: -6, dy: -5, dz: 6, s: 1.05 },
+]
+/**
+ * เล่นกับเคอร์เซอร์ (สปริงหน่วงน้อย — ดุ๊กดิ๊กก่อนนิ่ง): ใกล้ตัวไหน ตัวนั้นถอยหนี เอนหนี ป่องขึ้นนิด
+ * คลิกโดนตัว = กระดอนแบบเยลลี่ (บีบ-ยืด) + กระโดดนิด + หมุนนิด
+ */
+const BAL_PLAY = { reach: 1.3, push: 11, lean: 0.24, puff: 0.1, k: 230, c: 13, jelly: 7, hop: 70 }
+type BalSpring = { x: number; y: number; r: number; p: number; q: number; vx: number; vy: number; vr: number; vp: number; vq: number }
+const springOf = (): BalSpring => ({ x: 0, y: 0, r: 0, p: 0, q: 0, vx: 0, vy: 0, vr: 0, vp: 0, vq: 0 })
+const _balW = new THREE.Vector3()
+/** r = รัศมีคร่าว ๆ ของตัว (หน่วย SVG — ระยะที่เคอร์เซอร์เริ่มดันตัว/คลิกโดน) · top = กลางชิ้นบนสุดเทียบกลางตัว (จุดของ i) */
+type BalLetter = { geo: THREE.BufferGeometry; color: string; fat: number; cx: number; cy: number; r: number; hw: number; hh: number; top: { x: number; y: number } }
+
+/** box blur แนวเดียว (รัศมี r ช่อง) ของตาราง w × h ลง out */
+function boxBlur(src: Float32Array, out: Float32Array, w: number, h: number, r: number, horiz: boolean) {
+  const n = horiz ? w : h
+  const m = horiz ? h : w
+  const k = 1 / (2 * r + 1)
+  for (let j = 0; j < m; j++) {
+    const at = (i: number) => (horiz ? j * w + i : i * w + j)
+    let acc = 0
+    for (let i = -r; i <= r; i++) acc += src[at(Math.min(n - 1, Math.max(0, i)))]
+    for (let i = 0; i < n; i++) {
+      out[at(i)] = acc * k
+      acc += src[at(Math.min(n - 1, i + r + 1))] - src[at(Math.max(0, i - r))]
+    }
+  }
+}
+
+type StyledPath = THREE.ShapePath & { userData?: { style?: { fill?: string } } }
+type BalLoop = { outer: THREE.Vector2[]; holes: THREE.Vector2[][] }
+/** fat = เส้นระดับขอบตอนป่องเต็มของตัวนี้ (ตัวช่องแคบพองน้อยกว่า ไม่งั้นช่องปิดอ่านไม่ออก) */
+type BalSrc = { color: string; loops: BalLoop[]; fat?: number }
+const loopsOf = (shapes: THREE.Shape[]) => shapes.map((sh) => ({ outer: sh.getPoints(16), holes: sh.holes.map((hh) => hh.getPoints(16)) }))
+
+/** ตัวจากไฟล์ SVG: ชิ้นสีเดียวกัน = ตัวเดียวกัน (พิกัด SVG แกน y ชี้ลง) */
+function svgLetters(data: { paths: StyledPath[] }): BalSrc[] {
+  const groups = new Map<string, THREE.Shape[]>()
+  for (const path of data.paths) {
+    const fill = path.userData?.style?.fill
+    if (!fill || fill === 'none') continue
+    const list = groups.get(fill) ?? []
+    list.push(...SVGLoader.createShapes(path))
+    groups.set(fill, list)
+  }
+  return [...groups].map(([color, shapes]) => ({ color, loops: loopsOf(shapes) }))
+}
+
+/** ตัวจากฟอนต์หัวเรื่อง: วางเรียงตาม advance ของฟอนต์ แล้วย่อ/ขยายเข้ากรอบของไฟล์ LIFE (w × h หน่วย viewBox) · แกน y กลับเป็นชี้ลง */
+function fontLetters(json: unknown, frame: { x: number; y: number; w: number; h: number }, text: string): BalSrc[] {
+  const font = new FontLoader().parse(json as Parameters<FontLoader['parse']>[0])
+  const SIZE = 100
+  const res = (json as { resolution: number }).resolution || 1000
+  const glyphs = (json as { glyphs: Record<string, { ha: number }> }).glyphs
+  let x = 0
+  const raw = [...text].map((ch, i) => {
+    const loops = loopsOf(font.generateShapes(ch, SIZE)).map((l) => ({
+      outer: l.outer.map((p) => new THREE.Vector2(p.x + x, -p.y)),
+      holes: l.holes.map((hh) => hh.map((p) => new THREE.Vector2(p.x + x, -p.y))),
+    }))
+    x += ((glyphs[ch]?.ha ?? res * 0.6) * SIZE) / res + BAL.track * SIZE
+    /* หลายชิ้น (i): ชิ้นบนสุด (จุด) ยกขึ้นนิด — พองแล้วยังมีช่องกับก้าน */
+    if (loops.length > 1) {
+      const top = loops.reduce((a, b) => (Math.min(...b.outer.map((p) => p.y)) < Math.min(...a.outer.map((p) => p.y)) ? b : a))
+      for (const p of top.outer) p.y -= SIZE * 0.1
+    }
+    return { color: BAL_COLORS[i % BAL_COLORS.length], loops, fat: BAL_TIGHT.includes(ch.toUpperCase()) ? BAL.tTight : BAL.tFat }
+  })
+  const bb = new THREE.Box2()
+  for (const l of raw) for (const lp of l.loops) for (const p of lp.outer) bb.expandByPoint(p)
+  const sz = bb.getSize(new THREE.Vector2())
+  /* ชิดซ้าย + ฐานตรงขอบล่างของกรอบ (ต่อจาก "to" แบบ LIFE เดิม) · สูงเกินกรอบได้นิด (จุดของ i ยื่นขึ้นไป) */
+  const k = Math.min(frame.w / sz.x, (frame.h * 1.3) / sz.y)
+  const ox = frame.x - bb.min.x * k
+  const oy = frame.y + frame.h - bb.max.y * k
+  const map = (p: THREE.Vector2) => p.set(p.x * k + ox, p.y * k + oy)
+  for (const l of raw) for (const lp of l.loops) {
+    lp.outer.forEach(map)
+    lp.holes.forEach((hh) => hh.forEach(map))
+  }
+  return raw
+}
+
+function buildBalloon(src: BalSrc[]): BalLetter[] {
+  const out: BalLetter[] = []
+  const M = BAL.blur * 2.2
+  const r = Math.max(1, Math.round(BAL.blur * BAL.res))
+  for (const { color, loops, fat = BAL.tFat } of src) {
+    const bb = new THREE.Box2()
+    for (const l of loops) for (const p of l.outer) bb.expandByPoint(p)
+    const x0 = bb.min.x - M
+    const y0 = bb.min.y - M
+    const W = Math.ceil((bb.max.x - bb.min.x + 2 * M) * BAL.res)
+    const H = Math.ceil((bb.max.y - bb.min.y + 2 * M) * BAL.res)
+    const cv = document.createElement('canvas')
+    cv.width = W
+    cv.height = H
+    const ctx = cv.getContext('2d', { willReadFrequently: true })
+    if (!ctx) continue
+    ctx.setTransform(BAL.res, 0, 0, BAL.res, -x0 * BAL.res, -y0 * BAL.res)
+    ctx.fillStyle = '#fff'
+    /* แต่ละชิ้น (เช่นจุดกับก้านของ i) เบลอแยกแล้วรวมด้วยค่ามากสุด — พองแล้วไม่หลอมติดกันข้ามช่อง */
+    const f = new Float32Array(W * H)
+    const one = new Float32Array(W * H)
+    const tmp = new Float32Array(W * H)
+    for (const l of loops) {
+      ctx.clearRect(-x0, -y0, W / BAL.res, H / BAL.res)
+      ctx.beginPath()
+      for (const ring of [l.outer, ...l.holes]) {
+        ring.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)))
+        ctx.closePath()
+      }
+      ctx.fill('evenodd')
+      const px = ctx.getImageData(0, 0, W, H).data
+      for (let i = 0; i < W * H; i++) one[i] = px[i * 4 + 3] / 255
+      for (let pass = 0; pass < 3; pass++) {
+        boxBlur(one, tmp, W, H, r, true)
+        boxBlur(tmp, one, W, H, r, false)
+      }
+      for (let i = 0; i < W * H; i++) if (one[i] > f[i]) f[i] = one[i]
+    }
+    /* ระยะถึงขอบของทรงอ้วนสุด (chamfer 1/√2 สองรอบ, หน่วย SVG) → เกลี่ย → หน้าตัดวงกลม z = √(t(2 − t)), t = ระยะ/รัศมี */
+    const dist = new Float32Array(W * H)
+    const BIG = 1e6
+    for (let i = 0; i < W * H; i++) dist[i] = f[i] >= fat ? BIG : 0
+    const D1 = 1 / BAL.res
+    const D2 = Math.SQRT2 / BAL.res
+    const relax = (i: number, j: number, di: number, dj: number, c: number) => {
+      const ii = i + di
+      const jj = j + dj
+      if (ii < 0 || jj < 0 || ii >= W || jj >= H) return
+      const v = dist[jj * W + ii] + c
+      if (v < dist[j * W + i]) dist[j * W + i] = v
+    }
+    for (let j = 0; j < H; j++)
+      for (let i = 0; i < W; i++) {
+        relax(i, j, -1, 0, D1)
+        relax(i, j, 0, -1, D1)
+        relax(i, j, -1, -1, D2)
+        relax(i, j, 1, -1, D2)
+      }
+    for (let j = H - 1; j >= 0; j--)
+      for (let i = W - 1; i >= 0; i--) {
+        relax(i, j, 1, 0, D1)
+        relax(i, j, 0, 1, D1)
+        relax(i, j, 1, 1, D2)
+        relax(i, j, -1, 1, D2)
+      }
+    const rs = Math.max(1, Math.round(1.5 * BAL.res))
+    for (let pass = 0; pass < 2; pass++) {
+      boxBlur(dist, tmp, W, H, rs, true)
+      boxBlur(tmp, dist, W, H, rs, false)
+    }
+    const hz = new Float32Array(W * H)
+    for (let i = 0; i < W * H; i++) {
+      const q = Math.min(1, dist[i] / BAL.radius)
+      hz[i] = Math.sqrt(q * (2 - q))
+    }
+    /* ตารางจุด (กลางช่อง) — พิกัดเทียบกลางตัว · ความชันของโดมต่อหน่วย SVG · สองหน้า (aSide ±1) */
+    const cx = (bb.min.x + bb.max.x) / 2
+    const cy = (bb.min.y + bb.max.y) / 2
+    const nv = W * H
+    const pos = new Float32Array(nv * 2 * 3)
+    const aF = new Float32Array(nv * 2)
+    const aZ = new Float32Array(nv * 2)
+    const aG = new Float32Array(nv * 2 * 2)
+    const aSide = new Float32Array(nv * 2)
+    for (let j = 0; j < H; j++) {
+      for (let i = 0; i < W; i++) {
+        const v = j * W + i
+        const x = x0 + (i + 0.5) / BAL.res - cx
+        const y = y0 + (j + 0.5) / BAL.res - cy
+        const gx = ((hz[j * W + Math.min(W - 1, i + 1)] - hz[j * W + Math.max(0, i - 1)]) * BAL.res) / 2
+        const gy = ((hz[Math.min(H - 1, j + 1) * W + i] - hz[Math.max(0, j - 1) * W + i]) * BAL.res) / 2
+        for (let side = 0; side < 2; side++) {
+          const q = v + side * nv
+          pos[q * 3] = x
+          pos[q * 3 + 1] = y
+          aF[q] = f[v]
+          aZ[q] = hz[v]
+          aG[q * 2] = gx
+          aG[q * 2 + 1] = gy
+          aSide[q] = side ? -1 : 1
+        }
+      }
+    }
+    /* เฉพาะช่องที่ถึงเส้นขอบตอนอ้วนสุดได้ — หน้าหลังกลับลำดับจุด (หันออกด้านหลัง) */
+    const idx: number[] = []
+    const cut = fat - 0.06
+    for (let j = 0; j < H - 1; j++) {
+      for (let i = 0; i < W - 1; i++) {
+        const a = j * W + i
+        const b = a + 1
+        const c = a + W
+        const d = c + 1
+        if (Math.max(f[a], f[b], f[c], f[d]) < cut) continue
+        idx.push(a, b, c, b, d, c)
+        idx.push(a + nv, c + nv, b + nv, b + nv, c + nv, d + nv)
+      }
+    }
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    geo.setAttribute('aF', new THREE.BufferAttribute(aF, 1))
+    geo.setAttribute('aZ', new THREE.BufferAttribute(aZ, 1))
+    geo.setAttribute('aG', new THREE.BufferAttribute(aG, 2))
+    geo.setAttribute('aSide', new THREE.BufferAttribute(aSide, 1))
+    geo.setIndex(nv * 2 > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1))
+    /* กรอบกว้างพอทั้งทรงป่องเต็ม (frustum culling) */
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), Math.hypot(W, H) / BAL.res / 2 + BAL.height)
+    const topLoop = loops.reduce((a, b) => (Math.min(...b.outer.map((p) => p.y)) < Math.min(...a.outer.map((p) => p.y)) ? b : a))
+    const tb = new THREE.Box2().setFromPoints(topLoop.outer)
+    const top = { x: (tb.min.x + tb.max.x) / 2 - cx, y: (tb.min.y + tb.max.y) / 2 - cy }
+    out.push({ geo, color, fat, cx, cy, r: Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y) / 2 + BAL.blur, hw: (bb.max.x - bb.min.x) / 2, hh: (bb.max.y - bb.min.y) / 2, top })
+  }
+  return out.sort((p, q) => p.cx - q.cx)
+}
+
+/**
+ * วัสดุพลาสติกเป่าลมเงา (ref Summer DAYDREAM — ห่วงยาง/ของเล่นสระ): physical + เคลือบเงา (clearcoat) สะท้อนเวทีไฟของฟองแก้ว
+ * โดมใน vertex shader (uInf × uH × aZ) + ขอบนุ่มจากเส้นระดับ f (uT)
+ */
+function balloonMaterial(color: string, kind: 'gloss' | 'fuzz' = 'gloss') {
+  const fuzz = kind === 'fuzz'
+  const m = new THREE.MeshPhysicalMaterial({
+    color,
+    roughness: fuzz ? 0.9 : 0.24,
+    metalness: 0,
+    clearcoat: fuzz ? 0 : 0.7,
+    clearcoatRoughness: 0.04,
+    /* กำมะหยี่: ขนสั้นรับแสงเฉียงเป็นนวลสีอ่อนตามขอบ (sheen) แทนไฮไลต์เงา */
+    sheen: fuzz ? 1 : 0,
+    sheenColor: new THREE.Color(color).lerp(new THREE.Color('#ffffff'), 0.55),
+    sheenRoughness: 0.5,
+    envMapIntensity: fuzz ? 0.25 : 0.75,
+    toneMapped: false,
+    alphaToCoverage: true,
+  })
+  const u = { uInf: { value: 0 }, uT: { value: BAL.tThin }, uH: { value: BAL.height } }
+  m.userData.u = u
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u)
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aF;\nattribute float aZ;\nattribute vec2 aG;\nattribute float aSide;\nuniform float uInf;\nuniform float uH;\nvarying float vF;')
+      .replace('#include <beginnormal_vertex>', 'float bk = uH * uInf;\nvec3 objectNormal = normalize(vec3(-bk * aG.x, -bk * aG.y, aSide));')
+      .replace('#include <begin_vertex>', 'vec3 transformed = vec3(position.xy, bk * aZ * aSide);\nvF = aF;\nvBp = position.xy;')
+      .replace('varying float vF;', 'varying float vF;\nvarying vec2 vBp;')
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform float uT;
+varying float vF;
+varying vec2 vBp;
+float bH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float bN(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(bH(i), bH(i + vec2(1.0, 0.0)), f.x), mix(bH(i + vec2(0.0, 1.0)), bH(i + vec2(1.0, 1.0)), f.x), f.y); }`)
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.a *= smoothstep(uT - 0.025, uT + 0.025, vF);\nif (diffuseColor.a < 0.004) discard;' + (fuzz ? '\ndiffuseColor.rgb *= 0.86 + 0.22 * bN(vBp * 0.9);' : ''))
+      /* กำมะหยี่: ผิวเป็นเม็ดขน (นอร์มอลสั่นด้วยนอยส์ในพิกัดตัว — ไม่ไหลตามจอ) */
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>' + (fuzz ? '\nnormal = normalize(normal + 0.5 * vec3(bN(vBp * 0.7) - 0.5, bN(vBp * 0.7 + 17.3) - 0.5, 0.0));' : ''))
+      /* เนื้อยางหนา: สีเข้มลงตามขอบที่โค้งหนีกล้อง (ไม่ใช่ขอบสว่างเรือง) — ทรงป่องอ่านจากเงาไล่ ไม่ใช่เส้นขอบ */
+      .replace('#include <opaque_fragment>', 'outgoingLight *= mix(0.44, 0.8, pow(clamp(normal.z, 0.0, 1.0), 1.2));\n#include <opaque_fragment>')
+  }
+  return m
+}
+
+/** เติมลม 0 → 1: ช้าตอนเริ่มสูบ · ป่องเกินนิดท้ายท่า แล้วเด้งเข้าที่ */
+const inflate = (e: number) => (e >= 1 ? 1 : 1 - (1 - e) ** 3 + 0.14 * Math.sin(Math.PI * e) * e * e)
+
+/** กรอบอ้างอิง = viewBox ของไฟล์ (ฝั่ง HTML ย่อ/ขยายตามนี้) · data.xml = ราก <svg> (ไม่ใช่ document) */
+function vbOf(data: { xml: unknown }) {
+  const root = data.xml as Element & { documentElement?: Element }
+  const vb = (root?.getAttribute?.('viewBox') ?? root?.documentElement?.getAttribute('viewBox'))?.split(/[\s,]+/).map(Number)
+  return vb && vb.length === 4 && vb.every((n) => Number.isFinite(n)) ? { x: vb[0], y: vb[1], w: vb[2], h: vb[3] } : null
+}
+
+/**
+ * ตาโต (ref Summer — ตัวในคำมีตา): ลูกตาขาวแบนนิดติดบนโดม ขอบเข้ม · ตาดำมองตามเคอร์เซอร์
+ * ตาคู่ใหญ่บนตัว word.eyes (ตัวกลม O/C: กลางแถบบน · E: บนแขนบน) · ตาจิ๋วบนจุดของ i ตัวกำมะหยี่ (ลูกบอลมีหน้าแบบตัวเหลืองของ ref)
+ * พิกัดเทียบกลางตัว (หน่วย SVG แกน y ชี้ลง) · ติดอยู่ใต้ mesh ของตัว — บีบ/ยืด/กระดอนไปพร้อมตัว
+ */
+type EyeSet = { on: number; at: [number, number][]; r: number; pupil: number; look: number }
+const eyeSetsOf = (list: BalLetter[], word: BalWord): EyeSet[] => {
+  const out: EyeSet[] = []
+  const B = list[word.eyes]
+  if (B) {
+    const round = 'OCDGQU'.includes(word.text[word.eyes].toUpperCase())
+    const at: [number, number][] = round
+      ? [[-B.hw * 0.27, -B.hh * 0.6], [B.hw * 0.2, -B.hh * 0.62]]
+      : [[-B.hw * 0.4, -B.hh * 0.66], [B.hw * 0.02, -B.hh * 0.68]]
+    out.push({ on: word.eyes, at, r: B.hh * 0.17, pupil: B.hh * 0.085, look: B.hh * 0.06 })
+  }
+  const I = list[word.fuzz]
+  if (I && word.text[word.fuzz] === 'i') out.push({ on: word.fuzz, at: [[I.top.x - 4.4, I.top.y + 0.6], [I.top.x + 4.4, I.top.y - 0.6]], r: 3.9, pupil: 2.1, look: 1.3 })
+  return out
+}
+const _eyeW = new THREE.Vector3()
+
+/** คำหนึ่งคำที่ปั้นแล้ว (ตัวอักษร + วัสดุ + ตา) — ปั้นทีละคำ (คำที่โชว์ + คำถัดไประหว่างค้าง) ทิ้งคำเก่าเมื่อสลับ */
+type BalSlot = { wi: number; list: BalLetter[]; mats: THREE.MeshPhysicalMaterial[]; eyes: EyeSet[] }
+const disposeSlot = (sl: BalSlot | null) => {
+  sl?.list.forEach((l) => l.geo.dispose())
+  sl?.mats.forEach((m) => m.dispose())
+}
+/** จังหวะของคำ n ตัว (ms นับจากจุดเริ่มคำ): เป่าเข้าครบ · เริ่มปล่อยลม · ปล่อยลมครบ (= สลับคำ) */
+const slotTimes = (n: number) => {
+  const inEnd = ((n - 1) * BAL.stag + BAL.dur) * 1000
+  const outAt = inEnd + BAL.hold * 1000
+  return { inEnd, outAt, end: outAt + ((n - 1) * BAL.outStag + BAL.outDur) * 1000 }
+}
+const clamp01b = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x)
+
+/** โหมด dev ของหน้า (สวิตช์ในฉาก hero) = ของ 3D เป็น clay — ลูกโป่ง/ตาเป็นเทาดินเรียบ ไม่มีสี */
+const CLAY_TINT = '#b9b9bd'
+const CLAY_EYE = ['#d9d9dc', '#5a5a60'] as const
+
+function BalloonArt({ box }: { box: LineBox }) {
+  const data = useLoader(SVGLoader, box.src ?? '')
+  const dev = useSyncExternalStore(subscribeDevMode, () => devMode.on)
+  const field = useContext(FieldCtx)
+  const live = field?.live ?? false
+  const { size, invalidate } = useThree()
+  const t = useTuner()
+  const thick = (t.hlDepth / CAP_H) * LIFE_GLYPH
+  const vbox = useMemo(() => vbOf(data), [data])
+  /*
+   * กรอบให้คำ: สูงเท่า LIFE เดิม · กว้างได้ถึงขอบขวาของแคนวาสหรือของจอ (แคนวาสล้นจอได้ — ขอบจอคือขอบจริง)
+   * เว้นเผื่อตัวที่พองออก/เอียง · คำยาวกว่า LIFE ย่อลงให้พอดีที่ว่าง
+   */
+  const sc0 = vbox ? Math.min(box.width / vbox.w, box.height / vbox.h) : 1
+  const roomPx = Math.min(size.width - box.left, window.innerWidth - fieldRect.left - box.left) - 36 - BAL.blur * 2 * sc0
+  const availW = vbox ? Math.max(vbox.w, Math.floor(roomPx / sc0)) : 0
+  const make = useCallback(
+    async (wi: number): Promise<BalSlot | null> => {
+      if (!vbox) return null
+      const word = BAL_WORDS[wi]
+      const src = BAL_GLYPHS === 'font' ? fontLetters(await loadFont(), { ...vbox, w: availW }, word.text) : svgLetters(data as unknown as { paths: StyledPath[] })
+      const list = buildBalloon(src)
+      return { wi, list, mats: list.map((l, i) => balloonMaterial(l.color, i === word.fuzz ? 'fuzz' : 'gloss')), eyes: eyeSetsOf(list, word) }
+    },
+    [vbox, availW, data],
+  )
+  const [slot, setSlot] = useState<BalSlot | null>(null)
+  /** จุดเริ่มของคำที่โชว์ (performance.now) — NaN = คำแรก: เริ่มตามคิวโชว์ของหัวเรื่อง */
+  const start = useRef(NaN)
+  const next = useRef<BalSlot | null>(null)
+  const cur = useRef<BalSlot | null>(null)
+  cur.current = slot
+  const springs = useRef<BalSpring[]>([])
+  /* ปั้นคำแรกตอนเธรดหลักว่าง (แบบ SvgArt) · ถอดออก = ทิ้งทั้งคำที่โชว์และคำที่ปั้นรอ */
+  useEffect(() => {
+    let dead = false
+    const run = async () => {
+      const made = await make(0)
+      if (dead) return disposeSlot(made)
+      start.current = NaN
+      springs.current = []
+      const old = cur.current
+      setSlot(made)
+      if (old) window.setTimeout(() => disposeSlot(old), 100)
+      invalidate()
+    }
+    const hasIdle = 'requestIdleCallback' in window
+    const id = hasIdle ? window.requestIdleCallback(() => void run(), { timeout: 1200 }) : window.setTimeout(() => void run(), 60)
+    return () => {
+      dead = true
+      if (hasIdle) window.cancelIdleCallback(id)
+      else window.clearTimeout(id)
+    }
+  }, [make, invalidate])
+  useEffect(
+    () => () => {
+      disposeSlot(cur.current)
+      disposeSlot(next.current)
+      next.current = null
+    },
+    [],
+  )
+  /* วนคำ: ปั้นคำถัดไประหว่างค้าง · ปลุกเฟรมตอนเริ่มปล่อยลม (แคนวาสวาดเมื่อสั่ง) · ปล่อยลมครบ = สลับคำ */
+  useEffect(() => {
+    if (!slot || !field?.live || BAL_WORDS.length < 2) return
+    const base = Number.isFinite(start.current) ? start.current : field.revealAt + charsAll(field.lines) * APPEAR.stag * 1000
+    if (!Number.isFinite(base)) return
+    const tm = slotTimes(slot.list.length)
+    const now = performance.now()
+    const wi = (slot.wi + 1) % BAL_WORDS.length
+    let dead = false
+    const prep = window.setTimeout(() => {
+      void make(wi).then((sl) => {
+        if (dead) return disposeSlot(sl)
+        disposeSlot(next.current)
+        next.current = sl
+      })
+    }, Math.max(0, base + tm.inEnd - now + 200))
+    const kick = window.setTimeout(() => invalidate(), Math.max(0, base + tm.outAt - now))
+    const swap = window.setTimeout(() => {
+      void (async () => {
+        const sl = next.current?.wi === wi ? next.current : await make(wi)
+        next.current = null
+        if (dead) return disposeSlot(sl)
+        start.current = performance.now()
+        springs.current = []
+        const old = cur.current
+        setSlot(sl)
+        if (old) window.setTimeout(() => disposeSlot(old), 100)
+        invalidate()
+      })()
+    }, Math.max(0, base + tm.end - now))
+    return () => {
+      dead = true
+      window.clearTimeout(prep)
+      window.clearTimeout(kick)
+      window.clearTimeout(swap)
+    }
+  }, [slot, field, make, invalidate])
+  const meshes = useRef<(THREE.Mesh | null)[]>([])
+  const eyeRes = useMemo(
+    () => ({
+      ball: new THREE.SphereGeometry(1, 24, 16),
+      white: new THREE.MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 0.6, toneMapped: false }),
+      black: new THREE.MeshPhysicalMaterial({ color: '#1b1420', roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.04, envMapIntensity: 0.8, toneMapped: false }),
+    }),
+    [],
+  )
+  useEffect(
+    () => () => {
+      eyeRes.ball.dispose()
+      eyeRes.white.dispose()
+      eyeRes.black.dispose()
+    },
+    [eyeRes],
+  )
+  /* clay: สีทุกตัว/ตาเป็นเทา เคลือบเงาออก · ออกจาก dev คืนสีเดิมของตัว */
+  useEffect(() => {
+    slot?.mats.forEach((m, i) => {
+      m.color.set(dev ? CLAY_TINT : slot.list[i].color)
+      m.clearcoat = dev ? 0 : m.sheen > 0 ? 0 : 0.7
+      m.needsUpdate = true
+    })
+    eyeRes.white.color.set(dev ? CLAY_EYE[0] : '#ffffff')
+    eyeRes.black.color.set(dev ? CLAY_EYE[1] : '#1b1420')
+    invalidate()
+  }, [dev, slot, eyeRes, invalidate])
+  const pupils = useRef<(THREE.Mesh | null)[][]>([])
+  const eyesG = useRef<(THREE.Group | null)[]>([])
+  /** ตัวที่เคอร์เซอร์ชี้อยู่ (−1 = ไม่มี) — คลิกที่ไหนก็ตาม (แคนวาสไม่รับเมาส์) ถ้าชี้ตัวอยู่ = ตัวนั้นกระดอน */
+  const hot = useRef(-1)
+  useEffect(() => {
+    const down = () => {
+      const sp = springs.current[hot.current]
+      if (!sp) return
+      sp.vq += BAL_PLAY.jelly
+      sp.vy -= BAL_PLAY.hop
+      sp.vr += (Math.random() - 0.5) * 6
+      invalidate()
+    }
+    window.addEventListener('pointerdown', down)
+    return () => {
+      window.removeEventListener('pointerdown', down)
+      if (hot.current >= 0) document.documentElement.style.cursor = ''
+    }
+  }, [invalidate])
+  useFrame((_, dtRaw) => {
+    if (!slot || !field || !vbox) return
+    const dt = Math.min(dtRaw, 1 / 30)
+    const base = Number.isFinite(start.current) ? start.current : field.revealAt + charsAll(field.lines) * APPEAR.stag * 1000
+    const ok = Number.isFinite(base)
+    const tm = slotTimes(slot.list.length)
+    const now = performance.now()
+    const cycle = BAL_WORDS.length > 1
+    const mx = mouse.x - fieldRect.left - size.width / 2
+    const my = size.height / 2 - (mouse.y - fieldRect.top)
+    let moving = false
+    let near = -1
+    let nearD = Infinity
+    slot.mats.forEach((m, i) => {
+      const ein = ok ? (now - base - i * BAL.stag * 1000) / (BAL.dur * 1000) : 0
+      const eout = ok && cycle ? (now - base - tm.outAt - i * BAL.outStag * 1000) / (BAL.outDur * 1000) : 0
+      if (ein < 1 || (eout > 0 && eout < 1)) moving = true
+      const e = clamp01b(ein)
+      const o = clamp01b(eout)
+      /* ปล่อยลม: แฟบลงเร็วขึ้นเรื่อย ๆ (o²) ลอยหนีขึ้น + หมุน แล้วจางท้ายท่า */
+      const k = inflate(e) * (1 - o * o)
+      const u = m.userData.u as { uInf: { value: number }; uT: { value: number } }
+      u.uInf.value = k
+      u.uT.value = BAL.tThin + (slot.list[i].fat - BAL.tThin) * Math.min(1.08, k)
+      m.opacity = Math.min(1, e / 0.12) * (1 - clamp01b((o - 0.55) / 0.45))
+      const me = meshes.current[i]
+      if (!me) return
+      const L = slot.list[i]
+      const A = BAL_ARR[i % BAL_ARR.length]
+      const sp = (springs.current[i] ??= springOf())
+      /* เคอร์เซอร์ → แรงผลักของตัวนี้ (ระยะบนจอ px · ทิศแปลงกลับเป็นพิกัด SVG ที่แกน y ชี้ลง) — เฉพาะตอนป่องเต็มค้างอยู่ */
+      let tx = 0
+      let ty = 0
+      let tr = 0
+      let tp = 0
+      me.parent?.localToWorld(_balW.set(L.cx + A.dx, L.cy + A.dy, thick / 2))
+      const ddx = _balW.x - mx
+      const ddy = _balW.y - my
+      const d = Math.hypot(ddx, ddy)
+      const R = L.r * A.s * sc0 * BAL_PLAY.reach
+      if (e >= 1 && o <= 0 && d < R) {
+        const f = (1 - d / R) ** 2
+        const len = d || 1
+        tx = (ddx / len) * BAL_PLAY.push * f
+        ty = (-ddy / len) * BAL_PLAY.push * f
+        tr = (ddx / len) * BAL_PLAY.lean * f
+        tp = BAL_PLAY.puff * f
+        if (d < nearD && d < R * 0.75) {
+          nearD = d
+          near = i
+        }
+      }
+      /* สปริงหน่วงน้อย: a = k(เป้า − ค่า) − c·ความเร็ว */
+      const K = BAL_PLAY.k
+      const C = BAL_PLAY.c
+      sp.vx += (K * (tx - sp.x) - C * sp.vx) * dt
+      sp.vy += (K * (ty - sp.y) - C * sp.vy) * dt
+      sp.vr += (K * (tr - sp.r) - C * sp.vr) * dt
+      sp.vp += (K * (tp - sp.p) - C * sp.vp) * dt
+      sp.vq += (K * 0.8 * (0 - sp.q) - C * 0.6 * sp.vq) * dt
+      sp.x += sp.vx * dt
+      sp.y += sp.vy * dt
+      sp.r += sp.vr * dt
+      sp.p += sp.vp * dt
+      sp.q += sp.vq * dt
+      if (Math.abs(sp.vx) + Math.abs(sp.vy) + Math.abs(sp.vr) * 20 + Math.abs(sp.vp) * 40 + Math.abs(sp.vq) * 40 + Math.abs(tx - sp.x) + Math.abs(ty - sp.y) > 0.02) moving = true
+      const sc = (0.78 + 0.22 * k) * A.s * (1 + sp.p)
+      const fly = o * o
+      me.position.set(L.cx + A.dx + sp.x, L.cy + A.dy + sp.y - fly * 26, thick / 2 + A.dz)
+      me.rotation.z = (A.rot * Math.PI) / 180 + sp.r + fly * (i % 2 ? 0.9 : -0.9)
+      me.scale.set(sc * (1 + sp.q), sc * (1 - 0.8 * sp.q), 1 + sp.p)
+      me.visible = e > 0 && o < 1
+    })
+    /* ตา: ลอยบนโดม (สูงตามการเติมลม) · ตาดำเลื่อนไปทางเคอร์เซอร์ (หน่วง) */
+    const seen = mouse.x > -1e4
+    slot.eyes.forEach((set, si) => {
+      const eg = eyesG.current[si]
+      const eMesh = meshes.current[set.on]
+      const eMat = slot.mats[set.on]
+      if (!eg || !eMesh || !eMat) return
+      const k = (eMat.userData.u as { uInf: { value: number } }).uInf.value
+      eg.position.z = BAL.height * k * 0.98
+      eg.scale.setScalar(Math.max(1e-3, Math.min(1, k)))
+      eg.visible = eMesh.visible && k > 0.05
+      ;(pupils.current[si] ?? []).forEach((pm, j) => {
+        if (!pm) return
+        const [ex, ey] = set.at[j]
+        eMesh.localToWorld(_eyeW.set(ex, ey, eg.position.z))
+        const lx = seen ? mx - _eyeW.x : -60
+        const ly = seen ? -(my - _eyeW.y) : 20
+        const ll = Math.hypot(lx, ly) || 1
+        const reach = Math.min(1, ll / 120)
+        const tx = ex + (lx / ll) * set.look * reach
+        const ty = ey + (ly / ll) * set.look * reach
+        const nx = pm.position.x + (tx - pm.position.x) * 0.35
+        const ny = pm.position.y + (ty - pm.position.y) * 0.35
+        if (Math.abs(nx - pm.position.x) + Math.abs(ny - pm.position.y) > 0.01) moving = true
+        pm.position.x = nx
+        pm.position.y = ny
+      })
+    })
+    /* ชี้ตัวไหนอยู่ = คลิกได้ (เคอร์เซอร์มือ) */
+    if ((near >= 0) !== (hot.current >= 0)) document.documentElement.style.cursor = near >= 0 ? 'pointer' : ''
+    hot.current = near
+    if (moving && ok) invalidate()
+  })
+  if (!slot || !vbox) return null
+  const { x: bx, y: by, w, h } = vbox
+  const s = sc0
+  const originX = box.left - size.width / 2
+  const originY = size.height / 2 - box.top
+  return (
+    <group
+      position={[originX + (w * s) / 2, originY - (h * s) / 2, 0]}
+      rotation={[(t.hlRotX * Math.PI) / 180, (t.hlRotY * Math.PI) / 180, (t.hlRotZ * Math.PI) / 180]}
+    >
+      <group position={[(-w * s) / 2, (h * s) / 2, 0]} scale={[s, -s, s]} visible={live}>
+        <group position={[-bx, -by, 0]}>
+          {slot.list.map((l, i) => (
+            <mesh
+              key={`${slot.wi}-${i}`}
+              ref={(el) => {
+                meshes.current[i] = el
+              }}
+              geometry={l.geo}
+              material={slot.mats[i]}
+              position={[l.cx, l.cy, thick / 2]}
+              visible={false}
+            >
+              {slot.eyes.map((set, si) =>
+                set.on !== i ? null : (
+                  <group
+                    key={si}
+                    ref={(el) => {
+                      eyesG.current[si] = el
+                    }}
+                    visible={false}
+                  >
+                    {set.at.map(([ex, ey], j) => (
+                      <group key={j}>
+                        {/* ขอบเข้มรอบลูกตา — ตาขาวไม่จมหายในไฮไลต์ของผิวเงา */}
+                        <mesh geometry={eyeRes.ball} material={eyeRes.black} position={[ex, ey, -0.6]} scale={[set.r * 1.14, set.r * 1.14, set.r * 0.5]} />
+                        <mesh geometry={eyeRes.ball} material={eyeRes.white} position={[ex, ey, 0]} scale={[set.r, set.r, set.r * 0.55]} />
+                        <mesh
+                          ref={(el) => {
+                            ;(pupils.current[si] ??= [])[j] = el
+                          }}
+                          geometry={eyeRes.ball}
+                          material={eyeRes.black}
+                          position={[ex, ey, set.r * 0.42]}
+                          scale={[set.pupil, set.pupil, set.pupil * 0.6]}
+                        />
+                      </group>
+                    ))}
+                  </group>
+                ),
+              )}
+            </mesh>
+          ))}
+        </group>
+      </group>
+    </group>
+  )
+}
 
 function SvgArt({ box }: { box: LineBox }) {
   const data = useLoader(SVGLoader, box.src ?? '')
@@ -1941,7 +2639,7 @@ export function Headline3DField({
               <PointerWake />
               <Suspense fallback={null}>
                 {lines.map((b) =>
-                  b.src ? <SvgArt key={b.id} box={b} /> : <Line key={b.id} box={b} cfg={cfg} />,
+                  b.src ? BALLOON_LIFE && !b.glass ? <BalloonArt key={b.id} box={b} /> : <SvgArt key={b.id} box={b} /> : <Line key={b.id} box={b} cfg={cfg} />,
                 )}
               </Suspense>
             </Canvas>

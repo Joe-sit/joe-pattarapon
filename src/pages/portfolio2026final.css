@@ -315,6 +315,20 @@
   width: auto;
 }
 
+/* โซเชียล/ที่อยู่ของการ์ด hero — ขาวบนฟ้า เงานุ่มให้อ่านออกบนเมฆ */
+.v3-hero-social a {
+  filter: drop-shadow(0 1px 6px rgba(10, 40, 90, 0.35));
+}
+.v3-hero-social a:hover {
+  filter: none;
+}
+.v3-hero-based {
+  color: #fff;
+  font-family: var(--v3-display);
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 8px rgba(10, 40, 90, 0.35);
+}
+
 .v3-hero-bubble {
   height: calc(clamp(46px, 12.4svh, 126px) * var(--v3-hl-size, 1));
   width: calc(clamp(98px, 26.4svh, 270px) * var(--v3-hl-size, 1));

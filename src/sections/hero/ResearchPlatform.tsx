@@ -87,6 +87,8 @@ export const BASE_Y = -86
  * การ์ดล่างของจอเครื่อง (CARDS[2] ใน ./BenchScreen — x y และความหนาผิวบน slab(312×236, ลึก 3) = 3 + 2·bevel 8)
  * เขียนเลขซ้ำที่นี่เพราะ BenchScreen import ไฟล์นี้ (กันวนกัน) — เปลี่ยนการ์ดใบนั้นต้องแก้ตรงนี้ด้วย
  */
+/** ของบน island (แว่นขยาย แท่งแก้วบล็อก ต้นไม้ พุ่ม) — ปิด: บท Research เล่าด้วยหน้า favicon ประกอบร่างบนจอเครื่อง (./FaceShot) */
+export const ISLAND_PROPS = false
 export const ISLAND_CARD = { x: 0, y: -246, top: 3 + 2 * 8 }
 /**
  * จังหวะของ island: ฟองหงายจบก่อน (tilt ใน BubbleTraveler จบที่ flip[0]) → flip = พลิกครั้งเดียว แล้วของจึงงอก

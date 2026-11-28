@@ -3,8 +3,9 @@ import { useFrame } from '@react-three/fiber'
 import { useTexture } from '@react-three/drei'
 import * as THREE from 'three'
 import { storySv2 } from '@/sections/skystory/beats'
-import { DEVICE, deviceMat, workBeats } from './workMotion'
+import { DEVICE, ICON_OUT, deviceMat, workBeats } from './workMotion'
 import { HOME_ICON, roadPhase } from './roadWorld'
+import { iconOut } from './RolodexStage'
 
 /**
  * เรื่องถนน: จอเครื่องกลายเป็นหน้าโฮมของมือถือ (ตาม GIF ref) — wallpaper ไล่ฟ้า ช่องแอปใสเรียงสามคอลัมน์
@@ -94,7 +95,8 @@ export function RoadHome() {
       return
     }
     const b = workBeats(storySv2(Math.max(0, -story.getBoundingClientRect().top / (window.innerHeight || 1))))
-    const k = roadPhase(b).home
+    /* ICON_OUT: ทางออกบท Code ไม่มีหน้าโฮมบนเครื่อง (เครื่องลอยพ้นจอทั้งจอ splash) — หน้าโฮมขึ้นตอนตัดกลับ (iconOut กลับเป็น 0) */
+    const k = ICON_OUT && iconOut(b) > 0 ? 0 : roadPhase(b).home
     gg.visible = k > 0.002
     if (!gg.visible) return
     res.wallMat.opacity = k

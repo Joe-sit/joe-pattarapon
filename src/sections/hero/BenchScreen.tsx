@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { makeChunkyTile } from './liquidGlass'
-import { K as ISLE_K, ResearchIsland, blockFlight } from './ResearchPlatform'
+import { ISLAND_PROPS, K as ISLE_K, ResearchIsland, blockFlight } from './ResearchPlatform'
 import { outlineMat, rrect } from './shapes'
+import { faceShot } from './FaceShot'
 import { storySv2 } from '@/sections/skystory/beats'
 import { DECK_WORKS } from './WorksGallery'
 import {
@@ -400,13 +401,29 @@ const FLAT_CARD: readonly { fill: string; edge: string }[] = [
   { fill: '#a688f6', edge: '#bea6fa' },
   { fill: '#e8423f', edge: '#c11fbd' },
 ]
+/** แผ่นหน้า favicon เต็มจอ = ทั้งตัวเครื่องแก้ว (หน่วยผังจอ 420 × 820 มุม ≈ 86) หดเข้าขอบนิด */
+const LAUNCH = { w: 404, h: 804, r: 80 } as const
 /**
- * เปิดแอป (ต้นบท Code — สัดส่วนบท): แตะไอคอน [เริ่ม, ยาว] → ขยายเป็น splash เต็มจอ [เริ่ม, ยาว] ตลอดบท Code จอเป็น splash
- * ขยายพร้อมโหมดมืดเข้า → splash เป็นกระจกมืด แล้วลำแสงสแกนเรนเดอร์ splash จริงจากบนลงล่าง (แบบที่เคยเติมสีวิดเจ็ต)
- * จอ = ทั้งตัวเครื่องแก้ว (หน่วยผังจอ 420 × 820 มุม ≈ 86) หดเข้าขอบนิด · พื้น splash ขาวไล่นวล (ต่อเป็นหน้าขาวของ Selected Work)
+ * ประกอบร่างช่วงบท Design (สัดส่วนบท design): [เริ่ม, ยาว] · ชิ้นมาถึงทีละชิ้นตามลำดับ ยาวชิ้นละ PIECE_DUR (สัดส่วนของช่วงประกอบ)
+ * ระยะบิน (เท่าความกว้างจอ) · ชิ้นสูงสุด (ผม หน้า echo ≤ 8 พื้น)
  */
-const LAUNCH = { tap: [0, 0.03], open: [0.02, 0.07], w: 404, h: 804, r: 80 } as const
-const SPLASH = { top: '#ffffff', bot: '#eef2f8' } as const
+const ASSEMBLE = [0.02, 0.86] as const
+const PIECE_DUR = 0.3
+const FLY_D = 0.95
+const PIECES_MAX = 12
+/** ทิศที่ชั้น echo บินเข้า (หน่วยความกว้างจอ, y ขึ้น) — วนตามลำดับชั้น */
+const ECHO_FROM = [
+  [-1, 0.35],
+  [1, -0.25],
+  [0.3, 1],
+  [-0.35, -1],
+  [1, 0.6],
+  [-1, -0.5],
+  [0.6, -1],
+  [-0.5, 1],
+] as const
+/** เข้าที่แบบเด้งเกินนิด (snap) */
+const snapIn = (q: number) => (q >= 1 ? 1 : 1 - (1 - q) ** 3 + 0.12 * Math.sin(Math.PI * q) * q)
 /** ชั้นเงาสีรุ้งหลังไอคอนแอป (ใน → นอก) — ไล่แบบแถบรุ้งใน favicon */
 const ECHO = ['#ffd23f', '#5ed66d', '#3d9bff', '#9a6bff', '#ff5d55'] as const
 const FLAT_TILE: Record<string, string> ={ '#44c4de': '#2d8af0', '#a696f1': '#5d1fa8', '#b3a5f4': '#7a3ad6' }
@@ -722,19 +739,44 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
   )
   const echoRefs = useRef<(THREE.Mesh | null)[]>([])
   /**
-   * หน้า splash ของแอป: ไอคอน (favicon) ถูกแตะแล้วขยายจากช่องของมันจนเต็มจอเครื่อง (แบบเปิดแอปบน iOS)
-   * แผ่นมนแผ่นเดียว — ขนาด/มุมมนเป็น uniform (ไม่ยืดมุม) · พื้นขาวไล่นวล · favicon กลางแผ่นขนาดเท่าไอคอนเดิม
-   * ตอนเริ่มแผ่นเท่าไอคอนพอดี = สลับจากการ์ดไอคอนได้ไม่เห็นรอย
+   * จอเครื่องทั้งจอ = หน้า favicon เต็มจอ (ภาพจาก ./FaceShot — ฉากเดียวกับ favicon ปั้นแนวตั้ง) เล่าเรื่องตามบท:
+   *   Research  ประกอบร่างเป็นโครงเส้น (blueprint) บนพื้นน้ำเงินเส้นตาราง: แผ่นพื้น → ชั้น echo บินเข้าจากคนละทิศ (นอก → ใน)
+   *             → หน้าโผล่ขึ้นจากล่าง → ผมหล่นลงครอบ (เด้งเข้าที่) · เส้น = ขอบภาพ (Sobel) + รอยต่อชิ้น (แผนที่ชิ้น idx)
+   *             ทุกพิกเซลไล่ชิ้นจากหน้าไปหลัง (ผม → หน้า → echo ใน → นอก → พื้น) ย้อนท่าปัจจุบันของชิ้นนั้นไปอ่านภาพ
+   *   Design    ลงสีทีละชิ้น: ตัวละครก่อน → ชั้น echo จากในออกนอก → พื้น · เส้นร่างจางตามที่ลงสีครบ
+   *   Code      แสง echo ไหล: สีชั้นไหลออกจากหัวไปขอบนอก (แบบ idle ของ favicon) + วงแสงวิ่งออกเป็นจังหวะ
+   * แผ่นมนแผ่นเดียวเต็มจอ (ผังจอ LAUNCH.w × h มุม r) วาดทับของบนจอทั้งหมด (depthTest ปิด)
    */
   const splash = useMemo(() => {
-    const logo = (parts[0].mat as THREE.ShaderMaterial).uniforms.uMap.value as THREE.Texture | null
     const mat = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
-      /* วาดทับทุกอย่างในจอ — ของที่ยืนสูงบนเกาะ Research ไม่ทะลุแผ่นตอนขยาย */
       depthTest: false,
       toneMapped: false,
-      uniforms: { uSize: { value: new THREE.Vector2(1, 1) }, uR: { value: 0 }, uTop: { value: new THREE.Color(SPLASH.top) }, uBot: { value: new THREE.Color(SPLASH.bot) }, uLogo: { value: logo }, uLogoH: { value: 75 }, uDark: { value: 0 }, uFill: { value: 1e5 }, uCy: { value: 0 } },
+      uniforms: {
+        uSize: { value: new THREE.Vector2(LAUNCH.w, LAUNCH.h) },
+        uR: { value: LAUNCH.r },
+        uFace: { value: null as THREE.Texture | null },
+        uIdx: { value: null as THREE.Texture | null },
+        uTexel: { value: new THREE.Vector2(1 / 512, 1 / 1024) },
+        uFlowK: { value: 0 },
+        uTime: { value: 0 },
+        uN: { value: 4 },
+        uCol: { value: Array.from({ length: 8 }, () => new THREE.Color()) },
+        uAlpha: { value: 0 },
+        /* ชิ้นที่ประกอบ (หน้า → หลัง): รหัสใน idx · เลื่อน (uv) · ย่อ/ขยายรอบกลางหัว · ความทึบ */
+        uNP: { value: 0 },
+        uPid: { value: Array.from({ length: PIECES_MAX }, () => 0) },
+        uOff: { value: Array.from({ length: PIECES_MAX }, () => new THREE.Vector2()) },
+        uScl: { value: Array.from({ length: PIECES_MAX }, () => 1) },
+        uPv: { value: Array.from({ length: PIECES_MAX }, () => 0) },
+        uPivot: { value: new THREE.Vector2(0.5, 0.5) },
+        /* ตา: กรอบแต่ละข้าง (uv cx cy ครึ่งกว้าง ครึ่งสูง) · สีผิว (เปลือกตา) · หลับ 0..1 */
+        uEye: { value: [new THREE.Vector4(), new THREE.Vector4()] },
+        uEyeN: { value: 0 },
+        uSkin: { value: new THREE.Color('#e8b49c') },
+        uBlink: { value: 0 },
+      },
       vertexShader: /* glsl */ `
         varying vec2 vUv;
         void main() {
@@ -744,44 +786,123 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
       fragmentShader: /* glsl */ `
         uniform vec2 uSize;
         uniform float uR;
-        uniform vec3 uTop;
-        uniform vec3 uBot;
-        uniform sampler2D uLogo;
-        uniform float uLogoH;
-        uniform float uDark;
-        uniform float uFill;
-        uniform float uCy;
+        uniform sampler2D uFace;
+        uniform sampler2D uIdx;
+        uniform vec2 uTexel;
+        uniform float uFlowK;
+        uniform float uTime;
+        uniform float uN;
+        uniform vec3 uCol[8];
+        uniform float uAlpha;
+        uniform float uNP;
+        uniform float uPid[${PIECES_MAX}];
+        uniform vec2 uOff[${PIECES_MAX}];
+        uniform float uScl[${PIECES_MAX}];
+        uniform float uPv[${PIECES_MAX}];
+        uniform vec2 uPivot;
+        uniform vec4 uEye[2];
+        uniform float uEyeN;
+        uniform vec3 uSkin;
+        uniform float uBlink;
         varying vec2 vUv;
+        float hash(vec2 q) { return fract(sin(dot(q, vec2(12.9898, 78.233))) * 43758.5453); }
+        float lum(vec2 uv) { return dot(texture2D(uFace, uv).rgb, vec3(0.299, 0.587, 0.114)); }
+        float idAt(vec2 uv) { return floor(texture2D(uIdx, uv).r * 255.0 + 0.5); }
         void main() {
           vec2 p = (vUv - 0.5) * uSize;
           vec2 q = abs(p) - (uSize * 0.5 - vec2(uR));
           float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - uR;
           float aa = max(fwidth(sd), 0.5);
-          vec3 col = mix(uBot, uTop, smoothstep(0.0, 1.0, vUv.y));
-          vec2 lu = p / (uLogoH * 2.0) + 0.5;
-          vec4 lg = texture2D(uLogo, clamp(lu, 0.0, 1.0));
-          lg.a *= step(0.0, lu.x) * step(lu.x, 1.0) * step(0.0, lu.y) * step(lu.y, 1.0);
-          col = mix(col, lg.rgb, lg.a);
+          /* ── Research: โครงเส้นของหน้าทั้งหน้าอยู่กับที่ (แบบแปลน) — ขอบภาพ (Sobel ความสว่าง) + รอยต่อชิ้น บนพื้น blueprint ── */
+          float id0 = idAt(vUv);
+          vec2 t = uTexel * 1.5;
+          float a0 = lum(vUv + t * vec2(-1.0, 1.0)), a1 = lum(vUv + t * vec2(0.0, 1.0)), a2 = lum(vUv + t * vec2(1.0, 1.0));
+          float b0 = lum(vUv + t * vec2(-1.0, 0.0)), b2 = lum(vUv + t * vec2(1.0, 0.0));
+          float c0 = lum(vUv + t * vec2(-1.0, -1.0)), c1 = lum(vUv + t * vec2(0.0, -1.0)), c2 = lum(vUv + t * vec2(1.0, -1.0));
+          float gx = (a2 + 2.0 * b2 + c2) - (a0 + 2.0 * b0 + c0);
+          float gy = (a0 + 2.0 * a1 + a2) - (c0 + 2.0 * c1 + c2);
+          float ie = step(0.5, abs(idAt(vUv + vec2(uTexel.x, 0.0)) - id0)) + step(0.5, abs(idAt(vUv + vec2(0.0, uTexel.y)) - id0))
+                   + step(0.5, abs(idAt(vUv - vec2(uTexel.x, 0.0)) - id0)) + step(0.5, abs(idAt(vUv - vec2(0.0, uTexel.y)) - id0));
+          float line = clamp(max(smoothstep(0.12, 0.42, length(vec2(gx, gy))), min(ie, 1.0)), 0.0, 1.0);
+          vec3 bp = mix(vec3(0.06, 0.17, 0.5), vec3(0.11, 0.28, 0.7), vUv.y);
+          vec2 g = abs(fract(p / 26.0) - 0.5);
+          bp += vec3(0.6, 0.75, 1.0) * (1.0 - smoothstep(0.0, 0.05, min(g.x, g.y))) * 0.07;
+          /* ตัวหน้า (ไม่ใช่พื้น) ไส้ฟ้าอ่อนลงนิด อ่านเป็นแผ่นแบบร่าง */
+          vec3 wire = mix(bp + vec3(0.05, 0.08, 0.14) * step(0.5, id0), vec3(0.92, 0.96, 1.0), line * 0.92);
           /*
-           * โหมดมืดบท Code: กระจกมืดขอบเรือง favicon เป็นเงาจาง · ใต้ลำแสงสแกน (ยังไม่เรนเดอร์) มืด เหนือลำแสง = splash จริง
-           * เส้นสว่างตรงลำแสง — ชุดเดียวกับการ์ดวิดเจ็ต (makeChunkyTile)
+           * ── Design: ชิ้นสีจริงบินเข้าประกอบทับแบบแปลน — ไล่ชิ้นจากหน้าไปหลัง (ผม → หน้า → echo ใน → นอก → พื้น)
+           *    ย้อนท่าปัจจุบันของชิ้นไปอ่านภาพ · ชิ้นที่ยังไม่มาถึงไม่วาด (เห็นแบบแปลนข้างใต้) ──
            */
-          float wy = p.y + uCy;
-          float under = smoothstep(uFill - 1.5, uFill + 1.5, wy);
-          float rim = smoothstep(-14.0, 0.0, sd);
-          vec3 dk = mix(vec3(0.02, 0.018, 0.035), vec3(0.62, 0.58, 0.82), rim * 0.7);
-          dk = mix(dk, lg.rgb * 0.3, lg.a * 0.7);
-          float dm = uDark * (1.0 - under);
-          col = mix(col, dk, dm);
-          float a = mix(1.0, 0.84 + rim * 0.14, dm);
-          float lip = exp(-(wy - uFill) * (wy - uFill) / 18.0) * step(-uSize.y, uFill - uCy) * step(uFill - uCy, uSize.y);
-          col = mix(col, vec3(1.0), lip * 0.7 * uDark);
-          gl_FragColor = vec4(col, a * (1.0 - smoothstep(-aa, aa, sd)));
+          vec2 uv = vUv;
+          float hit = -1.0;
+          float pv = 0.0;
+          for (int i = 0; i < ${PIECES_MAX}; i++) {
+            if (float(i) >= uNP) break;
+            if (uPv[i] <= 0.001) continue;
+            vec2 sp = uPivot + (vUv - uPivot - uOff[i]) / max(uScl[i], 0.01);
+            if (sp.x < 0.0 || sp.x > 1.0 || sp.y < 0.0 || sp.y > 1.0) continue;
+            if (abs(idAt(sp) - uPid[i]) < 0.5) {
+              uv = sp;
+              hit = uPid[i];
+              pv = uPv[i];
+              break;
+            }
+          }
+          vec3 col = wire;
+          if (hit >= 0.0) {
+            vec3 c = texture2D(uFace, uv).rgb;
+            /* ── Code: กระพริบตา — เปลือกตา (สีผิว) ปิดจากบน/ล่างเข้าหากลางตา ── */
+            if (hit > 235.0 && hit < 245.0) {
+              for (int e = 0; e < 2; e++) {
+                if (float(e) >= uEyeN) break;
+                vec4 eb = uEye[e];
+                if (abs(uv.x - eb.x) <= eb.z + uTexel.x && abs(uv.y - eb.y) <= eb.w + uTexel.y) {
+                  float open = eb.w * (1.0 - uBlink);
+                  /* เปลือกตา = ผิวเหนือตาตรงแนวเดียวกัน (สีผิวเฉลี่ยรวมด้านเงา — เข้มกว่าผิวรอบตา) */
+                  if (abs(uv.y - eb.y) > open) c = texture2D(uFace, vec2(uv.x, eb.y + eb.w + uTexel.y * 4.0)).rgb;
+                }
+              }
+            }
+            /* ── Code: สีชั้น echo ไหลออกนอก + วงแสงวิ่งออก + ประกายระยิบ + แสงกวาดเฉียง ── */
+            float band = hit > 200.0 ? -1.0 : hit / 20.0 - 1.0;
+            if (band >= 0.0) {
+              float f = mod(band - uTime * 0.8, uN);
+              float ia = floor(f);
+              vec3 flowC = mix(uCol[int(ia)], uCol[int(mod(ia + 1.0, uN))], f - ia);
+              float d = band - mod(uTime * 2.4, uN + 3.0) + 1.0;
+              float pulse = exp(-d * d * 1.6);
+              c = mix(c, flowC, uFlowK) + vec3(1.0, 0.97, 0.92) * pulse * 0.5 * uFlowK;
+              /* ประกาย: ตารางสุ่ม (หน่วยผังจอ) บางช่องมีดาวสี่แฉกกระพริบเป็นจังหวะของตัวเอง */
+              vec2 sc = p / 14.0;
+              vec2 ci = floor(sc);
+              float rn = hash(ci);
+              vec2 cf = fract(sc) - 0.5 - (vec2(hash(ci + 7.1), hash(ci + 3.7)) - 0.5) * 0.5;
+              float tw = pow(0.5 + 0.5 * sin(uTime * (2.2 + rn * 2.5) + rn * 40.0), 14.0) * step(0.68, rn);
+              float star = max(0.0, 1.0 - length(cf) * 6.0)
+                + max(0.0, 1.0 - abs(cf.x) * 26.0) * max(0.0, 1.0 - abs(cf.y) * 2.6)
+                + max(0.0, 1.0 - abs(cf.y) * 26.0) * max(0.0, 1.0 - abs(cf.x) * 2.6);
+              c += vec3(1.0, 0.99, 0.94) * star * tw * uFlowK;
+              /* แสงกวาดเฉียงผ่านชั้น echo เป็นระยะ */
+              float sw = vUv.x * 0.6 + vUv.y - mod(uTime * 0.45, 2.8) + 0.3;
+              c += vec3(1.0, 0.97, 0.9) * exp(-sw * sw * 70.0) * 0.32 * uFlowK;
+            }
+            col = mix(wire, c, pv);
+          }
+          gl_FragColor = vec4(col, uAlpha * (1.0 - smoothstep(-aa, aa, sd)));
           #include <colorspace_fragment>
         }`,
     })
-    return { geo: new THREE.PlaneGeometry(1, 1), mat, ok: !!logo }
-  }, [parts])
+    return { geo: new THREE.PlaneGeometry(1, 1), mat, ok: true }
+  }, [])
+  /** ภาพหน้าเต็มจอที่ใช้อยู่ (รุ่นของ faceShot) — สร้างเท็กซ์เจอร์เมื่อ FaceShot ปั้นเสร็จ */
+  const faceVer = useRef(0)
+  useEffect(
+    () => () => {
+      ;(splash.mat.uniforms.uFace.value as THREE.Texture | null)?.dispose()
+      ;(splash.mat.uniforms.uIdx.value as THREE.Texture | null)?.dispose()
+    },
+    [splash],
+  )
   useEffect(
     () => () => {
       splash.geo.dispose()
@@ -1209,7 +1330,8 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
     const sm = scanRef.current
     if (sm) {
       const k = clamp01((b.code - SCAN[0]) / SCAN[1])
-      sm.visible = k > 0 && k < 1
+      /* จอเป็นหน้า favicon เต็มจอแล้ว (ดู splash) — ไม่มีวิดเจ็ตให้สแกน */
+      sm.visible = k > 0 && k < 1 && faceVer.current === 0
       if (sm.visible) {
         const su = scan.mat.uniforms
         /* กวาดจากขอบบนถึงขอบล่างของเครื่องพอดี */
@@ -1267,28 +1389,86 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
       m.scale.setScalar(1 + k * 0.012 * (n + 1))
     })
     /*
-     * ── เปิดแอป: แตะไอคอน (ยุบลงแล้วคืน) → ขยายเป็น splash เต็มจอ ──
-     * แผ่น splash เริ่มที่ช่องไอคอนพอดี (ผิวหน้าการ์ด z ≈ 28) แทนการ์ดไอคอน · ระนาบเดียวกับหน้าการ์ดตลอด (ไม่ยก — วาดทับด้วย depthTest ปิด)
-     * การ์ดอื่นถอยหลบใต้แผ่น · เต็มจอแล้วซ่อนการ์ดทั้งหมด (ชนคำ Code แล้วไม่มีวิดเจ็ตกระจาย — เหลือจอ splash)
+     * ── จอเครื่องทั้งจอ = หน้า favicon เล่าเรื่อง (ดู splash ข้างบน) ──
+     * ขึ้นต้นบท Research (โครงเส้น) · Design ลงสี · Code แสง echo ไหล — เต็มจอแล้วซ่อนการ์ด/วิดเจ็ตข้างใต้
      */
-    const tapK = splash.ok ? Math.sin(Math.PI * clamp01((b.code - LAUNCH.tap[0]) / LAUNCH.tap[1])) : 0
-    const lk = splash.ok ? smooth(clamp01((b.code - LAUNCH.open[0]) / LAUNCH.open[1])) : 0
+    if (faceShot.ver !== faceVer.current && faceShot.color && faceShot.idx) {
+      faceVer.current = faceShot.ver
+      const su = splash.mat.uniforms
+      ;(su.uFace.value as THREE.Texture | null)?.dispose()
+      ;(su.uIdx.value as THREE.Texture | null)?.dispose()
+      const ft = new THREE.CanvasTexture(faceShot.color)
+      ft.colorSpace = THREE.SRGBColorSpace
+      const it = new THREE.CanvasTexture(faceShot.idx)
+      it.colorSpace = THREE.NoColorSpace
+      it.magFilter = THREE.NearestFilter
+      it.minFilter = THREE.NearestFilter
+      it.generateMipmaps = false
+      su.uFace.value = ft
+      su.uIdx.value = it
+      su.uN.value = Math.max(1, faceShot.n)
+      faceShot.palette.forEach((c, k) => (su.uCol.value as THREE.Color[])[k].set(c))
+    }
+    const tapK = 0
+    const lk = faceVer.current > 0 ? smooth(clamp01(b.study / 0.1)) : 0
     const spm = splashRef.current
     if (spm) {
-      spm.visible = lk > 0
+      spm.visible = lk > 0.001
       if (spm.visible) {
-        const c0 = CARDS[0]
-        const w = lerp(c0.w, LAUNCH.w, lk)
-        const h = lerp(c0.h, LAUNCH.h, lk)
-        spm.position.set(lerp(c0.x, 0, lk), lerp(c0.y, 0, lk), 29)
-        spm.scale.set(w, h, 1)
+        spm.position.set(0, 0, 29)
+        spm.scale.set(LAUNCH.w, LAUNCH.h, 1)
         const su = splash.mat.uniforms
-        su.uSize.value.set(w, h)
-        su.uR.value = lerp(c0.r, LAUNCH.r, lk)
-        su.uLogoH.value = lerp(c0.w / 2, 64, lk)
-        su.uDark.value = dk
-        su.uFill.value = sy
-        su.uCy.value = lerp(c0.y, 0, lk)
+        su.uAlpha.value = lk
+        /*
+         * ประกอบร่าง: ชิ้นหน้า → หลัง (ผม หน้า echo1..N พื้น) สำหรับ shader · ลำดับมาถึง: พื้น → echo นอกสุด..ในสุด → หน้า → ผม
+         * echo บินเข้าจากคนละทิศ + โตจาก 60% · หน้าโผล่ขึ้นจากล่าง · ผมหล่นจากบนลงครอบ (ใหญ่กว่าแล้วหดเข้าที่)
+         */
+        const nE = Math.max(0, faceShot.n)
+        const front = [240, 250, 230, ...Array.from({ length: nE }, (_, k) => 20 * (k + 1)), 0]
+        const arrive = [0, ...Array.from({ length: nE }, (_, k) => 20 * (nE - k)), 230, 250, 240]
+        const A = clamp01((b.design - ASSEMBLE[0]) / ASSEMBLE[1])
+        const span = 1 - PIECE_DUR
+        const asp = LAUNCH.w / LAUNCH.h
+        front.forEach((pid, i) => {
+          const order = arrive.indexOf(pid)
+          const q = clamp01((A - (span * order) / Math.max(1, arrive.length - 1)) / PIECE_DUR)
+          const e = snapIn(q)
+          let dx = 0
+          let dy = 0
+          let sc = 1
+          if (pid === 240) {
+            /* ตาโผล่ท้ายสุด (ลืมตา) — ไม่บิน แค่ปรากฏ */
+            sc = 1
+          } else if (pid === 250) {
+            dy = 0.9
+            sc = 1.35 - 0.35 * e
+          } else if (pid === 230) {
+            dy = -1.1
+            sc = 0.85 + 0.15 * e
+          } else if (pid > 0) {
+            const f = ECHO_FROM[(pid / 20 - 1) % ECHO_FROM.length]
+            dx = f[0]
+            dy = f[1]
+            sc = 0.6 + 0.4 * e
+          } else sc = 0.88 + 0.12 * e
+          ;(su.uPid.value as number[])[i] = pid
+          ;(su.uOff.value as THREE.Vector2[])[i].set(dx * FLY_D * (1 - e), dy * FLY_D * asp * (1 - e))
+          ;(su.uScl.value as number[])[i] = sc
+          ;(su.uPv.value as number[])[i] = smooth(clamp01(q / 0.22))
+        })
+        su.uNP.value = front.length
+        su.uPivot.value.set(faceShot.pivot[0], faceShot.pivot[1])
+        /* กระพริบตา (บท Code): ทุก ~3.4 วิ ปิดเร็วเปิดช้ากว่านิด · บางรอบกระพริบสองที */
+        const ey = su.uEye.value as THREE.Vector4[]
+        faceShot.eyes.slice(0, 2).forEach((e, k) => ey[k].set(e[0], e[1], e[2], e[3]))
+        su.uEyeN.value = Math.min(2, faceShot.eyes.length)
+        ;(su.uSkin.value as THREE.Color).set(faceShot.skin)
+        const bt = (performance.now() / 1000) % 3.4
+        const one = (x: number) => (x < 0 ? 0 : x < 0.07 ? x / 0.07 : x < 0.17 ? 1 - (x - 0.07) / 0.1 : 0)
+        const twice = Math.floor(performance.now() / 3400) % 3 === 2
+        su.uBlink.value = Math.max(one(bt), twice ? one(bt - 0.24) : 0) * smooth(clamp01(b.code / 0.12))
+        su.uFlowK.value = smooth(clamp01(b.code / 0.12))
+        su.uTime.value = performance.now() / 1000
       }
     }
     parts.forEach((pc, i) => {
@@ -1674,8 +1854,8 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
         cg.scale.z *= tapS
         cg.position.z += lift
         cg.rotation.z += wob
-      } else cg.scale.multiplyScalar(1 - 0.06 * lk)
-      if (lk > 0 && (i === 0 || lk >= 0.999)) cg.visible = false
+      }
+      if (lk >= 0.999) cg.visible = false
       pc.tiles.forEach((pt, j) => {
         const tm = tileRefs.current[i]?.[j]
         if (!tm) return
@@ -1835,7 +2015,7 @@ export function BenchScreen({ frame }: { frame: React.RefObject<{ on: boolean; b
               <mesh geometry={badge.bar} material={badge.whites[i]} position={[0, 0, 6]} rotation={[0, 0, Math.PI / 2]} renderOrder={5} />
             </group>
           )}
-          {i === 2 && <ResearchIsland frame={frame} top={pc.top} />}
+          {i === 2 && ISLAND_PROPS && <ResearchIsland frame={frame} top={pc.top} />}
           {i === 0 && (
             <group ref={worksRef} visible={false}>
               {/* พื้นดำ + พื้นตารางของวงการ์ด — วาดก่อนทุกอย่างในกลุ่ม */}

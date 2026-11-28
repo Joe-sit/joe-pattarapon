@@ -2,7 +2,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useTexture } from '@react-three/drei'
 import * as THREE from 'three'
-import { DEVICE, FOV, ICON_OUT, STORY_FONT, TAN, smooth, worksPost, type WorkBeats } from './workMotion'
+import { DEVICE, FOV, ICON_OUT, STORY_FONT, TAN, inOut, smooth, worksPost, type WorkBeats } from './workMotion'
 import { WORKS } from './WorksGallery'
 import { DOLLY, HOME_ICON, ICON_PX, roadCut, roadPhase } from './roadWorld'
 import { paintHome } from './RoadHome'
@@ -77,18 +77,24 @@ export function rolodexPhase(b: { code: number; works: number }) {
 /**
  * คำ "Selected" / "Work" ประกบไอคอน (WorkStory วาด)
  *   in   ลอยขึ้น + เบลอหาย ระหว่างฉาก Code หดเป็นไอคอน
- *   head ความคืบหน้าคลี่ลงกำแพง — คำจางหายตามนี้ (ไม่มีหัวเรื่องค้างบนกำแพง) · กลับมาตอนปึกหุบ
+ *   fold rolodex เริ่มกาง — สองคำหุบเข้าหาไอคอนแล้วหาย · กางออกอีกครั้งตอนปึกปิดกลับเป็นไอคอน
+ *   head ความคืบหน้าคลี่ลงกำแพง — คำจางหายตามนี้ (ไม่มีหัวเรื่องค้างบนกำแพง)
  *   out  ขยายนิด + จาง หลังตัดกลับหน้าโฮม (ท่าออกเดียวกับคำบทอื่น)
  */
 /* ICON_OUT: คำเข้ามาประกบไอคอนระหว่างฉาก Code หดเป็นไอคอน (ช่วงกลางของ iconOut) */
 const WORD_IN = ICON_OUT ? ([-0.14, 0.28] as const) : ([0.05, 0.32] as const)
 const WORD_OUT = [2.2, 0.2] as const
+/** fold: rolodex เริ่มกาง → สองคำหุบเข้าหาไอคอนแล้วหาย (ไม่ถ่างตามปึก) · ปึกปิดกลับเป็นไอคอน (UNFOLD) → กางออกจากไอคอนอีกครั้ง */
+const FOLD = [0.41, 0.1] as const
+/* กางกลับตอนท้าย CLOSE (ปึกเหลือราวไอคอนแล้ว) — ไม่ทับปึกที่ยังใหญ่ */
+const UNFOLD = [CLOSE[0] + 0.11, 0.07] as const
 /** ขนาดตัวคำใหญ่ — สองคำยาวกว่าคำบทอื่น ตัวเล็กลงให้กว้างเต็มจอเท่ากัน (k = ย่อ เช่นขนาดหัวเรื่อง) */
 export const wordFont = (k = 1) => `clamp(${64 * k}px, ${13.5 * k}vw, ${250 * k}px)`
 export function rolodexWord(b: { code: number; works: number }) {
   const post = worksPost(b)
   const unf = smooth(at01(post, UNF)) * (1 - smooth(at01(post, REFOLD)))
-  return { in: smooth(at01(post, WORD_IN)), out: smooth(at01(post, WORD_OUT)), head: smooth(unf / 0.6) }
+  const fold = smooth(at01(post, FOLD)) * (1 - smooth(at01(post, UNFOLD)))
+  return { in: smooth(at01(post, WORD_IN)), out: smooth(at01(post, WORD_OUT)), head: smooth(unf / 0.6), fold }
 }
 
 /**
@@ -326,7 +332,8 @@ function rr(w: number, h: number, r: number) {
 
 const flat = (map: THREE.Texture) => new THREE.MeshBasicMaterial({ map, transparent: true, alphaTest: 0.5, toneMapped: false })
 
-type Live = { t: number; staged: boolean; unf: number; post: number; open: number; paused: boolean; hover: number }
+/** pick = ช่องที่คลิกเปิด (ดัชนี TILES · −1 = ปิด) · pickE ความคืบหน้าเปิด 0..1 · pickWork งานของแผ่นที่เปิด · pickBox กล่องแผ่นบนจอ (px: x, y, w, h) */
+type Live = { t: number; staged: boolean; unf: number; post: number; open: number; paused: boolean; hover: number; pick: number; pickE: number; pickWork: number; pickBox: number[] }
 
 /*
  * ── Selected Work: กำแพงผลงานทรงกระบอก (ref: baked.design หน้าแรก) ──
@@ -424,6 +431,15 @@ const seedQ = new THREE.Quaternion()
 /** ท่าใบหน้าสุดของปึกที่ปิดแล้ว (จุดเริ่ม seed) · จุดยึดกำแพงระหว่างแปลงร่าง (= ตำแหน่ง seed) */
 const _pF = new THREE.Vector3()
 const _zc = new THREE.Vector3()
+/**
+ * เปิดงาน (คลิกช่องบนกำแพง): ช่องนั้นบินจากท่าบนกำแพงมากลางจอ หันตรง สูง PICK_H ของจอ (ยาว PICK_S วินาที · ease in-out)
+ * ช่องอื่นจางลง · วาดด้วยแผ่น seed (ว่างหลังแปลงร่างครบ) — ท่าเริ่มตรงกับช่องบนกำแพงพอดี
+ */
+const PICK_S = 0.6
+const PICK_H = 0.72
+const _pkP = new THREE.Vector3()
+const _pkQ = new THREE.Quaternion()
+const _qI = new THREE.Quaternion()
 /** ช่องสมมติระหว่างทาง (คอลัมน์/แถว/ความสูงแบบเศษ) */
 const _vt: Tile = { col: 0, y: 0, h: 1, work: 0, hero: -1, rank: 0 }
 const _qT = new THREE.Quaternion()
@@ -459,6 +475,7 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
   const scene = useThree((s) => s.scene)
   const size = useThree((s) => s.size)
   const camera = useThree((s) => s.camera)
+  const gl = useThree((s) => s.gl)
   /* มุมหมุนเองของกำแพง (เดินเฉพาะตอนคลี่ครบ) · ตำแหน่งเมาส์ −1..1 (ดิบ / หน่วงแล้ว) */
   const rot = useRef(0)
   /** ความแรงการลอยวน 0 → 1 (ผ่อนเข้า/ออก) */
@@ -468,14 +485,58 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
   const hovK = useMemo(() => new Float32Array(TILES.length), [])
   const look = useRef({ x: 0, y: 0 })
   const lookS = useRef({ x: 0, y: 0 })
+  /* เมาส์อยู่ในหน้าต่าง — ออกนอกหน้าต่าง/สลับแอป ช่องที่ชี้ไว้ต้องหดกลับ (ไม่ค้างขยาย) */
+  const inside = useRef(false)
   useEffect(() => {
     const mv = (e: PointerEvent) => {
+      inside.current = true
       look.current.x = (e.clientX / Math.max(1, window.innerWidth)) * 2 - 1
       look.current.y = (e.clientY / Math.max(1, window.innerHeight)) * 2 - 1
     }
+    const out = (e: PointerEvent) => {
+      if (!e.relatedTarget) inside.current = false
+    }
+    const blur = () => {
+      inside.current = false
+    }
     window.addEventListener('pointermove', mv, { passive: true })
-    return () => window.removeEventListener('pointermove', mv)
+    window.addEventListener('pointerout', out, { passive: true })
+    window.addEventListener('blur', blur)
+    return () => {
+      window.removeEventListener('pointermove', mv)
+      window.removeEventListener('pointerout', out)
+      window.removeEventListener('blur', blur)
+    }
   }, [])
+  /* เปิดงาน: ช่องที่เปิด/กำลังปิด (−1 = ไม่มี) · ความคืบหน้าเชิงเวลา 0..1 · ตำแหน่งเลื่อนตอนเปิด (เลื่อนไปนิด = ปิด) */
+  const pickN = useRef(-1)
+  const pickT = useRef(0)
+  const pickPost = useRef(0)
+  useEffect(() => {
+    const el = gl.domElement
+    let dx = 0
+    let dy = 0
+    const down = (e: PointerEvent) => {
+      dx = e.clientX
+      dy = e.clientY
+    }
+    /* คลิกช่องที่ชี้ = เปิด · เปิดอยู่แล้วคลิกตรงไหนก็ได้ = ปิด · ลากเมาส์ไม่นับเป็นคลิก */
+    const click = (e: MouseEvent) => {
+      const L = live.current
+      if (!L || Math.hypot(e.clientX - dx, e.clientY - dy) > 6) return
+      if (L.pick >= 0) L.pick = -1
+      else if (hoverTile.current >= 0) {
+        L.pick = hoverTile.current
+        pickPost.current = L.post
+      }
+    }
+    el.addEventListener('pointerdown', down)
+    el.addEventListener('click', click)
+    return () => {
+      el.removeEventListener('pointerdown', down)
+      el.removeEventListener('click', click)
+    }
+  }, [gl, live])
 
   const res = useMemo(() => {
     icon.colorSpace = THREE.SRGBColorSpace
@@ -594,6 +655,13 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
   useFrame((_, dt) => {
     const L = live.current
     if (!L) return
+    /* เปิดงาน: พ้นช่วงกำแพงค้าง หรือเลื่อนไปนิด = ปิดเอง */
+    if (L.pick >= 0 && (L.unf < 0.98 || L.open > 0.001 || Math.abs(L.post - pickPost.current) > 0.03)) L.pick = -1
+    if (L.pick >= 0) pickN.current = L.pick
+    pickT.current = Math.min(1, Math.max(0, pickT.current + ((L.pick >= 0 ? 1 : -1) * Math.min(dt, 0.1)) / PICK_S))
+    if (pickT.current <= 0) pickN.current = -1
+    const pe = inOut(pickT.current)
+    L.pickE = pe
     const tt = L.t
     const started = tt >= CUT_T
     /*
@@ -637,7 +705,7 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
     lookS.current.x += (look.current.x - lookS.current.x) * k
     lookS.current.y += (look.current.y - lookS.current.y) * k
     /* ลอยวนเริ่มระหว่างระลอกท้าย ๆ แล้วเร่ง/ผ่อนนุ่ม ๆ (หยุด/เปิดกำแพงก็ค่อย ๆ หยุด) — ความเร็วไม่กระตุก */
-    const driftOn = L.open <= 0 && !L.paused ? smooth((L.unf - 0.7) / 0.3) : 0
+    const driftOn = L.open <= 0 && !L.paused && pickT.current <= 0 ? smooth((L.unf - 0.7) / 0.3) : 0
     driftK.current += (driftOn - driftK.current) * (1 - Math.exp(-Math.min(dt, 0.1) * 2.5))
     rot.current += Math.min(dt, 0.1) * WALL.drift * driftK.current
     /* เมาส์ไปขวา = มองไปทางขวา → กำแพงเลื่อนไปซ้าย (แบบ ref) · เมาส์ลง = มองลง → กำแพงเลื่อนขึ้น */
@@ -709,7 +777,7 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
      *    หาเองจากผังกำแพง: ฉายมุมสี่มุมของช่องลงจอแล้วเช็กจุดอยู่ในสี่เหลี่ยม — แคนวาสนี้ไม่รับเมาส์ (ทั้งชั้นไม่บังคลิกของหน้า)
      */
     L.hover = -1
-    if (L.unf >= 0.98 && L.open <= 0.001) {
+    if (L.unf >= 0.98 && L.open <= 0.001 && inside.current && pickT.current <= 0) {
       const mx = look.current.x
       const my = -look.current.y
       const pt = _hp
@@ -748,6 +816,8 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
      */
     const zS = (ICON_S * sd + (cw - ICON_S * sd) * morphK) / cw
     _zc.lerpVectors(_pF, seedP, morphK)
+    let pkW = 0
+    let pkH = 0
     res.fillOf.forEach((list, w) => {
       const im = fills.current[w]
       if (!im) return
@@ -764,16 +834,53 @@ function Deck({ live }: { live: React.RefObject<Live> }) {
         const front = tilePose(_vt, _p2, _qT, init ? smooth((L.unf - SEED_MORPH) / (1 - SEED_MORPH)) : a)
         if (morphK < 1) _p2.sub(seedP).multiplyScalar(zS).add(_zc)
         if (hovK[n] > 0.001) _p2.add(_v.set(0, 0, 1).applyQuaternion(_qT).multiplyScalar(hovK[n] * cw * 0.12))
-        /* ช่อง INIT = seed ระหว่างแปลงร่าง (seed วาดแทน) */
+        /* ช่อง INIT = seed ระหว่างแปลงร่าง · ช่องที่เปิดงาน = seed ระหว่างเปิด (seed วาดแทน) · ช่องอื่นหดนิด + จางตอนเปิดงาน */
         const sc = front > 0.05 && a > 0.001 && (!init || morphK >= 1) ? zS * (0.4 + 0.6 * a) * (1 + HOVER_K * hovK[n]) : 0
-        _mT.compose(_p2, _qT, _sT.set(cw * sc + 1e-5, cw * _vt.h * sc + 1e-5, 1))
+        if (n === pickN.current) {
+          _pkP.copy(_p2)
+          _pkQ.copy(_qT)
+          pkW = cw * sc
+          pkH = cw * _vt.h * sc
+        }
+        const so = n === pickN.current ? 0 : sc * (1 - 0.06 * pe)
+        _mT.compose(_p2, _qT, _sT.set(cw * so + 1e-5, cw * _vt.h * so + 1e-5, 1))
         im.setMatrixAt(slot, _mT)
-        al.setX(slot, a)
+        al.setX(slot, a * (1 - 0.82 * pe))
       })
       im.instanceMatrix.needsUpdate = true
       al.needsUpdate = true
       im.visible = L.unf > 0
     })
+    /* แผ่นงานที่เปิด: จากท่าบนกำแพง → กลางจอหันตรง (สูง PICK_H ของจอ · กว้างไม่เกิน 70% · ยกขึ้นนิดเว้นที่ชื่องานข้างใต้) */
+    if (sm && pickN.current >= 0 && morphK >= 1 && pkW > 0) {
+      const t = TILES[pickN.current]
+      let hT = hu * PICK_H
+      let wT = hT / t.h
+      const wMax = hu * (size.width / size.height) * 0.7
+      if (wT > wMax) {
+        wT = wMax
+        hT = wT * t.h
+      }
+      const yT = hu * 0.04
+      const w = pkW + (wT - pkW) * pe
+      const h = pkH + (hT - pkH) * pe
+      sm.visible = true
+      sm.position.lerpVectors(_pkP, _v.set(0, yT, 0), pe)
+      sm.quaternion.slerpQuaternions(_pkQ, _qI, pe)
+      sm.scale.set(w, h, 1)
+      const su = res.seedMat.uniforms
+      su.uSize.value.set(w, h)
+      su.uR.value = w * 0.022
+      su.uRim.value = 0
+      su.uRimA.value = 0
+      L.pickWork = t.work
+      const bw = wT / u2w
+      const bh = hT / u2w
+      L.pickBox[0] = size.width / 2 - bw / 2
+      L.pickBox[1] = size.height / 2 - yT / u2w - bh / 2
+      L.pickBox[2] = bw
+      L.pickBox[3] = bh
+    }
   })
 
   return (
@@ -858,7 +965,7 @@ const MEASURE = { scroll: false, debounce: 0 }
 export function RolodexStage({ frame }: { frame: React.RefObject<{ on: boolean; b: WorkBeats }> }) {
   const wrap = useRef<HTMLDivElement>(null)
   const cv = useRef<HTMLDivElement>(null)
-  const live = useRef<Live>({ t: 0, staged: false, unf: 0, post: 0, open: 0, paused: false, hover: -1 })
+  const live = useRef<Live>({ t: 0, staged: false, unf: 0, post: 0, open: 0, paused: false, hover: -1, pick: -1, pickE: 0, pickWork: -1, pickBox: [0, 0, 0, 0] })
   /* ปุ่มหยุดการลอยของกำแพง (แบบ ref "Pause motion") */
   const [paused, setPaused] = useState(false)
   const pauseBtn = useRef<HTMLButtonElement>(null)
@@ -868,6 +975,12 @@ export function RolodexStage({ frame }: { frame: React.RefObject<{ on: boolean; 
   const tip = useRef<HTMLDivElement>(null)
   const tipText = useRef<HTMLSpanElement>(null)
   const tipAt = useRef({ x: 0, y: 0, cur: -1, w: 0 })
+  /* งานที่เปิด (คลิกช่อง): ชื่อ/รายละเอียดใต้แผ่น + ปุ่มปิดมุมแผ่น */
+  const pickCap = useRef<HTMLDivElement>(null)
+  const pickName = useRef<HTMLDivElement>(null)
+  const pickSub = useRef<HTMLDivElement>(null)
+  const pickClose = useRef<HTMLButtonElement>(null)
+  const pickCur = useRef(-1)
 
 
   const cutOn = useRef(false)
@@ -894,8 +1007,31 @@ export function RolodexStage({ frame }: { frame: React.RefObject<{ on: boolean; 
       live.current.unf = ph.unf
       live.current.post = ph.post
       live.current.open = ph.open
-      /* ป้ายวิธีใช้ + ปุ่มหยุด: ขึ้นหลังกำแพงคลี่เกือบครบ · หายตอนเริ่มเปิดกำแพง */
-      const kUi = vis && ph.staged ? Math.max(0, Math.min(1, (ph.unf - 0.7) / 0.3)) * (1 - smooth(ph.open / 0.25)) : 0
+      /* ป้ายวิธีใช้ + ปุ่มหยุด: ขึ้นหลังกำแพงคลี่เกือบครบ · หายตอนเริ่มเปิดกำแพง / เปิดงาน */
+      const pe = live.current.pickE
+      const kUi = vis && ph.staged ? Math.max(0, Math.min(1, (ph.unf - 0.7) / 0.3)) * (1 - smooth(ph.open / 0.25)) * (1 - pe) : 0
+      /* งานที่เปิด: ขึ้นท้ายท่าบิน (แผ่นใกล้ถึงกลางจอ) · หายก่อนแผ่นบินกลับ */
+      const kp = vis ? smooth((pe - 0.6) / 0.4) : 0
+      const pw = live.current.pickWork
+      if (pw >= 0 && pw !== pickCur.current) {
+        pickCur.current = pw
+        if (pickName.current) pickName.current.textContent = WORKS[pw].name
+        if (pickSub.current) pickSub.current.textContent = `${WORKS[pw].category} · ${WORKS[pw].sub}`
+      }
+      const [bx, by, bw, bh] = live.current.pickBox
+      const pc = pickCap.current
+      if (pc) {
+        pc.style.visibility = kp > 0.001 ? 'visible' : 'hidden'
+        pc.style.opacity = kp.toFixed(3)
+        pc.style.width = `${bw.toFixed(1)}px`
+        pc.style.transform = `translate3d(${bx.toFixed(1)}px, ${(by + bh + 16 + (1 - kp) * 10).toFixed(1)}px, 0)`
+      }
+      const pcl = pickClose.current
+      if (pcl) {
+        pcl.style.visibility = kp > 0.001 ? 'visible' : 'hidden'
+        pcl.style.opacity = kp.toFixed(3)
+        pcl.style.transform = `translate3d(${(bx + bw - 56).toFixed(1)}px, ${(by + 16).toFixed(1)}px, 0) scale(${(0.85 + 0.15 * kp).toFixed(3)})`
+      }
       const hn = hint.current
       if (hn) {
         const k = window.matchMedia('(pointer: fine)').matches ? kUi : 0
@@ -925,17 +1061,26 @@ export function RolodexStage({ frame }: { frame: React.RefObject<{ on: boolean; 
         pb.style.opacity = kUi.toFixed(3)
       }
       cutOn.current = vis && ph.cut
-      if (cv.current) cv.current.style.visibility = cutOn.current ? 'visible' : 'hidden'
+      if (cv.current) {
+        cv.current.style.visibility = cutOn.current ? 'visible' : 'hidden'
+        /* ช่องที่ชี้กดเปิดได้ · เปิดงานอยู่ คลิกตรงไหนก็ปิด */
+        cv.current.style.cursor = live.current.hover >= 0 || live.current.pick >= 0 ? 'pointer' : ''
+      }
     }
     const mv = (e: PointerEvent) => {
       tipAt.current.x = e.clientX
       tipAt.current.y = e.clientY
     }
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') live.current.pick = -1
+    }
     window.addEventListener('pointermove', mv, { passive: true })
+    window.addEventListener('keydown', key)
     raf = requestAnimationFrame(tick)
     return () => {
       cancelAnimationFrame(raf)
       window.removeEventListener('pointermove', mv)
+      window.removeEventListener('keydown', key)
     }
   }, [frame])
   return (
@@ -967,6 +1112,24 @@ export function RolodexStage({ frame }: { frame: React.RefObject<{ on: boolean; 
       >
         <span ref={tipText} />
       </div>
+      <div ref={pickCap} className="absolute top-0 left-0" style={{ visibility: 'hidden', opacity: 0, fontFamily: STORY_FONT }}>
+        <div ref={pickName} className="truncate text-[clamp(18px,1.6vw,24px)] leading-tight font-medium tracking-[-0.01em] text-[#111]" />
+        <div ref={pickSub} className="mt-1 truncate text-[13px] text-[#6b7280]" />
+      </div>
+      <button
+        ref={pickClose}
+        type="button"
+        aria-label="Close"
+        onClick={() => {
+          live.current.pick = -1
+        }}
+        className="pointer-events-auto absolute top-0 left-0 grid size-10 cursor-pointer place-items-center rounded-full bg-white/90 text-[#1d2433] shadow-[0_6px_18px_rgba(10,30,80,0.16)]"
+        style={{ visibility: 'hidden', opacity: 0 }}
+      >
+        <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" aria-hidden>
+          <path d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      </button>
       <button
         ref={pauseBtn}
         type="button"

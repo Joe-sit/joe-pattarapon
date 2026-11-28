@@ -32,6 +32,7 @@ import { fadeToArt, Headline3D, Headline3DField, useHeadlineArt } from '@/sectio
 import { BubbleTraveler } from '@/sections/hero/BubbleTraveler'
 import { WorkStory } from '@/sections/hero/WorkStory'
 import { ScrollMouse } from '@/sections/hero/ScrollMouse'
+import { GithubIcon, InstagramIcon, LinkedinIcon } from '@/joespresso/Icons'
 
 import heroLife from '@/assets/v2final/hero-life.svg'
 import heroBubble from '@/assets/v2final/hero-ideas-bubble.svg'
@@ -609,6 +610,13 @@ function CommentPin({
 }
 
 /** คำว่า LIFE — ภาพเวกเตอร์เดิมกันที่ไว้ในผัง ส่วนที่เห็นจริงคือทรงสามมิติในแคนวาสหัวเรื่อง */
+/** โซเชียลของการ์ด hero — ลิงก์จริง (SITE) */
+const HERO_SOCIAL = [
+  { name: 'GitHub', Icon: GithubIcon, href: 'https://github.com/Joe-sit' },
+  { name: 'LinkedIn', Icon: LinkedinIcon, href: SITE.linkedIn },
+  { name: 'Instagram', Icon: InstagramIcon, href: SITE.instagram },
+]
+
 function LifeArt() {
   const [el, setEl] = useState<HTMLImageElement | null>(null)
   const live = useHeadlineArt(el, heroLife)
@@ -616,7 +624,7 @@ function LifeArt() {
     <img
       ref={setEl}
       src={heroLife}
-      alt="LIFE"
+      alt="Life, Product, Solution, Impact"
       className="v3-hero-life"
       style={fadeToArt(live)}
     />
@@ -964,7 +972,7 @@ export function Portfolio2026FinalPage() {
             หัวเรื่องอยู่กลาง ประโยคปิดถูกดันลงไปติดล่างด้วย mt-auto */}
         <div
           ref={copyRef}
-          className="pointer-events-none relative z-10 ml-auto flex h-[100svh] w-[min(46%,560px)] flex-col pt-[clamp(56px,8svh,100px)] pl-[clamp(24px,5.6vw,92px)] pr-[clamp(4px,0.4vw,8px)] pb-[clamp(24px,14svh,143px)] text-[var(--v3-hero-ink)] will-change-transform">
+          className="pointer-events-none relative z-10 ml-auto flex h-[100svh] w-[min(46%,560px)] flex-col pt-[clamp(56px,8svh,100px)] pl-[clamp(24px,7.3vw,116px)] pr-[clamp(4px,0.4vw,8px)] pb-[clamp(24px,14svh,143px)] text-[var(--v3-hero-ink)] will-change-transform">
           {/* my-auto ไม่ใช่ justify-center — ประโยคปิดถูกตรึงไว้ล่างสุด ที่ว่างที่เหลือ
               จึงต้องถูกแบ่งรอบหัวเรื่องเอง ไม่งั้นมันจะถูกดันไปชนแถบเมนูด้านบน */}
           <Headline3DField
@@ -1000,6 +1008,28 @@ export function Portfolio2026FinalPage() {
           {/* ประโยคปิดย้ายออกไปเป็นชั้นเล่าเรื่องตามการเลื่อน (ดู sections/hero/ScrollTell)
               มันต้องค้างอยู่บนจอข้ามช่วงที่ม่านเมฆถม ซึ่งอยู่ในโฟลว์ของจอแรกไม่ได้ */}
         </div>
+
+        {/* โซเชียล ซ้ายล่างของการ์ด (แบบ joespresso) — ลิงก์จริงจาก config/site · GitHub ชุดเดียวกับหน้า /2026 */}
+        <ul className="v3-in v3-hero-social absolute bottom-[clamp(18px,4svh,40px)] left-[clamp(18px,2.2vw,36px)] z-20 m-0 flex list-none flex-col gap-[10px] p-0 [--v3-in-delay:1200ms]">
+          {HERO_SOCIAL.map(({ name, Icon, href }) => (
+            <li key={name}>
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={name}
+                className="pointer-events-auto grid size-10 cursor-pointer place-items-center rounded-full text-white/95 transition-colors duration-200 hover:bg-white hover:text-[#1d3f8f]"
+              >
+                <Icon />
+              </a>
+            </li>
+          ))}
+        </ul>
+        {/* บทบาท + ที่อยู่ ขวาล่างของการ์ด */}
+        <p className="v3-in v3-hero-based absolute right-[clamp(20px,2.6vw,40px)] bottom-[clamp(20px,4.4svh,44px)] z-20 m-0 text-right leading-snug [--v3-in-delay:1250ms]">
+          <span className="block text-[15px] font-semibold">UX/UI Designer</span>
+          <span className="block text-[13px] opacity-90">Based in Bangkok, Thailand</span>
+        </p>
 
         {/* ตัวชวนเลื่อน กลางล่างของจอแรก — โผล่ตามจังหวะเปิดตัว หลบทันทีที่เลื่อน */}
         <ScrollMouse className="v3-in absolute inset-x-0 bottom-[clamp(20px,4.5svh,44px)] z-10 text-[var(--v3-hero-ink)] [--v3-in-delay:1100ms]" />

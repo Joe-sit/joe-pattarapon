@@ -1,5 +1,5 @@
 import { FrameCap } from '@/lib/FrameCap'
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Grid, MeshTransmissionMaterial, PerformanceMonitor } from '@react-three/drei'
 import * as THREE from 'three'
@@ -18,7 +18,7 @@ import { StackedWindows } from './StackedWindows'
 import { Tetris } from './Tetris'
 import { CameraFX } from './CameraFX'
 import { Switch } from './Switch'
-import { devKnob, toggleDevMode } from './devMode'
+import { devKnob, devMode, subscribeDevMode, toggleDevMode } from './devMode'
 import { Appear } from './Appear'
 import { panelScreen } from './panelScreen'
 import { PortalFx } from './PortalFx'
@@ -2697,7 +2697,9 @@ function CameraRig() {
 
 function Scene({ bare = false }) {
   const t = useTuner()
-  const clay = t.clay > 0.5
+  /* โหมด dev (สวิตช์ในฉาก): ของ 3D ทั้งหมดเป็น clay (มุมมองตรวจรูปทรงแบบ Blender) — design กลับเป็นสีจริง */
+  const dev = useSyncExternalStore(subscribeDevMode, () => devMode.on)
+  const clay = t.clay > 0.5 || dev
   const props = t.props > 0.5
   const skater = t.skater > 0.5
   /**
@@ -3157,7 +3159,8 @@ function Scene({ bare = false }) {
          * รอยเงาซิลูเอตต์ (แบบ githubuniverse) — อยู่นอก Entrance เหมือนรอยลม เพราะเงา
          * ค้างอยู่กับทางที่วิ่งผ่าน ไม่ได้เกาะตัว
          */}
-        {skater && t.etAmt > 0 && <EchoTrail />}
+        {/* โหมด clay (รวม dev) ไม่มีรอยสีรุ้ง — ดูรูปทรงล้วน */}
+        {skater && t.etAmt > 0 && !clay && <EchoTrail />}
         {skater && (
           <Entrance
             replay={t.enReplay}
