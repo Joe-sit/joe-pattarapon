@@ -1,0 +1,3520 @@
+import { FrameCap } from '@/lib/FrameCap'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Grid, MeshTransmissionMaterial, PerformanceMonitor } from '@react-three/drei'
+import * as THREE from 'three'
+import { Mascot } from '@/joespresso/scene/Mascot'
+import { useDisposable, makeRandom, gradientTexture, LOW_END, damp, clamp, addCel, makeCelUniforms } from '@/joespresso/scene/utils'
+import { DEFAULTS, getTuner, useTuner } from './tuner'
+import { roundedBoxGeo } from './geo'
+import { Globe } from './Globe'
+import { EdgeClouds } from './EdgeClouds'
+import { Palette } from './palette'
+import { heroCursor } from '@/cursorguide/heroCursor'
+import { HeroLights } from './heroLights'
+import { SpaceBackdrop, Planets } from './Space'
+import { Landscape, SKY_STOPS } from './Landscape'
+import { StackedWindows } from './StackedWindows'
+import { Tetris } from './Tetris'
+import { CameraFX } from './CameraFX'
+import { Switch } from './Switch'
+import { devKnob, devMode, subscribeDevMode, toggleDevMode } from './devMode'
+import { Appear } from './Appear'
+import { panelScreen } from './panelScreen'
+import { PortalFx } from './PortalFx'
+import { EchoTrail } from './EchoTrail'
+import { HeroRider } from './HeroRider'
+import { WindTrail } from './WindTrail'
+import { heroView } from './heroView'
+import { CardClip } from './cardClip'
+import { SLAB_CURVE, WaveSlab, slabFrame } from './WaveSlab'
+import { heroPointer, holdHeroPointer } from './heroPointer'
+import { IntroClock, introSet, introSince, introSkip, introTime, outBack as introBack, ribbonStart } from './intro'
+import { setNewHeroReady } from './ready'
+import { Entrance, entranceBlend, entranceSample, entranceU } from './Entrance'
+import { portalRide } from './portalRide'
+import { entranceLift } from './entranceLift'
+import { ridePose } from './ridePose'
+import { cruiseGrow, cruisePull, useSceneOn } from './scrolly'
+import { WarmShaders } from '@/lib/WarmShaders'
+
+/**
+ * ฉาก hero ใหม่ — "โต้คลื่นบนริบบิ้นหมากรุก" (คอมพ์ 12739:337)
+ *
+ * ภาพ ref เป็นชีทชิ้นส่วน + ภาพฉากประกอบเสร็จ: ตัวละครยืนเซิร์ฟบอร์ดไถลไปตามริบบิ้น
+ * ลายหมากรุกที่ลอยบิดอยู่กลางอากาศ รอบตัวเป็นของลอยตามธีม (ป้ายสัญญาณ, ไอคอนแอป,
+ * ไพ่, โดนัทลายลูกกวาด, เพชร, หมากรุก, บล็อก, คอนเฟตติ) บนพื้นไล่สี teal→เขียว
+ * มีแผงโค้งสีครีมเรียงเป็นฉากหลังชั้นกลาง
+ *
+ * ทุกชิ้นปั้นในโค้ด ไม่มี GLB ใหม่ — ภาษาเดียวกับ mascot (ทรงเรขาคณิต สีจัดจ้าน แสงแบน)
+ * ตัวละครใช้ Mascot ตัวเดิมท่า skydive (แขนกาง เข่าย่อ) ซึ่งอ่านเป็นท่าทรงตัวบนบอร์ดพอดี
+ *
+ * ของทุกชิ้นลอยเลี้ยงตัวช้า ๆ คนละเฟส/ความถี่ (ไม่เป็นเท่าตัวกัน — ผลรวมไม่วนซ้ำให้ตาจับ)
+ * กล้องนิ่ง มี parallax ตามเมาส์นิด ๆ ทั้งฉากจึง "หายใจ" โดยไม่มีอะไรแย่งสายตา
+ */
+
+/* ---------- จานสี ----------
+   ชุดน้ำเงินอ่านจากคอมพ์ 12739:158699 โดยสุ่มพิกเซล: พื้น #265ada / หน้าต่าง #3c6bde */
+/**
+ * พื้นหลังนอกพอร์ทัล = ท้องฟ้า
+ *
+ * ไล่แบบรัศมี ไม่ใช่ไล่เป็นแถบ: ในแบบ ฟ้าจางที่สุดตรงหลังตัวละครแล้วเข้มขึ้นเข้าหามุมทุกด้าน
+ * ซึ่งคือสิ่งที่ดันสายตาเข้ากลางเฟรมและทำให้ของกลางจอดูลอยออกมาจากพื้นหลัง
+ * ไล่เป็นแถบให้ค่าเดียวทั้งแถวนอน ของที่ขอบซ้าย-ขวาจึงจมกับพื้นหลังเท่ากับของกลางจอ
+ */
+const BG_MID = '#5cb8ee'
+const CREAM = '#3c6bde'
+/** เลขที่ใช้ทำเครื่องหมายพื้นที่ "ในหน้าต่าง" บน stencil buffer */
+const STENCIL_REF = 1
+
+/** สีเนื้อหน้าต่าง — ขาวล้วน ตัดกับพื้นน้ำเงินของหน้า */
+const INNER_BG = '#ffffff'
+const GREEN_DEEP = '#1d4a38'
+const GREEN_MAIN = '#3cb464'
+const GREEN_SOFT = '#8fd98a'
+const ORANGE = '#f2793b'
+const PURPLE = '#b44be0'
+const BLUE = '#4f7df9'
+const RED = '#e8492e'
+
+/* ---------- textures (canvas วาดครั้งเดียว ระดับโมดูล — แชร์ทุก instance ห้าม dispose) ---------- */
+
+/**
+ * ผิวถนน = ตารางคอมมิตแบบ GitHub
+ *
+ * 7 แถวเพราะเป็นวันในสัปดาห์ ไม่ใช่เลขที่เลือกให้พอดีรูป — ปูซ้ำตามยาวริบบิ้นแล้ว
+ * แต่ละคอลัมน์จึงอ่านเป็นสัปดาห์ที่ไล่ออกไป เหมือนหน้าโปรไฟล์จริง
+ *
+ * ระดับสีสุ่มด้วยเมล็ดคงที่ (makeRandom) ไม่ใช่ Math.random — เทกซ์เจอร์ต้องออกมา
+ * เหมือนเดิมทุกครั้งที่โหลด ไม่งั้นหน้าตาถนนเปลี่ยนไปทุกรีเฟรชโดยไม่มีใครสั่ง
+ */
+/**
+ * ชุดสีธีม dark dimmed ของ GitHub — เทาอมน้ำเงินนุ่ม ไม่ใช่ดำสนิทแบบธีม dark
+ * ช่องระดับ 0 ต้องต่างจากสีพื้นเสมอ ไม่งั้นวันที่ไม่มีคอมมิตหายไปกับพื้นจนไม่เห็นเป็นตาราง
+ */
+const HEAT_BG = '#22272e'
+const HEAT_LEVELS = ['#2d333b', '#1b4721', '#2f6b36', '#478b48', '#63c363']
+/** ความสว่างที่ช่องนั้นปล่อยออกมา (emissive) — ระดับ 0 ไม่เรือง */
+const HEAT_GLOW = ['#000000', '#1d5c28', '#3a9e46', '#5fd066', '#9dff8f']
+/** จำนวนแถว = วันในสัปดาห์ */
+const HEAT_ROWS = 7
+
+/**
+ * ตารางคอมมิต — คืนสองผืนที่ผังตรงกันเป๊ะ: สีจริง กับ "ช่องไหนสว่างแค่ไหน"
+ *
+ * ผืนเรืองต้องมาจากลูปเดียวกัน ไม่ใช่วาดซ้ำอีกรอบด้วย seed เดิม: ถ้าวันหนึ่งมีใครแก้กติกา
+ * การสุ่มระดับ แล้วลืมแก้อีกฟังก์ชัน แสงจะไปสว่างคนละช่องกับสีเขียว ซึ่งดูเหมือนบั๊กที่หา
+ * ไม่เจอ วาดพร้อมกันในลูปเดียวจึงผิดไม่ได้โดยโครงสร้าง
+ *
+ * ผืนเรือง: พื้นดำสนิท (ไม่เรืองเลย) ช่องที่มีคอมมิตสว่างตามระดับ — เอาไปเป็น emissiveMap
+ * ให้ช่องเขียวปล่อยแสงออกมาเองโดยไม่ขึ้นกับไฟในฉาก
+ */
+function heatmapTiles(size = 1024) {
+  const col = document.createElement('canvas')
+  const glo = document.createElement('canvas')
+  col.width = col.height = glo.width = glo.height = size
+  const ctx = col.getContext('2d')
+  const gtx = glo.getContext('2d')
+  ctx.fillStyle = HEAT_BG
+  ctx.fillRect(0, 0, size, size)
+  gtx.fillStyle = '#000000'
+  gtx.fillRect(0, 0, size, size)
+
+  const cell = size / HEAT_ROWS
+  // ช่องไฟกว้างขึ้นเล็กน้อย — ขอบช่องที่ชัดคือสิ่งที่ทำให้ตารางอ่านออกตอนอยู่ไกล
+  const pad = cell * 0.16
+  const box = cell - pad * 2
+  const r = box * 0.24
+  const rnd = makeRandom(7)
+  for (let y = 0; y < HEAT_ROWS; y++) {
+    for (let x = 0; x < HEAT_ROWS; x++) {
+      /**
+       * ถ่วงให้ช่องจาง ๆ เยอะกว่าช่องเข้ม — ตารางจริงมีวันที่ไม่ได้คอมมิตเยอะที่สุด
+       * สุ่มแบบกระจายเท่ากันจะได้ผืนเขียวทึบซึ่งอ่านไม่ออกว่าเป็นตารางคอมมิต
+       */
+      const u = rnd()
+      const lv = u < 0.34 ? 0 : u < 0.56 ? 1 : u < 0.76 ? 2 : u < 0.91 ? 3 : 4
+      const bx = x * cell + pad
+      const by = y * cell + pad
+      ctx.fillStyle = HEAT_LEVELS[lv]
+      ctx.beginPath()
+      ctx.roundRect(bx, by, box, box, r)
+      ctx.fill()
+      // ระดับ 0 = วันที่ไม่มีคอมมิต ไม่ควรเรืองเลย ที่เหลือสว่างไล่ตามระดับ
+      if (lv > 0) {
+        gtx.fillStyle = HEAT_GLOW[lv]
+        gtx.beginPath()
+        gtx.roundRect(bx, by, box, box, r)
+        gtx.fill()
+      }
+    }
+  }
+  /**
+   * แสงล้นออกนอกช่อง — เอาผืนเรืองมาเบลอแล้วบวกทับตัวเอง
+   *
+   * ช่องสว่างเฉย ๆ ยังอ่านเป็น "สีเขียวสด" ไม่ใช่ "ไฟ" สิ่งที่ทำให้ตาตัดสินว่าเป็นแหล่งแสง
+   * คือขอบฟุ้งที่ล้นออกมาโดนพื้นรอบ ๆ ทำที่เทกซ์เจอร์ถูกกว่าใส่ bloom ทั้งจอมาก —
+   * bloom คือ post pass เต็มเฟรมหลายรอบทุกเฟรม ที่นี่คือเบลอครั้งเดียวตอนโหลด
+   */
+  const blurred = document.createElement('canvas')
+  blurred.width = blurred.height = size
+  const btx = blurred.getContext('2d')
+  btx.filter = `blur(${Math.round(cell * 0.3)}px)`
+  btx.drawImage(glo, 0, 0)
+  btx.filter = 'none'
+  gtx.globalCompositeOperation = 'lighter'
+  gtx.globalAlpha = 0.55
+  gtx.drawImage(blurred, 0, 0)
+  gtx.globalAlpha = 1
+  gtx.globalCompositeOperation = 'source-over'
+  const mk = (canvas) => {
+    const tex = new THREE.CanvasTexture(canvas)
+    tex.colorSpace = THREE.SRGBColorSpace
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+    return tex
+  }
+  return { color: mk(col), glow: mk(glo) }
+}
+const HEATMAP = heatmapTiles()
+const checkerTex = HEATMAP.color
+const checkerGlowTex = HEATMAP.glow
+
+/**
+ * ริบบิ้นทุกท่อนใช้วัสดุหน้าตาเดียวกัน — ช่องคอมมิตปล่อยแสงเองผ่าน emissiveMap
+ *
+ * emissive ไม่ใช่ "สีสว่าง": มันคือแสงที่ผิวปล่อยออกมาเอง ไม่ขึ้นกับไฟในฉาก ช่องเขียวจึง
+ * ยังสว่างตอนอยู่ด้านเงา ซึ่งเป็นสิ่งที่ทำให้อ่านว่าเป็นจอ/ไฟ ไม่ใช่สีทาบนแผ่น
+ * ผืน emissive มีพื้นดำสนิท พื้นถนนจึงไม่เรืองตาม มีแค่ช่องที่มีคอมมิต
+ */
+/**
+ * ช่องที่เมาส์เพิ่งลากผ่าน — วงแหวนขนาดคงที่ ไม่ใช่รายการที่โตได้
+ *
+ * เก็บเป็นอาร์เรย์ระดับโมดูลแล้วส่งเข้า uniform ทุกเฟรม ไม่ใช่ state ของ React:
+ * ค่านี้เปลี่ยนทุกครั้งที่เมาส์ขยับ ถ้าเป็น state จะ re-render ทั้งฉากตามการขยับเมาส์
+ *
+ * วงแหวนแค่แปดช่องพอ เพราะแต่ละช่องจางหมดในราวหนึ่งวินาที ลากเร็วแค่ไหนก็เห็นหางไม่เกินนี้
+ * — และมันคือลูป for ในเชดเดอร์ ยิ่งยาวยิ่งจ่ายทุกพิกเซลของถนน
+ */
+const HOVER_MAX = 8
+const hoverCell = new Float32Array(HOVER_MAX * 2)
+const hoverStart = new Float32Array(HOVER_MAX).fill(-999)
+let hoverNext = 0
+
+/** แตะช่องหนึ่ง — ช่องเดิมที่ยังไม่จางถูกต่อเวลา (เมาส์ค้างอยู่ = ยังสว่างค้าง ไม่กะพริบ) */
+function touchCell(cx, cy, now) {
+  for (let i = 0; i < HOVER_MAX; i++) {
+    if (hoverCell[i * 2] === cx && hoverCell[i * 2 + 1] === cy && now - hoverStart[i] < 1.2) {
+      hoverStart[i] = now
+      return
+    }
+  }
+  const i = hoverNext % HOVER_MAX
+  hoverNext += 1
+  hoverCell[i * 2] = cx
+  hoverCell[i * 2 + 1] = cy
+  hoverStart[i] = now
+}
+
+/**
+ * ตัวจับเมาส์บนผิวถนน — คืน prop ไปแปะที่ mesh
+ *
+ * ใช้ uv ของจุดที่ยิงโดน ไม่ใช่พิกัดโลก: ช่องคอมมิตถูกนิยามในพิกัดเทกซ์เจอร์ (floor(uv*7))
+ * ซึ่งเป็นตัวเดียวกับที่เชดเดอร์ใช้ ถนมันบิดเป็นคลื่นและขยับตลอด การแปลงกลับจากพิกัดโลก
+ * จึงไม่มีทางตรง
+ */
+function useCellHover() {
+  return useMemo(
+    () => ({
+      onPointerMove: (e) => {
+        if (!e.uv) return
+        touchCell(Math.floor(e.uv.x * HEAT_ROWS), Math.floor(e.uv.y * HEAT_ROWS), performance.now() / 1000)
+      },
+    }),
+    [],
+  )
+}
+
+function RibbonTopMaterial({ map, aniso = 1 }) {
+  const t = useTuner()
+  const ref = useRef()
+  // ผืนเรืองใช้ร่วมทุกท่อน (ผังเดียวกัน ไม่มีใครแก้ repeat) — ตั้ง anisotropy ให้เท่ากับผืนสี
+  if (checkerGlowTex.anisotropy !== aniso) {
+    checkerGlowTex.anisotropy = aniso
+    checkerGlowTex.needsUpdate = true
+  }
+  /**
+   * ระยิบระยับ — แต่ละช่องกะพริบคนละจังหวะ
+   *
+   * แก้ที่เชดเดอร์ ไม่ใช่วาดเทกซ์เจอร์ใหม่ทุกเฟรม: ต้องการให้ช่องแต่ละช่องมีเฟสของตัวเอง
+   * ซึ่งอ่านได้จากพิกัด uv ตรง ๆ (floor(uv * 7) = ช่องที่เท่าไร) การอัปโหลดแคนวาส 1024
+   * ใหม่ทุกเฟรมเพื่อผลเดียวกันคือจ่ายแบนด์วิดท์เปล่า ๆ
+   *
+   * คูณเข้ากับ totalEmissiveRadiance หลัง three คำนวณ emissive เสร็จ — ช่องที่ไม่เรือง
+   * (ระดับ 0 พื้นดำ) จึงยังไม่เรืองอยู่ดี การกะพริบไม่ไปปลุกช่องว่างให้สว่างขึ้นมา
+   */
+  const onCompile = useMemo(
+    () => (shader) => {
+      shader.uniforms.uTwTime = { value: 0 }
+      shader.uniforms.uTwAmt = { value: 0.55 }
+      shader.uniforms.uHitCell = { value: Array.from({ length: HOVER_MAX }, () => new THREE.Vector2(-999, -999)) }
+      shader.uniforms.uHitAge = { value: Array.from({ length: HOVER_MAX }, () => 999) }
+      shader.uniforms.uHitInt = { value: 1 }
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+           uniform float uTwTime;
+           uniform float uTwAmt;
+           uniform vec2 uHitCell[${HOVER_MAX}];
+           uniform float uHitAge[${HOVER_MAX}];
+           uniform float uHitInt;
+           float twHash(vec2 p) {
+             return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+           }`,
+        )
+        .replace(
+          '#include <emissivemap_fragment>',
+          `#include <emissivemap_fragment>
+           {
+             vec2 cell = floor(vMapUv * ${HEAT_ROWS}.0);
+             float ph = twHash(cell) * 6.2831853;
+             /* ความถี่ต่างกันรายช่องด้วย ไม่งั้นทั้งผืนกะพริบเป็นจังหวะเดียวกันแค่เหลื่อมเฟส */
+             float sp = 0.7 + twHash(cell + 17.0) * 1.6;
+             float tw = 1.0 + uTwAmt * sin(uTwTime * sp + ph);
+             totalEmissiveRadiance *= tw;
+             /**
+              * ช่องที่เมาส์ผ่าน: สว่างขึ้นแล้วจางเอง
+              * ขาขึ้นสั้น ๆ (smoothstep) ไม่ใช่กระโดดเต็มทันที — กระโดดอ่านเป็นไฟกะพริบ
+              * ขาลงเป็นเอ็กซ์โพเนนเชียล ซึ่งคือรูปการจางของแสงจริง ไม่ใช่เส้นตรงที่ดับห้วน
+              */
+             float fill = 0.0;
+             for (int i = 0; i < ${HOVER_MAX}; i++) {
+               vec2 hc = uHitCell[i];
+               if (abs(hc.x - cell.x) > 0.5 || abs(hc.y - cell.y) > 0.5) continue;
+               float a = max(uHitAge[i], 0.0);
+               fill = max(fill, smoothstep(0.0, 0.11, a) * exp(-a * 1.7));
+             }
+             /**
+              * ตัดให้อยู่ในกรอบมนของช่อง ไม่ใช่เต็มสี่เหลี่ยมของกริด
+              * ค่า 0.16 (ช่องไฟ) กับ 0.24 (ความมน) เป็นชุดเดียวกับตอนวาดแคนวาส — ถ้าไม่ตัด
+              * แสงจะล้นไปทับร่องระหว่างช่อง แล้วอ่านเป็นแถบสี่เหลี่ยมทึบพาดถนน ไม่ใช่ช่องติดไฟ
+              */
+             vec2 f = abs(fract(vMapUv * ${HEAT_ROWS}.0) - 0.5) - (0.5 - 0.16);
+             float inCell = 1.0 - smoothstep(0.0, 0.035, length(max(f, 0.0)) - 0.055);
+             totalEmissiveRadiance += vec3(0.42, 1.0, 0.5) * fill * inCell * uHitInt;
+           }`,
+        )
+      if (ref.current) ref.current.userData.shader = shader
+    },
+    [],
+  )
+  useFrame(({ clock }) => {
+    const sh = ref.current && ref.current.userData.shader
+    if (!sh) return
+    sh.uniforms.uTwTime.value = clock.elapsedTime
+    sh.uniforms.uTwAmt.value = t.rbTwinkle
+    const now = performance.now() / 1000
+    for (let i = 0; i < HOVER_MAX; i++) {
+      sh.uniforms.uHitCell.value[i].set(hoverCell[i * 2], hoverCell[i * 2 + 1])
+      sh.uniforms.uHitAge.value[i] = now - hoverStart[i]
+    }
+    sh.uniforms.uHitInt.value = t.rbHover
+  })
+  return (
+    <meshStandardMaterial
+      ref={ref}
+      attach="material-0"
+      map={map}
+      emissiveMap={checkerGlowTex}
+      emissive="#ffffff"
+      emissiveIntensity={t.rbGlow}
+      roughness={0.85}
+      side={THREE.DoubleSide}
+      onBeforeCompile={onCompile}
+    />
+  )
+}
+
+/** ลายทางลูกกวาดแดง-ขาว — ปูรอบหน้าตัดของโดนัท */
+function candyStripes(size = 256) {
+  const c = document.createElement('canvas')
+  c.width = size
+  c.height = 32
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#f6f0e4'
+  ctx.fillRect(0, 0, size, 32)
+  ctx.fillStyle = RED
+  const n = 4
+  for (let i = 0; i < n; i++) ctx.fillRect((i / n) * size, 0, size / (n * 2), 32)
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+  return tex
+}
+const candyTex = candyStripes()
+
+/** วงเป้าฟ้า-ขาวซ้อนกัน — แปะหน้าตัดของทรงกระบอกแบน */
+function targetFace(size = 512) {
+  const c = document.createElement('canvas')
+  c.width = c.height = size
+  const ctx = c.getContext('2d')
+  const rings = ['#2e6bd8', '#f2f4ef', '#3f8ff2', '#f2f4ef', '#5eb1f5']
+  rings.forEach((col, i) => {
+    ctx.fillStyle = col
+    ctx.beginPath()
+    ctx.arc(size / 2, size / 2, (size / 2) * (1 - i / rings.length), 0, Math.PI * 2)
+    ctx.fill()
+  })
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+/** glyph บนแผ่นใส — ใช้กับไอคอน/ไพ่ (วาดฟรอนต์เดียวพอ ด้านหลังเป็นเนื้อสีล้วน) */
+function glyphTexture(draw, size = 256) {
+  const c = document.createElement('canvas')
+  c.width = c.height = size
+  const ctx = c.getContext('2d')
+  draw(ctx, size)
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+/** สัญลักษณ์ wifi (จุด + ส่วนโค้งสองชั้น) */
+const wifiGlyph = glyphTexture((ctx, s) => {
+  ctx.strokeStyle = '#ffffff'
+  ctx.fillStyle = '#ffffff'
+  ctx.lineWidth = s * 0.075
+  ctx.lineCap = 'round'
+  const cx = s / 2
+  const cy = s * 0.68
+  ctx.beginPath()
+  ctx.arc(cx, cy, s * 0.055, 0, Math.PI * 2)
+  ctx.fill()
+  for (const r of [0.18, 0.32]) {
+    ctx.beginPath()
+    ctx.arc(cx, cy, s * r, Math.PI * 1.22, Math.PI * 1.78)
+    ctx.stroke()
+  }
+})
+
+/** เสาสัญญาณ (จุด + เสา + คลื่นแผ่สองข้าง) — หน้าตัดของป้ายทรงกระบอก */
+const beaconGlyph = glyphTexture((ctx, s) => {
+  ctx.strokeStyle = '#ffffff'
+  ctx.fillStyle = '#ffffff'
+  ctx.lineWidth = s * 0.05
+  ctx.lineCap = 'round'
+  const cx = s / 2
+  const cy = s * 0.42
+  ctx.beginPath()
+  ctx.arc(cx, cy, s * 0.05, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.beginPath()
+  ctx.moveTo(cx, cy)
+  ctx.lineTo(cx, s * 0.78)
+  ctx.stroke()
+  for (const r of [0.16, 0.27]) {
+    for (const side of [-1, 1]) {
+      ctx.beginPath()
+      ctx.arc(cx, cy, s * r, side < 0 ? Math.PI * 0.75 : -Math.PI * 0.25, side < 0 ? Math.PI * 1.25 : Math.PI * 0.25)
+      ctx.stroke()
+    }
+  }
+})
+
+/** เครื่องบินส้มแบบไอคอน — ลำตัว + ปีกกวาด + หาง */
+const planeGlyph = glyphTexture((ctx, s) => {
+  ctx.fillStyle = ORANGE
+  ctx.translate(s / 2, s / 2)
+  ctx.rotate(-Math.PI / 4)
+  const u = s / 100
+  ctx.beginPath()
+  ctx.moveTo(0, -34 * u)
+  ctx.quadraticCurveTo(6 * u, -20 * u, 5 * u, -6 * u)
+  ctx.lineTo(30 * u, 8 * u)
+  ctx.lineTo(30 * u, 16 * u)
+  ctx.lineTo(4 * u, 8 * u)
+  ctx.lineTo(3 * u, 22 * u)
+  ctx.lineTo(12 * u, 30 * u)
+  ctx.lineTo(12 * u, 35 * u)
+  ctx.lineTo(0, 31 * u)
+  ctx.lineTo(-12 * u, 35 * u)
+  ctx.lineTo(-12 * u, 30 * u)
+  ctx.lineTo(-3 * u, 22 * u)
+  ctx.lineTo(-4 * u, 8 * u)
+  ctx.lineTo(-30 * u, 16 * u)
+  ctx.lineTo(-30 * u, 8 * u)
+  ctx.lineTo(-5 * u, -6 * u)
+  ctx.quadraticCurveTo(-6 * u, -20 * u, 0, -34 * u)
+  ctx.fill()
+})
+
+/** ดอกจิกบนไพ่ — ตัวอักษร ♣ ตรง ๆ วางเรียงแบบไพ่ 3 ดอก */
+const clubGlyph = glyphTexture((ctx, s) => {
+  ctx.fillStyle = '#20241f'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = `${s * 0.34}px system-ui, sans-serif`
+  ctx.fillText('♣', s * 0.5, s * 0.28)
+  ctx.fillText('♣', s * 0.32, s * 0.66)
+  ctx.fillText('♣', s * 0.68, s * 0.66)
+  ctx.font = `${s * 0.15}px system-ui, sans-serif`
+  ctx.fillText('♣', s * 0.13, s * 0.12)
+  ctx.save()
+  ctx.translate(s * 0.87, s * 0.88)
+  ctx.rotate(Math.PI)
+  ctx.fillText('♣', 0, 0)
+  ctx.restore()
+})
+
+/* ---------- geometry ช่วย ---------- */
+
+/**
+ * ริบบิ้นหมากรุก — แถบโค้งบิดตามเส้นทาง Catmull-Rom
+ *
+ * เดินตามเส้นโค้งแล้ววางหน้าตัดกว้าง w ทีละสเต็ป โดยบิดหน้าตัดรอบแกนสัมผัส (twist)
+ * ค่อย ๆ เพิ่มตามระยะ — ได้ริบบิ้นที่ "ม้วนตัว" แบบภาพ ref ไม่ใช่แถบแบนราบ
+ * uv แกน u คิดจากระยะจริงหารครึ่งความกว้าง — ช่องหมากรุกจึงเป็นจัตุรัสตลอดเส้น
+ */
+/**
+ * เฟรมของผิวริบบิ้นที่พารามิเตอร์ t: จุดกึ่งกลางผิวบน (รวมคลื่น) ทิศสัมผัส และตั้งฉากผิว
+ * เป็นแหล่งเดียวของสูตร — ทั้ง geometry และ "ของที่วิ่งบนริบบิ้น" (ตัวละคร) ใช้ตัวนี้
+ * ไม่งั้นสองที่คำนวณคนละสูตรแล้วตัวละครลอย/จมจากผิวจริง
+ */
+const RIB_UP = new THREE.Vector3(0, 1, 0)
+/**
+ * tv = "เฟสตามเส้น" แยกจาก t ที่ใช้หาจุด — ปกติเท่ากัน
+ *
+ * ริบบิ้นช่วงต่อ (CruiseRibbon) เป็นเส้นคนละเส้นที่งอกจากปลายเส้นหลัก ถ้ามันคิดคลื่นกับ
+ * การบิดจาก t ของตัวเอง (เริ่มใหม่ที่ 0) ผิวสองท่อนจะกระโดดคนละเฟสตรงรอยต่อทันที
+ * — ส่งเฟสที่นับต่อจากเส้นหลัก (tv = 1 + ...) เข้ามาแทน รอยต่อจึงเรียบเป็นเส้นเดียว
+ */
+function ribbonFrame(curve, t, wave, waves, out, tv = t) {
+  const { P, T, S, N } = out
+  curve.getPointAt(t, P)
+  curve.getTangentAt(t, T)
+  S.crossVectors(T, RIB_UP).normalize()
+  const tw = Math.sin(tv * Math.PI * 1.6 + 0.4) * 0.16 + tv * 0.2 - 0.08
+  S.applyAxisAngle(T, tw)
+  N.crossVectors(S, T).normalize()
+  const lift = Math.sin(tv * Math.PI * 2 * waves + 0.6) * wave
+  P.addScaledVector(N, lift)
+  return out
+}
+
+function ribbonGeometry(
+  points,
+  w = 3.1,
+  thick = 0.18,
+  wave = 0.35,
+  waves = 2.5,
+  segs = 300,
+  from = 0,
+  to = 1,
+  /**
+   * ต่อจากเส้นอื่น: tv0/tvK คือเฟสคลื่นที่นับต่อมา (ดู ribbonFrame) และ sOff คือระยะตามเส้น
+   * ที่สะสมมาแล้ว ซึ่ง uv ต้องนับต่อ ไม่งั้นลายหมากรุกเริ่มนับหนึ่งใหม่ตรงรอยต่อ
+   */
+  phase = null,
+) {
+  const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.6)
+  const len = curve.getLength()
+  const pos = []
+  const uv = []
+  const idxTop = []
+  const idxRest = []
+  const P = new THREE.Vector3()
+  const T = new THREE.Vector3()
+  const S = new THREE.Vector3()
+  const N = new THREE.Vector3()
+  const frame = { P, T, S, N }
+  const hw = w / 2
+  for (let i = 0; i <= segs; i++) {
+    /**
+     * t ยังเป็นพารามิเตอร์ของ "เส้นเต็ม" เสมอ แม้จะสร้างแค่บางช่วง
+     * เกลียวกับคลื่นคิดจาก t และ uv คิดจาก t × ความยาวเต็ม — ถ้า normalize ใหม่ต่อช่วง
+     * สองท่อนจะมีเฟสคนละชุดแล้วต่อกันไม่สนิทตรงรอยตัด
+     */
+    const t = from + (to - from) * (i / segs)
+    /**
+     * บิดรอบแกนสัมผัสนิดเดียวพอ — มันคือถนนที่เอียงตามโค้ง ไม่ใช่ริบบิ้นที่ม้วนตัว
+     * และคลื่นตามยาวยกตาม "แนวตั้งฉากกับผิว" ไม่ใช่แกน y ของโลก (สูตรอยู่ใน ribbonFrame)
+     */
+    ribbonFrame(curve, t, wave, waves, frame, phase ? phase.tv0 + t * phase.tvK : t)
+    const cx = P.x
+    const cy = P.y
+    const cz = P.z
+    // สี่มุมต่อสเต็ป: บนซ้าย บนขวา ล่างซ้าย ล่างขวา (ล่าง = ถอยตามแนวตั้งฉากลงไป thick)
+    pos.push(cx - S.x * hw, cy - S.y * hw, cz - S.z * hw)
+    pos.push(cx + S.x * hw, cy + S.y * hw, cz + S.z * hw)
+    pos.push(cx - S.x * hw - N.x * thick, cy - S.y * hw - N.y * thick, cz - S.z * hw - N.z * thick)
+    pos.push(cx + S.x * hw - N.x * thick, cy + S.y * hw - N.y * thick, cz + S.z * hw - N.z * thick)
+    /**
+     * v วิ่ง 0→1 ตลอดความกว้าง ไม่ใช่ 0→2
+     *
+     * เดิมใช้ 0→2 เทกซ์เจอร์จึงปูซ้ำสองรอบขวางถนน ได้ 14 ช่องต่อความกว้าง ทั้งที่
+     * ตารางคอมมิตต้องมี 7 ช่องต่อคอลัมน์พอดี (เจ็ดวันในสัปดาห์)
+     *
+     * u หารด้วยความกว้างเต็ม ไม่ใช่ครึ่งความกว้าง — ต้องขยับคู่กัน ไม่งั้นช่องจะไม่จัตุรัส
+     * (v ครอบ 1 หน่วยเทกซ์เจอร์ต่อความกว้าง u ก็ต้องครอบ 1 หน่วยต่อระยะเท่าความกว้าง)
+     */
+    const u = ((phase ? phase.sOff : 0) + t * len) / w
+    uv.push(u, 0, u, 1, u, 0, u, 1)
+    if (i < segs) {
+      const a = i * 4
+      const b = a + 4
+      idxTop.push(a, a + 1, b, a + 1, b + 1, b)
+      // ผิวล่าง + สันสองข้าง ใช้วัสดุอีกตัว จะได้เห็นความหนาเป็นสีทึบ ไม่ใช่ลายหมากรุกซ้ำ
+      idxRest.push(a + 2, b + 2, a + 3, a + 3, b + 2, b + 3)
+      idxRest.push(a, b, a + 2, a + 2, b, b + 2)
+      idxRest.push(a + 1, a + 3, b + 1, a + 3, b + 3, b + 1)
+    }
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
+  g.setIndex([...idxTop, ...idxRest])
+  g.addGroup(0, idxTop.length, 0)
+  g.addGroup(idxTop.length, idxRest.length, 1)
+  g.computeVertexNormals()
+  return g
+}
+
+/**
+ * ลอยเลี้ยงตัว — ห่อของหนึ่งชิ้นแล้วโยกตำแหน่ง/เอียงช้า ๆ
+ * ความถี่สุ่มต่อชิ้นจากเฟส ไม่เป็นเท่าตัวกัน ทั้งฉากจึงไม่โยกพร้อมกันเป็นจังหวะเดียว
+ */
+function Float({ children, amp = 0.28, rot = 0.06, phase = 0, speed = 1, ...props }) {
+  const ref = useRef()
+  // นาฬิกามาจาก state ของเฟรม ไม่ใช่ตัวแปรลอย ๆ — ของเดิมอ้าง clock ที่ไม่มีอยู่จริง แล้วโยน
+  // ทุกเฟรม ไม่มีใครเห็นเพราะกลุ่ม props ถูกปิดไว้ ไม่เคยมี Float ตัวไหนถูกสร้างเลย
+  useFrame(({ clock }) => {
+    const g = ref.current
+    if (!g) return
+    const t = clock.elapsedTime * speed + phase
+    g.position.y = Math.sin(t * 0.63) * amp
+    g.rotation.z = Math.sin(t * 0.41 + 1.1) * rot
+    g.rotation.x = Math.sin(t * 0.52 + 2.3) * rot * 0.6
+  })
+  return (
+    <group {...props}>
+      <group ref={ref}>{children}</group>
+    </group>
+  )
+}
+
+/* ---------- ชิ้นส่วน ---------- */
+
+/**
+ * โหมด clay — เลียนมุมมอง solid/clay ของ Blender ไว้ตรวจรูปทรงกับ perspective
+ *
+ * ตัดสีและเทกซ์เจอร์ออกทั้งหมด เหลือดินเหนียวสีเดียวบนพื้นหลังเทา สิ่งที่เหลือให้ตาอ่าน
+ * มีแค่รูปทรง เงา และเส้นลู่ — ซึ่งเป็นสิ่งเดียวที่กำลังจัดอยู่ตอนนี้
+ */
+const CLAY_COLOR = '#b9b4ac'
+const CLAY_BG_TOP = '#4a4a4a'
+const CLAY_BG_BOT = '#282828'
+const GRID = {
+  clay: { line: '#5a5a5a', major: '#767676' },
+  color: { line: '#3aa585', major: '#1d7f66' },
+}
+
+/**
+ * ห่อของที่เป็น "ชิ้นงาน" (ไม่รวมพื้นหลังกับเส้นกริด) แล้วยัดวัสดุ clay ทับทุก mesh
+ *
+ * ใช้ traverse แทน scene.overrideMaterial เพราะ override ของ three กินทั้ง scene —
+ * พื้นหลังกับกริดจะกลายเป็นดินเหนียวไปด้วย แล้วจอจะเหลือแค่สีเดียวทั้งจอ
+ */
+/**
+ * ผิวพลาสติกเงา — ทับค่าความด้าน/แรงสะท้อนของทุกวัสดุในฉาก
+ *
+ * "พลาสติก" ในภาษาของ PBR คือ: ไม่ใช่โลหะ (metalness 0) ผิวเรียบ (roughness ต่ำ)
+ * จึงสะท้อนแผงไฟจาก environment เป็นไฮไลต์นุ่ม ๆ และมีจุดสะท้อนคมจากไฟ key
+ * ไม่แตะสี — สีเดิมของทุกชิ้นอยู่ครบ เปลี่ยนแค่ "เนื้อวัสดุ"
+ *
+ * ทำแบบไล่ทับเป็นระยะ ไม่ใช่ครั้งเดียว: mascot กับของในพอร์ทัลสร้างวัสดุทีหลัง
+ * (โหลด GLB / สร้างใน effect) ทำครั้งเดียวตอน mount แล้วชิ้นที่มาทีหลังจะยังด้านอยู่
+ * เช็คจากกุญแจใน userData จึงเขียนซ้ำเฉพาะชิ้นที่ยังไม่ได้ค่าชุดนี้ — ราคาแทบศูนย์
+ *
+ * ข้าม: แก้ว (transmission) ที่มีสูตรของตัวเอง, วัสดุที่ไม่มี roughness (basic), หน้ากาก stencil
+ */
+function Gloss({ on, rough, env, cel, children }) {
+  const g = useRef()
+  const frame = useRef(0)
+  /**
+   * uniform ของ cel shading — ชุดเดียวทั้งฉาก (ดู makeCelUniforms)
+   * ค่าถูกเขียนทุกเฟรมจาก tuner ราคาแค่ assignment ไม่กี่ตัว
+   */
+  const celU = useMemo(makeCelUniforms, [])
+  useFrame(() => {
+    const root = g.current
+    if (!root) return
+    frame.current += 1
+    celU.celOn.value = cel ? 1 : 0
+    if (cel) {
+      celU.celEdge.value = cel.edge
+      celU.celHiEdge.value = cel.hiEdge
+      celU.celSoft.value = cel.soft
+      celU.celShadow.value = cel.shadow
+      celU.celLit.value = cel.lit
+      celU.celHi.value = cel.hi
+      celU.celTint.value = cel.tint
+    }
+    /**
+     * ทุก 2 เฟรม (ไม่ใช่ 6) — ตัวละครโหลดทีหลัง วัสดุที่โผล่ใหม่ต้องได้ cel ก่อนถูก compile
+     * ครั้งแรก ไม่งั้น compile สองรอบ (รอบสองสะดุดกลางท่าไหลเข้าฉาก) traverse ราคาถูกมาก
+     */
+    if (frame.current % 2 !== 0) return
+    const key = on ? `${rough}|${env}` : 'off'
+    root.traverse((o) => {
+      if (!o.material || o.userData.noClay) return
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        /**
+         * แก้วของ drei (MeshTransmissionMaterial) ตั้ง transmission ของวัสดุฐานเป็น 0 แล้วเก็บ
+         * ค่าจริงไว้ใน uniform `_transmission` — เช็คแค่ m.transmission จึงหลุด แล้วแก้วโดน
+         * roughness 1 + cel ทับ กลายเป็นฝ้าขาวเม็ด ๆ ทั้งก้อน
+         */
+        if (
+          !('roughness' in m) ||
+          m.isMeshTransmissionMaterial ||
+          m.uniforms?._transmission ||
+          (m.transmission ?? 0) > 0
+        ) continue
+        if (!m.userData.celApplied) {
+          addCel(m, celU)
+          // วัสดุที่ compile ไปแล้วต้องขอโปรแกรมใหม่ — onBeforeCompile ที่เพิ่มทีหลังไม่ถูกเรียกเอง
+          m.needsUpdate = true
+        }
+        if (m.userData.glossKey === key) continue
+        // จำค่าเดิมครั้งแรกที่เจอ — ปิดแล้วต้องคืนเนื้อวัสดุเดิมได้ ไม่ใช่ค้างเงา
+        if (m.userData.glossOrig === undefined) {
+          m.userData.glossOrig = { roughness: m.roughness, metalness: m.metalness, env: m.envMapIntensity }
+        }
+        const o0 = m.userData.glossOrig
+        m.roughness = on ? rough : o0.roughness
+        m.metalness = on ? 0 : o0.metalness
+        m.envMapIntensity = on ? env : o0.env
+        m.userData.glossKey = key
+      }
+    })
+  })
+  return <group ref={g}>{children}</group>
+}
+
+function Clay({ on, children }) {
+  const g = useRef()
+  const mat = useMemo(
+    () => new THREE.MeshStandardMaterial({ color: CLAY_COLOR, roughness: 0.92, metalness: 0 }),
+    [],
+  )
+  useDisposable(mat)
+  /**
+   * สลับวัสดุทุกเฟรม (ราคาแค่ traverse) ไม่ใช่ครั้งเดียวใน effect
+   *
+   * ของเดิมเป็น useLayoutEffect ที่จำ "วัสดุตอนนั้น" ไว้ใน Map แล้วคืนตอน cleanup — พัง
+   * สองทาง: (1) deps มี children จึงรันใหม่ทุกครั้งที่แผงขยับ (2) มันจำวัสดุของตัวละครไว้
+   * "ก่อน" rig ของ Mascot จะสลับเป็นวัสดุจริง (layout effect มาก่อน effect) พอแผงขยับครั้งถัดไป
+   * cleanup ก็เอาวัสดุดิบของ GLB (ที่ Entrance เคยติด stencil ไว้) ยัดกลับ — หัวเลยหายไปอยู่
+   * ในพอร์ทัล เห็นแต่ก้อนผมหลัง
+   *
+   * ทำแบบเดียวกับ Gloss: เดินทุกเฟรม เจอชิ้นที่ยังไม่ใช่ดินก็สลับแล้วจดของจริงไว้ใน
+   * userData.clayFrom (ชื่อเดียวกับที่ Mascot ใช้หาวัสดุจริงอยู่แล้ว) ปิดโหมดก็คืนจากตรงนั้น
+   * ข้าม: หน้ากาก stencil ของหน้าต่าง (noClay) และชิ้นที่ต้องคงสี (keepColor เช่น ตา/หน้า)
+   */
+  useFrame(() => {
+    const root = g.current
+    if (!root) return
+    root.traverse((o) => {
+      if (!o.material || o.userData.noClay || o.userData.keepColor) return
+      if (on) {
+        if (o.material !== mat) {
+          o.userData.clayFrom = o.material
+          o.material = mat
+        }
+      } else if (o.material === mat && o.userData.clayFrom) {
+        o.material = o.userData.clayFrom
+        delete o.userData.clayFrom
+      }
+    })
+  })
+  return <group ref={g}>{children}</group>
+}
+
+/**
+ * ติดธงเงาให้ชิ้นในฉาก — ทำเป็น pass เดียว ไม่ใช่ใส่ prop ทีละ mesh
+ *
+ * ของในฉากนี้มาจากหลายที่ (GLB ของ mascot, ชิ้นที่ปั้นในโค้ด, ของในพอร์ทัล) การไล่ใส่
+ * castShadow/receiveShadow ทีละจุดคือแก้ไม่ครบแน่นอน — และของที่โผล่มาทีหลัง (โมเดล
+ * โหลดเสร็จช้า) จะไม่มีเงาโดยที่ไม่มีใครสังเกต จึงกวาดซ้ำช่วงต้นเหมือน pass อื่นในไฟล์นี้
+ *
+ * ใครได้ "ยิงเงา" บ้างคือเรื่องของราคา ไม่ใช่ความสวย: ทุกชิ้นที่ยิงเงาถูกวาดซ้ำอีกรอบใน
+ * shadow map ฉะนั้นของในพอร์ทัล (ทุ่ง + พืชหลักร้อยต้น) จึงรับเงาอย่างเดียว ไม่ยิง —
+ * เงาของพุ่มเล็ก ๆ ในกรอบหน้าต่างแทบไม่มีใครเห็น แต่มันคือ draw call ครึ่งฉาก
+ *
+ * ข้าม: พื้นหลัง/หน้ากาก stencil/กระจก/เมฆ (ของแบน ๆ ที่เกาะกล้อง เงาของมันไม่มีความหมาย
+ * และถ้าปล่อยให้บังแสง จะได้แผ่นดำคาดทั้งฉาก)
+ */
+function ShadowFlags({ on }) {
+  const scene = useThree((s) => s.scene)
+  const gl = useThree((s) => s.gl)
+  const cam = useThree((s) => s.camera)
+  const frames = useRef(0)
+  /**
+   * ประตูวัดผลตอน dev — นับ draw call/สามเหลี่ยมจริงจากสคริปต์ภายนอกได้
+   * (renderer.info รีเซ็ตทุกเฟรม จึงต้องอ่านจาก rAF ของหน้าเอง ไม่ใช่จาก useFrame)
+   */
+  if (import.meta.env.DEV) {
+    window.__gl = gl
+    window.__scene = scene
+    window.__cam = cam
+  }
+  useFrame(() => {
+    if (!on || frames.current > 240) return
+    frames.current += 1
+    // เดินเองแทน traverse เพราะต้องส่งต่อ "อยู่ในพอร์ทัลไหม" ลงไปตามกิ่ง
+    const walk = (o, inside) => {
+      const within = inside || o.userData.insidePortal === true
+      if (o.isMesh && !o.userData.shadowSet) {
+        const m = o.material
+        const skip = o.userData.noClay || o.renderOrder < 0 || (m && (m.isShaderMaterial || m.depthWrite === false))
+        o.userData.shadowSet = true
+        if (!skip) {
+          o.castShadow = !within
+          o.receiveShadow = true
+        }
+      }
+      for (const c of o.children) walk(c, within)
+    }
+    walk(scene, false)
+  })
+  return null
+}
+
+/**
+ * อัปเดตเงาทุก 2 เฟรม — shadow map คือการวาดของที่ยิงเงาทั้งฉากซ้ำอีกรอบ (วัดที่ 1440×900: ~4ms/เฟรม
+ * จากฉากราว 10ms) ของในฉากขยับช้า (ตัวละครไถ/ไหว) เงาช้ากว่าตัวหนึ่งเฟรมตามองไม่ออก ประหยัดครึ่งหนึ่ง
+ */
+function ShadowThrottle({ on }) {
+  const gl = useThree((s) => s.gl)
+  const n = useRef(0)
+  useEffect(() => {
+    gl.shadowMap.autoUpdate = !on
+    gl.shadowMap.needsUpdate = true
+    return () => {
+      gl.shadowMap.autoUpdate = true
+    }
+  }, [gl, on])
+  useFrame(() => {
+    if (on && (n.current++ & 1) === 0) gl.shadowMap.needsUpdate = true
+  })
+  return null
+}
+
+/** พื้นหลังไล่สีเกาะกล้อง — โหมด clay ใช้เทาเรียบแบบวิวพอร์ต ไม่มีตาราง */
+/**
+ * ท้องฟ้าของฉาก — ไล่สีที่คำนวณต่อพิกเซลในเชดเดอร์ ไม่ใช่ภาพไล่สีที่วาดใส่ canvas
+ *
+ * ของเดิมเป็น canvas 512px ไล่สีสามจุดแล้วแปะเป็น texture ซึ่งมีสองปัญหาที่แก้ไม่ได้ด้วย
+ * การเพิ่มจุดสี: (1) ไล่สีในพื้นที่ sRGB ทำให้ช่วงกลางหม่น — ฟ้าสองสีผสมกันในพื้นที่ที่ไม่
+ * เป็นเชิงเส้นได้สีเทาอมเขียวคาดอยู่กลางทาง (2) 512px ยืดเต็มจอ 2560px = แถบคาด (banding)
+ * ที่ตาเห็นชัดบนพื้นเรียบใหญ่ ๆ อย่างท้องฟ้า
+ *
+ * เชดเดอร์นี้จึงผสมสีใน **พื้นที่เชิงเส้น** แล้วแปลงเป็น sRGB ตอนท้ายด้วยเส้นโค้งจริง และ
+ * เติม dither ละเอียด ±1/255 ก่อนแปลง — แถบคาดหายสนิทโดยไม่ต้องเพิ่มความละเอียดอะไรเลย
+ *
+ * องค์ประกอบของฟ้า (ทั้งหมดผสมกันด้วย mix/smoothstep ไม่มีเงื่อนไข ตาม shader-mobile):
+ *   1. ไล่ตั้งสี่ช่วง: สีเข้มสุดที่ยอดฟ้า → ฟ้ากลาง → ฟ้าสว่าง → ขอบฟ้าซีดอมอุ่น
+ *   2. ดวงอาทิตย์: แกนสว่างแคบ + แสงฟุ้งกว้าง (สองชั้น) วางตำแหน่งได้จากแผงจูน
+ *   3. ไอแดดที่ขอบฟ้า: แถบอุ่นบาง ๆ ล่างเฟรม = อากาศที่หนากว่าตรงขอบฟ้า
+ *   4. ขอบเฟรมหรี่ลงเบา ๆ (vignette) ดึงตาเข้ากลางภาพ
+ *
+ * โหมด clay ผสมทับด้วยไล่สีเทา — โหมดนั้นคือการตรวจรูปทรง สีทุกอย่างต้องถูกถอดทิ้ง
+ */
+/**
+ * สีของฟ้า — เข้มขึ้นจากชุดแรกที่วัดบนจอจริงแล้วซีดเกิน
+ *
+ * หัวเรื่องในจอนี้เป็นตัวอักษรขาว (--v3-hero-ink) ฟ้าจึงต้องอิ่มสีพอที่ตัวขาวจะอ่านออก
+ * ชุดแรก (#1f7fd4 → #e8f4fb) รวมกับแสงแดดแล้วครึ่งบนของเฟรมขาวจนตัวหนังสือจม
+ */
+const SKY_ZENITH = new THREE.Color('#1466b5')
+const SKY_HIGH = new THREE.Color('#2f92dd')
+const SKY_LOW = new THREE.Color('#74c6f1')
+const SKY_HAZE = new THREE.Color('#cfe9f9')
+const SKY_SUN = new THREE.Color('#fff6e2')
+const SKY_CLAY_TOP = new THREE.Color(CLAY_BG_TOP)
+const SKY_CLAY_BOT = new THREE.Color(CLAY_BG_BOT)
+
+/**
+ * clip: ตัดฟ้าให้อยู่ในการ์ดของ hero แบบการ์ด (ดู ./heroView) — แผ่นฟ้าวางตามกรวยภาพ
+ * ซึ่งกล้องย่อลงพอดีการ์ดแล้ว เหลือแค่ตัดส่วนที่เผื่อไว้ 4% กับมุมมนให้ตรงกล่องการ์ด DOM
+ */
+function Backdrop({ clay, clip = false }) {
+  const t = useTuner()
+  const uniforms = useMemo(
+    () => ({
+      uZenith: { value: SKY_ZENITH.clone() },
+      uHigh: { value: SKY_HIGH.clone() },
+      uLow: { value: SKY_LOW.clone() },
+      uHaze: { value: SKY_HAZE.clone() },
+      uSunCol: { value: SKY_SUN.clone() },
+      uClayTop: { value: SKY_CLAY_TOP.clone() },
+      uClayBot: { value: SKY_CLAY_BOT.clone() },
+      uSun: { value: new THREE.Vector2(0.62, 0.72) },
+      uSunR: { value: 0.1 },
+      uGlow: { value: 0.55 },
+      uWarm: { value: 0.35 },
+      uVig: { value: 0.18 },
+      uAspect: { value: 1 },
+      uClay: { value: 0 },
+      /* เมฆจุดครึ่งโทน — ค่าทั้งชุดมาจากแผงจูน (กลุ่ม "ท้องฟ้า") */
+      uCloud: { value: 0.9 },
+      uCloudScale: { value: 2.6 },
+      uCloudCut: { value: 0.52 },
+      uCloudIn: { value: 1 },
+      uCloudDot: { value: 9 },
+      uTime: { value: 0 },
+      /* การ์ด: x, y (ล่างซ้าย), กว้าง, สูง เป็นพิกเซลบัฟเฟอร์ · รัศมีมุม (ติดลบ = ไม่ตัด) */
+      uClip: { value: new THREE.Vector4(0, 0, 1, 1) },
+      uClipR: { value: -1 },
+      /* กรอบบานบนจอ (พิกเซล CSS แกน y ชี้ลง): ศูนย์กลาง xy + ครึ่งกว้าง/สูง zw และรัศมีมุม */
+    }),
+    [],
+  )
+
+  /**
+   * แผ่นพื้นหลังเกาะกล้อง ไม่ใช่แผ่นนิ่งกลางฉาก
+   *
+   * กล้องก้ม 18° กรวยภาพจึงเลื่อนลงไปตกที่ครึ่งล่างของแผ่น ถ้าวางนิ่งต้องทำแผ่นใหญ่มาก
+   * เพื่อกันขอบโผล่ แล้วไล่สีก็จะถูกบีบจนเห็นแค่แถบเดียว = พื้นหลังสีเรียบ
+   * เกาะกล้องแล้วขนาดพอดีกรวยเสมอ ไล่สีเต็มเฟรมทุกอัตราส่วน
+   */
+  const ref = useRef()
+  const DIST = 60
+  /**
+   * วางแผ่นตอน "กำลังจะวาด" (onBeforeRender) ไม่ใช่ใน useFrame
+   *
+   * CameraRig ขยับกล้องใน useFrame ของมันเอง ซึ่งลงทะเบียนหลัง Backdrop — ถ้าวางแผ่นใน
+   * useFrame แผ่นจะอ่านกล้องของเฟรมก่อนเสมอ ช่วงเปิดตัวที่กล้องซูมออกเร็ว แผ่นจึงตามหลัง
+   * กล้องหนึ่งเฟรมทุกเฟรม เมฆเลื่อนไปมาเทียบกับตะแกรงจุด (ซึ่งผูกกับพิกเซลจอ) จุดจึงกะพริบ
+   * เป็นอาการกระตุก ตอนวาดกล้องขยับครบแล้ว ใช้ท่านั้นได้ตรงเฟรม
+   * (three คูณ modelViewMatrix หลัง onBeforeRender — อัปเดต matrixWorld ตรงนี้จึงทันใช้)
+   */
+  const place = useCallback((_gl, _scene, camera) => {
+    const m = ref.current
+    if (!m) return
+    m.quaternion.copy(camera.quaternion)
+    m.position.set(0, 0, -DIST).applyQuaternion(camera.quaternion).add(camera.position)
+    const h = 2 * DIST * Math.tan((camera.fov * Math.PI) / 360) * 1.04
+    m.scale.set(h * camera.aspect, h, 1)
+    m.updateMatrixWorld()
+    const u = m.material.uniforms
+    u.uAspect.value = camera.aspect
+  }, [])
+  useFrame(({ camera, clock, gl }) => {
+    const m = ref.current
+    if (!m) return
+    /* อ่านค่าจากแผงจูนในลูปเฟรม ไม่ผ่าน prop — ลากสไลเดอร์แล้วเห็นผลทันทีโดยไม่ reconcile */
+    const u = m.material.uniforms
+    u.uAspect.value = camera.aspect
+    u.uSun.value.set(t.skySunX, t.skySunY)
+    u.uSunR.value = t.skySunR
+    u.uGlow.value = t.skyGlow
+    u.uWarm.value = t.skyWarm
+    u.uVig.value = t.skyVig
+    u.uClay.value = clay ? 1 : 0
+    u.uCloud.value = t.skyCloud
+    u.uCloudScale.value = t.skyCloudScale
+    u.uCloudCut.value = t.skyCloudCut
+    /*
+     * เมฆตอนเปิดฉาก: ฟ้าของด่านโหลด (BlobReveal) ไม่มีเมฆ ฉากจริงไหลออกจากปากบานแล้วเมฆเต็มก้อนโผล่ตามขอบรู
+     * = ภาพกระโดด · ให้เมฆจางขึ้นหลังฉากไหลออกมาแล้ว (ขนาดก้อน/จุดเท่าเดิมตลอด ไม่โต) · ไม่มีอินโทร = เต็มเลย
+     */
+    const it = introTime()
+    const ci = it < 0 ? 1 : Math.min(1, Math.max(0, (it - 0.7) / 2.4))
+    /* ความคืบหน้าของคลื่นงอก (เชดเดอร์แจกให้แต่ละจุดเอง) — ออกตัวนุ่ม วิ่งสม่ำเสมอ */
+    u.uCloudIn.value = ci * ci * (3 - 2 * ci)
+    u.uCloudDot.value = t.skyCloudDot
+    /* เมฆลอยด้วยนาฬิกาของฉาก ไม่ใช่ตามระยะเลื่อน — ฟ้าต้องมีชีวิตแม้คนดูไม่ขยับ */
+    u.uTime.value = clock.elapsedTime * t.skyCloudDrift
+    /* กล่องการ์ดเป็นพิกเซลของบัฟเฟอร์ (gl_FragCoord แกน y ชี้ขึ้น) — ผ้าใบกับบัฟเฟอร์ของ CameraFX ขนาดเท่ากัน */
+    const k = gl.getPixelRatio()
+    const H = gl.domElement.clientHeight
+    u.uClip.value.set(heroView.x * k, (H - heroView.y - heroView.h) * k, heroView.w * k, heroView.h * k)
+    u.uClipR.value = clip && heroView.on ? heroView.r * k : -1
+  })
+
+  return (
+    <mesh ref={ref} renderOrder={-1} onBeforeRender={place} frustumCulled={false}>
+      <planeGeometry args={[1, 1]} />
+      <shaderMaterial
+        uniforms={uniforms}
+        depthWrite={false}
+        /* เขียนสีเองทั้งหมด (รวมการแปลงพื้นที่สี) จึงต้องกัน three ไม่ให้ tone map ทับ */
+        toneMapped={false}
+        vertexShader={`
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `}
+        fragmentShader={`
+          precision mediump float;
+          uniform vec3 uZenith;
+          uniform vec3 uHigh;
+          uniform vec3 uLow;
+          uniform vec3 uHaze;
+          uniform vec3 uSunCol;
+          uniform vec3 uClayTop;
+          uniform vec3 uClayBot;
+          uniform vec2 uSun;
+          uniform float uSunR;
+          uniform float uGlow;
+          uniform float uWarm;
+          uniform float uVig;
+          uniform float uAspect;
+          uniform float uClay;
+          uniform float uCloud;
+          uniform float uCloudScale;
+          uniform float uCloudCut;
+          uniform float uCloudIn;
+          uniform float uCloudDot;
+          uniform float uTime;
+          uniform vec4 uClip;
+          uniform float uClipR;
+          varying vec2 vUv;
+
+          /* hash คงที่ต่อพิกเซล — dither ต้องนิ่ง ไม่ใช่สัญญาณรบกวนที่วิ่งทุกเฟรม */
+          float hash(vec2 p) {
+            return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+          }
+
+          /* value noise: สุ่มที่มุมช่องแล้วผสมด้วยเส้นโค้งนุ่ม (ไม่ใช่เส้นตรง ไม่งั้นเห็นขอบช่อง) */
+          float vnoise(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            vec2 w = f * f * (3.0 - 2.0 * f);
+            float a = hash(i);
+            float b = hash(i + vec2(1.0, 0.0));
+            float c = hash(i + vec2(0.0, 1.0));
+            float d = hash(i + vec2(1.0, 1.0));
+            return mix(mix(a, b, w.x), mix(c, d, w.x), w.y);
+          }
+
+          /**
+           * ก้อนเมฆ = value noise สี่ชั้น ชั้นละถี่ขึ้นเท่าตัวและเบาลงครึ่ง
+           *
+           * สี่ชั้นพอให้ได้ทั้งก้อนใหญ่และขอบหยักย่อย มากกว่านั้นตาไม่เห็นเพิ่มแต่จ่ายค่า
+           * ตัวอย่างทุกพิกเซลของฟ้าซึ่งกินเต็มเฟรม
+           */
+          /**
+           * fbm แบบกำหนดจำนวนชั้น — เมฆคิดทุกพิกเซลทุกเฟรม (เป็นงานหนักสุดของฟ้า วัดแล้ว: ปิดเมฆ
+           * เฟรมขึ้น ~30%) ก้อนใหญ่ใช้ 2 ชั้น ขอบใช้ 3 ชั้น แทน 5+5 — เมฆถูกวาดเป็นจุดอยู่แล้ว
+           * รายละเอียดชั้นสูงหายไปในช่องจุด ผลรวมถูกปรับให้เท่าของ 5 ชั้นเดิม (0.969)
+           * ค่าตัดเมฆ (uCloudCut) จึงได้ปริมาณเมฆเท่าเดิม
+           */
+          float fbmN(vec2 p, int oct) {
+            /* หมุนทุกชั้น: value noise สุ่มที่มุมช่องตามแกน ถ้าไม่หมุน ทุกชั้นวางทับแกน
+               เดียวกันจนก้อนเมฆออกมาเป็นปื้นสี่เหลี่ยม (เห็นมาแล้วบนจอ) */
+            mat2 rot = mat2(0.80, -0.60, 0.60, 0.80);
+            float v = 0.0;
+            float a = 0.5;
+            float sum = 0.0;
+            for (int i = 0; i < 5; i++) {
+              if (i >= oct) break;
+              v += a * vnoise(p);
+              sum += a;
+              p = rot * p * 2.03 + 7.13;
+              a *= 0.5;
+            }
+            return v * (0.969 / sum);
+          }
+
+          void main() {
+            /* hero แบบการ์ด: ฟ้าอยู่แค่ในกล่องการ์ด มุมมน (เฟรมภาพสูงเกินการ์ด จึงตัดด้วยพิกัดจอ ไม่ใช่ uv) */
+            if (uClipR >= 0.0) {
+              /* ห้ามชื่อ half — คำสงวนของ GLSL (shader คอมไพล์ไม่ผ่าน ฟ้าหายทั้งผืน) */
+              vec2 hb = uClip.zw * 0.5;
+              vec2 p = abs(gl_FragCoord.xy - (uClip.xy + hb));
+              vec2 b = hb - uClipR;
+              float sd = length(max(p - b, 0.0)) - uClipR;
+              if (sd > 0.0) discard;
+            }
+            float y = vUv.y;
+
+            /* ไล่ตั้งสี่ช่วง — smoothstep ทุกช่วงไม่ให้เห็นรอยต่อของจุดสี */
+            vec3 sky = mix(uHaze, uLow, smoothstep(0.0, 0.42, y));
+            sky = mix(sky, uHigh, smoothstep(0.3, 0.72, y));
+            sky = mix(sky, uZenith, smoothstep(0.62, 1.0, y));
+
+            /* ไอแดดที่ขอบฟ้า: อุ่นและซีดขึ้นเมื่อลงไปใกล้ขอบล่าง */
+            sky = mix(sky, uHaze, smoothstep(0.34, 0.0, y) * uWarm);
+
+            /**
+             * ดวงอาทิตย์สองชั้น: แกนแคบ (คมกว่า) + แสงฟุ้งกว้าง
+             *
+             * คิดระยะโดยแก้อัตราส่วนจอก่อน ไม่งั้นวงแสงถูกยืดเป็นวงรีตามความกว้างจอ
+             */
+            vec2 d = (vUv - uSun) * vec2(uAspect, 1.0);
+            float r = length(d);
+            float core = exp(-pow(r / max(0.02, uSunR), 2.0));
+            float bloom = exp(-r / max(0.05, uSunR * 3.4));
+            sky += uSunCol * (core * 0.7 + bloom * 0.28) * uGlow;
+
+            /* ขอบเฟรมหรี่ — ดึงตาเข้ากลาง ใช้ระยะจากกลางเฟรมที่แก้อัตราส่วนแล้ว */
+            vec2 q = (vUv - 0.5) * vec2(uAspect, 1.0);
+            sky *= 1.0 - smoothstep(0.35, 1.05, length(q)) * uVig;
+
+            /**
+             * ── เมฆจุดครึ่งโทน ──
+             *
+             * ปั้นเองทั้งหมด ไม่ได้แปะรูป: ความหนาแน่นของเมฆมาจาก fbm แล้วถูก *พิมพ์* ลง
+             * ตะแกรงจุดแบบงานพิมพ์ครึ่งโทน — จุดโตขึ้นตามความหนาแน่น ท้องเมฆจึงเป็นวงโต
+             * ชนกัน ขอบเมฆเป็นวงเล็กห่าง ๆ เหมือนแบบที่ส่งมา
+             *
+             * ตะแกรงคิดใน **พิกัดพิกเซลของจอ** (gl_FragCoord) ไม่ใช่พิกัด uv ของแผ่น:
+             * จุดต้องมีขนาดเท่ากันทั้งเฟรมและคงที่เมื่อกล้องขยับ/ซูม ถ้าผูกกับ uv จุดจะโต
+             * ตามระยะและเต้นตามกล้องทุกเฟรม
+             *
+             * ตัวเมฆเองเลื่อนช้า ๆ ตามแกน x (uTime) และมีแต่ครึ่งบนของฟ้า — ใต้เส้นขอบฟ้า
+             * ในฉากนี้เป็นพื้น เมฆลงไปถึงตรงนั้นจะอ่านเป็นฝ้าบนพื้น
+             */
+            /* เมฆอยู่ครึ่งบนของฟ้าเท่านั้น: ใต้ลงไปเป็นทุ่งกับหัวเรื่องสีขาว ถ้าเมฆลงไปถึง
+               ตรงนั้น ท้องเมฆขาวจะกินตัวหนังสือขาวจนอ่านไม่ออก */
+            float band = smoothstep(0.34, 0.6, y) * (1.0 - smoothstep(0.92, 1.12, y));
+            if (uCloud > 0.001 && band > 0.001) {
+              vec2 cuv = vec2(vUv.x * uAspect, vUv.y) * uCloudScale;
+              /* ยืดตามแกนนอน: ก้อนเมฆจริงแบนกว่าสูง */
+              cuv.y *= 2.1;
+              vec2 flow = cuv + vec2(uTime, 0.0);
+              /**
+               * สองชั้น: ก้อนใหญ่บอกว่า "แถวนี้มีเมฆไหม" ชั้นละเอียดบอกรูปขอบของก้อน
+               *
+               * ชั้นเดียวได้เมฆกระจายสม่ำเสมอทั้งฟ้าเท่ากันหมด ซึ่งอ่านเป็นลายพื้น ไม่ใช่เมฆ
+               * — ฟ้าจริงมีย่านที่โปร่งสนิทสลับกับย่านที่ก้อนเกาะกันเป็นแพ
+               */
+              float mass = fbmN(flow * 0.3, 2);
+              float n = fbmN(flow, 3) * 0.62 + mass * 0.52;
+              float dens = smoothstep(uCloudCut, uCloudCut + 0.2, n) * band;
+              /* รัศมีจุด: √ความหนาแน่น เพื่อให้ *พื้นที่* ของจุดโตเป็นเส้นตรงตามความหนาแน่น */
+              float rad = sqrt(dens) * 0.62;
+              /*
+               * โผล่ตอนเปิดฉาก: จุดครึ่งโทนงอกทีละจุด (รัศมี 0 → เต็ม เด้งเกินนิด) เป็นคลื่นจากซ้ายบนไปขวา
+               * แต่ละจุดเหลื่อมเวลาสุ่มนิด ๆ — เห็นเป็นเมฆค่อย ๆ "พิมพ์" ตัวเองขึ้นมา ไม่ใช่ทั้งผืนจางพร้อมกัน
+               */
+              vec2 cid = floor(gl_FragCoord.xy / max(2.0, uCloudDot));
+              float ch = fract(sin(dot(cid, vec2(12.9898, 78.233))) * 43758.5453);
+              float front = vUv.x * 0.62 + (1.0 - y) * 0.22 + ch * 0.28;
+              float lk = clamp((uCloudIn * 1.5 - front) / 0.32, 0.0, 1.0);
+              float pop = 1.0 + 0.35 * sin(3.14159 * lk) * (1.0 - lk);
+              rad *= lk * pop;
+              vec2 cell = fract(gl_FragCoord.xy / max(2.0, uCloudDot)) - 0.5;
+              float dotv = 1.0 - smoothstep(rad - 0.05, rad + 0.02, length(cell));
+              /* ท้องเมฆขาวจัด ขอบเมฆอมสีฟ้าของฟ้าเอง — ไม่ใช่ขาวเท่ากันทั้งก้อน */
+              /* ท้องเมฆสว่างสุดที่ 0.94 ไม่ถึงขาวสนิท — ขาวสนิทแข่งกับหัวเรื่องซึ่งขาวจริง */
+              vec3 cloudCol = mix(mix(sky, vec3(0.94), 0.72), vec3(0.94), dens);
+              sky = mix(sky, cloudCol, dotv * uCloud * min(1.0, lk * 1.6));
+            }
+
+            /* โหมด clay: ไล่เทาแทนทั้งผืน (ผสมด้วย mix ไม่ใช่ if ตาม shader-mobile) */
+            sky = mix(sky, mix(uClayBot, uClayTop, y), uClay);
+
+            /**
+             * dither ละเอียดกันแถบคาด — ฟ้าคือพื้นเรียบใหญ่ที่ค่าต่างกันไม่ถึงหนึ่งขั้น 8 บิต
+             * ตาจึงเห็นเป็นแถบ เติมความคลาดเล็กกว่าหนึ่งขั้นเข้าไป ขอบแถบแตกเป็นเม็ดละเอียด
+             */
+            sky += (hash(gl_FragCoord.xy) - 0.5) * (1.0 / 512.0);
+
+            /**
+             * ส่งออกเป็นค่า **เชิงเส้น** ไม่แปลงเป็น sRGB เอง
+             *
+             * ฉากนี้มีพาสหลังประมวลผลเปิดอยู่เป็นค่าเริ่มต้น (rimFx — ดู CameraFX) ฉากถูก
+             * วาดลง FBO แล้วพาสนั้นเป็นคนแปลงพื้นที่สีตอนเขียนลงจอ ถ้าที่นี่แปลงเองด้วยจะถูก
+             * แปลงสองรอบ = ฟ้าซีดขึ้นทั้งผืน (วัดจากจอจริง: ยอดฟ้าที่ตั้งไว้ #1466b5 ออกมา
+             * เป็น #6ca8d5) ปล่อยเป็นเชิงเส้นแล้วให้ปลายทางแปลงรอบเดียวจึงตรงกับสีที่ตั้ง
+             */
+            gl_FragColor = vec4(max(sky, vec3(0.0)), 1.0);
+          }
+        `}
+      />
+    </mesh>
+  )
+}
+
+/** วงกลมนุ่ม ๆ ลอยเป็นฉากหลังบนซ้าย (decorative spheres ในชีท — ในฉากจริงถูกใช้แบบแบน) */
+function SoftCircles() {
+  return (
+    <group position={[-6.5, 6.4, -19]}>
+      {/* ทรงกลมจริง ไม่ใช่จานแบน — จานแบนไม่มีไล่แสง เลยอ่านเป็นรอยเปื้อนบนพื้นหลัง */}
+      <mesh position={[-1.4, 0.2, 0]}>
+        <sphereGeometry args={[2.6, 32, 24]} />
+        <meshStandardMaterial color="#86dfa4" roughness={0.85} />
+      </mesh>
+      <mesh position={[1.9, 1.4, 1.2]}>
+        <sphereGeometry args={[1.5, 32, 24]} />
+        <meshStandardMaterial color="#5fcf94" roughness={0.85} />
+      </mesh>
+    </group>
+  )
+}
+
+/**
+ * แผงครีมฉากกลาง — กล่องมุมมนมีความหนาจริง (BACKGROUND PANELS ในชีท)
+ *
+ * ชีท perspective วาดแผงเป็นกล่อง เห็นหน้าข้างลู่เข้า VP ไม่ใช่ป้ายแบนหันหน้าเข้ากล้อง
+ * ความหนาจึงต้องพอให้เห็นสันข้าง (~1.4 หน่วยขึ้นไป) และแผงทั้งแถบต้องหันไปทางเดียวกัน
+ * แล้วปล่อยให้ perspective เป็นตัวเปิดหน้าข้างของใบที่อยู่นอกแนวกลางเอง
+ *
+ * `band` = สัดส่วนความสูงของแถบเขียวที่ฐาน (0 = ไม่มี) — ใน ref มีเฉพาะบางใบ และเป็น
+ * เขียวอ่อน ไม่ใช่เขียวเข้มทึบ ถ้าใส่ทุกใบเท่ากันทั้งแถบจะอ่านเป็นรั้ว ไม่ใช่ฉากหลัง
+ */
+const PANEL_BAND = '#8ccf90'
+const PANEL_BAND_LINE = '#c6e7bd'
+
+/**
+ * กระจกของพอร์ทัล — แผ่นบาง ๆ ปิดหน้าช่อง ให้ปากหน้าต่างอ่านเป็นบานกระจกหนา ไม่ใช่รูตัดทะลุ
+ *
+ * ไม่ได้ใช้ transmission จริง: วัสดุ transmission สุ่มตัวอย่างจากภาพฉากที่เรนเดอร์แยกรอบ
+ * ซึ่งไม่มีของในพอร์ทัล (ของพวกนั้นวาดผ่านเงื่อนไข stencil) กระจกจะกลายเป็นฝ้าที่มองเห็น
+ * ทิวทัศน์ข้างในหายไปทั้งบาน ที่นี่จึงวาด "สิ่งที่ตาใช้ตัดสินว่าเป็นกระจก" ตรง ๆ แทน:
+ *  · ขอบในมนรับแสง — ฝั่งไฟสว่าง ฝั่งตรงข้ามเงา คือสิ่งที่บอกว่าขอบมีความหนาและมน
+ *  · เงาจมเข้าไปตลอดขอบ — บอกว่าผิวข้างในอยู่ลึกกว่าระนาบหน้าบาน
+ *  · แถบแสงเฉียงบาง ๆ ทั้งบาน — การสะท้อนของแผ่นเรียบ
+ *
+ * ทิศของขอบมาจากเกรเดียนต์ของ SDF (dFdx/dFdy) ไม่ใช่มุมรอบจุดกึ่งกลาง: ที่มุมโค้ง
+ * สองอย่างนี้ต่างกันมาก ถ้าใช้มุมรอบจุดกึ่งกลาง ไฮไลต์จะไถลไม่เกาะขอบ
+ */
+const GLASS_U = {
+  uSize: { value: new THREE.Vector2(1, 1) },
+  uHalf: { value: new THREE.Vector2(1, 1) },
+  uR: { value: 1 },
+  uBevel: { value: 0.6 },
+  uInt: { value: 1 },
+  uSheen: { value: 0.12 },
+}
+
+let GLASS_MAT = null
+function glassMaterial() {
+  if (GLASS_MAT) return GLASS_MAT
+  GLASS_MAT = new THREE.ShaderMaterial({
+    uniforms: GLASS_U,
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false,
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec2 uSize, uHalf;
+      uniform float uR, uBevel, uInt, uSheen;
+      varying vec2 vUv;
+
+      float sdRound(vec2 p, vec2 b, float r) {
+        vec2 q = abs(p) - b + r;
+        return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+      }
+
+      void main() {
+        vec2 p = (vUv - 0.5) * uSize;
+        float d = sdRound(p, uHalf, uR);
+        /* นอกปากช่องไม่วาดเลย — แผ่นนี้เป็นกระจกในกรอบ ไม่ใช่ฝ้ารอบหน้าต่าง */
+        if (d > 0.0) discard;
+        /* 0 ที่ขอบ → 1 เมื่อลึกเข้าไปพ้นความหนาของขอบ */
+        float t = clamp(-d / uBevel, 0.0, 1.0);
+        vec2 g = normalize(vec2(dFdx(d), dFdy(d)) + 1e-6);
+        vec2 L = normalize(vec2(-0.62, 0.78));
+        float rim = pow(1.0 - t, 2.4);
+        float lit = dot(g, L) * rim;
+        float hi = max(lit, 0.0) * 0.72 * uInt;
+        float lo = max(-lit, 0.0) * 0.42 * uInt;
+        /* เงาจมรอบขอบทุกด้าน = ผิวข้างในอยู่ลึกกว่าหน้าบาน */
+        float inset = pow(1.0 - t, 3.0) * 0.24 * uInt;
+        /* แถบสะท้อนเฉียงพาดบาน — บางและจาง ไม่ใช่แผ่นฝ้า */
+        float band = abs((p.x * 0.55 + p.y) / (uHalf.y * 1.7) - 0.12);
+        float sheen = smoothstep(0.3, 0.0, band) * uSheen;
+        float film = 0.035 * uSheen * 8.0;
+        float bright = hi + sheen + film;
+        float dark = lo + inset;
+        float a = clamp(bright + dark, 0.0, 0.9);
+        vec3 col = mix(vec3(0.16, 0.28, 0.42), vec3(1.0), bright / (bright + dark + 1e-4));
+        gl_FragColor = vec4(col, a);
+      }
+    `,
+  })
+  return GLASS_MAT
+}
+
+/** กระจกของบานหนึ่งใบ — ทุกบานขนาดเท่ากัน จึงใช้วัสดุ/ยูนิฟอร์มชุดเดียวร่วมกัน */
+function PortalGlass({ w, h, r, z, bevel, intensity, sheen }) {
+  useFrame(() => {
+    GLASS_U.uSize.value.set(w, h)
+    GLASS_U.uHalf.value.set(w / 2, h / 2)
+    GLASS_U.uR.value = r
+    GLASS_U.uBevel.value = bevel
+    GLASS_U.uInt.value = intensity
+    GLASS_U.uSheen.value = sheen
+  })
+  return (
+    <mesh position={[0, 0, z]} material={glassMaterial()} renderOrder={6} userData={{ noClay: true }}>
+      <planeGeometry args={[w, h]} />
+    </mesh>
+  )
+}
+
+/**
+ * ฉายกรอบของบานหน้าต่างลงพิกัดจอ ให้สปแลชใช้เป็นเป้าของการมอร์ฟ
+ *
+ * อยู่ในกลุ่มเดียวกับบาน จึงได้เมทริกซ์โลกชุดเดียวกันฟรี — ไม่ต้องไล่คูณมุมกลุ่ม/สเกลเอง
+ * และคิดจาก *ตำแหน่งปลายทาง* ของบานตรง ๆ ไม่ใช่จากกลุ่ม Appear ที่กำลังย่อ-ขยายอยู่
+ * (ตอนสปแลชยังบัง บานยังเล่นท่าโผล่ค้างอยู่ที่สเกลเกือบศูนย์ ฉายจากของจริงจะได้จุดเดียว)
+ *
+ * ทำงานเฉพาะเมื่อมีคนรอ (panelScreen.want) — สปแลชปิดไปแล้วก็ไม่ต้องเสียเวลาฉายทุกเฟรม
+ */
+const PROBE_P = new THREE.Vector3()
+/** จุดต่อมุมของเส้นรอบรูปบาน (= panelScreen.outlineSeg — สปแลชสุ่มวงกลมตั้งต้นด้วยจำนวนเดียวกัน) */
+const OUTLINE_SEG = panelScreen.outlineSeg
+
+function PanelProbe({ count, w, h, d, y, xAt }) {
+  const g = useRef()
+  const { camera, size } = useThree()
+  useFrame(() => {
+    const o = g.current
+    if (import.meta.env.DEV) panelScreen.ticks = (panelScreen.ticks || 0) + 1
+    if (!o || !panelScreen.want) return
+    /**
+     * อัปเดตเมทริกซ์เองก่อนฉาย — ของ three ถูกอัปเดตตอน `render()` ซึ่งคือ *ท้าย* เฟรม
+     *
+     * ฉายด้วยเมทริกซ์ที่ค้างอยู่ = รายงานท่าของเฟรมก่อน แต่ประทับเวลาเป็นเฟรมนี้ คนอ่านที่
+     * คิดความเร็วจาก (ผลต่าง ÷ ช่วงเวลา) จึงได้ค่าเพี้ยนตามอัตราส่วนของสองเฟรมติดกัน
+     * วัดได้ชัด: ระยะที่บานขยับต่อการเขียนหนึ่งครั้งสัมพันธ์กับ span ของเฟรม *ก่อนหน้า* เป๊ะ
+     * (span 46ms → 5.97px, span 20ms → 3.44px, span 44ms → 2.36px) ขณะที่กล้องเองเดินเรียบ
+     * สนิท (ความเร็วไล่จาก 0.0075 เป็น 0.0088 หน่วย/ms แบบทางเดียว) — ความกระตุกทั้งหมด
+     * เกิดที่ชั้นรายงาน ไม่ใช่ที่การเคลื่อนของฉาก
+     */
+    camera.updateMatrixWorld()
+    o.updateWorldMatrix(true, false)
+    const rects = []
+    const quads = []
+    const radii = []
+    const outlines = []
+    /* หน้าบานอยู่ที่ z = +d/2 ไม่ใช่ z = 0 — กล่องวางกลางที่ระนาบศูนย์ ฉายที่ศูนย์คือได้
+       ระนาบกลางความหนา ซึ่งเล็กกว่าหน้าที่คนดูเห็นจริง */
+    const zFront = d / 2
+    for (let i = 0; i < count; i += 1) {
+      const x = xAt(i)
+      let left = Infinity
+      let right = -Infinity
+      let top = Infinity
+      let bottom = -Infinity
+      /* สี่มุมของหน้าบาน (z = 0 ระนาบเดียวกับที่บานวางอยู่) → จอ
+         เรียงตามเข็มจากซ้ายบน: บานเอียงในเพอร์สเปกทีฟ คนที่จะมอร์ฟไปทับต้องได้รูปจริง
+         ไม่ใช่แค่กรอบครอบ (ดู panelScreen) */
+      const corner = []
+      for (const [dx, dy] of [
+        [-0.5, 0.5],
+        [0.5, 0.5],
+        [0.5, -0.5],
+        [-0.5, -0.5],
+      ]) {
+        PROBE_P.set(x + dx * w, y + dy * h, zFront)
+        o.localToWorld(PROBE_P)
+        PROBE_P.project(camera)
+        const sx = (PROBE_P.x * 0.5 + 0.5) * size.width
+        const sy = (1 - (PROBE_P.y * 0.5 + 0.5)) * size.height
+        corner.push({ x: sx, y: sy })
+        if (sx < left) left = sx
+        if (sx > right) right = sx
+        if (sy < top) top = sy
+        if (sy > bottom) bottom = sy
+      }
+      rects.push({ x: left, y: top, w: right - left, h: bottom - top })
+      quads.push(corner)
+      /* รัศมีเป็นพิกเซล = รัศมีในหน่วยฉาก × (ความยาวขอบด้าน h บนจอ ต่อ h หน่วยฉาก)
+         เฉลี่ยขอบซ้าย-ขวาเพื่อไม่ให้ค่าแกว่งตามด้านที่อยู่ใกล้กล้องกว่า */
+      const leftEdge = Math.hypot(corner[0].x - corner[3].x, corner[0].y - corner[3].y)
+      const rightEdge = Math.hypot(corner[1].x - corner[2].x, corner[1].y - corner[2].y)
+      radii.push(((Math.min(w, h) * 0.17) / h) * ((leftEdge + rightEdge) / 2))
+      /* เส้นรอบรูปจริงของหน้าบาน — มุมเป็นโค้งกำลังสองแบบเดียวกับ roundedBoxGeo (ไม่ใช่วงกลม)
+         ฉายทีละจุด มุมไกล/ใกล้กล้องจึงบีบตามเพอร์สเปกทีฟเอง ดู panelScreen.outlines */
+      const rr = Math.min(Math.min(w, h) * 0.17, Math.min(w, h) / 2)
+      const x0 = x - w / 2
+      const x1 = x + w / 2
+      const y0 = y - h / 2
+      const y1 = y + h / 2
+      const line = []
+      for (const [ax, ay, cx, cy, bx, by] of [
+        [x0, y1 - rr, x0, y1, x0 + rr, y1],
+        [x1 - rr, y1, x1, y1, x1, y1 - rr],
+        [x1, y0 + rr, x1, y0, x1 - rr, y0],
+        [x0 + rr, y0, x0, y0, x0, y0 + rr],
+      ]) {
+        for (let k = 0; k <= OUTLINE_SEG; k += 1) {
+          const t = k / OUTLINE_SEG
+          const m = 1 - t
+          PROBE_P.set(m * m * ax + 2 * m * t * cx + t * t * bx, m * m * ay + 2 * m * t * cy + t * t * by, zFront)
+          o.localToWorld(PROBE_P)
+          PROBE_P.project(camera)
+          line.push({ x: (PROBE_P.x * 0.5 + 0.5) * size.width, y: (1 - (PROBE_P.y * 0.5 + 0.5)) * size.height })
+        }
+      }
+      outlines.push(line)
+    }
+    panelScreen.outlines = outlines
+    panelScreen.rects = rects
+    panelScreen.quads = quads
+    panelScreen.radii = radii
+    // รัศมีมุมของบานเป็นสัดส่วนของด้านที่สั้นกว่า (ดู Panel) แปลงเป็นพิกเซลด้วยอัตราส่วนเดียวกัน
+    panelScreen.radius = rects.length
+      ? Math.min(rects[0].w, rects[0].h) * 0.17
+      : 0
+    panelScreen.ready = rects.length > 0 && rects[0].w > 1
+  })
+  return <group ref={g} />
+}
+
+function Panel({ w = 5.2, h = 6.5, d = 1.7, band = 0, cells = 0, stripe = false, portal = false, glass = 0, glassBevel = 0.7, glassSheen = 0.12, tint = INNER_BG, ...props }) {
+  /**
+   * หน้าต่าง = ช่องมองทะลุไปอีกฉาก ทำด้วย stencil buffer
+   *
+   * วาดตัวหน้าต่างโดยไม่เขียนสี (colorWrite=false) แต่เขียนเลข STENCIL_REF ลง stencil
+   * แล้วของในฉากข้างในตั้งเงื่อนไขว่าจะวาดเฉพาะพิกเซลที่ stencil ตรงเลขนั้น — ผลคือ
+   * ฉากข้างในโผล่เฉพาะในกรอบหน้าต่าง เหมือนมองผ่านช่อง
+   *
+   * เคยลอง MeshPortalMaterial ของ drei แล้วภาพในช่องไม่ตรงตำแหน่งกับฉากหลัก (คลาด
+   * แนวตั้งราว 100 px) เพราะมันเรนเดอร์ลง render target แล้วสุ่มตัวอย่างกลับด้วยพิกัดจอ
+   * ซึ่งพลาดง่ายเมื่อขนาด target กับขนาดจอไม่ตรงกัน stencil ไม่มีปัญหานั้นเลย เพราะ
+   * ทุกอย่างวาดด้วยกล้องตัวเดียวกันในบัฟเฟอร์เดียวกัน ตำแหน่งจึงตรงโดยอัตโนมัติ
+   */
+  const r = Math.min(w, h) * 0.17
+  const geo = useMemo(() => roundedBoxGeo(w, h, d, r), [w, h, d, r])
+  useDisposable(geo)
+
+  const bh = h * band
+  return (
+    <group {...props}>
+      <mesh geometry={geo} renderOrder={portal ? -2 : 0} userData={{ noClay: portal }}>
+        {portal ? (
+          <meshBasicMaterial
+            colorWrite={false}
+            depthWrite={false}
+            stencilWrite
+            stencilRef={STENCIL_REF}
+            stencilFunc={THREE.AlwaysStencilFunc}
+            stencilZPass={THREE.ReplaceStencilOp}
+          />
+        ) : (
+          <meshStandardMaterial color={tint} roughness={0.95} />
+        )}
+      </mesh>
+      {band > 0 && (
+        <group position={[0, -h / 2 + bh / 2, d / 2 - 0.02]}>
+          <mesh>
+            <boxGeometry args={[w * 0.995, bh, 0.12]} />
+            <meshStandardMaterial color={PANEL_BAND} roughness={0.85} />
+          </mesh>
+          {Array.from({ length: Math.max(0, cells - 1) }, (_, i) => (
+            <mesh key={i} position={[w * 0.995 * ((i + 1) / cells - 0.5), 0, 0.07]}>
+              <boxGeometry args={[0.07, bh * 0.96, 0.04]} />
+              <meshStandardMaterial color={PANEL_BAND_LINE} roughness={0.9} />
+            </mesh>
+          ))}
+        </group>
+      )}
+      {stripe && (
+        <mesh position={[0, -h * 0.05, d / 2 + 0.02]}>
+          <planeGeometry args={[w * 0.6, h * 0.4]} />
+          <meshBasicMaterial map={candyStripesGreen} />
+        </mesh>
+      )}
+      {portal && glass > 0 && (
+        <PortalGlass
+          w={w}
+          h={h}
+          r={r}
+          z={d / 2 + 0.02}
+          bevel={glassBevel}
+          intensity={glass}
+          sheen={glassSheen}
+        />
+      )}
+    </group>
+  )
+}
+
+/** ลายทางผ้าใบเขียว-ขาวของแผงกลาง */
+const candyStripesGreen = (() => {
+  const c = document.createElement('canvas')
+  c.width = 256
+  c.height = 32
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#f2ecdc'
+  ctx.fillRect(0, 0, 256, 32)
+  ctx.fillStyle = GREEN_MAIN
+  for (let i = 0; i < 8; i++) ctx.fillRect(i * 32, 0, 14, 32)
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+})()
+
+/** ป้ายทรงกระบอกนอน หน้าตัดเป็นเสาสัญญาณ (SIGN - WIFI) */
+function BeaconSign(props) {
+  const mats = useMemo(() => {
+    const side = new THREE.MeshStandardMaterial({ color: GREEN_SOFT, roughness: 0.8 })
+    const cap = new THREE.MeshStandardMaterial({ color: GREEN_MAIN, roughness: 0.7, map: null })
+    return [side, cap, new THREE.MeshStandardMaterial({ color: '#6cc276', roughness: 0.8 })]
+  }, [])
+  useDisposable(mats)
+  return (
+    <group {...props}>
+      <mesh rotation={[0, 0, -Math.PI / 2]} material={mats}>
+        <cylinderGeometry args={[1.45, 1.45, 4.4, 40]} />
+      </mesh>
+      {/* หน้า glyph ลอยหน้าฝาซ้ายนิดเดียว — ง่ายกว่าไล่ UV ของฝา cylinder */}
+      <mesh position={[-2.21, 0, 0]} rotation={[0, -Math.PI / 2, 0]}>
+        <circleGeometry args={[1.32, 40]} />
+        <meshStandardMaterial color={GREEN_MAIN} roughness={0.7} />
+      </mesh>
+      <mesh position={[-2.24, 0, 0]} rotation={[0, -Math.PI / 2, 0]}>
+        <planeGeometry args={[2.3, 2.3]} />
+        <meshBasicMaterial map={beaconGlyph} transparent />
+      </mesh>
+    </group>
+  )
+}
+
+/** ไอคอนแอปมุมมน + glyph (ใช้ทั้ง wifi ฟ้าและหัวใจ) */
+function AppIcon({ color = BLUE, glyph = wifiGlyph, size = 1.7, ...props }) {
+  const geo = useMemo(() => roundedBoxGeo(size, size, size * 0.42, size * 0.26), [size])
+  useDisposable(geo)
+  return (
+    <group {...props}>
+      <mesh geometry={geo}>
+        <meshStandardMaterial color={color} roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 0, size * 0.22]}>
+        <planeGeometry args={[size * 0.92, size * 0.92]} />
+        <meshBasicMaterial map={glyph} transparent />
+      </mesh>
+    </group>
+  )
+}
+
+/** เหรียญเขียวลายเครื่องบินส้ม (ICON - AIRPLANE) */
+function PlaneCoin(props) {
+  return (
+    <group {...props}>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[1.05, 1.05, 0.34, 40]} />
+        <meshStandardMaterial color={GREEN_MAIN} roughness={0.7} />
+      </mesh>
+      <mesh position={[0, 0, 0.18]}>
+        <planeGeometry args={[1.7, 1.7]} />
+        <meshBasicMaterial map={planeGlyph} transparent />
+      </mesh>
+    </group>
+  )
+}
+
+/** ไพ่ดอกจิก — แผ่นมุมมนขาว + ลายดอก */
+function PlayingCard(props) {
+  const geo = useMemo(() => roundedBoxGeo(1.7, 2.4, 0.1, 0.2), [])
+  useDisposable(geo)
+  return (
+    <group {...props}>
+      <mesh geometry={geo}>
+        <meshStandardMaterial color="#f4f1e6" roughness={0.85} />
+      </mesh>
+      <mesh position={[0, 0, 0.07]}>
+        <planeGeometry args={[1.55, 2.25]} />
+        <meshBasicMaterial map={clubGlyph} transparent />
+      </mesh>
+    </group>
+  )
+}
+
+/** โดนัทลายลูกกวาด (CANDY FLOAT) */
+function CandyFloat(props) {
+  const tex = useMemo(() => {
+    const t = candyTex.clone()
+    t.repeat.set(9, 1)
+    t.needsUpdate = true
+    return t
+  }, [])
+  useDisposable(tex)
+  return (
+    <mesh {...props}>
+      <torusGeometry args={[1.55, 0.68, 24, 64]} />
+      <meshStandardMaterial map={tex} roughness={0.75} />
+    </mesh>
+  )
+}
+
+/** วงเป้าฟ้า (TARGET RING) */
+function TargetRing(props) {
+  const tex = useMemo(() => targetFace(), [])
+  useDisposable(tex)
+  return (
+    <group {...props}>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[1.6, 1.6, 0.5, 48]} />
+        <meshStandardMaterial color="#2e6bd8" roughness={0.7} />
+      </mesh>
+      <mesh position={[0, 0, 0.26]}>
+        <circleGeometry args={[1.58, 48]} />
+        <meshBasicMaterial map={tex} />
+      </mesh>
+    </group>
+  )
+}
+
+/** เพชรม่วง — ทรง 12 หน้า flat shading + สันขอบสีอ่อน */
+/**
+ * หมุดของเคอร์เซอร์นำสายตา — group เปล่าที่ฉายตำแหน่งตัวเองลงเป็นพิกเซลบนจอทุกเฟรม
+ *
+ * ฉากนี้ **ไม่วาดลูกศร** ลูกศรตัวจริงมีชิ้นเดียวทั้งหน้า วาดที่ cursorguide/CursorGuideLayer
+ * เพราะของในแคนวาสของจอนี้ออกไปโผล่ในจออื่นไม่ได้ ถ้าวาดทั้งสองที่ก็เป็นลูกศรสองชิ้นที่
+ * หน้าตาเหมือนกันสลับกันเข้าออก ไม่ใช่ตัวเดิมที่เดินทางข้ามจอ
+ *
+ * สิ่งที่ฉากนี้ยังเป็นเจ้าของคือ "ที่อยู่": ตำแหน่งที่จูนไว้ ท่าเข้าฉาก และพาราแลกซ์ของกลุ่ม
+ * ที่มันเกาะ — หมุดอยู่ในลำดับชั้นเดิมทั้งหมด จึงขยับเหมือนที่ลูกศรเคยขยับเป๊ะ ๆ
+ *
+ * ส่งออกสามอย่าง: พิกเซลบนจอ, ความสูงที่เห็นบนจอ (ฉากเป็นเพอร์สเปกทีฟ สเกลในฉากไม่ใช่
+ * พิกเซล), และทิศหันในสเปซกล้อง — ชั้นของหน้าใช้กล้องออร์โธที่หันตรง เอาทิศนี้ไปใส่ตรง ๆ
+ * แล้วลูกศรหันเหมือนอยู่ในฉากนี้
+ */
+function CursorAnchor(props) {
+  const g = useRef()
+  const P = useMemo(
+    () => ({
+      a: new THREE.Vector3(),
+      b: new THREE.Vector3(),
+      up: new THREE.Vector3(),
+      s: new THREE.Vector3(),
+      q: new THREE.Quaternion(),
+      q2: new THREE.Quaternion(),
+    }),
+    [],
+  )
+  useEffect(
+    () => () => {
+      heroCursor.ok = false
+    },
+    [],
+  )
+  useFrame(({ camera, gl }) => {
+    const root = g.current
+    if (!root) return
+    /**
+     * วัดกรอบของแคนวาสจริง ไม่ใช่ `size` ของ r3f
+     *
+     * แคนวาสของฉากนี้เป็นการ์ดที่เว้นขอบจากวิวพอร์ต พิกเซลในแคนวาสจึงไม่ใช่พิกเซลบนจอ
+     * ชั้นนำสายตาตรึงเต็มจอ ถ้าส่งพิกัดแคนวาสไปตรง ๆ ลูกศรจะเพี้ยนไปเท่าขอบที่เว้นไว้
+     */
+    const r = gl.domElement.getBoundingClientRect()
+    root.updateWorldMatrix(true, false)
+    P.a.setFromMatrixPosition(root.matrixWorld)
+    /**
+     * ความสูงต่อหนึ่งหน่วยฉากวัดตามแกน "ขึ้น" ของกล้อง ไม่ใช่แกน y ของหมุดเอง
+     *
+     * หมุดหันเอียงในสามมิติ แกนของมันฉายลงจอแล้วสั้นลงตามมุม ถ้าวัดจากแกนนั้นจะได้
+     * ความสูงที่หักมุมไปแล้ว แล้วชั้นของหน้าซึ่งหมุนลูกศรด้วยทิศเดียวกันจะหักมุมซ้ำอีกรอบ
+     */
+    /* แกนขึ้นและทิศของกล้องต้องเอาจาก matrixWorld — กล้องอยู่ในกลุ่มที่หมุน/ขยับได้ */
+    P.up.setFromMatrixColumn(camera.matrixWorld, 1).normalize().add(P.a)
+    P.a.project(camera)
+    P.b.copy(P.up).project(camera)
+    heroCursor.x = r.left + ((P.a.x + 1) / 2) * r.width
+    heroCursor.y = r.top + ((1 - P.a.y) / 2) * r.height
+    const unit = Math.abs(P.b.y - P.a.y) * 0.5 * r.height
+    /* สเกลเอาจาก matrixWorld ไม่ใช่ prop — กลุ่มแม่ที่ห่ออยู่ก็ย่อขยายหมุดได้ */
+    root.matrixWorld.decompose(P.b, P.q, P.s)
+    heroCursor.size = unit * P.s.y
+    /* ทิศในสเปซกล้อง = ผกผันของทิศกล้อง คูณทิศโลกของหมุด */
+    camera.getWorldQuaternion(heroCursor.camQ)
+    heroCursor.q.copy(P.q).premultiply(P.q2.copy(heroCursor.camQ).invert())
+    heroCursor.ok = heroCursor.size > 1
+  })
+  return <group ref={g} {...props} />
+}
+
+function Gem(props) {
+  const edges = useMemo(() => {
+    const g = new THREE.DodecahedronGeometry(1)
+    const e = new THREE.EdgesGeometry(g, 10)
+    g.dispose()
+    return e
+  }, [])
+  useDisposable(edges)
+  return (
+    <group {...props}>
+      <mesh scale={[1, 0.82, 1]}>
+        <dodecahedronGeometry args={[1]} />
+        <meshStandardMaterial color={PURPLE} roughness={0.45} flatShading />
+      </mesh>
+      <lineSegments geometry={edges} scale={[1, 0.82, 1]}>
+        <lineBasicMaterial color="#e2a5f5" />
+      </lineSegments>
+    </group>
+  )
+}
+
+/** เบี้ยหมากรุกเขียวเข้ม — ปั้นด้วย Lathe จากโปรไฟล์ */
+function GamePawn(props) {
+  const geo = useMemo(() => {
+    const pts = [
+      [0.0, 0],
+      [0.62, 0],
+      [0.62, 0.16],
+      [0.42, 0.3],
+      [0.3, 0.62],
+      [0.26, 0.98],
+      [0.4, 1.12],
+      [0.4, 1.2],
+      [0.24, 1.26],
+      [0.34, 1.5],
+      [0.28, 1.74],
+      [0.0, 1.84],
+    ].map(([x, y]) => new THREE.Vector2(x, y))
+    return new THREE.LatheGeometry(pts, 36)
+  }, [])
+  useDisposable(geo)
+  return (
+    <mesh geometry={geo} {...props}>
+      <meshStandardMaterial color={GREEN_DEEP} roughness={0.6} />
+    </mesh>
+  )
+}
+
+/** กลุ่มบล็อก 2x2 — สีเดียวทั้งกลุ่ม (BLOCKS ในชีท) */
+function Blocks({ color = GREEN_MAIN, unit = 0.55, ...props }) {
+  const cells = [
+    [0, 0, 0],
+    [1, 0, 0],
+    [0, 1, 0],
+    [1, 1, 0],
+    [1, 0, 1],
+  ]
+  return (
+    <group {...props}>
+      {cells.map(([x, y, z], i) => (
+        <mesh key={i} position={[x * unit, y * unit, z * unit]}>
+          <boxGeometry args={[unit * 0.94, unit * 0.94, unit * 0.94]} />
+          <meshStandardMaterial color={color} roughness={0.65} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/** บล็อกกระเบื้องครีมฝาเขียว (TILE BLOCK) */
+function TileBlock(props) {
+  const geo = useMemo(() => roundedBoxGeo(2.4, 2.4, 1.2, 0.5), [])
+  useDisposable(geo)
+  return (
+    <group {...props}>
+      <mesh geometry={geo}>
+        <meshStandardMaterial color={CREAM} roughness={0.9} />
+      </mesh>
+      <mesh position={[0, 0.62, 0.1]}>
+        <boxGeometry args={[2.3, 0.7, 1.1]} />
+        <meshStandardMaterial color={GREEN_DEEP} roughness={0.8} />
+      </mesh>
+      <mesh position={[0, 1.02, 0.1]}>
+        <boxGeometry args={[2.3, 0.26, 1.16]} />
+        <meshStandardMaterial color={GREEN_SOFT} roughness={0.8} />
+      </mesh>
+    </group>
+  )
+}
+
+/** จานเขียวใหญ่หลังแผง (LARGE CYLINDER) */
+function BigDisc(props) {
+  return (
+    <mesh rotation={[Math.PI / 2, 0, 0]} {...props}>
+      <cylinderGeometry args={[2.6, 2.6, 0.9, 48]} />
+      <meshStandardMaterial color="#57b96b" roughness={0.8} />
+    </mesh>
+  )
+}
+
+/** คอนเฟตติ: เม็ดกลม/เม็ดแคปซูลกระจายทั่วฉาก — InstancedMesh เดียว สีต่อเม็ด */
+function Confetti({ count = 26 }) {
+  const ref = useRef()
+  const data = useMemo(() => {
+    const rnd = makeRandom(13)
+    const colors = [ORANGE, '#f7c980', '#2fbf8f', BLUE, '#7c5cf0', PURPLE, '#e8492e']
+    return Array.from({ length: count }, (_, i) => {
+      let x = (rnd() - 0.5) * 24
+      const y = (rnd() - 0.5) * 13
+      // เว้นย่านกลางจอ — นั่นคือที่ของตัวละคร เม็ดที่ลอยตรงนั้นอ่านเป็นสิ่งสกปรกบนเลนส์
+      if (Math.abs(x) < 3 && Math.abs(y) < 3) x += Math.sign(x || 1) * 3.5
+      return {
+      p: new THREE.Vector3(x, y, -6 + rnd() * 10),
+      s: 0.07 + rnd() * 0.15,
+      flat: rnd() > 0.3,
+      c: new THREE.Color(colors[i % colors.length]),
+      ph: rnd() * Math.PI * 2,
+      }
+    })
+  }, [count])
+  const M = useMemo(() => new THREE.Matrix4(), [])
+  const Q = useMemo(() => new THREE.Quaternion(), [])
+  const V = useMemo(() => new THREE.Vector3(), [])
+  const E = useMemo(() => new THREE.Euler(), [])
+  useFrame(() => {
+    const mesh = ref.current
+    if (!mesh) return
+    const t = clock.elapsedTime
+    data.forEach((d, i) => {
+      E.set(t * 0.3 + d.ph, d.ph, t * 0.24 + d.ph * 2)
+      Q.setFromEuler(E)
+      V.set(d.s * (d.flat ? 2.6 : 1), d.s * (d.flat ? 0.42 : 1), d.s * (d.flat ? 0.42 : 1))
+      M.compose(
+        // ลอยขึ้นลงคนละเฟส — ตำแหน่งฐานนิ่ง ไม่เดินทาง
+        new THREE.Vector3(d.p.x, d.p.y + Math.sin(t * 0.5 + d.ph) * 0.35, d.p.z),
+        Q,
+        V,
+      )
+      mesh.setMatrixAt(i, M)
+      if (mesh.instanceColor === null) mesh.setColorAt(i, d.c)
+    })
+    mesh.instanceMatrix.needsUpdate = true
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  })
+  return (
+    <instancedMesh ref={ref} args={[undefined, undefined, count]} frustumCulled={false}>
+      <sphereGeometry args={[1, 12, 10]} />
+      <meshStandardMaterial roughness={0.7} />
+    </instancedMesh>
+  )
+}
+
+/** เส้นริบบิ้นหยัก ๆ เล็ก ๆ (CONFETTI / RIBBONS) — ท่อบางตามเส้นโค้ง sine */
+function Squiggle({ color = '#59d3a8', ...props }) {
+  const geo = useMemo(() => {
+    const pts = []
+    for (let i = 0; i <= 24; i++) {
+      const t = i / 24
+      pts.push(new THREE.Vector3(t * 2.4, Math.sin(t * Math.PI * 2.4) * 0.32, 0))
+    }
+    return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.09, 8, false)
+  }, [])
+  useDisposable(geo)
+  return (
+    <mesh geometry={geo} {...props}>
+      <meshStandardMaterial color={color} roughness={0.7} />
+    </mesh>
+  )
+}
+
+/** จุดหมุนของริบบิ้น = ปากช่องบานที่ 2 ตรงที่มันโผล่ออกมา (พิกัดในกลุ่มแถบหน้าต่าง) */
+const RIBBON_PIVOT = [-3.5, 2.45, 0.7]
+
+/** จุดควบคุมริบบิ้นหลัก — พิกัดในกลุ่มแถบหน้าต่าง (ดูคำอธิบายใน CheckerRibbon) */
+export const RIBBON_PATH = [
+    /**
+     * ช่วงหลัง: ในโพรงบานที่ 1 → ลอดหลังกรอบ → ปากช่องบานที่ 2
+     *
+     * ชุดจุดนี้ได้จากการค้นหา ไม่ใช่การกะ: วัด "มุมที่ทิศทางเส้นหักต่อหนึ่งสเต็ป"
+     * ตลอดเส้นแล้วเลือกชุดที่ค่าสูงสุดต่ำที่สุด — มุมหักคือสิ่งที่ทำให้ริบบิ้นตะแคง
+     * จนเห็นเป็นสันบางแล้วบานออกตรงรอยต่อ ไม่ใช่รูโหว่ในเรขาคณิต
+     *
+     * ได้ 1.51° จากเดิม 2.08° (ลองด้วยมือก่อนหน้านี้ได้ 4.32° คือแย่ลง — เลยต้องวัด)
+     *
+     * เงื่อนไขที่ล็อกไว้ระหว่างค้นหา: จุดปากช่องคงเดิมเป๊ะ และความยาวรวมต่างจากเดิม
+     * ไม่เกิน 0.7% เพราะเฟสของคลื่นคิดจากระยะตามเส้น ถ้ายาวเปลี่ยนมากคลื่นจะเลื่อน
+     * ไปทั้งเส้น รวมช่วงหน้าที่จัดไว้แล้ว
+     */
+    new THREE.Vector3(-9.6, 2.7, -3.9),
+    new THREE.Vector3(-8.3, 2.66, -3.0),
+    new THREE.Vector3(-6.1, 2.58, -2.1),
+    new THREE.Vector3(-4.6, 2.52, -1.1),
+    new THREE.Vector3(-3.5, 2.45, 0.7),
+    /**
+     * ขาออกต้องลด x ท้องถิ่นลงขณะที่ z เพิ่ม
+     *
+     * แกน +z ของกลุ่มชี้ออกมาทางกล้อง "เยื้องขวา" (sin26° ≈ 0.44) เดินตรงตาม z
+     * อย่างเดียวจะลอยไปทับบานที่ 3 แล้วเลยไปโซนข้อความ ถอย x ไปทางซ้ายพอ ๆ กัน
+     * จึงได้เส้นที่พุ่งเข้าหาคนดูตรง ๆ แล้วดำดิ่งออกขอบล่าง
+     */
+    new THREE.Vector3(-3.7, 2.0, 3.2),
+    new THREE.Vector3(-4.1, 0.8, 7.0),
+    new THREE.Vector3(-4.9, -1.4, 11.0),
+    // ปลายต้องพ้นขอบล่างของเฟรม ไม่ใช่จบกลางอากาศ — เอียงซ้ายเพิ่มไม่ให้ไปทับโซนข้อความ
+    new THREE.Vector3(-7.0, -4.8, 16.0),
+]
+
+
+/**
+ * ของที่อยู่ "ในหน้าต่าง" — วาดเฉพาะพิกเซลที่ stencil ถูกทำเครื่องหมายไว้โดยหน้าต่าง
+ *
+ * ไล่ตั้งค่า stencil ให้ทุกวัสดุด้วย traverse แทนการส่ง prop ทีละชิ้น เพราะของในนี้
+ * เป็นเมชธรรมดาหลายชิ้น การลืมตั้งแค่ชิ้นเดียวจะทำให้มันโผล่นอกกรอบหน้าต่างทันที
+ *
+ * depthTest ยังเปิดอยู่ ของที่อยู่หน้าหน้าต่าง (ริบบิ้น ตัวละคร) จึงบังพอร์ทัลได้ตามจริง
+ */
+function InsideWindow({ children }) {
+  const g = useRef()
+  /**
+   * ไล่ตั้ง stencil ซ้ำทุกเฟรมช่วงแรก ไม่ใช่ครั้งเดียวตอน mount
+   *
+   * ฉาก joespresso สร้างเมชหลายชิ้นหลังจากนั้น (โหลด GLB, สร้าง geometry ใน effect)
+   * ตั้งครั้งเดียวแล้วชิ้นที่มาทีหลังจะไม่มีเงื่อนไข stencil แล้วโผล่นอกกรอบหน้าต่างทันที
+   * ตั้งเฉพาะชิ้นที่ยังไม่ถูกตั้ง (ดูจาก stencilRef) เพื่อไม่ให้ต้อง needsUpdate ทุกเฟรม
+   */
+  const frames = useRef(0)
+  useFrame(() => {
+    const root = g.current
+    if (!root || frames.current > 240) return
+    frames.current += 1
+    root.traverse((o) => {
+      /**
+       * เปิด matrixWorldAutoUpdate กลับให้ทุกชิ้นในพอร์ทัล
+       *
+       * Sky กับ Terrain ของ joespresso เรียก useStaticSubtree ซึ่งปิดธงนี้ทั้งกิ่ง
+       * (ของสองชิ้นนั้นไม่เคยขยับในหน้าเดิม จึงตัดออกจากงานคำนวณทุกเฟรม)
+       * ผลข้างเคียงที่นี่คือพอกลุ่มแม่ขยับ ลูกไม่คำนวณ matrixWorld ใหม่เลย สไลเดอร์
+       * ตำแหน่ง/สเกล/หมุนจึงไม่มีผล — และ updateMatrixWorld(true) ก็ช่วยไม่ได้
+       * เพราะโค้ดของ three ข้ามการคำนวณเมื่อธงนี้เป็น false ไม่ว่าจะ force หรือไม่
+       */
+      o.matrixWorldAutoUpdate = true
+      if (!o.material) return
+      o.renderOrder = 1
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (m.stencilWrite && m.stencilRef === STENCIL_REF) continue
+        m.stencilWrite = true
+        m.stencilRef = STENCIL_REF
+        m.stencilFunc = THREE.EqualStencilFunc
+        m.needsUpdate = true
+      }
+    })
+  })
+  // ธงให้ pass อื่นรู้ว่ากิ่งนี้อยู่ในพอร์ทัล (ดู ShadowFlags — ของในนี้ไม่ยิงเงา)
+  return (
+    <group ref={g} userData={{ insidePortal: true }}>
+      {children}
+    </group>
+  )
+}
+
+/**
+ * ริบบิ้นของฉากในหน้าต่าง — คนละชิ้นกับเส้นหลัก ไม่ได้ผูกกับตำแหน่งบาน
+ *
+ * แยกเป็นวัตถุของตัวเองเพราะเส้นหลักต้องเริ่มที่ปากช่องพอดี ส่วนชิ้นนี้แค่ต้องอยู่ใน
+ * กรอบหน้าต่างให้สวย จะวางตรงไหนก็ได้ตราบใดที่ยังอยู่หลังระนาบบาน — ผูกสองเรื่องนี้
+ * เข้าด้วยกันเมื่อไร การขยับบานทีเดียวจะพังทั้งสองฝั่ง
+ */
+/** จุดควบคุมริบบิ้นในพอร์ทัล — พิกัดท้องถิ่นของ mesh (ก่อน offset/rot/scale) */
+export const PORTAL_PATH = [
+  new THREE.Vector3(-46, 10, -16),
+  new THREE.Vector3(-26, 4, -8),
+  new THREE.Vector3(-8, 0, -2),
+  new THREE.Vector3(12, -3, 2),
+  new THREE.Vector3(32, -8, 10),
+  new THREE.Vector3(52, -16, 22),
+]
+
+function PortalRibbon({ width, thick, wave, waves, scale, offset, rot }) {
+  const mesh = useRef()
+  const curve = useMemo(() => new THREE.CatmullRomCurve3(PORTAL_PATH, false, 'catmullrom', 0.6), [])
+  useEffect(() => {
+    portalRide.curve = curve
+    return () => {
+      if (portalRide.curve === curve) portalRide.curve = null
+    }
+  }, [curve])
+  useEffect(() => {
+    portalRide.mesh = mesh.current
+    portalRide.wave = wave
+    portalRide.waves = waves
+    return () => {
+      if (portalRide.mesh === mesh.current) portalRide.mesh = null
+    }
+  }, [wave, waves, scale, offset, rot])
+  const geo = useMemo(
+    () =>
+      ribbonGeometry(
+        PORTAL_PATH,
+        width,
+        thick,
+        wave,
+        waves,
+        RIB_SEGS,
+      ),
+    [width, thick, wave, waves],
+  )
+  useDisposable(geo)
+  // อินโทร: วาดจากท้ายสุดในหน้าต่างมาถึงปากบาน ก่อนส่งไม้ต่อให้เส้นข้างนอก
+  useRibbonDraw(geo, 'portal')
+  const tex = useMemo(() => {
+    const t = checkerTex.clone()
+    t.needsUpdate = true
+    return t
+  }, [])
+  useDisposable(tex)
+  return (
+    <mesh ref={mesh} geometry={geo} position={offset} rotation={rot} scale={scale}>
+      <RibbonTopMaterial map={tex} />
+      <meshStandardMaterial attach="material-1" color={GREEN_DEEP} roughness={0.75} side={THREE.DoubleSide} />
+    </mesh>
+  )
+}
+
+/** ฉากที่อยู่หลังหน้าต่าง — โทนอุ่นเข้ม ตัดกับพื้นน้ำเงินของหน้า จึงอ่านว่าเป็นคนละที่ */
+function WindowWorld({
+  z = -46,
+  ribbon,
+  /** ลูกโลกจิ๋ว: null = ไม่แสดง */
+  globe,
+  wall = true,
+  /** ทิวทัศน์แบนในกรอบหน้าต่าง — null = ไม่แสดง */
+  land,
+  hemi = 0.7,
+  /** ชื่อ keyLight ไม่ใช่ key — `key` เป็นชื่อสงวนของ React ส่งเป็น prop ไม่ได้ */
+  keyLight = 1.1,
+  stack,
+  tetris,
+}) {
+  const skyTex = useMemo(() => gradientTexture(SKY_STOPS), [])
+  useDisposable(skyTex)
+
+  return (
+    <group position={[0, 0, z]}>
+      {/**
+       * ผนังหลังสุดสีขาว — ทึบพอที่จะกันไม่ให้พื้นหลังน้ำเงินของหน้าลอดออกมา
+       *
+       * ใช้ meshBasicMaterial ไม่ใช่ standard: ผนังต้องขาวเท่ากันทั้งผืนไม่ว่าไฟจะตกยังไง
+       * ถ้ารับแสงมันจะมีไล่เฉดแล้วอ่านเป็น "กำแพงที่ถูกส่อง" แทนที่จะเป็นที่ว่างสีขาว
+       */}
+      {wall && (
+        /**
+         * ผนังพอร์ทัลใช้ไล่สีฟ้าชุดเดียวกับท้องฟ้าของทิวทัศน์ (SKY_STOPS)
+         *
+         * ฉากนั้นมีผนังฟ้าของตัวเองอยู่แล้ว แต่มันกว้างแค่ 90 หน่วยและอยู่ที่ z -26
+         * ของฉากเอง พอย่อ/เลื่อนฉากให้พอดีกรอบหน้าต่าง ขอบผนังนั้นจะโผล่เป็นเส้นตัด
+         * กลางหน้าต่าง จึงปิดผนังของฉาก (noBackdrop) แล้วใช้ผนังใบนี้ใบเดียวแทน
+         *
+         * สีดึงจากค่าที่ export มาจาก Landscape.jsx ไม่ได้ก๊อบตัวเลขมาวาง — ก๊อบแล้ว
+         * วันหนึ่งจะแก้ที่เดียวแล้วอีกที่ไม่ตาม
+         */
+        <mesh position={[0, 0, -22]}>
+          <planeGeometry args={[220, 150]} />
+          <meshBasicMaterial map={skyTex} toneMapped={false} />
+        </mesh>
+      )}
+      {/* พื้นหลังขาวสว่างกว่าเดิมมาก ไฟจึงต้องลดลง ไม่งั้นของในฉากจะซีดจนกลืนกับผนัง */}
+      <hemisphereLight intensity={hemi} color="#ffffff" groundColor="#c9d4e8" />
+      <directionalLight position={[-8, 10, 6]} intensity={keyLight} color="#fff2e2" />
+      {globe && (
+        /**
+         * ลูกโลกจิ๋ววนลูป — แทนภูมิทัศน์ joespresso เดิม (ฟ้า/เนิน/ต้นไม้) ที่เอาออกไป
+         * ปั้นที่รัศมี 1 ต้องขยายและวางให้พอดีกรอบหน้าต่าง
+         */
+        <Globe
+          spinBoost={globe.spinBoost}
+          position={globe.pos}
+          rotation={globe.rot}
+          scale={globe.scale}
+          speed={globe.speed}
+          seed={globe.seed}
+          road={globe.road}
+          bushes={globe.bushes}
+          cones={globe.cones}
+          rounds={globe.rounds}
+          mushrooms={globe.mushrooms}
+          flowers={globe.flowers}
+          berries={globe.berries}
+          pebbles={globe.pebbles}
+          propScale={globe.propScale}
+        />
+      )}
+      {land && (
+        <Landscape
+          position={land.pos}
+          rotation={land.rot}
+          scale={land.scale}
+          spin={land.spin}
+          cloudSpeed={land.cloud}
+          seed={land.seed}
+          count={land.count}
+          grow={land.grow}
+          growLead={land.growLead}
+          growDur={land.growDur}
+          growStagger={land.growStagger}
+        />
+      )}
+      {stack && (
+        <StackedWindows
+          count={stack.count}
+          step={stack.step}
+          w={stack.w}
+          h={stack.h}
+          barRatio={stack.barRatio}
+          depth={stack.depth}
+          radius={stack.radius}
+          btnRatio={stack.btnRatio}
+          inset={stack.inset}
+          position={stack.pos}
+          rotation={stack.rot}
+          scale={stack.scale}
+        />
+      )}
+      {tetris && (
+        <Tetris
+          shape={tetris.shape}
+          depth={tetris.depth}
+          radius={tetris.radius}
+          gap={tetris.gap}
+          position={tetris.pos}
+          rotation={tetris.rot}
+          scale={tetris.scale}
+        />
+      )}
+      {/* hero แบบการ์ด: ไม่มีถนนในโลกหลังหน้าต่าง (แผ่นลอน S แทนถนนทั้งชุด) */}
+      {ribbon && <PortalRibbon {...ribbon} />}
+    </group>
+  )
+}
+
+/** ริบบิ้นหมากรุกเส้นหลัก */
+/** จำนวนสเต็ปของริบบิ้น (ทั้งในพอร์ทัลและข้างนอก) — ใช้ทั้งตอนสร้างและตอนนับ index ที่วาดในอินโทร */
+const RIB_SEGS = 260
+
+/**
+ * อินโทร: ริบบิ้น "วาด" ต่อเนื่องเป็นเส้นเดียว — เริ่มจากเส้นในพอร์ทัล (ท้ายสุดในหน้าต่าง) ไล่มาถึง
+ * ปากบาน แล้วต่อด้วยเส้นข้างนอกจนสุดปลาย ความคืบหน้ารวม 0..1 ผ่อนแบบ ease-out ทีเดียวทั้งเส้น
+ * แล้วค่อยแบ่งช่วงให้สองชิ้นตาม inRibSplit (สัดส่วนของเส้นในพอร์ทัล) จังหวะจึงไม่สะดุดที่รอยต่อ
+ *
+ * ไม่สร้าง geometry ใหม่ แค่จำกัดจำนวน index ที่วาดของแต่ละกลุ่มวัสดุ (ผิวบน 6 index/สเต็ป
+ * สันข้าง+ผิวล่าง 18) geometry เรียงสเต็ปตามทิศการวิ่ง จึงงอกไปข้างหน้าพอดี
+ * onStep(e) = ความคืบหน้าท้องถิ่น 0..1 ของชิ้นนี้ (ให้เส้นข้างนอกใช้ก่อคลื่น)
+ */
+function useRibbonDraw(geo, part, onStep) {
+  const drawn = useRef(-1)
+  useFrame(() => {
+    const t = getTuner()
+    let local = 1
+    if (t.intro > 0.5) {
+      const u = Math.min(1, Math.max(0, (introTime() - ribbonStart(t)) / Math.max(0.01, t.inRibDur)))
+      /**
+       * smootherstep ไม่ใช่ ease-out กำลังสาม — สูตรเดียวกับ ribbonDrawn ใน Entrance.jsx
+       *
+       * ease-out กำลังสามเทน้ำหนักไปที่ช่วงต้น: ท่อนในพอร์ทัล (40% แรก) ถูกวาดจบใน 0.25 วิ
+       * ทั้งที่ทั้งเส้นยาว 1.6 วิ — เห็นเป็นเส้นกระเด็นออกมาแล้วค่อย ๆ คลานต่อ
+       */
+      const e = u * u * u * (u * (u * 6 - 15) + 10)
+      const f = Math.min(0.95, Math.max(0.05, t.inRibSplit))
+      local = part === 'portal' ? Math.min(1, e / f) : Math.min(1, Math.max(0, (e - f) / (1 - f)))
+    }
+    const k = Math.round(RIB_SEGS * local)
+    if (k === drawn.current) return
+    drawn.current = k
+    const [top, rest] = geo.groups
+    if (top) top.count = k * 6
+    if (rest) rest.count = k * 18
+    onStep?.(local)
+  })
+}
+
+/**
+ * แผ่นลอน S ของ hero แบบการ์ด (ดู ./WaveSlab) — ผิวบนใช้ลายตารางคอมมิตชุดเดียวกับถนน
+ * ตำแหน่งเป็นพิกัดโลก (แผงจูน กลุ่ม "แผ่นลอน (การ์ด)"): ภาพเต็มเฟรมถูกย่อลงการ์ด ที่ z -8
+ * การ์ดกินราว x -5…38, y -9…9
+ */
+/** ตำแหน่งแผ่นเป็นเมทริกซ์โลก — ทางไถลของตัวละครต้องใช้ตัวเดียวกัน (ดู slabRide ใน Scene) */
+function slabMatrix(t) {
+  const k = t.slabScale
+  return new THREE.Matrix4().compose(
+    new THREE.Vector3(t.slabX, t.slabY, t.slabZ),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(t.slabRotX * RAD, t.slabRotY * RAD, t.slabRotZ * RAD)),
+    new THREE.Vector3(k, k, k),
+  )
+}
+
+function CardSlab() {
+  const t = useTuner()
+  const hover = useCellHover()
+  const maxAniso = useThree((st) => st.gl.capabilities.getMaxAnisotropy())
+  const tex = useMemo(() => {
+    const t = checkerTex.clone()
+    t.anisotropy = maxAniso
+    t.needsUpdate = true
+    return t
+  }, [maxAniso])
+  useDisposable(tex)
+  return (
+    <group {...hover}>
+      <WaveSlab
+        position={[t.slabX, t.slabY, t.slabZ]}
+        rotation={[t.slabRotX * RAD, t.slabRotY * RAD, t.slabRotZ * RAD]}
+        scale={t.slabScale}
+        width={t.slabW}
+        thick={t.slabThick}
+      >
+        <RibbonTopMaterial map={tex} aniso={maxAniso} />
+      </WaveSlab>
+    </group>
+  )
+}
+
+function CheckerRibbon({ width, thick, wave, waves, scale, offset, rot }) {
+  /**
+   * เส้นทางเป็น "ถนน" ที่วิ่งเข้าหาคนดู ไม่ใช่แถบพาดขวางจอ
+   *
+   * ใน ref ช่องหมากรุกเล็กจิ๋วตรงที่มันโผล่จากหลังแผง แล้วโตขึ้นเรื่อย ๆ จนคับขอบล่าง
+   * ของเฟรม — นั่นคือ perspective ของเส้นที่เดินเข้าหากล้อง ไม่ใช่ริบบิ้นที่กว้างขึ้น
+   * จุดควบคุมจึงไล่ z จาก -13 (หลังแผง) มาถึง +10 (เกือบชนเลนส์) และไล่ลงตาม y
+   * เพื่อให้มันออกขอบล่างพอดี ไม่ใช่พุ่งทะลุกลางจอ
+   */
+  /**
+   * จุดควบคุมเป็นพิกัด "ในกลุ่มแถบหน้าต่าง" ไม่ใช่พิกัดโลก
+   *
+   * ริบบิ้นต้องผูกกับหน้าต่าง ไม่ใช่ลอยอิสระ: มันเริ่มในโพรงของบานที่ 1 ไหลไปทางขวา
+   * ลอดหลังกรอบ แล้วโผล่ออกทางช่องของบานที่ 2 พิกัดท้องถิ่นทำให้ตำแหน่งพวกนี้เขียนตรง ๆ
+   * จากตำแหน่งบาน (ศูนย์กลางบานอยู่ที่ x = panelX + (i-1)·panelGap) และยังตรงอยู่แม้
+   * จะหมุน bandYaw หรือขยับ panelZ ทีหลัง
+   *
+   * แกน +z ของกลุ่มนี้ชี้ออกมาทางกล้องเยื้องขวา (หมุน 26°) — ไล่ z ขึ้นคือวิ่งเข้าหาคนดู
+   */
+  const PATH = RIBBON_PATH
+
+  /**
+   * ริบบิ้นเส้นนี้เริ่มที่ "ปากช่องบานที่ 2" ไม่มีหางลากไปข้างหลังอีกแล้ว
+   *
+   * หางเดิมอยู่ในช่องว่างระหว่างบาน ไม่ได้อยู่หลังบานไหนเลย จึงเห็นเป็นริบบิ้นพาด
+   * พื้นหลังแทนที่จะเป็นของในหน้าต่าง — ตัดทิ้ง แล้วไปทำเป็นวัตถุแยกในฉากของหน้าต่าง
+   * (ดู PortalRibbon) ซึ่งวางอิสระได้โดยไม่ต้องผูกกับตำแหน่งบาน
+   *
+   * หาจุดเริ่มจากระยะตามเส้นจริง (getPointAt) ไม่ใช่ index ของจุดควบคุมหารจำนวนจุด
+   * เพราะช่วงระหว่างจุดควบคุมยาวไม่เท่ากัน ใช้ index จะเริ่มเลยหรือไม่ถึงปากช่อง
+   */
+  const tCut = useMemo(() => {
+    const c = new THREE.CatmullRomCurve3(PATH, false, 'catmullrom', 0.6)
+    const exit = PATH[4]
+    const P = new THREE.Vector3()
+    let best = 0
+    let bestD = Infinity
+    for (let i = 0; i <= 600; i++) {
+      const t = i / 600
+      const d = c.getPointAt(t, P).distanceTo(exit)
+      if (d < bestD) {
+        bestD = d
+        best = t
+      }
+    }
+    return best
+  }, [PATH])
+
+  const geoFront = useMemo(
+    () => ribbonGeometry(PATH, width, thick, wave, waves, RIB_SEGS, tCut, 1),
+    [PATH, width, thick, wave, waves, tCut],
+  )
+  useDisposable(geoFront)
+  /** ตำแหน่งจุดยอดชุด "คลื่นเต็ม" กับ "แบน" — อินโทรผสมสองชุดนี้ให้คลื่นค่อย ๆ ก่อตัวตอนวาด */
+  const wavePos = useMemo(() => {
+    const full = geoFront.attributes.position.array.slice()
+    const flatGeo = ribbonGeometry(PATH, width, thick, 0, waves, RIB_SEGS, tCut, 1)
+    const flat = flatGeo.attributes.position.array.slice()
+    flatGeo.dispose()
+    return { full, flat }
+  }, [geoFront, PATH, width, thick, waves, tCut])
+  // คลื่นก่อตัวตามหลังปลายที่กำลังวาด: ผสมตำแหน่งจุดยอดจากแบน → คลื่นเต็ม
+  useRibbonDraw(geoFront, 'outer', (e) => {
+    const arr = geoFront.attributes.position.array
+    const { full, flat } = wavePos
+    for (let i = 0; i < arr.length; i += 1) arr[i] = flat[i] + (full[i] - flat[i]) * e
+    geoFront.attributes.position.needsUpdate = true
+    if (e >= 1) geoFront.computeVertexNormals()
+  })
+
+  /**
+   * anisotropy สูงสุดเท่าที่การ์ดรองรับ — ตัวชี้ขาดความคมของผิวที่วางเกือบขนานสายตา
+   *
+   * ถนนพุ่งหนีกล้อง แต่ละพิกเซลจึงกินเนื้อเทกซ์เจอร์เป็นแถบยาว ๆ ตัวกรองปกติเฉลี่ย
+   * เป็นวงกลมจึงเบลอทั้งที่ความละเอียดพอ ค่าเดิมตั้งไว้ตายตัวที่ 8 ซึ่งมักต่ำกว่า
+   * ที่การ์ดทำได้ (ส่วนใหญ่ 16)
+   */
+  const hover = useCellHover()
+  const maxAniso = useThree((st) => st.gl.capabilities.getMaxAnisotropy())
+  const tex = useMemo(() => {
+    const t = checkerTex.clone()
+    t.anisotropy = maxAniso
+    t.needsUpdate = true
+    return t
+  }, [maxAniso])
+  useDisposable(tex)
+  return (
+    /**
+     * หมุนรอบ "ปากทางออกที่บานที่ 2" ไม่ใช่รอบจุดกำเนิดของกลุ่ม
+     *
+     * จุดกำเนิดอยู่กลางแถบหน้าต่าง หมุนรอบจุดนั้นแล้วริบบิ้นเหวี่ยงหลุดออกจากบานทันที
+     * ปักหมุดที่ปากทางออกแล้วหมุน ปลายที่โผล่ออกมาจึงกวาดไปมาโดยที่หัวยังคาอยู่ในหน้าต่าง
+     */
+    <group position={RIBBON_PIVOT} rotation={rot}>
+    <group position={[-RIBBON_PIVOT[0], -RIBBON_PIVOT[1], -RIBBON_PIVOT[2]]}>
+    <group position={offset} scale={scale}>
+      <mesh geometry={geoFront} {...hover}>
+        {/* ผิวบน = ตารางคอมมิต / ผิวล่างกับสันข้าง = สีทึบ ให้เห็นว่าเป็นแผ่นมีความหนา */}
+        <RibbonTopMaterial map={tex} aniso={maxAniso} />
+        <meshStandardMaterial attach="material-1" color={GREEN_DEEP} roughness={0.75} side={THREE.DoubleSide} />
+      </mesh>
+    </group>
+    </group>
+    </group>
+  )
+}
+
+/**
+ * ช่วงต่อของริบบิ้น — งอกจากปลายเส้นหลักตอนคนดูเลื่อนจอ แล้วกวาดขึ้นไปบรรจบขอบขวาของเฟรม
+ *
+ * จอแรกไม่ได้จบด้วยการตัดภาพ: ริบบิ้นเส้นเดิมยาวต่อออกไปเรื่อย ๆ ตามการเลื่อน ตัวละครไถล
+ * ตามปลายที่กำลังงอก แล้วทั้งคู่ออกไปทางขวาเพื่อส่งต่อให้จอถัดไป (ดู scrolly.js)
+ *
+ * ทำไมเป็นเมชคนละใบ ไม่ใช่ต่อจุดควบคุมเข้าไปในเส้นเดิม: พารามิเตอร์ t ของเส้นเดิมถูกใช้
+ * เป็น "เฟส" ของคลื่นและการบิด และค่าที่จูนไว้ทั้งชุด (enT0/enT1/ตำแหน่งปากช่อง) อ้างอิง t
+ * ชุดนั้น — ต่อจุดเข้าไปคือยืด t ทั้งเส้น ของที่จูนมาทั้งหมดเลื่อนหมดในครั้งเดียว
+ * ใบใหม่จึงต่อท้ายแทน โดยรับ "เฟสที่นับต่อ" กับ "ระยะตามเส้นที่สะสมมา" ไปคิด (ดู ribbonFrame)
+ *
+ * จุดควบคุมได้จากการฉายกลับ: เลือกจุดในพิกัดจอ (ndc) ที่อยากให้เส้นผ่าน แล้วแปลงกลับเป็น
+ * พิกัดกลุ่มแถบหน้าต่างด้วยกล้องจริงของฉาก — ปลายเส้นจึงจบที่ขอบขวาพอดี ไม่ใช่กะเอา
+ * จุดแรกคือปลายเส้นหลักเป๊ะ และจุดที่สองอยู่บนแนวสัมผัสเดิม รอยต่อจึงไม่มีหักศอก
+ */
+export const CRUISE_PATH = [
+  new THREE.Vector3(-7, -4.8, 16),
+  new THREE.Vector3(-7.5, -5.7, 17.2),
+  new THREE.Vector3(-6.2, -6.4, 18.2),
+  new THREE.Vector3(-2.8, -6.5, 19.4),
+  new THREE.Vector3(1.6, -6, 21.2),
+  new THREE.Vector3(6.4, -5, 23.8),
+  new THREE.Vector3(11.6, -3.6, 27.2),
+  new THREE.Vector3(17.4, -1.9, 31),
+]
+
+const CRUISE_SEGS = 200
+
+/** เส้นกับความยาว คิดครั้งเดียวตอนโหลดโมดูล — จุดควบคุมเป็นค่าคงที่ ไม่ได้ขึ้นกับปุ่มไหน */
+export const CRUISE_CURVE = new THREE.CatmullRomCurve3(CRUISE_PATH, false, 'catmullrom', 0.6)
+export const CRUISE_LEN = CRUISE_CURVE.getLength()
+export const RIBBON_LEN = new THREE.CatmullRomCurve3(RIBBON_PATH, false, 'catmullrom', 0.6).getLength()
+
+/** ความคืบหน้าของการวาดใบต่อ (0..1 ของใบนี้) — ปลายล้ำหน้าตัวละครไว้เล็กน้อยตาม cruLead */
+function cruiseDrawn(t, split) {
+  const g = cruiseGrow(t)
+  if (g <= split) return 0
+  return Math.min(1, (g - split) / Math.max(0.01, 1 - split) + Math.max(0, t.cruLead))
+}
+
+function useCruiseDraw(geo, split) {
+  const drawn = useRef(-1)
+  useFrame(() => {
+    const k = Math.round(CRUISE_SEGS * cruiseDrawn(getTuner(), split))
+    if (k === drawn.current) return
+    drawn.current = k
+    const [top, rest] = geo.groups
+    if (top) top.count = k * 6
+    if (rest) rest.count = k * 18
+  })
+}
+
+function CruiseRibbon({ width, thick, wave, waves, scale, offset, rot, split }) {
+  const geo = useMemo(
+    () =>
+      ribbonGeometry(CRUISE_PATH, width, thick, wave, waves, CRUISE_SEGS, 0, 1, {
+        tv0: 1,
+        tvK: CRUISE_LEN / RIBBON_LEN,
+        sOff: RIBBON_LEN,
+      }),
+    [width, thick, wave, waves],
+  )
+  useDisposable(geo)
+  useCruiseDraw(geo, split)
+  const hover = useCellHover()
+  const maxAniso = useThree((st) => st.gl.capabilities.getMaxAnisotropy())
+  const tex = useMemo(() => {
+    const x = checkerTex.clone()
+    x.anisotropy = maxAniso
+    x.needsUpdate = true
+    return x
+  }, [maxAniso])
+  useDisposable(tex)
+  return (
+    <group position={RIBBON_PIVOT} rotation={rot}>
+      <group position={[-RIBBON_PIVOT[0], -RIBBON_PIVOT[1], -RIBBON_PIVOT[2]]}>
+        <group position={offset} scale={scale}>
+          <mesh geometry={geo} {...hover}>
+            <RibbonTopMaterial map={tex} aniso={maxAniso} />
+            <meshStandardMaterial attach="material-1" color={GREEN_DEEP} roughness={0.75} side={THREE.DoubleSide} />
+          </mesh>
+        </group>
+      </group>
+    </group>
+  )
+}
+
+/**
+ * ริบบิ้นกระจก — แถบโปร่งแสงฟุ้ง ๆ สีขาวฟ้า โค้งพุ่งออกจากปากบานที่ 2
+ *
+ * ภาพอ้างอิงเป็นแถบเหมือนกระจกฝ้าบาง ๆ ที่หักเหฉากหลังและมีไฮไลต์ขาว — จึงเป็น
+ * MeshTransmissionMaterial (เบลอฉากหลังแบบกระจก ไม่ใช่ฝ้าทึบ) บน geometry ริบบิ้นตัวเดียวกับ
+ * เส้นหมากรุก (มีความหนา สันข้างรับแสงเป็นเส้นสว่าง) ไม่มีคลื่น ไม่มีลาย
+ *
+ * เส้นทางเป็นพิกัดสัมพัทธ์กับปากช่อง (RIBBON_PIVOT) แล้วค่อยเลื่อน/หมุน/ย่อขยายทั้งชิ้นด้วยปุ่ม
+ * โค้งไปทางขวาแล้วม้วนขึ้น — ปลายที่ม้วนคือจุดที่ตาอ่านว่า "แถบ" ไม่ใช่ "ถนน"
+ */
+const GLASS_PATH = [
+  new THREE.Vector3(-1.5, 0.2, -2.5),
+  new THREE.Vector3(0, 0, 0),
+  new THREE.Vector3(2.4, -0.4, 2.6),
+  new THREE.Vector3(5.6, -1.2, 5.2),
+  new THREE.Vector3(9.4, -0.6, 6.4),
+  new THREE.Vector3(12.6, 1.6, 5.4),
+  new THREE.Vector3(14.2, 4.2, 2.6),
+  new THREE.Vector3(13.0, 6.2, -0.6),
+]
+
+function GlassRibbon({ width, thick, scale, offset, rot, rough, transmission, chroma, ior, tint }) {
+  const geo = useMemo(
+    () => ribbonGeometry(GLASS_PATH, width, thick, 0, 1, 220),
+    [width, thick],
+  )
+  useDisposable(geo)
+  return (
+    <group position={RIBBON_PIVOT} rotation={rot}>
+      <group position={[-RIBBON_PIVOT[0], -RIBBON_PIVOT[1], -RIBBON_PIVOT[2]]}>
+        <group position={offset} scale={scale}>
+          <mesh geometry={geo} renderOrder={2} userData={{ noClay: true }}>
+            {/* ผิวบน/ล่างและสันข้างเป็นวัสดุเดียวกัน — กระจกไม่มี "ผิวหน้า" ให้ปูลาย */}
+            <MeshTransmissionMaterial
+              attach="material-0"
+              color={tint}
+              transmission={transmission}
+              thickness={thick * 3}
+              ior={ior}
+              roughness={rough}
+              anisotropicBlur={0.4}
+              chromaticAberration={chroma}
+              samples={4}
+              resolution={256}
+              attenuationDistance={4}
+              attenuationColor="#dff1ff"
+              side={THREE.DoubleSide}
+              transparent
+            />
+            <MeshTransmissionMaterial
+              attach="material-1"
+              color={tint}
+              transmission={transmission}
+              thickness={thick * 3}
+              ior={ior}
+              roughness={rough}
+              anisotropicBlur={0.4}
+              chromaticAberration={chroma}
+              samples={4}
+              resolution={256}
+              attenuationDistance={4}
+              attenuationColor="#dff1ff"
+              side={THREE.DoubleSide}
+              transparent
+            />
+          </mesh>
+        </group>
+      </group>
+    </group>
+  )
+}
+
+/**
+ * ตัวละครบนบอร์ด
+ *
+ * เคยใช้ท่า `skydive` ซึ่งเป็นท่านอนคว่ำกางแขน (ทำไว้ให้ฉาก tunnel) พอเอามาวางบนบอร์ด
+ * มันอ่านเป็น "นอนราบอยู่บนถนน" ไม่ใช่ยืนโต้ — ใน ref ตัวละครยืน เข่างอ ชูหมัดข้างหนึ่ง
+ * ท่าตั้งต้นของ Mascot คือยืน จึงเอียงลำตัวเอาเองแทนการยืมท่าผิดประเภท
+ */
+function Surfer(props) {
+  const bob = useRef()
+  useFrame(() => {
+    const g = bob.current
+    if (!g) return
+    const t = clock.elapsedTime
+    // โยกเหมือนกำลังเลี้ยงตัวบนคลื่น: ยกตัว + กระดกหัวบอร์ด + เอียงข้างเล็กน้อย
+    g.position.y = Math.sin(t * 0.9) * 0.18
+    g.rotation.x = Math.sin(t * 0.7 + 1.2) * 0.06
+    g.rotation.z = Math.sin(t * 0.55 + 0.4) * 0.08
+  })
+  return (
+    <group {...props}>
+      <group ref={bob}>
+        {/* บอร์ด: จานรีเขียวเข้ม กระดกหน้าเข้ากล้องนิดหนึ่ง — มุมพอดีขอบจะอ่านเป็นแท่ง */}
+        <mesh position={[0, -0.05, 0]} rotation={[0.26, 0.34, 0]} scale={[1.35, 0.42, 0.44]}>
+          <cylinderGeometry args={[1, 1, 0.16, 36]} />
+          <meshStandardMaterial color={GREEN_DEEP} roughness={0.6} />
+        </mesh>
+        {/* เอียงตัวไปทางที่บอร์ดวิ่ง + บิดลำตัวเข้าหากล้องนิดหนึ่ง = ท่าเลี้ยงตัวบนบอร์ด */}
+        <group position={[0, 2.02, 0]} rotation={[0.06, -0.35, -0.12]}>
+          <Suspense fallback={null}>
+            <Mascot scale={0.46} isolated noIdle noMug />
+          </Suspense>
+        </group>
+      </group>
+    </group>
+  )
+}
+
+/** กล้อง parallax ตามเมาส์นิด ๆ — ฉากนิ่งสนิทจะอ่านเป็นภาพนิ่ง */
+/**
+ * กล้องแก้จากชีท perspective (12739:158714) ด้วยการวัดพิกเซล ไม่ได้กะจากสายตา
+ *
+ * วัดจากชีท 1199x735: เส้น horizon (เส้นแดง) อยู่แถว y=185, จุด vanishing สองข้าง
+ * (จุดที่เส้นน้ำเงินหนาแน่นสุดบนเส้น horizon) อยู่ x=25 กับ x=1165
+ *
+ * แก้กลับเป็นค่ากล้อง — ให้ dL, dR = ระยะจาก VP ถึงกลางเฟรม, hOff = ระยะ horizon ถึงกลางเฟรม:
+ *   k = sqrt(dL·dR) = f/cos(pitch) = 570 px
+ *   pitch = asin(hOff / k)          = 18.67°
+ *   f     = k·cos(pitch)            = 540 px
+ *   fovY  = 2·atan((H/2) / f)       = 68.48°
+ *   yaw ของแกนพื้น = atan(dL / k)    = 45.2°  → ตารางพื้นวางเฉียง 45° ไม่ใช่ขนานแกนโลก
+ *
+ * ข้อสำคัญ: ตำแหน่ง horizon ในเฟรมขึ้นกับ fov กับ pitch เท่านั้น ไม่เกี่ยวกับความสูงกล้อง
+ * ("perspective ตรง ref" = fov กับ pitch ตรง; ความสูงกล้องกับขนาดของ = การจัดองค์ประกอบ)
+ *
+ * ค่าจริงทั้งหมดอยู่ใน tuner.js (DEFAULTS) ปรับสดได้จากแผงใน dev — ดู CameraTuner.jsx
+ */
+const RAD = Math.PI / 180
+
+/**
+ * gizmo เส้นทางเข้า — dev เท่านั้น
+ *
+ * จุดพวกนี้ไม่ได้ตั้งเอง แต่วัดจากกึ่งกลางความกว้างของริบบิ้น (ดู ribbonWaypoints ใน Entrance)
+ * ใช้ตัวคิดเดียวกับตัวละครเป๊ะ เส้นที่เห็นจึงเป็นเส้นที่มันวิ่งจริง ไม่ใช่เส้นที่วาดเลียนแบบไว้
+ */
+const GIZ_SEGS = 120
+const GIZ_F = { P: new THREE.Vector3(), T: new THREE.Vector3(), S: new THREE.Vector3(), N: new THREE.Vector3() }
+const GIZ_V = new THREE.Vector3()
+const GIZ_END = new THREE.Vector3()
+const GIZ_REST = new THREE.Vector3()
+const GIZ_TAN = new THREE.Vector3()
+
+/** กลุ่มที่ gizmo อยู่ = พิกัดเดียวกับริบบิ้นเส้นหลักและตัวละคร */
+const gizmoParent = (mesh) => mesh?.parent ?? mesh
+
+function PathGizmo({ ride }) {
+  const tube = useRef()
+  const last = useRef('')
+  const curve = useMemo(
+    () => new THREE.CatmullRomCurve3(Array.from({ length: GIZ_SEGS + 1 }, () => new THREE.Vector3()), false, 'catmullrom', 0.5),
+    [],
+  )
+  // ท่อแทนเส้น 1px — WebGL วาดเส้นได้บางเดียว มองไม่เห็นบนฉากที่มีลายเยอะ
+  useFrame(() => {
+    const t = getTuner()
+    if (!ride || !tube.current) return
+    /**
+     * สร้างใหม่เฉพาะตอนค่าที่กำหนดรูปเส้นเปลี่ยน — ทั้งของทางเข้าและของตัวริบบิ้นเอง
+     * (เส้นเกาะผิวริบบิ้น ขยับริบบิ้นทีเดียวเส้นต้องตามไปด้วย)
+     */
+    const key = [
+      t.enPT0, t.enT0, t.enT1, t.enUp, t.enBackZ, t.enBlend, t.enBurstAt, t.enBurstAmt,
+      t.skaterX, t.skaterY, t.skaterZ,
+      t.ribbonX, t.ribbonY, t.ribbonZ, t.ribbonRotX, t.ribbonRotY, t.ribbonRotZ,
+      t.ribbonScale, t.ribbonWave, t.ribbonWaves,
+      t.prX, t.prY, t.prZ, t.prRotX, t.prRotY, t.prRotZ, t.prScale, t.prWave, t.prWaves,
+      entranceLift.value.toFixed(2),
+    ].join('|')
+    if (key === last.current) return
+    last.current = key
+    /**
+     * เส้นที่วาด = สูตรเดียวกับที่ตัวละครใช้ทุกบรรทัด (ระยะทางตามจังหวะพุ่ง + คลื่นของผิว
+     * + การเลื่อนเข้าที่หยุดช่วงท้าย) ไม่ใช่เส้นที่วาดเลียนแบบไว้คนละสูตร
+     */
+    entranceSample(ride, t, 1, GIZ_END, GIZ_TAN, GIZ_F, gizmoParent(tube.current), null, entranceLift.value)
+    for (let i = 0; i <= GIZ_SEGS; i += 1) {
+      const pp = i / GIZ_SEGS
+      entranceSample(ride, t, entranceU(t, pp), GIZ_V, GIZ_TAN, GIZ_F, gizmoParent(tube.current), null, entranceLift.value)
+      const bl = entranceBlend(t, pp)
+      curve.points[i]
+        .copy(GIZ_V)
+        .addScaledVector(GIZ_END, -bl)
+        .addScaledVector(GIZ_REST.set(t.skaterX, t.skaterY, t.skaterZ), bl)
+    }
+    curve.updateArcLengths()
+    const old = tube.current.geometry
+    tube.current.geometry = new THREE.TubeGeometry(curve, 200, 0.1, 6, false)
+    old?.dispose()
+  })
+  return (
+    <mesh ref={tube} renderOrder={5}>
+      <meshBasicMaterial color="#6ee7b7" depthTest={false} transparent opacity={0.9} />
+    </mesh>
+  )
+}
+
+/**
+ * ท่าขาที่เขียนใหม่ทุกเฟรม — วัตถุใบเดิมตลอด ไม่ได้สร้างใหม่ต่อเฟรม
+ *
+ * Mascot อ่าน legPose ข้างใน useFrame ของมันเอง การแก้ค่าในวัตถุใบเดิมจึงมีผลทันที
+ * โดยไม่ต้อง re-render — ถ้าสร้างวัตถุใหม่ทุกเฟรมเพื่อส่งเป็น prop ฉากทั้งฉากจะถูก
+ * reconcile ใหม่ทุกเฟรม ซึ่งแพงกว่างานที่มันทำหลายเท่า
+ *
+ * การย่อ: เข่ารับเต็ม สะโพกรับครึ่ง ข้อเท้ารับเศษที่เหลือ — สัดส่วนของการย่อจริง ถ้างอ
+ * แต่เข่าอย่างเดียวลำตัวจะทิ่มไปข้างหน้าและฝ่าเท้าเปิดหลุดจากบอร์ด ส่วนความสูงของตัวไม่ต้อง
+ * ชดเชยเอง: entranceSample วัดระยะจากจุดกำเนิดถึงฝ่าเท้าใหม่ทุกเฟรมอยู่แล้ว ขาสั้นลง
+ * ตัวก็นั่งต่ำลงตามเอง (ดู soleOffset)
+ */
+const LEG_HIP_SHARE = 0.5
+const LEG_ANKLE_SHARE = 0.35
+
+function LegDrive({ pose, torso }) {
+  useFrame(() => {
+    const t = getTuner()
+    const c = ridePose.crouch
+    /**
+     * ลำตัวก้มลงตามการย่อด้วย — คนย่อรับแรงไม่ได้ย่อแต่ขาโดยที่อกยังตั้งตรง
+     * นี่คือส่วนที่ตาอ่านออกชัดที่สุด เพราะขาถูกกางเกงกับบอร์ดบังไปครึ่งหนึ่งอยู่แล้ว
+     */
+    torso.leanX = t.leanX * RAD
+    torso.leanZ = t.leanZ * RAD
+    torso.foldX = t.foldX * RAD + c * 0.55
+    torso.foldY = t.foldY * RAD
+    torso.foldZ = t.foldZ * RAD
+    torso.headX = t.headX * RAD - c * 0.25
+    pose.spread = t.legSpread
+    pose.stagger = t.legStagger
+    pose.L.hipX = t.hipLX * RAD - c * LEG_HIP_SHARE
+    pose.L.hipY = t.hipLY * RAD
+    pose.L.hipZ = t.hipLZ * RAD
+    pose.L.knee = t.kneeL * RAD + c
+    pose.L.ankle = t.ankleL * RAD + c * LEG_ANKLE_SHARE
+    pose.R.hipX = t.hipRX * RAD - c * LEG_HIP_SHARE
+    pose.R.hipY = t.hipRY * RAD
+    pose.R.hipZ = t.hipRZ * RAD
+    // ขาหลังรับแรงมากกว่าขาหน้าเล็กน้อย — น้ำหนักลงส้นหลังตอนกดรับ ไม่ใช่ย่อเท่ากันสองข้าง
+    pose.R.knee = t.kneeR * RAD + c * 1.15
+    pose.R.ankle = t.ankleR * RAD + c * LEG_ANKLE_SHARE
+  }, -900)
+  return null
+}
+
+function CameraRig() {
+  /**
+   * parallax อ่านเมาส์จาก *หน้าต่าง* ไม่ใช่จากแคนวาส — เหตุผลอยู่ที่ ./heroPointer
+   *
+   * ต้องติดตั้งจากที่นี่ ไม่ใช่จากหน้า: ใครก็ตามที่วางฉากนี้ก็ได้ parallax เท่ากันทันที
+   * ไม่ต้องมีสองฝ่ายตกลงกันว่าหน้าไหนต้องจำติดตั้งตัวฟังเอง
+   */
+  useEffect(() => holdHeroPointer(), [])
+  useFrame((state, dt) => {
+    const cam = state.camera
+    /**
+     * จอแคบต้องถอยกล้อง ไม่ใช่ปล่อยให้ตัวละครโดนขอบตัด
+     *
+     * เฟรมนี้จัดไว้ที่อัตราส่วนราว 16:10 ของคอมพ์ พอจอเป็นแนวตั้ง ความกว้างที่เห็นหดลง
+     * ตามสัดส่วนทันที (fov คุมแกนตั้ง) ของที่วางไว้ริมซ้าย-ขวาจึงหลุดเฟรมไปหมด
+     * ถอยตามส่วนกลับของอัตราส่วน แล้วเลื่อนกล้องตามตัวละครซึ่งอยู่ค่อนซ้าย
+     */
+    // ถอยได้จำกัด — ถอยเกิน 1.25 เท่าแล้วครึ่งบนของจอเหลือแต่พื้นหลังว่าง เสียเฟรมกว่าโดนตัด
+    const t = getTuner()
+    /* hero แบบการ์ด: จัดเฟรมตามสัดส่วนของการ์ด ไม่ใช่ของผ้าใบ (ดู ./heroView) */
+    const view = heroView.on ? heroView : null
+    const fit = clamp(1.62 / (view ? view.fw / view.fh : state.size.width / state.size.height), 1, t.fitMax)
+    /**
+     * อินโทรของกล้อง: เริ่มจากมุมที่เข้าใกล้/ต่ำ/เฉียงกว่า แล้วค่อย ๆ ถอยกลับมาที่มุมจริง
+     * ฉากมีชั้นลึก (หน้าต่าง → ริบบิ้น → ตัวละคร → ของลอยหน้าสุด) กล้องที่เคลื่อนคือสิ่งที่
+     * ทำให้เห็น parallax ของชั้นเหล่านั้น — ทุกอย่างโผล่บนกล้องนิ่งจะแบนเหมือนสไลด์
+     */
+    const it = t.intro > 0.5 ? introTime() : 99
+    /**
+     * ผ่อนแบบ smootherstep ไม่ใช่ยกกำลังห้า
+     *
+     * (1-x)^5 มีความชัน -5 ที่จุดเริ่ม กล้องจึงออกตัวด้วยความเร็วสูงสุดทันทีที่อินโทรเริ่ม
+     * ยิ่งย่นเวลาลงยิ่งอ่านเป็นกระตุกหนึ่งครั้ง — smootherstep ความเร็วเป็นศูนย์ทั้งหัวและท้าย
+     */
+    const cx = it < 0 ? 0 : Math.min(1, it / Math.max(0.05, t.inCamDur))
+    /**
+     * ข้ามอินโทรของกล้องเมื่อสปแลชมอร์ฟมาลงบนบาน
+     *
+     * ท่าเริ่มของกล้องคือ dolly เข้ามาใกล้ บานที่หนึ่งจึงกว้าง 968px และอยู่ที่ x -1263
+     * (วัดแล้ว) แผ่นของสปแลชที่ต้องไปลงบนบานเลยต้องวิ่งไปหาเป้าที่ยังเลื่อนอยู่อีกสามวินาที
+     * กล้องนิ่งตั้งแต่เฟรมแรกแทน = ปลายทางของการมอร์ฟนิ่ง รอยต่อจึงทับกันพอดี
+     * ส่วนที่เหลือของอินโทร (ริบบิ้น ตัวละคร prop) ยังเล่นตามคิวเดิมทั้งหมด
+     */
+    const k = introSkip.camera ? 0 : 1 - cx * cx * cx * (cx * (cx * 6 - 15) + 10)
+    const dollyZ = t.inCamDolly * k
+    const dollyX = t.inCamX * k
+    const dollyY = t.inCamY * k
+    /**
+     * ช่วงไหล: กล้องถอยและลดระดับ เปิดพื้นที่ให้เส้นที่กำลังงอก
+     *
+     * ปลายเส้นหลักจบต่ำกว่าขอบล่างของเฟรม (ตั้งใจ — จอแรกต้องเห็นถนนพุ่งออกนอกจอ)
+     * ถ้ากล้องอยู่ที่เดิม ช่วงต้นของการงอกจะเกิดใต้ขอบจอทั้งหมด คนดูเห็นแค่ตัวละครหายไป
+     * ถอยกล้องก่อนแล้วค่อยงอก (cruStart) ทั้งเส้นจึงอยู่ในเฟรมตลอดทาง
+     */
+    const pull = cruisePull(t)
+    cam.position.z = damp(cam.position.z, t.camZ * fit + dollyZ + t.cruZoom * pull, 0.06, dt)
+    cam.position.x = damp(cam.position.x, t.camX - (fit - 1) * 2.1 + heroPointer.x * 0.6 + dollyX, 0.06, dt)
+    cam.position.y = damp(cam.position.y, t.camY + heroPointer.y * 0.4 + dollyY + t.cruDrop * pull, 0.06, dt)
+    // fov มาจากแผงปรับ — เปลี่ยนแล้วต้อง updateProjectionMatrix เอง
+    if (view) {
+      /**
+       * ภาพเต็มเฟรมเดิมไปลงกรอบการ์ด ส่วนนอกการ์ดยังวาดต่อ (หน้าต่างมองที่ใหญ่กว่า "ภาพเต็ม")
+       * aspect ต้องเป็นของการ์ด ไม่งั้นภาพถูกยืดตามสัดส่วนผ้าใบ
+       */
+      cam.fov = t.fov
+      cam.aspect = view.fw / view.fh
+      cam.setViewOffset(view.fw, view.fh, -view.fx, -view.fy, state.size.width, state.size.height)
+    } else if (heroView.fullH > state.size.height + 1) {
+      /* ผ้าใบเป็นท่อนบนของภาพเต็มกรอบ (ดู fullH ใน ./heroView) — จัดภาพตามกรอบเต็ม วาดแค่ท่อนที่เห็น */
+      const W = state.size.width
+      cam.fov = t.fov
+      cam.aspect = W / heroView.fullH
+      cam.setViewOffset(W, heroView.fullH, 0, 0, W, state.size.height)
+    } else if (cam.fov !== t.fov || cam.view) {
+      cam.fov = t.fov
+      cam.aspect = state.size.width / state.size.height
+      cam.clearViewOffset()
+    }
+    /* ประตูให้สคริปต์ตรวจงานอ่านท่ากล้องได้ — dev เท่านั้น (ท่าเดียวกับ window.__intro) */
+    if (import.meta.env.DEV) {
+      window.__cam = { x: cam.position.x, y: cam.position.y, fov: cam.fov, px: heroPointer.x, py: heroPointer.y }
+    }
+    /**
+     * ตั้งมุมก้มตรง ๆ ไม่ใช้ lookAt
+     *
+     * lookAt จุดคงที่ทำให้มุมก้มเปลี่ยนทุกครั้งที่กล้องขยับ (parallax/ถอยตามอัตราส่วน)
+     * แล้วเส้น horizon ก็เลื่อนตาม — perspective ที่วัดมาจาก ref จะไม่นิ่ง
+     */
+    cam.rotation.order = 'YXZ'
+    cam.rotation.set(-t.pitch * RAD, t.inCamYaw * RAD * k, 0)
+  })
+  return null
+}
+
+/* ---------- ฉากรวม ---------- */
+
+function Scene({ bare = false }) {
+  const t = useTuner()
+  /* โหมด dev (สวิตช์ในฉาก): ของ 3D ทั้งหมดเป็น clay (มุมมองตรวจรูปทรงแบบ Blender) — design กลับเป็นสีจริง */
+  const dev = useSyncExternalStore(subscribeDevMode, () => devMode.on)
+  const clay = t.clay > 0.5 || dev
+  const props = t.props > 0.5
+  const skater = t.skater > 0.5
+  /**
+   * โหมด clay ปิดพอร์ทัลเสมอ
+   *
+   * clay มีไว้ดูรูปทรงของโมเดล การเปิดพอร์ทัลค้างไว้ทำให้ฉากในหน้าต่าง (ซึ่งอยู่นอก
+   * กลุ่ม Clay จึงยังมีสีของตัวเอง) กินพื้นที่ครึ่งจอ แล้วหน้าต่างก็ไม่เหลือรูปทรง
+   * ให้ตรวจเพราะมันเป็นหน้ากากที่ไม่เขียนสี — เหลือเป็นเทาปนขาวทั้งจอ อ่านอะไรไม่ได้
+   */
+  const portal = t.portal > 0.5 && !clay
+  const grid = clay ? GRID.clay : GRID.color
+  // exposure อยู่บนตัว renderer ไม่ใช่ใน scene graph จึงต้องเขียนเองเมื่อค่าเปลี่ยน
+  /**
+   * เรื่องราวของอินโทร (ฟังก์ชันอ่านทุกเฟรม ไม่ผ่าน React):
+   * เคอร์เซอร์พุ่งเข้ามาแล้ว "คลิก" → สวิตช์สับจากปิดเป็นเปิด (เด้งเกินนิด) → ดาวในหน้าต่าง
+   * หมุนติ้วตอนบานเปิดแล้วค่อยผ่อนเป็นความเร็วปกติ
+   */
+  const clickAt = t.enDelay + t.enDur + t.inPropAt + t.inClickAt
+  const swPos = useMemo(
+    () => () => {
+      const tt = getTuner()
+      /* หลังอินโทร: ปุ่มอยู่ขวา = design · กดสวิตช์ → dev ปุ่มเลื่อนไปซ้าย (./devMode) */
+      const mode = 1 - devKnob()
+      if (tt.intro < 0.5) return tt.bcPos * mode
+      const u = (introTime() - clickAt) / 0.35
+      if (u <= 0) return 0
+      return tt.bcPos * (u >= 1 ? 1 : introBack(u, 1.7)) * mode
+    },
+    [clickAt],
+  )
+  const gbSpin = useMemo(
+    () => () => {
+      const tt = getTuner()
+      if (tt.intro < 0.5) return 0
+      const it = introTime()
+      return it < 0 ? 0 : tt.inGlobeSpin * Math.exp(-it * 1.2)
+    },
+    [],
+  )
+  const flat = t.flat > 0.5 && !clay
+  /** ACES เปิดเมื่อสั่งเท่านั้น (flatTone) — ไม่ได้ผูกกับโหมดแบนอีกแล้ว */
+  const aces = t.flatTone > 0.5
+  useFrame(({ gl }) => {
+    if (gl.toneMappingExposure !== t.exposure) gl.toneMappingExposure = t.exposure
+    /**
+     * ไม่เอา ACES เป็นค่าเริ่มต้น
+     *
+     * ACES ม้วนไฮไลต์เข้าหาขาว ผิวที่โดนไฟเกิน 1 (พื้นหญ้าที่หันขึ้นฟ้า) จึงกลายเป็นมิ้นต์ซีด
+     * ทั้งผืน — เขียวสดหายไปทั้งที่ค่าสีต้นทางยังเข้มอยู่ ปิดแล้วสีคงความอิ่มไว้ แลกกับต้อง
+     * คุมไม่ให้แสงรวมเกิน 1 มาก ๆ เอง (ดูค่าไฟใน tuner)
+     * three ตรวจ toneMapping ของ renderer ทุกครั้งที่ setProgram จึงสลับได้โดยไม่ต้อง needsUpdate
+     */
+    const tm = aces ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping
+    if (gl.toneMapping !== tm) gl.toneMapping = tm
+  })
+  /** cel shading: โหมดแบนบังคับผิวด้าน (roughness 1) แล้วตัดแสงเป็น 3 ชั้นที่ shader */
+  const cel = flat
+    ? {
+        edge: t.flatEdge,
+        hiEdge: t.flatHiEdge,
+        soft: t.flatSoft,
+        shadow: t.flatShadow,
+        lit: t.flatLit,
+        hi: t.flatHi,
+        tint: t.flatTint,
+      }
+    : null
+  /**
+   * ริบบิ้นตัวเดียวกัน ใช้ทั้งในฉากของหน้าต่างและในฉากหลัก
+   *
+   * ฉากใน portal ใช้กล้องตัวเดียวกัน พิกัดโลกจึงตรงกันเป๊ะ ไม่ต้องชดเชยอะไร
+   * ส่วนที่อยู่หลังบานกระจกจะถูกเห็นผ่านหน้าต่าง ส่วนที่พ้นออกมาแล้วเห็นจากฉากหลัก
+   */
+  /**
+   * เส้นทางให้ตัวละครไถลบนริบบิ้นจริง — เส้นเดียวกับ geometry + เมทริกซ์ของกลุ่มที่ห่อมัน
+   * (หมุนรอบปากช่อง, ออฟเซ็ต, สเกล) แปลงเป็นพิกัดกลุ่มแถบหน้าต่างซึ่งเป็นพิกัดของตัวละคร
+   */
+  /**
+   * เส้นทางให้ตัวละครไถลบนริบบิ้นจริง — เส้นเดียวกับ geometry + เมทริกซ์ของกลุ่มที่ห่อมัน
+   * (หมุนรอบปากช่อง, ออฟเซ็ต, สเกล) แปลงเป็นพิกัดกลุ่มแถบหน้าต่างซึ่งเป็นพิกัดของตัวละคร
+   */
+  /** วัตถุใบเดียวตลอดอายุฉาก — LegDrive เขียนทับค่าในนี้ทุกเฟรม */
+  const legPose = useRef({
+    spread: 0,
+    stagger: 0,
+    L: { hipX: 0, hipY: 0, hipZ: 0, knee: 0, ankle: 0 },
+    R: { hipX: 0, hipY: 0, hipZ: 0, knee: 0, ankle: 0 },
+  }).current
+  /** ท่าลำตัว — ใบเดิมตลอดเช่นกัน (ดู LegDrive) */
+  const torsoPose = useRef({ leanX: 0, leanZ: 0, foldX: 0, foldY: 0, foldZ: 0, headX: 0 }).current
+  const ride = useMemo(() => {
+    const curve = new THREE.CatmullRomCurve3(RIBBON_PATH, false, 'catmullrom', 0.6)
+    const piv = new THREE.Vector3(...RIBBON_PIVOT)
+    const m = new THREE.Matrix4()
+      .makeTranslation(piv.x, piv.y, piv.z)
+      .multiply(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(t.ribbonRotX * RAD, t.ribbonRotY * RAD, t.ribbonRotZ * RAD)))
+      .multiply(new THREE.Matrix4().makeTranslation(-piv.x, -piv.y, -piv.z))
+      .multiply(new THREE.Matrix4().makeTranslation(t.ribbonX, t.ribbonY, t.ribbonZ))
+      .multiply(new THREE.Matrix4().makeScale(t.ribbonScale, t.ribbonScale, t.ribbonScale))
+    // t ของ "ปากช่องบานที่ 2" บนเส้นหลัก — จุดที่ริบบิ้นหน้าเริ่มถูกวาด (ดู tCut ใน CheckerRibbon)
+    const exit = RIBBON_PATH[4]
+    const P = new THREE.Vector3()
+    let mouthT = 0
+    let bestD = Infinity
+    for (let i = 0; i <= 600; i++) {
+      const d = curve.getPointAt(i / 600, P).distanceTo(exit)
+      if (d < bestD) {
+        bestD = d
+        mouthT = i / 600
+      }
+    }
+    /**
+     * ช่วงไหล: ระยะที่เหลือทั้งหมด = ปลายเส้นหลักที่ยังไม่ได้ไถล (enT1 → 1) + ใบต่อทั้งใบ
+     * split = สัดส่วนของท่อนแรกในระยะนั้น ตัวละครจึงข้ามรอยต่อด้วยความเร็วเท่าเดิม
+     * ไม่ใช่ครึ่งเวลาต่อท่อนทั้งที่สองท่อนยาวไม่เท่ากัน
+     */
+    const restLen = Math.max(0, 1 - t.enT1) * RIBBON_LEN
+    return {
+      curve,
+      matrix: m,
+      wave: t.ribbonWave,
+      waves: t.ribbonWaves,
+      frame: ribbonFrame,
+      mouthT,
+      cruise: {
+        curve: CRUISE_CURVE,
+        tvK: CRUISE_LEN / RIBBON_LEN,
+        split: restLen / Math.max(1e-6, restLen + CRUISE_LEN),
+      },
+    }
+  }, [t.ribbonRotX, t.ribbonRotY, t.ribbonRotZ, t.ribbonX, t.ribbonY, t.ribbonZ, t.ribbonScale, t.ribbonWave, t.ribbonWaves, t.enT1])
+  /**
+   * hero แบบการ์ด: ตัวละครไถลบนแผ่นลอน S แทนถนนเดิม — โค้ดท่าเข้าฉากชุดเดิม แค่เปลี่ยนเส้น
+   *
+   * ตัวละครอยู่ในกลุ่มแถบหน้าต่าง (เลื่อน panelZ แล้วหมุน bandYaw) ส่วนแผ่นวางด้วยพิกัดโลก
+   * เมทริกซ์ของทางไถลจึงต้องถอดกลุ่มนั้นออกก่อน ไม่มีปากบาน (mouthT 0) ไม่มีท่อนงอกตามการเลื่อน
+   */
+  const slabRide = useMemo(() => {
+    if (!bare) return null
+    const band = new THREE.Matrix4()
+      .makeTranslation(0, 0, t.panelZ)
+      .multiply(new THREE.Matrix4().makeRotationY(t.bandYaw * RAD))
+    return {
+      curve: SLAB_CURVE,
+      matrix: band.invert().multiply(slabMatrix(t)),
+      wave: 0,
+      waves: 1,
+      frame: slabFrame,
+      mouthT: 0,
+      cruise: null,
+    }
+  }, [bare, t.panelZ, t.bandYaw, t.slabX, t.slabY, t.slabZ, t.slabRotX, t.slabRotY, t.slabRotZ, t.slabScale])
+  const rideNow = slabRide ?? ride
+  const ribbon = (
+    <CheckerRibbon
+      width={t.ribbonW}
+      thick={t.ribbonThick}
+      wave={t.ribbonWave}
+      waves={t.ribbonWaves}
+      scale={t.ribbonScale}
+      offset={[t.ribbonX, t.ribbonY, t.ribbonZ]}
+      rot={[t.ribbonRotX * RAD, t.ribbonRotY * RAD, t.ribbonRotZ * RAD]}
+    />
+  )
+  // ref ไม่มีพื้น ของทุกชิ้นลอยในที่ว่าง — ตารางพื้นเป็นแค่ตัวช่วยตอนจัดมุม
+  const showGrid = t.grid > 0.5
+  return (
+    <Gloss
+      on={(flat || t.gloss > 0.5) && !clay}
+      rough={flat ? 1 : t.glossRough}
+      env={flat ? t.flatEnv : t.glossEnv}
+      cel={cel}
+    >
+      <IntroClock />
+      <SceneReady />
+      <LegDrive pose={legPose} torso={torsoPose} />
+      {clay ? (
+        /**
+         * ไฟแบบ studio ของวิวพอร์ต: key เฉียงบนซ้าย, fill อ่อนฝั่งตรงข้าม, rim จากหลัง
+         * ambient ต่ำกว่าโหมดสี เพราะ clay ต้องอ่านรูปทรงจากไล่เงา ไม่ใช่จากสี
+         */
+        <>
+          {/* ค่าชุดนี้ลดลงจากเดิมราวครึ่ง — ตอนตั้งครั้งแรกยังไม่มี exposure มาคูณทับ
+              รวมกันแล้วดินเหนียวสว่างจนชนเพดาน ทุกหน้าขาวเท่ากันจนอ่านทรงไม่ออก */}
+          <ambientLight intensity={0.22} color="#ffffff" />
+          <directionalLight position={[-6, 9, 7]} intensity={0.85} color="#ffffff" />
+          <directionalLight position={[7, 2, 5]} intensity={0.28} color="#dfe6ee" />
+          <directionalLight position={[0, 4, -10]} intensity={0.3} color="#ffffff" />
+        </>
+      ) : (
+        <>
+        <HeroLights skyTint={BG_MID} />
+        </>
+      )}
+
+      {/**
+       * เอฟเฟกต์กล้อง — ต้องอยู่ในฉาก เพราะมันเข้าไปแทนลูปวาดของ r3f (useFrame priority 1)
+       * ปิดไว้ (fx = 0) แล้วไม่มีต้นทุนอะไรเลย ฉากวาดตามปกติ
+       */}
+      {(t.fx > 0.5 || t.rimFx > 0.5) && (
+        <CameraFX
+          rim={t.rimFx > 0.5 ? t.rimFxInt : 0}
+          rimW={t.rimFxW}
+          rimSoft={t.rimFxSoft}
+          rimThresh={t.rimFxThresh}
+          rimMix={t.rimFxMix}
+          rimAngle={t.rimFxAngle}
+          rimFall={t.rimFxFall}
+          rimShade={t.rimFxShade}
+          rimBack={t.rimFxBack}
+          tone={aces ? 1 : 0}
+          fish={t.fxFish}
+          skewX={t.fxSkewX}
+          skewY={t.fxSkewY}
+          zoom={t.fxZoom}
+          chroma={t.fxChroma}
+          bulge={t.fxBulge}
+          bulgeR={t.fxBulgeR}
+          bulgeX={t.fxBulgeX}
+          bulgeY={t.fxBulgeY}
+        />
+      )}
+
+      {/**
+       * ฉากนอกพอร์ทัล: อวกาศ (sp) หรือพื้นหลังไล่สีน้ำเงินชุดเดิม
+       * โหมด clay ต้องเป็นเทาเรียบเสมอ — มันคือโหมดตรวจรูปทรง สีทุกอย่างต้องถูกถอดทิ้ง
+       */}
+      {/* bare = ฟ้าถูกตัดให้อยู่ในการ์ด นอกการ์ดโปร่ง ของในฉากจึงล้นขอบการ์ดได้ */}
+      {t.sp > 0.5 && !clay && !bare ? (
+        <SpaceBackdrop seed={t.spSeed} stars={t.spStars} nebula={t.spNebula} />
+      ) : (
+        <Backdrop clay={clay} clip={bare} />
+      )}
+      <ShadowFlags on={t.sh > 0.5 && !clay} />
+      <ShadowThrottle on={t.sh > 0.5 && !clay} />
+      {/**
+       * ริกกล้องต้องขยับกล้อง "ก่อน" ของที่เกาะกรอบภาพจะคำนวณตำแหน่งตัวเอง
+       *
+       * ชิ้นที่เกาะกรอบ (เมฆขอบจอ, ดาวเคราะห์) วางตัวเองจาก camera.quaternion/position ใน
+       * useFrame ของมันเอง r3f เรียก useFrame ตามลำดับที่คอมโพเนนต์ถูกเมานต์ ถ้าริกอยู่ท้าย
+       * ต้นไม้ ของพวกนี้จะอ่านท่ากล้องของ "เฟรมก่อน" แล้วกล้องค่อยขยับทีหลัง — ระหว่างอินโทร
+       * ที่กล้องเคลื่อนเร็ว มันจึงไถลสวนฉากอยู่หนึ่งเฟรมตลอด เห็นเป็นการกระตุกที่ขอบจอ
+       */}
+      <CameraRig />
+
+      {/* ดาวเคราะห์หน้าสุด — เกาะขอบจอเป็นกรอบ ไม่ได้อยู่ในโลกของฉาก (ดู Space) */}
+      {t.pl > 0.5 && t.sp > 0.5 && !clay && (
+        <Planets dist={t.plDist} scale={t.plScale} drift={t.plDrift} spin={t.plSpin} />
+      )}
+      {/* เมฆหน้าสุด — เกาะขอบจอเป็นกรอบ ไม่ได้อยู่ในโลกของฉาก (ดู EdgeClouds) */}
+      {t.cl > 0.5 && !clay && !bare && (
+        <EdgeClouds dist={t.clDist} scale={t.clScale} drift={t.clDrift} />
+      )}
+      {/**
+       * พื้นตาราง — วางที่ y -7.2 ซึ่งเป็นระดับฐานของแผงพอดี แผงจึงยืนบนพื้นจริง ไม่ใช่ลอย
+       * fade ก่อนถึงเส้น horizon ไม่งั้นเส้นจะถี่จนกลายเป็นแถบทึบตรงขอบฟ้า (moiré)
+       */}
+      {showGrid && (
+      <Grid
+        position={[0, t.gridY, 0]}
+        rotation={[0, t.groundYaw * RAD, 0]}
+        infiniteGrid
+        cellSize={t.gridCell}
+        cellThickness={1.0}
+        cellColor={grid.line}
+        sectionSize={t.gridCell * 4}
+        sectionThickness={2.0}
+        sectionColor={grid.major}
+        fadeDistance={95}
+        fadeStrength={1.0}
+        fadeFrom={0}
+      />
+      )}
+      {/* ทุกอย่างในนี้โดนวัสดุ clay ทับ — พื้นหลังกับกริดอยู่นอก จึงคงสีวิวพอร์ตไว้ */}
+      <Clay on={clay}>
+      {props && <SoftCircles />}
+
+      {/**
+       * แถบแผงครีม = เวทีกลางภาพ ไม่ใช่แผงลอยเป็นใบ ๆ
+       *
+       * ใน ref แผงเรียงต่อกันเกือบทึบตลอดความกว้าง และใบริมสุดถูกขอบเฟรมตัด — มันคือ
+       * "พื้นหลังชั้นกลาง" ที่ของทุกชิ้นวางอยู่หน้ามัน ถ้าเว้นช่องให้เห็นพื้นหลังระหว่างใบ
+       * ทั้งฉากจะกลายเป็นของลอยกระจายในที่ว่าง ซึ่งเป็นสิ่งที่ผิดที่สุดของเวอร์ชันก่อน
+       * (ที่ z -11 ครึ่งความกว้างเฟรมราว 15 หน่วย ใบริมจึงต้องเลย ±13 ออกไป)
+       */}
+      {/**
+       * หมุนรอบ "ระนาบแผง" ไม่ใช่รอบจุดกำเนิดโลก
+       *
+       * ถ้าใส่ rotation ให้กลุ่มที่มี Panel วางอยู่ที่ z = panelZ กลุ่มจะหมุนรอบ (0,0,0)
+       * ซึ่งลาก x ของทุกใบไปด้วยเป็นระยะ panelZ·sin(yaw) — เลื่อนไปทั้งแถบเกือบหนึ่งช่อง
+       * ย้าย panelZ ออกมาเป็น position ของกลุ่มนอก แล้วหมุนกลุ่มใน ตำแหน่งจึงตรงกับ
+       * สมการที่แก้จากเส้นที่วาดไว้
+       */}
+      <group position={[0, 0, t.panelZ]}>
+      <group rotation={[0, t.bandYaw * RAD, 0]}>
+        {/**
+         * ขนาดถอดจากสัดส่วนในเฟรมของ ref: แผงกินความสูงจาก 28% ถึง 71% ของเฟรม
+         * ก่อนหน้านี้กินแค่ 24-51% เพราะแผงเตี้ยเกิน ทั้งแถบเลยอ่านเป็นแนวรั้วไกล ๆ
+         * ไม่ใช่เวทีที่ของทุกชิ้นวางอยู่หน้า — ฐานแผงต้องต่ำจนถนนวิ่งตัดหน้ามันได้
+         */}
+        {/**
+         * ห้าใบเท่ากันเป๊ะ: w/h/d เท่ากัน ระยะห่างเท่ากัน อยู่ระนาบ z เดียวกัน
+         * ขนาดที่เห็นในเฟรมต่างกันเองจาก perspective — ไม่ต้องไปสุ่มขนาดช่วย
+         */}
+        {/**
+         * ขนาดแก้จากสมการฉายภาพ ไม่ได้ลองปรับเอา — ที่ระนาบ z -11 กล้องชุดนี้เห็น
+         * กว้าง ±30.7 หน่วย และแถบแผงของ ref กินแนวตั้งจาก y 4.68 ถึง -12.36
+         * และแถบแผงใน ref กินแนวตั้งจาก y 4.68 (จอ 28%) ถึง -10.94 (จอ 68%)
+         * ดังนั้นสูง 15.62 ฐาน -10.94 กว้าง 11.5 ห่างกัน 13.3
+         */}
+        {/* hero แบบการ์ด: บานยืนบนการ์ด — ตัดข้าง/ล่าง โผล่ขอบบนได้ (ดู ./cardClip) */}
+        <CardClip on={bare}>
+        {Array.from({ length: Math.round(t.panelCount) }, (_, i) => {
+          // เรียงสมมาตรรอบศูนย์ ระยะห่างเท่ากันทุกช่อง ไม่ว่าจะกี่ใบ
+          const x = t.panelX + (i - (Math.round(t.panelCount) - 1) / 2) * t.panelGap
+          return (
+            /* อินโทร: บานโผล่ทีละบานจากซ้ายไปขวา (ขยายจากศูนย์ เลยเป้านิดแล้วดีดกลับ) */
+            <Appear
+              key={i}
+              at={t.inWinAt + i * t.inWinStep}
+              dur={t.inWinDur}
+              over={t.inOver}
+              rise={t.inWinRise}
+              tilt={t.inWinTilt * RAD}
+              hold="windows"
+              position={[x, t.panelBase + t.panelH / 2, 0]}
+            >
+              <Panel
+                w={t.panelW}
+                h={t.panelH}
+                d={t.panelD}
+                portal={portal}
+                glass={t.pw > 0.5 ? t.pwInt : 0}
+                glassBevel={t.pwBevel}
+                glassSheen={t.pwSheen}
+              />
+            </Appear>
+          )
+        })}
+        </CardClip>
+        {/* ฉายกรอบบานลงพิกัดจอให้สปแลชเอาไปเป็นเป้ามอร์ฟ (ดู newhero/panelScreen) */}
+        <PanelProbe
+          count={Math.round(t.panelCount)}
+          w={t.panelW}
+          h={t.panelH}
+          d={t.panelD}
+          y={t.panelBase + t.panelH / 2}
+          xAt={(i) => t.panelX + (i - (Math.round(t.panelCount) - 1) / 2) * t.panelGap}
+        />
+        {/* ถนนคือแผ่นชั้นหน้า — ตัดแค่ซ้าย/ขวา ปล่อยโผล่ทั้งขอบบนและขอบล่างของการ์ด (ดู ./cardClip) */}
+        <CardClip on={bare} open="bottom">
+        {/* hero แบบการ์ด: ถนนเดิมถูกแทนด้วยแผ่นลอน S (CardSlab) */}
+        {!bare && ribbon}
+        {/* ช่วงต่อของถนน — งอกตามการเลื่อนจอ ไปจบที่ขอบขวา (ดู CruiseRibbon) */}
+        {!bare && (
+        <CruiseRibbon
+          width={t.ribbonW}
+          thick={t.ribbonThick}
+          wave={t.ribbonWave}
+          waves={t.ribbonWaves}
+          scale={t.ribbonScale}
+          offset={[t.ribbonX, t.ribbonY, t.ribbonZ]}
+          rot={[t.ribbonRotX * RAD, t.ribbonRotY * RAD, t.ribbonRotZ * RAD]}
+          split={ride.cruise.split}
+        />
+        )}
+        </CardClip>
+        {/* ริบบิ้นกระจก — พุ่งออกจากปากบานที่ 2 คนละชิ้นกับเส้นหมากรุก */}
+        {t.gr > 0.5 && !clay && (
+          <GlassRibbon
+            width={t.grW}
+            thick={t.grThick}
+            scale={t.grScale}
+            offset={[t.grX, t.grY, t.grZ]}
+            rot={[t.grRotX * RAD, t.grRotY * RAD, t.grRotZ * RAD]}
+            rough={t.grRough}
+            transmission={t.grTrans}
+            chroma={t.grChroma}
+            ior={t.grIor}
+            tint="#eef7ff"
+          />
+        )}
+        {/**
+         * สวิตช์ — ลอยอยู่หน้าแถบหน้าต่าง ไม่ใช่ของในพอร์ทัล
+         *
+         * อยู่ในกลุ่มเดียวกับริบบิ้น/ตัวละคร พิกัดจึงเป็นระบบเดียวกับของสองชิ้นนั้น
+         * วางเทียบกับปากหน้าต่างได้ตรง ๆ และยังตามไปด้วยเมื่อหมุน bandYaw
+         */}
+        {t.bc > 0.5 && (
+          <Appear
+            at={t.enDelay + t.enDur + t.inPropAt + t.inPropGap}
+            dur={t.inPropDur}
+            over={t.inOver}
+            from={[-3 * t.inPropDist, -0.5 * t.inPropDist, -5 * t.inPropDist]}
+          >
+          <Switch
+            len={t.bcLen}
+            radius={t.bcRadius}
+            thickness={t.bcThick}
+            knobSize={t.bcKnob}
+            knobThick={t.bcKnobThick}
+            knobProud={t.bcKnobProud}
+            pos={t.bcPos}
+            posAt={swPos}
+            opacity={t.bcOpacity}
+            icon={t.bcIcon}
+            outline={t.bcOutline}
+            outlineAlpha={t.bcOutlineAlpha}
+            showEdges={t.bcEdges > 0.5}
+            edgeAngle={t.bcEdgeAngle}
+            glass={t.bcGlass}
+            blur={t.bcBlur}
+            env={t.bcEnv}
+            ior={t.bcIor}
+            chroma={t.bcChroma}
+            position={[t.bcX, t.bcY, t.bcZ]}
+            rotation={[t.bcRotX * RAD, t.bcRotY * RAD, t.bcRotZ * RAD]}
+            scale={t.bcScale}
+            onPress={toggleDevMode}
+          />
+          </Appear>
+        )}
+        {/* เคอร์เซอร์พิกเซล — ของลอยหน้าหน้าต่าง นอกพอร์ทัล พิกัดกลุ่มเดียวกับสวิตช์ */}
+        {t.cu > 0.5 && (
+          <Appear
+            at={t.enDelay + t.enDur + t.inPropAt}
+            dur={t.inPropDur}
+            over={t.inOver}
+            from={[3 * t.inPropDist, 2 * t.inPropDist, -5 * t.inPropDist]}
+          >
+          {/* หมุดเปล่า — ลูกศรตัวจริงวาดที่ชั้นนำสายตาของหน้า (ดู CursorAnchor) */}
+          <CursorAnchor
+            position={[t.cuX, t.cuY, t.cuZ]}
+            rotation={[t.cuRotX * RAD, t.cuRotY * RAD, t.cuRotZ * RAD]}
+            scale={t.cuScale}
+          />
+          </Appear>
+        )}
+        {/* เส้นทางวางเอง (debug): เส้น + ลูกบอลที่ waypoint ในพิกัดกลุ่มนี้ */}
+        {import.meta.env.DEV && t.enPath > 0.5 && t.enShowPath > 0.5 && <PathGizmo ride={rideNow} />}
+        {/* ตัวละครอยู่ในพิกัดกลุ่มเดียวกับริบบิ้น จะได้วางบนถนนได้ตรง ๆ ไม่ต้องแปลงพิกัด */}
+        {/**
+         * ตัวละครห่อด้วย Entrance: กลุ่มนอกถือปลายทาง (ค่าจากแผง) กลุ่มในวิ่งเข้ามาจาก
+         * ในหน้าต่าง — ค่า skaterX/Y/Z จึงยังหมายถึง "ที่หยุด" เหมือนเดิม
+         */}
+        {/**
+         * เอฟเฟกต์ปากพอร์ทัล — อยู่นอก Entrance เพราะมันเกิดที่ *ปากช่อง* ไม่ใช่ที่ตัวละคร
+         * (ตัวละครวิ่งผ่านไป แสงยังค้างอยู่ที่ช่องแล้วค่อยจบของตัวเอง)
+         */}
+        {skater && t.pfxAmt > 0 && <PortalFx />}
+        {/**
+         * รอยลมท้ายตัวละคร — อยู่นอก Entrance เพราะรอยไม่ได้เกาะตัว มันค้างอยู่กับ *ทาง*
+         * ที่เพิ่งวิ่งผ่าน (เกาะตัวเมื่อไรก็กลายเป็นแผ่นติดท้ายที่เลี้ยวตามตัว ไม่ใช่รอย)
+         */}
+        {skater && t.wtAmt > 0 && <WindTrail />}
+        {/**
+         * รอยเงาซิลูเอตต์ (แบบ githubuniverse) — อยู่นอก Entrance เหมือนรอยลม เพราะเงา
+         * ค้างอยู่กับทางที่วิ่งผ่าน ไม่ได้เกาะตัว
+         */}
+        {/* โหมด clay (รวม dev) ไม่มีรอยสีรุ้ง — ดูรูปทรงล้วน */}
+        {skater && t.etAmt > 0 && !clay && <EchoTrail />}
+        {skater && (
+          <Entrance
+            replay={t.enReplay}
+            ride={rideNow}
+            rideMode={t.enRide > 0.5}
+            pathMode={t.enPath > 0.5}
+            position={[t.skaterX, t.skaterY, t.skaterZ]}
+            rotation={[t.skaterRotX * RAD, t.skaterRotY * RAD, t.skaterRotZ * RAD]}
+            scale={t.skaterScale}
+          >
+          {/*
+            ชี้ตัวละคร = tooltip "About me" ตามเคอร์เซอร์ (หน้า /2026-final วาด — ดู HeroAboutTip) · คลิก = ไปหน้า About me
+            ส่งเป็น event ของหน้าต่าง — แคนวาสนี้ไม่ต้องรู้จักเราเตอร์
+          */}
+          <group
+            onPointerOver={(e) => {
+              e.stopPropagation()
+              document.body.style.cursor = 'pointer'
+              window.dispatchEvent(new CustomEvent('hero-about', { detail: { on: true } }))
+            }}
+            onPointerOut={() => {
+              document.body.style.cursor = ''
+              window.dispatchEvent(new CustomEvent('hero-about', { detail: { on: false } }))
+            }}
+            onClick={(e) => {
+              e.stopPropagation()
+              document.body.style.cursor = ''
+              window.dispatchEvent(new CustomEvent('hero-about', { detail: { on: false, open: true } }))
+            }}
+          >
+            <HeroRider legPose={legPose} torsoPose={torsoPose} />
+          </group>
+          </Entrance>
+        )}
+      </group>
+      </group>
+      {bare && (
+        <CardClip on open="bottom">
+          <CardSlab />
+        </CardClip>
+      )}
+      {/* ต้องอยู่หลังแถบหน้าต่างในลำดับ JSX — หน้ากาก stencil ต้องถูกวาดก่อนของข้างใน */}
+      {portal && (
+        <CardClip on={bare}>
+        <InsideWindow>
+          <WindowWorld
+            z={t.portalZ}
+            globe={
+              t.gb > 0.5 && {
+                pos: [t.gbX, t.gbY, t.gbZ],
+                rot: [t.gbRotX * RAD, t.gbRotY * RAD, t.gbRotZ * RAD],
+                scale: t.gbScale,
+                speed: t.gbSpeed,
+                seed: Math.round(t.gbSeed),
+                road: t.gbRoad,
+                bushes: Math.round(t.gbBushes),
+                cones: Math.round(t.gbCones),
+                rounds: Math.round(t.gbRounds),
+                mushrooms: Math.round(t.gbMushrooms),
+                flowers: Math.round(t.gbFlowers),
+                berries: Math.round(t.gbBerries),
+                pebbles: Math.round(t.gbPebbles),
+                propScale: t.gbProp,
+                spinBoost: gbSpin,
+              }
+            }
+            land={
+              t.ls > 0.5 && {
+                pos: [t.lsX, t.lsY, t.lsZ],
+                rot: [t.lsRotX * RAD, t.lsRotY * RAD, t.lsRotZ * RAD],
+                scale: t.lsScale,
+                spin: t.lsSpin,
+                cloud: t.lsCloud,
+                seed: Math.round(t.lsSeed),
+                count: Math.round(t.lsCount),
+                grow: t.lsGrow > 0.5,
+                growLead: t.lsGrowLead,
+                growDur: t.lsGrowDur,
+                growStagger: t.lsGrowStagger,
+              }
+            }
+            wall={t.portalWall > 0.5}
+            hemi={t.portalHemi}
+            keyLight={t.portalKey}
+            stack={
+              t.sw > 0.5 && {
+                count: t.swCount,
+                step: [t.swDX, t.swDY, t.swDZ],
+                w: t.swW,
+                h: t.swH,
+                barRatio: t.swBar,
+                depth: t.swDepth,
+                radius: t.swRadius,
+                btnRatio: t.swBtn,
+                inset: t.swInset,
+                pos: [t.swX, t.swY, t.swZ],
+                rot: [t.swRotX * RAD, t.swRotY * RAD, t.swRotZ * RAD],
+                scale: t.swScale,
+              }
+            }
+            tetris={
+              t.te > 0.5 && {
+                shape: t.teShape,
+                depth: t.teDepth,
+                radius: t.teRadius,
+                gap: t.teGap,
+                pos: [t.teX, t.teY, t.teZ],
+                rot: [t.teRotX * RAD, t.teRotY * RAD, t.teRotZ * RAD],
+                scale: t.teScale,
+              }
+            }
+            ribbon={bare ? null : {
+              width: t.prW,
+              thick: t.prThick,
+              wave: t.prWave,
+              waves: t.prWaves,
+              scale: t.prScale,
+              offset: [t.prX, t.prY, t.prZ],
+              rot: [t.prRotX * RAD, t.prRotY * RAD, t.prRotZ * RAD],
+            }}
+          />
+        </InsideWindow>
+        </CardClip>
+      )}
+      {/**
+       * จานสี — ของลอยนอกหน้าต่าง ไม่ได้อยู่ในกลุ่ม props
+       *
+       * กลุ่ม props ทั้งชุด (สามสิบชิ้น) ถูกปิดไว้ในค่าเริ่มต้น (tuner props = 0) ชิ้นนี้จึงอยู่
+       * ระดับฉากเป็นของตัวเอง เปิด/ปิดด้วยปุ่มของตัวเอง ตำแหน่งเป็นพิกัดโลกตรง ๆ
+       * (คำนวณจากตำแหน่งบนจอที่ต้องการ ฉายกลับผ่านกล้องจริงของฉาก)
+       */}
+      {t.pal > 0.5 && (
+        <Appear at={t.enDelay + t.enDur + t.inPropAt} dur={t.inPropDur} over={t.inOver}>
+          {/* ไม่มีการลอยเลี้ยงตัว — วางนิ่งตามมุมที่จูนไว้ */}
+          <group position={[t.palX, t.palY, t.palZ]}>
+            <Palette
+              scale={t.palScale}
+              rotation={[t.palRotX * RAD, t.palRotY * RAD, t.palRotZ * RAD]}
+            />
+          </group>
+        </Appear>
+      )}
+      {props && (
+        <>
+          <BigDisc position={[9.2, -0.3, -13.5]} scale={1.15} />
+
+          <TileBlock position={[7.6, -1.1, -6.5]} rotation={[0.08, -0.4, 0]} />
+        </>
+      )}
+
+      {props && (
+        /**
+         * ของลอยทั้งชุดถูกจัดตำแหน่งไว้ตอนฉากยังเล็กกว่านี้ (fov 44 แผงสูง 10)
+         * พอกล้องเปลี่ยนตาม ref ฉากโตขึ้นราวหนึ่งเท่าครึ่ง ของเลยจมอยู่กลางเฟรม
+         * ยกทั้งชุดด้วยสเกล/ออฟเซ็ตเดียว ปรับจากแผงได้ ดีกว่าไล่แก้ทีละชิ้นสามสิบชิ้น
+         */
+        <group scale={t.propScale} position={[t.propX, t.propY, t.propZ]}>
+      {/* ตัวละครยืนบนถนน ณ ช่วงที่มันเริ่มโตเข้าหากล้อง — จุดที่สายตาตกก่อนของทุกชิ้น */}
+      <Surfer position={[-1.9, -2.6, 1.4]} rotation={[0, 0.2, 0.04]} scale={1.7} />
+
+      {/* ของลอยรอบตัว — ตำแหน่งตามภาพฉากประกอบเสร็จ */}
+      <Float position={[3.4, 1.3, -1.8]} phase={1.2} rot={0.09}>
+        <BeaconSign scale={1.0} rotation={[0.1, 0.62, -0.12]} />
+      </Float>
+      <Float position={[-9.6, -0.5, -1.5]} phase={2.6}>
+        <AppIcon size={2} rotation={[0.05, 0.5, -0.12]} />
+      </Float>
+      <Float position={[-4.8, 1.7, -3.5]} phase={4.1}>
+        <PlaneCoin scale={1.05} rotation={[0.1, -0.3, 0.15]} />
+      </Float>
+      <Float position={[-6.8, 2.9, -4.5]} phase={0.7} amp={0.2}>
+        <AppIcon color="#f2b8cf" glyph={heartGlyph} size={1.2} rotation={[0, 0.3, 0.2]} />
+      </Float>
+      <Float position={[5.4, 0.1, -3.0]} phase={3.3}>
+        <PlayingCard scale={1.15} rotation={[0.05, -0.4, 0.16]} />
+        <PlayingCard scale={1.15} position={[1.3, -0.6, -0.6]} rotation={[0.02, -0.55, -0.1]} />
+      </Float>
+      <Float position={[1.7, -1.9, -1.8]} phase={5.2} amp={0.2}>
+        <TargetRing scale={0.95} rotation={[0.1, 0.32, 0]} />
+      </Float>
+      {/* โดนัทกินมุมล่างขวาจนโดนขอบตัด — ชิ้น foreground ที่ทำให้เฟรมมีชั้นหน้าจริง ๆ */}
+      <Float position={[6.2, -2.4, 3.2]} phase={1.9} rot={0.1}>
+        <CandyFloat scale={1.2} rotation={[0.55, -0.75, 0.45]} />
+      </Float>
+      <Float position={[0.4, -3.4, 4.4]} phase={2.2} rot={0.18}>
+        <Gem scale={1.05} rotation={[0.4, 0.6, 0.2]} />
+      </Float>
+      <Float position={[-4.2, -1.7, -2.0]} phase={0.4}>
+        <GamePawn scale={1.25} rotation={[0.06, 0, -0.08]} />
+      </Float>
+      <Float position={[-5.6, 0.1, -3.0]} phase={3.8} amp={0.2}>
+        <Blocks color={GREEN_MAIN} unit={0.62} rotation={[0.2, 0.5, 0.1]} />
+      </Float>
+      <Float position={[-3.3, -1.3, -2.6]} phase={4.6} amp={0.18}>
+        <Blocks color={RED} unit={0.5} rotation={[0.3, -0.4, 0]} />
+      </Float>
+      <Float position={[2.4, -2.6, 0.6]} phase={5.7} amp={0.16}>
+        <Blocks color={PURPLE} unit={0.42} rotation={[0.4, 0.7, 0.2]} />
+      </Float>
+
+      <Float position={[-6.4, 4.0, -5]} phase={2.9} amp={0.2}>
+        <Squiggle rotation={[0.2, 0.4, 0.5]} />
+      </Float>
+      <Float position={[5.6, 3.8, -5]} phase={4.9} amp={0.2}>
+        <Squiggle color="#4f9df9" rotation={[-0.3, -0.5, -0.7]} />
+      </Float>
+      <Float position={[7.4, -2.0, -1]} phase={0.9} amp={0.24}>
+        <Squiggle color="#39c7b8" rotation={[0.5, 0.2, 1.2]} scale={0.9} />
+      </Float>
+
+      {/* ลูกกลมเขียวมุมล่างซ้าย — โดนขอบตัดครึ่งใบเหมือน ref ถ่วงน้ำหนักฝั่งตรงข้ามโดนัท */}
+      <Float position={[-8.8, -3.2, 2.6]} phase={3.1} amp={0.18}>
+        <mesh>
+          <sphereGeometry args={[2.1, 32, 24]} />
+          <meshStandardMaterial color="#4fbe6e" roughness={0.6} />
+        </mesh>
+      </Float>
+
+      <Confetti />
+        </group>
+      )}
+      </Clay>
+    </Gloss>
+  )
+}
+
+/** หัวใจชมพู — ไอคอนเล็กมุมบนซ้ายของ ref */
+const heartGlyph = glyphTexture((ctx, s) => {
+  ctx.fillStyle = '#e0407c'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = `${s * 0.62}px system-ui, sans-serif`
+  ctx.fillText('♥', s / 2, s * 0.56)
+})
+
+/**
+ * บอกสปแลชว่า "ฉากวาดได้จริงแล้ว" — สามด่าน ไม่ใช่ด่านเดียว
+ *
+ * 1. ตัวละครขึ้นครบ: Entrance เป็นคนบอก (introSet) เพราะมันเป็นชิ้นที่มาช้าสุดในฉาก
+ *    GLB ถูกแตกเสร็จและเฟรมเดินแล้วมันถึงจะยกธง
+ * 2. คอมไพล์ให้จบตรงนี้เลย: gl.compile ไล่คอมไพล์ shader ของทุกวัสดุในฉากทีเดียว
+ *    ถ้าไม่สั่ง มันจะไปคอมไพล์ทีละวัสดุตอนวัตถุนั้นโผล่เข้าเฟรมจริง — ซึ่งคือ "ระหว่างอินโทร"
+ *    เฟรมนั้นค้างเป็นวินาที จังหวะที่จูนมาทั้งหมดพัง (เสียเวลาตรงนี้แทน สปแลชยังบังอยู่)
+ * 3. เฟรมเดินเป็นปกติติดกันสามเฟรม: คอมไพล์เสร็จแล้วยังมีเฟรมแรก ๆ ที่อัปโหลดเท็กซ์เจอร์
+ *    ขึ้น GPU อยู่ รอให้ผ่านไปก่อนค่อยเปิดผ้า
+ */
+const READY_FRAMES = 3
+const READY_DT = 0.06
+
+function SceneReady() {
+  const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
+  const camera = useThree((s) => s.camera)
+  const step = useRef({ compiled: false, good: 0, done: false })
+  useFrame((_, dt) => {
+    const st = step.current
+    /**
+     * introSet ไม่ใช่ introWants — wants เป็นจริงเฉพาะตอนมีสปแลชกั้นอยู่
+     * ปิดสปแลชแล้วใช้ wants จะไม่มีใครรายงานว่าฉากพร้อม (หัวเรื่อง 3D จึงไม่ขึ้นเลย)
+     */
+    if (st.done || !introSet()) return
+    if (!st.compiled) {
+      gl.compile(scene, camera)
+      st.compiled = true
+      return
+    }
+    if (dt > READY_DT) {
+      st.good = 0
+      return
+    }
+    st.good += 1
+    if (st.good < READY_FRAMES) return
+    st.done = true
+    setNewHeroReady()
+  }, -999)
+  return null
+}
+
+/**
+ * bare: ผ้าใบโปร่ง ฟ้าอยู่แค่ในการ์ด ไม่มีเมฆขอบ (hero แบบการ์ด ตาม ref
+ * creativecruise.nl: ของ 3D ล้นออกนอกขอบการ์ดได้ เพราะการ์ดเป็น DOM อยู่หลังผ้าใบ)
+ */
+/**
+ * ของที่ต้องรออินโทรเล่นจบ (+ พักครึ่งวิ) ก่อนค่อย mount — PerformanceMonitor ของ dpr
+ *
+ * มันวัดเฟรมตั้งแต่ mount: ช่วงหลังม่านโหลดเฟรมหนัก (อุ่น shader อบ env map) แล้วต่อด้วยอินโทร
+ * มันจึงสั่งลด dpr กลางอินโทรพอดี — ผ้าใบกับบัฟเฟอร์ของ CameraFX จองใหม่ทั้งชุด ~170ms (วัดได้
+ * 640ms หลังม่านเริ่มเปิด) = จังหวะกระตุกตอนจุดโหลดคลี่เป็นจอแรก · วัดหลังอินโทรจบ = วัดเฟรมปกติจริง
+ */
+function AfterIntro({ children }) {
+  const [ready, setReady] = useState(false)
+  useFrame(() => {
+    if (!ready && introSince() >= 0.5) setReady(true)
+  })
+  return ready ? children : null
+}
+
+export default function NewHeroScene({ bare = false, className = 'absolute inset-0' }) {
+  // เลื่อนพ้นไปไกลจนไม่มีใครเห็นแล้ว = หยุดวาด (ดู setSceneOn ใน scrolly.js)
+  const on = useSceneOn()
+  /**
+   * dpr ปรับตามเครื่อง — เริ่มที่เพดาน ถ้าเฟรมตก (PerformanceMonitor วัดเฉลี่ยหลายรอบ ไม่ใช่เฟรม
+   * เดียว) ลดลงพื้น (minDpr) ถ้าไหวค่อยขึ้นกลับ เครื่องแรงได้ภาพคม เครื่องอ่อนได้ความลื่น
+   */
+  const maxDpr = LOW_END ? 1.25 : 1.5
+  /**
+   * พื้นตอนเฟรมตก 1.25 ไม่ใช่ 1 — ที่ 1 บนจอ retina ภาพแตกเป็นเม็ด จ่ายค่าความละเอียดที่เพิ่มด้วยงานที่
+   * เคยทำทิ้ง (ผ้าใบไม่ลบรอยหยักซ้ำ, MSAA ของบัฟเฟอร์ 2 ไม่ใช่ 4 ดู CameraFX) วัดที่ 1440×900 จอ 2x:
+   * dpr 1 แบบเดิม 18.7ms/เฟรม · dpr 1.25 แบบนี้ 19.9ms — พิกเซลมากขึ้น 56% ต้นทุนแทบเท่าเดิม
+   */
+  const minDpr = LOW_END ? 1 : 1.25
+  const [dpr, setDpr] = useState(maxDpr)
+  return (
+    <Canvas
+      shadows="soft"
+      /* วาดผ่าน FrameCap (เพดาน 60 fps) — always วาดตามรอบจอ จอ 144 Hz ขึ้นไป GPU ทำงานเกินเท่าตัว */
+      frameloop="never"
+      className={className}
+      /**
+       * dpr สูงสุด 1.5 ไม่ใช่ 2 — ฉากนี้ติดคอขวดที่จำนวนพิกเซล (ฟ้า fbm, พาส rim ของ CameraFX
+       * เต็มจอ) ไม่ใช่ draw call: ปิดเงา/พอร์ทัลแล้ว fps แทบไม่ขยับ แต่พิกเซลลด 44% ที่ 1.5
+       * ตัวอักษรในฉากไม่มี ขอบที่นุ่มลงนิดเดียวแลกกับเฟรมที่ลื่นขึ้นเกือบเท่าตัว (วัดแล้ว)
+       */
+      /*
+       * ไม่เกินความละเอียดจริงของจอ — r3f ใช้ dpr แบบตัวเลขตรง ๆ ไม่ clamp (แบบ [min, max] ถึงจะ clamp)
+       * จอ dpr 1 (จอ Windows ทั่วไป) เดิมเรนเดอร์ 1.5 เท่า = พิกเซล 2.25 เท่าของที่จอแสดงได้ ทิ้งเปล่า ๆ
+       */
+      dpr={Math.min(dpr, typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1)}
+      camera={{
+        position: [DEFAULTS.camX, DEFAULTS.camY, DEFAULTS.camZ],
+        fov: DEFAULTS.fov,
+        near: 0.1,
+        far: 140,
+      }}
+      /**
+       * exposure ยกความสว่างทั้งภาพ "หลัง" คำนวณแสงเสร็จ
+       * ต่างจากการเร่ง intensity ของไฟทีละดวง ซึ่งจะดันด้านสว่างจนไหม้ก่อนที่ด้านมืด
+       * จะสว่างพอ — ที่นี่อัตราส่วนระหว่างด้านสว่างกับด้านมืดคงเดิม
+       */
+      // stencil ต้องเปิดเอง — พอร์ทัลของหน้าต่างใช้ stencil buffer เป็นตัวจำกัดพื้นที่วาด
+      /**
+       * antialias ของผ้าใบปิดเมื่อเอฟเฟกต์กล้องเปิด (ค่าตั้งต้น) — ฉากวาดลงบัฟเฟอร์ของ CameraFX ที่ลบรอยหยัก
+       * เองอยู่แล้ว แล้วค่อยแปะลงผ้าใบเป็นแผ่นเดียว MSAA ของผ้าใบจึงไม่ได้ลบอะไร แค่กินหน่วยความจำกับแบนด์วิดท์
+       */
+      gl={{ antialias: !(DEFAULTS.fx > 0.5 || DEFAULTS.rimFx > 0.5), stencil: true, alpha: bare, toneMappingExposure: DEFAULTS.exposure }}
+    >
+      <FrameCap on={on} />
+      <WarmShaders />
+      <AfterIntro>
+        <PerformanceMonitor onDecline={() => setDpr(minDpr)} onIncline={() => setDpr(maxDpr)} flipflops={3} onFallback={() => setDpr(minDpr)} />
+      </AfterIntro>
+      <Suspense fallback={null}>
+        <Scene bare={bare} />
+      </Suspense>
+    </Canvas>
+  )
+}

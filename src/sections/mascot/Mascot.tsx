@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, type Ref } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { ExtrudeGeometry, Mesh, Shape, type Group } from 'three'
+import { ExtrudeGeometry, Mesh, Shape, SphereGeometry, type Group } from 'three'
 import { createShirtTexture } from './mascotTextures'
 import { Part } from './MascotDebug'
 
@@ -404,97 +404,106 @@ const prismR = (w: number) => (w / 2) * Math.SQRT2
 type V3 = [number, number, number]
 
 /**
- * The fingers, widest and longest first.
+ * The hand.
  *
- * They are **not four separate blocks stuck on the end of a palm**, which is
- * what this was. In the artwork the hand is one solid whose end has three
- * narrow slots cut back into it, and the fingertips step back in a diagonal
- * from the long side to the short one. Built as separate blocks the gaps
- * between them show the background through the hand, and the fingers read as a
- * comb rather than as a hand.
+ * It was a flat slab with three slots sawn into the end — a comb. The artwork's
+ * hand is a moulded toy hand: one rounded mass with no hard edge anywhere on
+ * it, the four fingers reading as soft lobes that touch each other rather than
+ * as separate prongs, and a fat thumb sitting proud of the palm. The slots were
+ * the wrong idea from the start — at this size a cut narrow enough to read as a
+ * gap between fingers is narrower than the highlight along its own edge, so it
+ * fills in and the hand goes back to being a paddle.
+ *
+ * So: lobes that overlap, not slots that cut. Neighbours overlap by more than a
+ * third of their width, which is what keeps the background from ever showing
+ * between them while still leaving a crease where two round surfaces meet.
+ */
+const HAND = {
+  /** Palm: wider than the wrist it sits on. A hand narrower than the wrist reads as a stump. */
+  palmW: 0.44,
+  palmLen: 0.26,
+  depth: 0.27,
+  /** Thumb: sits on the palm side, angled across it, and is the fattest single piece. */
+  thumbW: 0.2,
+  thumbLen: 0.23,
+  thumbAngle: 0.72,
+}
+
+/**
+ * The four finger lobes, longest first — tips step back in a diagonal, as in
+ * the artwork. `x` is the centre across the palm, in fractions of the palm's
+ * half width, so the row stays put when the palm changes width.
  */
 const FINGERS = [
-  { w: 0.115, len: 0.34 },
-  { w: 0.115, len: 0.31 },
-  { w: 0.105, len: 0.28 },
-  { w: 0.09, len: 0.245 },
+  { x: -0.7, w: 0.2, len: 0.28 },
+  { x: -0.24, w: 0.2, len: 0.26 },
+  { x: 0.24, w: 0.19, len: 0.235 },
+  { x: 0.68, w: 0.16, len: 0.195 },
 ]
 
 /**
- * The hand.
+ * One lump: a unit sphere, scaled. Everything in the hand is one of these.
  *
- * Wider than the arm it is on, which is the other thing the old one had
- * backwards: the artwork flares the palm out past the forearm and steps back in
- * at the wrist. A hand narrower than the wrist reads as a stump.
+ * Rounded boxes were the second attempt and they were still wrong. A rounded
+ * box only rounds its edges — a 0.42-wide palm keeps a flat face 0.24 across in
+ * the middle of it, which catches the light as one even patch and reads as a
+ * slab no matter how soft the corners are. An ellipsoid has no flat anywhere,
+ * which is the whole look of a moulded toy hand.
  */
-const HAND = {
-  d: 0.22,
-  /** Width of the cut between two fingers, and how far it reaches back. */
-  slot: 0.016,
-  slotDepth: 0.09,
-  /** How far back the palm narrows to meet the wrist, and to what. */
-  wristRun: 0.1,
-  wristW: 0.3,
+const BALL = new SphereGeometry(0.5, 24, 16)
+
+function Lump({ size, ...props }: { size: V3 } & Record<string, unknown>) {
+  return (
+    <mesh geometry={BALL} scale={size} {...props}>
+      <meshLambertMaterial color={C.skin} />
+    </mesh>
+  )
 }
 
-/** Total width across the knuckles, from the fingers themselves. */
-const handW =
-  FINGERS.reduce((sum, f) => sum + f.w, 0) + (FINGERS.length - 1) * HAND.slot
-
-/**
- * The hand as one closed outline, cut in the plane of the palm.
- *
- * Drawn in the forearm's own space: the arm runs along +Y, so the wrist is at
- * y = 0 and the fingers carry on past it.
- */
-function handProfile() {
-  const s = new Shape()
-  const half = handW / 2
-
-  // Up the long side, from the wrist through the flare.
-  s.moveTo(-HAND.wristW / 2, 0)
-  s.lineTo(-half, HAND.wristRun)
-  s.lineTo(-half, FINGERS[0].len)
-
-  let x = -half
-  FINGERS.forEach((finger, i) => {
-    const right = x + finger.w
-    s.lineTo(right, finger.len)
-
-    const next = FINGERS[i + 1]
-    if (next) {
-      // Down into the slot, across it, and up the next finger. Cut to the
-      // shorter of the pair so the slot never opens out of the tip edge.
-      const floor = Math.min(finger.len, next.len) - HAND.slotDepth
-      s.lineTo(right, floor)
-      s.lineTo(right + HAND.slot, floor)
-      s.lineTo(right + HAND.slot, next.len)
-      x = right + HAND.slot
-    } else {
-      s.lineTo(right, HAND.wristRun)
-      s.lineTo(HAND.wristW / 2, 0)
-    }
-  })
-
-  s.closePath()
-  return s
-}
-
-function Hand({ tilt, roll }: { tilt: number; roll: number }) {
-  const geometry = useMemo(() => slab(handProfile(), HAND.d), [])
-  useEffect(() => () => geometry.dispose(), [geometry])
-
+function Hand({ tilt, roll, side = 1 }: { tilt: number; roll: number; side?: number }) {
+  const half = HAND.palmW / 2
   // `roll` turns the palm about the arm's own axis, and it is not optional.
   // The quaternion the bone is built from only says which way the arm points —
   // the spin around that direction is whatever `setFromUnitVectors` happened to
-  // pick, and left alone it lands the palm edge on to the lens, so the finger
-  // slots read as a flight of steps instead of as fingers.
+  // pick, and left alone it lands the palm edge on to the lens.
   return (
     <group rotation={[0, roll, 0]}>
       <group rotation={[tilt, 0, 0]}>
-        <mesh geometry={geometry}>
-          <meshLambertMaterial color={C.skin} />
-        </mesh>
+        {/* Wrist: swallows the end of the arm.
+
+            The arm is a square prism turned an eighth, so its corners stand
+            0.21 off the axis — wider than the top of the palm ellipsoid. Left
+            uncovered they poke out through the back of the hand as a hard notch,
+            which is the one sharp edge left anywhere on this shape. */}
+        <Lump size={[0.38, 0.2, 0.32]} position={[0, -0.03, 0]} />
+        {/* The mass. Starts inside the sleeve so the arm's taper never shows a
+            step where the two meet. */}
+        <Lump
+          size={[HAND.palmW, HAND.palmLen, HAND.depth]}
+          position={[0, HAND.palmLen * 0.12, 0]}
+        />
+        {/* Finger lobes: half sunk into the mass, tips stepping back in a
+            diagonal. Neighbours overlap, so there is a crease between them and
+            never a gap with the background showing through. */}
+        {FINGERS.map((f, i) => (
+          <Lump
+            key={i}
+            size={[f.w, f.len, HAND.depth * 0.9]}
+            position={[f.x * half, HAND.palmLen * 0.12 + HAND.palmLen / 2 + f.len * 0.08, 0]}
+          />
+        ))}
+        {/* Thumb: on the inner edge, tipped across the palm and stood proud of
+            it in z. Flush with the palm it vanishes into the silhouette and the
+            hand reads as a mitten. */}
+        <group
+          position={[side * half * 0.82, HAND.palmLen * 0.18, HAND.depth * 0.26]}
+          rotation={[0, 0, -side * HAND.thumbAngle]}
+        >
+          <Lump
+            size={[HAND.thumbW, HAND.thumbLen, HAND.thumbW]}
+            position={[0, HAND.thumbLen * 0.28, 0]}
+          />
+        </group>
       </group>
     </group>
   )
@@ -1026,7 +1035,7 @@ function ArmTube({ side }: { side: number }) {
         {/* Cut wrist-at-origin pointing +Y, so it is turned to face back down
             the arm. */}
         <group position={[0, -ARM.length, 0]} rotation={[0, 0, Math.PI]}>
-          <Hand tilt={0} roll={0} />
+          <Hand tilt={0} roll={0} side={side} />
         </group>
       </Part>
     </group>

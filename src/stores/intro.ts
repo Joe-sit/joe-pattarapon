@@ -49,3 +49,22 @@ export function useEyeOpen(): boolean {
 export function useIntroDone(): boolean {
   return useSyncExternalStore(subscribe, getDone, getDone)
 }
+
+/**
+ * ด่านโหลดของ /2026-final (pages/Final2026Gate) ถอดม่านออกแล้ว — หน้าเห็นได้จริงตั้งแต่จังหวะนี้
+ *
+ * ไม่ใช่ introDone: introDone ยิงตอน *เริ่ม* มอร์ฟ ระหว่างนั้นม่านขาวยังบังหน้าอยู่อีกราว 1.6 วิ
+ * ของที่อยากให้คนเห็นท่าโผล่ตั้งแต่ต้น (แถบบน) ต้องรออันนี้
+ */
+let gateOpen = false
+function getGateOpen() {
+  return gateOpen
+}
+export function setGateOpen() {
+  if (gateOpen) return
+  gateOpen = true
+  announce()
+}
+export function useGateOpen(): boolean {
+  return useSyncExternalStore(subscribe, getGateOpen, getGateOpen)
+}

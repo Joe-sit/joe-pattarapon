@@ -1,0 +1,177 @@
+/* ป้าย mono + block cursor เขียวกะพริบ — ภาษาเดียวกับ eyebrow ของ githubuniverse.com
+   (ของเขา: ข้อความ mono ถูกพิมพ์ทีละตัว แล้วบล็อกเขียว 10px กะพริบค้างท้ายบรรทัด) */
+
+.v2-eyebrow {
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: -0.01em;
+}
+
+.v2-caret {
+  display: inline-block;
+  width: 0.55em;
+  height: 0.95em;
+  margin-left: 0.45ch;
+  vertical-align: baseline;
+  transform: translateY(0.12em);
+  background: var(--v2-green, #08872b);
+  /* steps(1) = ตัด ไม่เฟด — caret ของ terminal จริงไม่เฟด */
+  animation: v2-blink 1.06s steps(1) infinite;
+}
+
+@keyframes v2-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ปุ่ม CTA แบบ githubuniverse: rest เขียวเรียบ hover ค่อยโชว์ชั้นการ์ดสีซ้อนใต้
+   (box-shadow 4 ชั้นบน ::after) + เขียวเข้มขึ้น + ยกขึ้นขวา — สี/จังหวะถอดจากเว็บจริง */
+.v2-cta {
+  position: relative;
+  /* ขัง ::after (z-index -1) ไว้ใน stacking context ของปุ่มเอง — ไม่งั้นมันมุดไปหลังพื้น cell */
+  isolation: isolate;
+  background: var(--v2-green, #08872b);
+  border-radius: 8px;
+  transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+  cursor: pointer;
+}
+.v2-cta::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 8px;
+  box-shadow: none;
+  transition: box-shadow 0.2s ease-in-out;
+}
+.v2-cta:hover {
+  transform: translate(2px, -2px);
+}
+.v2-cta:hover::after {
+  box-shadow:
+    #bba00a -1px 2px 0 0,
+    #5fed83 -2px 4px 0 0,
+    #583af7 -3px 6px 0 0,
+    #c05200 -4px 8px 0 0;
+}
+
+/* enter ของ headline: โผล่จากล่างขึ้นมาหลังฉากในกรอบเล่นไปแล้วพักหนึ่ง —
+   ให้คนดูเห็น motion ไล่เป็นลำดับ ไม่ใช่ทุกอย่างพรึ่บพร้อมกัน */
+/* แถบ Open to work: เลื่อนซ้ายไม่รู้จบ — เนื้อในมีสองชุดเหมือนกันเป๊ะ เลื่อนครบครึ่ง
+   (= หนึ่งชุดเต็ม) แล้ววนกลับ 0 ภาพต่อเนียนไม่มีสะดุด */
+.v2-marquee {
+  display: flex;
+  width: max-content;
+  animation: v2-marquee 18s linear infinite;
+}
+@keyframes v2-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.v2-rise {
+  opacity: 0;
+  transform: translateY(30px);
+  transition:
+    opacity 0.85s cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 0.85s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.v2-rise.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* ปลายไทม์ไลน์: mascot ชะโงกออกมาจากหลังขอบการ์ด + ป้าย open-to-work/
+   เวทีถูก overflow-hidden ตัดขอบขวา ตัวจึงโผล่มาแค่ครึ่งเดียวเหมือนแอบมอง
+   absolute ล้วน แถวเส้นเวลาจึงยังสูงเท่าหมุด 12px */
+.v2-peek {
+  position: absolute;
+  right: 0;
+  bottom: calc(50% + 10px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  width: clamp(110px, 10.5vw, 155px);
+  pointer-events: none;
+}
+
+.v2-peek-stage {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: clamp(120px, 11.5vw, 170px);
+  /* ตัดที่ขอบขวา = ขอบการ์ด แล้วดันตัวออกไปนอกกรอบนิดหน่อย ให้อ่านว่าโผล่มาจากข้างหลัง */
+  overflow: hidden;
+  animation: v2-peek-in 5.5s ease-in-out infinite;
+}
+
+/* ป้ายภาษาเดียวกับ eyebrow ของหน้า: mono + บล็อกเขียว ไม่ใช่ pill กลม ๆ */
+.v2-peek-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--v2-line, #d2d9d5);
+  background: var(--v2-surface, #fff);
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: clamp(11px, 0.9vw, 13px);
+  letter-spacing: -0.01em;
+  color: color-mix(in srgb, var(--v2-ink, #000) 62%, transparent);
+  white-space: nowrap;
+}
+
+.v2-peek-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--v2-green, #08872b);
+  /* กะพริบจังหวะเดียวกับ caret ของ eyebrow — ตัวเรียกสายตาเบา ๆ */
+  animation: v2-blink 1.06s steps(1) infinite;
+}
+
+/* ชะโงกเข้า-ถอยกลับช้า ๆ ไม่ใช่ลอยตลอดเวลา */
+@keyframes v2-peek-in {
+  0%,
+  12% {
+    transform: translateX(16%);
+  }
+  32%,
+  68% {
+    transform: translateX(0);
+  }
+  88%,
+  100% {
+    transform: translateX(16%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v2-peek-stage {
+    animation: none;
+    transform: translateX(6%);
+  }
+  .v2-peek-dot {
+    animation: none;
+  }
+}
+
+/* ── ธีมของหน้า /2026: dark ล้วน พื้นดำสนิท ────────────────────────────────
+   สีทั้งหน้าอ่านจากตัวแปรชุดนี้ ไม่ใช่ค่าดิบใน JSX — เปลี่ยนธีมทั้งหน้าได้ที่เดียว
+   ประกาศไว้ที่คลาส ไม่ใช่ :root เพราะไฟล์ CSS ถูกโหลดค้างทั้งแอปหลังเข้าหน้านี้ครั้งแรก
+   (route เปลี่ยนแล้ว CSS ไม่ถูกถอด) ถ้าไปอยู่ :root มันจะไปทับหน้าอื่นด้วย
+
+   ค่าสีมาจาก BMS Design System (Figma node 12654:2364) ซึ่งให้มาสามตัวตามบทบาท:
+   header #020409 / surface #0e1116 / border #3e444c — แมปเป็น พื้นหน้า = surface,
+   แถบบนกับการ์ดที่ยกขึ้น = header (เข้มกว่าพื้น แบบ inset ไม่ใช่ลอยขึ้น), เส้น = border */
+.v2-theme {
+  --v2-bg: #0e1116;
+  --v2-surface: #020409;
+  --v2-raise: #020409;
+  --v2-line: #3e444c;
+  --v2-ink: #f2f3f5;
+  --v2-muted: #8b8f8d;
+  /* เขียวเดิม (#008a15) จมกับพื้นดำ ดันความสว่างขึ้นให้ contrast ผ่านบนพื้นดำแทน */
+  --v2-green: #0dbb3a;
+  --v2-green-2: #0a9330;
+}

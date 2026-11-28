@@ -1,0 +1,359 @@
+/*
+ * จอมือชูจอ — ชั้นพื้นหลังกับป้ายคำบรรยาย และจังหวะเปิดตัวของสองชั้นนี้
+ * (ชั้น 3D เดินจังหวะของตัวเองใน HandScene ด้วยนาฬิกาเดียวกันที่เริ่มพร้อม data-in)
+ *
+ * ศูนย์ของรัศมีอยู่หลังจอ CRT (50% 40%) — จุดที่ทุกอย่างเปิดออกมา
+ */
+
+.hc-root {
+  /* ขาวก่อนเปิด — รับช่วงต่อจากม่านเมฆขาวของจอแรก วงฟ้าจึงเปิดออกมาจากพื้นขาวนั้นพอดี */
+  background: #fff;
+}
+
+.hc-sky {
+  position: absolute;
+  inset: 0;
+  /* เปิดเป็นวงกลมจากหลังจอ — ปิดสนิทตอนยังไม่เข้าจอ */
+  clip-path: circle(0% at 50% 40%);
+  transition: clip-path 1.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hc-root[data-in='true'] .hc-sky {
+  clip-path: circle(150% at 50% 40%);
+}
+
+/* ลายรัศมีใหญ่กว่าจอ เพื่อหมุนได้โดยไม่เห็นขอบ · หมุนคลายเข้าที่ตอนเปิด แล้วหมุนช้า ๆ ต่อ */
+.hc-rays {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  width: 260vmax;
+  height: 260vmax;
+  translate: -50% -50%;
+  background: repeating-conic-gradient(from 0deg, #4f8ef5 0deg 7.5deg, #3a78ec 7.5deg 15deg);
+  rotate: -40deg;
+  scale: 0.6;
+  transition:
+    rotate 1.8s cubic-bezier(0.22, 1, 0.36, 1),
+    scale 1.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hc-root[data-in='true'] .hc-rays {
+  rotate: 0deg;
+  scale: 1;
+}
+.hc-rays::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: inherit;
+  animation: hc-spin 160s linear infinite;
+}
+@keyframes hc-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+/* แสงขาวนวลหลังจอ + ขอบมืดรอบนอก — วาบสว่างขึ้นทีหนึ่งพร้อมจอเปิดเครื่อง */
+.hc-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.95) 0, rgba(220, 234, 255, 0.7) 12%, rgba(160, 196, 255, 0) 40%),
+    radial-gradient(ellipse at 50% 40%, rgba(0, 0, 0, 0) 45%, rgba(22, 64, 190, 0.45) 100%);
+}
+.hc-root[data-in='true'] .hc-glow {
+  animation: hc-flash 1.4s ease-out 1s both;
+}
+@keyframes hc-flash {
+  0% {
+    filter: brightness(1);
+  }
+  25% {
+    filter: brightness(1.35);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+/* ย้อมพื้นด้วยสีสกิลของบท — แสงสีจาง ๆ จากฝั่งข้อความ ไล่เข้าหาฉาก เปลี่ยนสีนุ่ม ๆ ระหว่างบท */
+.hc-tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 70% 90% at var(--hc-tx, 25%) 50%, var(--hc-tint, transparent), transparent 70%);
+  mix-blend-mode: soft-light;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+.hc-root:not([data-ch='-1']) .hc-tint {
+  opacity: 0.9;
+}
+
+/*
+ * ข้อความของบทสกิล — ครึ่งจอฝั่งตรงข้ามกับฉาก 3D ตัวอักษรขาวบนพื้นฟ้า
+ *
+ * ทุกบรรทัดเป็นหน้ากาก (overflow hidden) ตัวข้อความข้างในเลื่อนขึ้นจากใต้หน้ากาก ไล่ทีละบรรทัด
+ * — เข้าเล่มอ่านเป็นเรื่อง ไม่ใช่ป๊อปทั้งก้อน · ตอนออก เลื่อนขึ้นต่อพ้นหน้ากากด้านบน
+ */
+.hc-head {
+  isolation: isolate;
+  /* เงาทั้งก้อน ไม่ใช่ text-shadow รายบรรทัด — บรรทัดเป็นหน้ากาก overflow hidden เงาจะถูกตัดเป็นกล่อง */
+  filter: drop-shadow(0 8px 28px rgba(10, 30, 120, 0.35));
+  padding-inline: clamp(24px, 7vw, 120px) clamp(24px, 4vw, 64px);
+  color: #fff;
+}
+.hc-head[data-side='right'] {
+  padding-inline: clamp(24px, 4vw, 64px) clamp(24px, 7vw, 120px);
+}
+.hc-line {
+  display: block;
+  overflow: hidden;
+  /* เผื่อหางตัวอักษร (g, y) — ไม่งั้นหางของบรรทัดที่เลื่อนหนีไปแล้วยังโผล่ขอบล่างหน้ากาก */
+  padding-bottom: 0.18em;
+}
+.hc-line > span {
+  display: block;
+  transform: translateY(135%);
+  transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hc-head[data-on='true'] .hc-line > span {
+  transform: none;
+}
+.hc-head[data-on='true'] .hc-kicker > span {
+  transition-delay: 0.05s;
+}
+.hc-head[data-on='true'] .hc-title > span {
+  transition-delay: 0.14s;
+}
+.hc-head[data-on='true'] .hc-status > span {
+  transition-delay: 0.26s;
+}
+/* คำอธิบายรอจนสื่อเสียบเสร็จ — ท่อนที่สองของเรื่อง */
+.hc-head[data-on='true'][data-phase='intro'] .hc-sub > span {
+  transform: translateY(135%);
+}
+.hc-head[data-on='true'][data-phase='play'] .hc-sub > span {
+  transform: none;
+  transition-delay: 0.1s;
+}
+.hc-head[data-on='false'] .hc-line > span {
+  transform: translateY(-135%);
+  transition-duration: 0.55s;
+}
+
+.hc-kicker {
+  font: 600 clamp(0.8rem, 1vw, 1rem) / 1.2 'Momo Trust Sans', system-ui, sans-serif;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+.hc-title {
+  margin: 0.25em 0 0.2em;
+  font: 400 clamp(3.4rem, 8.4vw, 9rem) / 0.92 'Momo Trust Display', 'Mona Sans', system-ui, sans-serif;
+}
+.hc-status {
+  font: 600 clamp(0.9rem, 1.2vw, 1.1rem) / 1.3 'Momo Trust Sans', system-ui, sans-serif;
+}
+.hc-status b {
+  font-weight: inherit;
+}
+.hc-dot {
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  margin-right: 0.6em;
+  border-radius: 50%;
+  /* ขอบขาววาดด้านใน (border) ไม่ใช่ box-shadow — เงานอกกล่องล้นหน้ากากบรรทัด โผล่เป็นเสี้ยววงกลม */
+  box-sizing: border-box;
+  border: 2px solid #fff;
+  background: var(--hc-c);
+  vertical-align: 0.05em;
+  animation: hc-pulse 1.1s ease-in-out infinite;
+}
+.hc-head[data-phase='play'] .hc-dot {
+  animation: none;
+}
+.hc-head[data-phase='intro'] .hc-play,
+.hc-head[data-phase='play'] .hc-wait {
+  display: none;
+}
+@keyframes hc-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+.hc-sub {
+  max-width: 26ch;
+  margin-top: 1.1em;
+  font: 500 clamp(1.1rem, 1.7vw, 1.6rem) / 1.4 'Momo Trust Sans', system-ui, sans-serif;
+}
+/* เส้นความคืบหน้าของบท — เขียน scaleX จากระยะเลื่อน */
+.hc-track {
+  display: block;
+  width: min(100%, 360px);
+  height: 3px;
+  margin-top: 2em;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.25);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.5s ease 0.3s;
+}
+.hc-head[data-on='true'] .hc-track {
+  opacity: 1;
+}
+.hc-bar {
+  display: block;
+  height: 100%;
+  background: #fff;
+  transform-origin: left;
+  transform: scaleX(0);
+}
+/* เลขบทใหญ่โปร่งหลังข้อความ — เลื่อนช้ากว่าตัวข้อความ (พารัลแลกซ์ด้วยเวลา) */
+.hc-num {
+  position: absolute;
+  top: 50%;
+  translate: 0 -58%;
+  font: 400 clamp(12rem, 30vw, 30rem) / 1 'Momo Trust Display', 'Mona Sans', system-ui, sans-serif;
+  color: transparent;
+  -webkit-text-stroke: 2px rgba(255, 255, 255, 0.22);
+  opacity: 0;
+  transform: translateY(12%) scale(0.94);
+  transition:
+    opacity 1s ease,
+    transform 1.6s cubic-bezier(0.22, 1, 0.36, 1);
+  z-index: -1;
+}
+.hc-head[data-side='left'] .hc-num {
+  left: clamp(8px, 3vw, 48px);
+}
+.hc-head[data-side='right'] .hc-num {
+  right: clamp(8px, 3vw, 48px);
+}
+.hc-head[data-on='true'] .hc-num {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hc-sky,
+  .hc-rays,
+  .hc-line > span,
+  .hc-num {
+    transition: none;
+  }
+  .hc-rays::after,
+  .hc-root[data-in='true'] .hc-glow {
+    animation: none;
+  }
+}
+
+/*
+ * ฉากจบ — ภาพเต็มจอหดเข้ากรอบ portal (ตามภาพอ้างอิงหน้าปกพอร์ตโฟลิโอ)
+ * --hc-w 0..1 เขียนจาก handler เลื่อน (ผูกระยะเลื่อน ย้อนได้) · ขอบกรอบเป็นสัดส่วนของจอจาก FRAME
+ * ใน HandScene ชุดเดียวกับระนาบตัดแขน/เมฆ · Canvas อยู่เหนือกรอบ ของที่ล้นกรอบจึงทับขอบขาวได้
+ */
+.hc-paper {
+  position: absolute;
+  inset: 0;
+  background-color: #f3f3f1;
+  background-image: radial-gradient(rgba(27, 34, 64, 0.16) 1.1px, transparent 1.5px);
+  background-size: 24px 24px;
+  opacity: var(--hc-w, 0);
+}
+.hc-portal {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(
+    calc(var(--hc-w, 0) * var(--f-t) * 100%) calc(var(--hc-w, 0) * var(--f-r) * 100%)
+      calc(var(--hc-w, 0) * var(--f-b) * 100%) calc(var(--hc-w, 0) * var(--f-l) * 100%) round
+      calc(var(--hc-w, 0) * var(--f-rad))
+  );
+}
+.hc-frame {
+  position: absolute;
+  top: calc(var(--hc-w, 0) * var(--f-t) * 100%);
+  right: calc(var(--hc-w, 0) * var(--f-r) * 100%);
+  bottom: calc(var(--hc-w, 0) * var(--f-b) * 100%);
+  left: calc(var(--hc-w, 0) * var(--f-l) * 100%);
+  box-sizing: border-box;
+  border: calc(var(--hc-w, 0) * var(--f-bd)) solid #fff;
+  border-radius: calc(var(--hc-w, 0) * var(--f-rad));
+  box-shadow: 0 24px 60px rgba(20, 40, 100, calc(var(--hc-w, 0) * 0.16));
+  pointer-events: none;
+}
+
+.hc-ptitle {
+  height: calc(var(--f-t) * 100%);
+  margin: 0;
+  padding-top: 1.5svh;
+  color: #1b2240;
+  font: 400 min(12.5vw, 17svh) / 1 'Momo Trust Display', 'Mona Sans', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+.hc-pline {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.12em;
+}
+.hc-pline > span {
+  display: block;
+  white-space: nowrap;
+  transform: translateY(115%);
+  transition: transform 1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* ตัว o = แคปซูลขอบหนา ยืดออกจากซ้ายหลังตัวหนังสือขึ้นมา */
+.hc-pill {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 1.55em;
+  height: 0.56em;
+  margin-left: 0.05em;
+  border: 0.14em solid currentColor;
+  border-radius: 1em;
+  transform-origin: left center;
+  scale: 0.36 1;
+  transition: scale 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.3s;
+}
+.hc-pfoot {
+  height: calc(var(--f-b) * 100%);
+  padding-inline: calc(var(--f-r) * 100vw + 8px);
+}
+.hc-badge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 0.7em 1.4em;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(20, 40, 100, 0.12);
+  color: #1b2240;
+  font: 500 clamp(0.75rem, 1vw, 0.95rem) / 1.25 'Momo Trust Sans', system-ui, sans-serif;
+  opacity: 0;
+  transform: translateY(40%);
+  transition:
+    opacity 0.6s ease,
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hc-badge b {
+  font: 400 1.45em / 1.1 'Momo Trust Display', 'Mona Sans', system-ui, sans-serif;
+}
+.hc-root[data-portal='true'] .hc-pline > span {
+  transform: none;
+}
+.hc-root[data-portal='true'] .hc-pill {
+  scale: 1 1;
+}
+.hc-root[data-portal='true'] .hc-badge {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.35s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hc-pline > span,
+  .hc-pill,
+  .hc-badge {
+    transition: none;
+  }
+}

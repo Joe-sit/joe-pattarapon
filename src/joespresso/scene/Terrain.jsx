@@ -1,6 +1,6 @@
-import { useEffect, useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { gradientTexture } from './utils'
+import { gradientTexture, useDisposable, useStaticSubtree } from './utils'
 
 /** พารามิเตอร์เนินหน้า — ใช้ร่วมกับ hillY() เพื่อวางของให้ติดผิวเนินพอดี */
 export const FRONT_HILL = { R: 10, sx: 1.15, sy: 0.7, cy: -7.0, cz: 0 }
@@ -38,9 +38,14 @@ export function Terrain() {
       ),
     [],
   )
+  useDisposable(rainbow)
+
+  // เนินไม่ขยับ — ตัดออกจาก matrix update ทุกเฟรม
+  const ref = useRef(null)
+  useStaticSubtree(ref)
 
   return (
-    <group>
+    <group ref={ref}>
       {/* เนินไกลสุด */}
       <Hill position={[-12, -5.2, -19]} radius={10} color="#F0C9A2" scale={[1.6, 0.62, 1]} />
       <Hill position={[11, -5.4, -18]} radius={10.5} color="#F3D3AE" scale={[1.5, 0.6, 1]} />
@@ -121,7 +126,7 @@ function SandDent({ map }) {
     return g
   }, [])
 
-  useEffect(() => () => geo.dispose(), [geo])
+  useDisposable(geo)
 
   return (
     <mesh geometry={geo} receiveShadow>
@@ -146,6 +151,7 @@ function FrontDome({ map }) {
     uv.needsUpdate = true
     return g
   }, [])
+  useDisposable(geo)
 
   return (
     <mesh

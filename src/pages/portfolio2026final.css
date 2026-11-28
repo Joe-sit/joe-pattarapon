@@ -1,0 +1,1015 @@
+/*
+ * Open Runde (github.com/lauridskern/open-runde — Inter ขอบมน, OFL · public/fonts/open-runde/OFL.txt)
+ * ฟอนต์หลักของหน้า — สี่น้ำหนักจริง 400/500/600/700 (เกินกว่านั้นเบราว์เซอร์ใช้ 700)
+ */
+@font-face {
+  font-family: 'Open Runde';
+  src: url('/fonts/open-runde/OpenRunde-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Open Runde';
+  src: url('/fonts/open-runde/OpenRunde-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Open Runde';
+  src: url('/fonts/open-runde/OpenRunde-Semibold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Open Runde';
+  src: url('/fonts/open-runde/OpenRunde-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── /2026-final ───────────────────────────────────────────────────────────
+   สีและค่าคงที่ของหน้านี้ ถอดจากไฟล์ Figma (BMS Design System, node 12716:2552)
+
+   ตั้งบนคลาส ไม่ใช่ :root — CSS ของ route หนึ่งยังค้างอยู่ทั้งแอปหลังเข้าหน้านั้น
+   ครั้งแรก ถ้าตั้งที่ :root มันจะไปย้อมทุกหน้าที่เหลือด้วย */
+.v3 {
+  --v3-blue: #265ada;
+  /* พื้นรอบการ์ดฉาก — เทาอ่อนแบบกระดาษ ตัดกับน้ำเงินในการ์ด ขอบการ์ดจึงชัดโดยไม่ต้องตีเส้น */
+  --v3-shell: #e8eaf0;
+  /* หมึกบนพื้นเทาของหน้า (นอกการ์ด) — ตัวหนังสือในฉากยังใช้ --v3-ink สีอ่อนเหมือนเดิม */
+  --v3-shell-ink: #16181f;
+  /* ความสูงแถบเมนู — แถบอยู่ในกรอบฉาก ค่านี้จึงเป็นแค่ความสูงของแถบ ไม่ใช่ขอบบนของกรอบ */
+  --v3-nav-h: clamp(56px, 9svh, 92px);
+  /**
+   * ระยะเว้นขอบของกรอบฉาก — ประกาศที่ระดับหน้า ไม่ใช่ที่ .v3-scene-frame
+   *
+   * แถบเมนูเป็นพี่น้องกับกรอบ ไม่ใช่ลูก ถ้าประกาศไว้ที่ตัวกรอบ แถบจะอ่านค่าไม่เจอแล้วตกไป
+   * ใช้ค่าสำรอง = แถบไม่ตรงกับขอบกรอบ (เจอมาแล้ว)
+   */
+  --v3-frame-gap: clamp(3px, 0.4vw, 7px);
+  /**
+   * กรอบสูงเลยขอบล่างของวิวพอร์ต — มุมล่างกับขอบล่างจึงอยู่นอกจอ ไม่มีใครเห็น
+   *
+   * อ่านเป็น "การ์ดที่ยาวต่อลงไป" ไม่ใช่การ์ดที่จบพอดีขอบจอ ทำด้วยการดันกล่องลงไปใต้จอ
+   * แล้วตัด clip-path ที่ระยะเดียวกัน ไม่ได้ใส่ inset ติดลบ (inset() ไม่รับค่าติดลบ)
+   */
+  --v3-frame-over: 16svh;
+  --v3-blue-deep: #2052cd;
+  --v3-green: #008254;
+  --v3-ink: #f0f0f0;
+  /**
+   * หมึกของหัวเรื่อง hero — ขาว ตามแบบ
+   * ฟ้าหลังหัวเรื่องถูกดันให้อิ่มสีพอที่ตัวขาวจะอ่านออก (ดู BG_* ใน NewHeroScene)
+   * แยกตัวแปรจาก --v3-ink ไว้เพราะพื้นหลังจอแรกเปลี่ยนได้อิสระจากจอที่เหลือ
+   */
+  --v3-hero-ink: #ffffff;
+  --v3-line: #d2d9d5;
+  --v3-muted: #666;
+  --v3-purple: #ad85fe;
+  --v3-orange: #fd5000;
+  --v3-sky: #158ffc;
+  --v3-sand: #e2d7cb;
+  --v3-grey: #d9d9d9;
+
+  /* ฟอนต์ของแบบ โหลดจาก Google Fonts ที่ index.html
+     ทั้งหัวเรื่องและเนื้อความเป็น Open Runde (400–700) — เดิม Momo Trust Display/Sans
+     (หัวเรื่อง 3D ของจอแรกยังเป็น typeface JSON ของ Momo — ดู sections/hero/Headline3D) */
+  --v3-display: 'Open Runde', 'Mona Sans', system-ui, sans-serif;
+  --v3-body: 'Open Runde', 'Mona Sans', system-ui, sans-serif;
+
+  background: var(--v3-shell);
+  transition: background-color 0.7s ease;
+  color: var(--v3-ink);
+  font-family: var(--v3-body);
+}
+
+/**
+ * แผ่นสี่เหลี่ยมเอียงที่ลอยอยู่หลังฉาก
+ *
+ * ในไฟล์ออกแบบเป็นสี่เหลี่ยมจัตุรัส 400px ที่ถูกหมุน 33.69° บีบแกนตั้ง 92% แล้ว skew
+ * แกนนอน −22.42° — ค่าชุดนี้คือการฉายภาพไอโซเมตริก เก็บไว้เป็นคลาสเดียวเพราะทุกแผ่น
+ * ใช้ค่าเดียวกันหมด ต่างกันแค่ตำแหน่ง
+ */
+.v3-iso {
+  position: absolute;
+  width: 400px;
+  height: 400px;
+  border: 1px solid #fff;
+  background: rgb(255 255 255 / 0.05);
+  transform: rotate(33.69deg) scaleY(0.92) skewX(-22.42deg);
+  pointer-events: none;
+}
+
+/**
+ * ราวจุดนำสายตา — ตัวเดียวกับหน้าแรก (components/AnchorNav) แต่ต้องใช้สีของหน้านี้
+ *
+ * ตัวราวแต่งด้วยโทเคนของ Tailwind (bg-panel / bg-brand-orange / text-ink) ซึ่งธีมหลัก
+ * ตั้งเป็นชุดสี Discord — ทับเฉพาะในขอบเขต .v3 ให้เป็นสีของแบบ BMS ไม่ต้องแก้ตัวคอมโพเนนต์
+ */
+.v3 {
+  --color-panel: #fff;
+  --color-brand-orange: var(--v3-orange);
+  --color-ink: #292a2e;
+}
+
+/* ในแบบเนื้อหาชิดขอบซ้ายที่ 64px เท่ากับตำแหน่งราวเดิม — ขยับเข้ามาไม่ให้ทับกระเบื้อง */
+.v3 .anchor-nav {
+  left: 24px;
+  /* เหนือชั้นฉากเรื่องเต็มจอ (WorkStory/BubbleTraveler z 51–55) — ไม่งั้นราวจางใต้เมฆ */
+  z-index: 56;
+}
+
+/**
+ * เคอร์เซอร์โหมดคอมเมนต์ — ลูกโป่งคำพูดแบบเดียวกับเครื่องมือคอมเมนต์ของ Figma
+ *
+ * เป็น data URI ของ SVG ตรง ๆ (ไฟล์ .cur ไม่รองรับ retina และ .svg แยกไฟล์ต้องรอโหลด
+ * ทำให้เห็นเคอร์เซอร์กระพริบตอนเข้าโหมด) ตัวเลขท้าย = จุดกด (hotspot) ที่ปลายหางลูกโป่ง
+ */
+.v3-comment-cursor {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M4 3h22a3 3 0 0 1 3 3v13a3 3 0 0 1-3 3H13l-9 8v-8a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z' fill='%23fd5000' stroke='%23ffffff' stroke-width='2'/%3E%3C/svg%3E")
+      4 29,
+    crosshair;
+}
+
+/* หัวข้อใหญ่ของแต่ละหน้าจอ — 96px ที่ 1440 แล้วย่อตามจอ */
+.v3-h1 {
+  font-family: var(--v3-display);
+  /* ย่อตามทั้งความกว้างและความสูงของจอ — จอเตี้ย (โน้ตบุ๊ก 13") ตัวอักษรที่คิดจาก vw
+     อย่างเดียวจะดันบรรทัดล่างหลุดออกนอกจอแรก */
+  /* ขนาดคิดจากความกว้างคอลัมน์จริง: บรรทัดยาวสุด ("Bring your") กว้าง 378px ที่ 75px
+     ในคอลัมน์ที่ใช้ได้ 516px = เหลือที่ทิ้งไป 27% ดันขึ้นให้เต็มคอลัมน์แล้วเหลือขอบหายใจ */
+  font-size: calc(clamp(36px, min(7.5vw, 12svh), 108px) * var(--v3-hl-size, 1));
+  line-height: 1;
+  /* ตัวเลขเดียวกับที่ตัวอักษร 3D ใช้เรียงตัว (--v3-track มาจากแผงจูน) กล่องที่ HTML วัดได้
+     กับบรรทัดที่วาดใน 3D จึงกว้างเท่ากันเสมอ ไม่ต้องไล่ให้ตรงกันสองที่ */
+  letter-spacing: var(--v3-track, -0.01em);
+}
+
+/**
+ * หัวเรื่องจอแรกเอียงรับมุมของฉาก 3D
+ *
+ * ฉากวางเป็นแนวทแยงพุ่งขึ้นไปทางขวา หัวเรื่องที่ตั้งฉากเป๊ะจึงดูหลุดออกมาเป็นคนละระนาบ
+ * เฉือน (skew) แทนการหมุน เพราะเส้นตั้งของตัวอักษรต้องยังตั้งอยู่ — ได้มุมรับกับฉากโดยที่
+ * ยังอ่านง่าย จุดหมุนอยู่ขอบขวาซึ่งเป็นขอบที่คอลัมน์นี้ชิด ฝั่งซ้ายจึงเป็นฝั่งที่ยกขึ้น
+ * และระยะห่างจากขอบจอด้านขวายังเท่าเดิมทุกบรรทัด
+ */
+/**
+ * กรอบที่ครอบฉาก 3D — เว้นขอบเป็นการ์ดตอนอยู่จอแรก แล้วกางออกเต็มจอตอนเลื่อนลง
+ *
+ * ระยะขอบกับรัศมีมุมผูกกับ --v3-frame-open ตัวเดียว (0 = การ์ด, 1 = เต็มจอ) JS จึงเขียน
+ * ตัวเลขเดียวต่อเฟรม ไม่ต้องคำนวณสี่ด้านเอง และค่าตั้งต้นยังอยู่ในชีทนี้ที่เดียว
+ *
+ * ตัวกล่องเต็มจอเสมอ แล้วตัดด้วย clip-path ไม่ใช่ขยับ inset จริง: ถ้ากล่องเปลี่ยนขนาด
+ * แคนวาส 3D ข้างในจะถูก resize ทุกเฟรมที่เลื่อน (จัดสรรบัฟเฟอร์ใหม่ทั้งผืน) การกางจึง
+ * เป็นการเปิดเผยฉากที่วาดอยู่แล้ว ไม่ใช่การยืดฉากให้ใหญ่ขึ้น
+ */
+.v3-scene-frame {
+  --v3-frame-open: 0;
+  position: fixed;
+  /**
+   * อยู่เหนือจอถัด ๆ ไป (ระดับ auto) แต่ต่ำกว่าแถบเมนู (30) ม่านเมฆ (50) เคอร์เซอร์ (55)
+   *
+   * เดิมปล่อยเป็น auto แล้วอาศัยว่า section ถัดไปเป็น positioned และอยู่หลังในเอกสาร
+   * จึงวาดทับให้เอง — แต่จอถัดไปเลื่อนเข้ามาจากขอบล่างตั้งแต่ยังไม่มีม่านเมฆ เห็นเป็นแถบ
+   * ขาวไล่ขึ้นมากินฉากทีละนิด และตอนม่านจาง ฉากที่ยังไม่ถูกทับหมดก็โผล่กลับมาด้านบน
+   * ตอนนี้จอแรกถูกปิดทีเดียวใต้ม่านที่ทึบแล้ว (ดู WIPE_FULL ใน Portfolio2026FinalPage)
+   */
+  z-index: 20;
+  /* ล้นลงไปใต้ขอบล่างของจอ — ดู --v3-frame-over */
+  inset: 0 0 calc(-1 * var(--v3-frame-over)) 0;
+  /**
+   * เว้นขอบซ้าย/ขวา/บนเท่ากัน แถบเมนูอยู่ *ใน* กรอบ ไม่ใช่บนพื้นหน้าเหนือกรอบ
+   *
+   * ของเดิมขอบบนเริ่มใต้แถบเมนู (--v3-nav-h) แถบจึงลอยอยู่บนพื้นเทาของหน้า พอย้ายแถบ
+   * เข้าไปในกรอบแล้วยังเว้นขอบบนเท่าความสูงแถบอยู่ จะเหลือพื้นเทาคาดอยู่เหนือกรอบเปล่า ๆ
+   * (ดู TopBar — มันจัดตัวเองให้อยู่ในกรอบด้วย --v3-frame-gap ชุดเดียวกัน)
+   *
+   * ขอบล่างตัดที่ระยะที่กล่องล้นออกไปพอดี มุมล่างจึงถูกโค้งอยู่ใต้จอ คนดูเห็นแต่ด้านข้าง
+   * สองด้านวิ่งต่อลงไป
+   */
+  clip-path: inset(
+    calc(var(--v3-frame-gap) * (1 - var(--v3-frame-open)))
+    calc(var(--v3-frame-gap) * (1 - var(--v3-frame-open)))
+    calc(var(--v3-frame-over) + var(--v3-frame-gap) * (1 - var(--v3-frame-open)))
+    round calc(clamp(30px, 3.4vw, 56px) * (1 - var(--v3-frame-open)))
+  );
+}
+
+/**
+ * ชิ้นส่วนของจอแรกไถลขึ้นมาเข้าที่ ต่อจากสปแลชที่ไถลขึ้นพ้นจอ — ทิศเดียวกันทั้งฉาก
+ *
+ * ซ่อนไว้ก่อนด้วย opacity ไม่ใช่ display: กล่องต้องมีขนาดจริงตั้งแต่เฟรมแรก ไม่งั้นผังจอ
+ * ขยับตอนของทยอยโผล่ และหัวเรื่อง 3D ที่วัดกรอบจาก DOM จะได้ตัวเลขผิด
+ *
+ * ดีเลย์รายชิ้นมาจาก --v3-in-delay ที่ตัวชิ้นเอง คลาสนี้จึงมีชุดเดียว ไม่ต้องไล่ nth-child
+ */
+.v3-in {
+  opacity: 0;
+}
+
+.v3-entered .v3-in {
+  /* quint.out: ท้ายทางช้าลงยาว ๆ ตาจึงอ่านว่าของเข้าที่เอง ไม่ใช่ถูกหยุด */
+  animation: v3-rise 1.05s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--v3-in-delay, 0ms);
+  /* บังคับให้ขึ้นเลเยอร์ของตัวเอง — ช่วงนี้เธรดหลักกำลังยุ่งกับอินโทรของฉาก 3D
+     ถ้าไม่ถูกโปรโมต การไถลจะไปเดินอยู่บนเธรดเดียวกันแล้วกระตุกตาม */
+  will-change: transform, opacity;
+}
+
+@keyframes v3-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 26px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/**
+ * จุด "กำลังพิมพ์" ของฟองแชตในช่วงเล่าเรื่อง (ดู sections/hero/ScrollTell)
+ *
+ * เป็นแอนิเมชันของ CSS ไม่ผูกกับระยะเลื่อน — คนพิมพ์ไม่ได้พิมพ์เร็วขึ้นเพราะผู้ชมเลื่อนจอ
+ * เร็วขึ้น ท่านี้ต้องเดินด้วยนาฬิกาของตัวเอง ต่างจากทุกอย่างอื่นในจอนั้น
+ *
+ * เด้งไม่พร้อมกัน (หน่วงกันทีละ 0.14s) — สามจุดที่ขึ้นลงพร้อมกันอ่านเป็นของกระพริบ
+ * ไม่ใช่การพิมพ์ ช่วงนิ่งท้ายรอบ (60%..100%) คือจังหวะหายใจของรอบถัดไป
+ */
+@keyframes v3-typing {
+  0%,
+  58%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  28% {
+    transform: translateY(-38%);
+    opacity: 1;
+  }
+}
+
+.v3-typing-dot {
+  animation: v3-typing 1.15s cubic-bezier(0.34, 0.8, 0.4, 1) infinite;
+}
+
+/**
+ * เคอร์เซอร์พิมพ์ในช่องถาม AI ของจอเล่าเรื่อง (ดู sections/hero/ScrollTell)
+ *
+ * กระพริบด้วยนาฬิกาของตัวเอง ไม่ใช่ตามระยะเลื่อน — คนพิมพ์ไม่ได้กระพริบเร็วขึ้นเพราะ
+ * ผู้ชมเลื่อนจอเร็วขึ้น ขั้นเป็น step ไม่ใช่ไล่จาง เพราะเคอร์เซอร์ของจริงตัดเปิด/ปิด
+ */
+@keyframes v3-caret {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.v3-caret {
+  animation: v3-caret 1.06s steps(1, end) infinite;
+}
+
+.v3-typing-dot:nth-child(2) {
+  animation-delay: 0.14s;
+}
+
+.v3-typing-dot:nth-child(3) {
+  animation-delay: 0.28s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v3-in,
+  .v3-entered .v3-in {
+    animation: none;
+    opacity: 1;
+  }
+
+  .v3-typing-dot {
+    animation: none;
+    opacity: 0.7;
+  }
+
+  .v3-caret {
+    animation: none;
+  }
+}
+
+/**
+ * LIFE กับฟองคำพูดโตตามตัวคูณเดียวกับตัวอักษร (--v3-hl-size จากแผงจูน)
+ *
+ * อัตราส่วนเทียบขนาดตัวอักษรคงที่: LIFE ≈ 0.98em, ฟอง ≈ 1.03em — ลากขนาดหัวเรื่องแล้ว
+ * ทั้งสามชิ้นโตพร้อมกัน ไม่ใช่ตัวหนังสือโตแล้วของประกอบเล็กค้าง
+ */
+.v3-hero-life {
+  height: calc(clamp(44px, 11.8svh, 118px) * var(--v3-hl-size, 1));
+  width: auto;
+}
+
+/* โซเชียล/ที่อยู่ของการ์ด hero — ขาวบนฟ้า เงานุ่มให้อ่านออกบนเมฆ */
+.v3-hero-social a {
+  filter: drop-shadow(0 1px 6px rgba(10, 40, 90, 0.35));
+}
+.v3-hero-social a:hover {
+  filter: none;
+}
+.v3-hero-based {
+  color: #fff;
+  font-family: var(--v3-display);
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 8px rgba(10, 40, 90, 0.35);
+}
+
+.v3-hero-bubble {
+  height: calc(clamp(46px, 12.4svh, 126px) * var(--v3-hl-size, 1));
+  width: calc(clamp(98px, 26.4svh, 270px) * var(--v3-hl-size, 1));
+}
+
+/* หัวเรื่องจอแรกเล็กกว่า .v3-h1 ของจออื่นนิดหนึ่ง (100 แทน 108 ที่ 1440) — เลื่อนคอลัมน์ไปชิดขวาได้โดยบรรทัด
+   "Bring your" ไม่ล้นขอบจอ */
+.v3-hero-skew .v3-h1 {
+  font-size: calc(clamp(34px, min(6.9vw, 11svh), 100px) * var(--v3-hl-size, 1));
+}
+
+.v3-hero-skew {
+  transform: skewY(-5deg);
+  transform-origin: 100% 50%;
+}
+
+/**
+ * ตัวอักษรหัวเรื่องแบบนูน — ความหนาสั้น ๆ สามชั้น ไม่ใช่แท่งหนาแบบตัวอักษรป้ายไฟ
+ *
+ * แต่ละชั้นจางลงเรื่อย ๆ (โปร่งใส ไม่ใช่สีทึบ) ขอบจึงละลายเข้ากับพื้นหลังแทนที่จะเป็นบล็อกทึบ
+ * ปิดท้ายด้วยเงานุ่มหนึ่งชั้นที่ถอยตัวอักษรออกจากฉาก — ได้มิติจากแสงเงา ไม่ได้จากความหนา
+ *
+ * ไม่ได้ใช้ตัวอักษรในฉาก 3D เพราะหน้านี้มีแคนวาส WebGL อยู่แล้วสองใบ (ดู MagneticText)
+ * เงาชั้นสุดท้ายเป็นเงาตกกระทบจริง ๆ ไว้ถอยตัวอักษรออกจากพื้นหลัง ไม่ใช่ส่วนของความหนา
+ */
+.v3-glyph3d {
+  display: inline-block;
+  /**
+   * ทำให้เส้นตัวอักษรหนาขึ้นด้วยเส้นขอบ ไม่ใช่ font-weight
+   *
+   * Momo Trust Display มีน้ำหนักเดียวคือ 400 สั่ง font-weight ไปก็ได้ตัวหนาปลอมที่เบราว์เซอร์
+   * ยืดเอาเอง (ขอบเบลอ ทรงเสีย) — วาดเส้นขอบสีเดียวกับตัวอักษรแล้วสั่งวาดเส้นก่อนไส้
+   * ได้ตัวที่หนาขึ้นจริงโดยรูปทรงยังเป็นของฟอนต์เดิมทุกเส้น หน่วยเป็น em จึงหนาตามขนาดจอ
+   */
+  -webkit-text-stroke: 0.045em currentColor;
+  paint-order: stroke fill;
+  transform-style: preserve-3d;
+  will-change: transform;
+  color: inherit;
+  text-shadow:
+    1px 1px 0 rgba(13, 52, 84, 0.5),
+    2px 2px 0 rgba(13, 52, 84, 0.34),
+    3px 3px 0 rgba(13, 52, 84, 0.2),
+    4px 6px 14px rgba(8, 34, 56, 0.22);
+}
+
+/* ป้ายกำกับหมวดที่ขอบซ้าย (SKILLS / WORKS / TOOLS) */
+.v3-eyebrow {
+  font-family: var(--v3-display);
+  font-size: 16px;
+  letter-spacing: 0.02em;
+}
+
+/**
+ * จอ What I Do — section ตัวเดียวกับหน้า /2026 แต่ต้องอยู่บนพื้นน้ำเงินของหน้านี้
+ *
+ * ตัว section อ่านสีจากตัวแปร --v2-* ทั้งหมด (ไม่มีค่าดิบใน JSX) การเปลี่ยนพื้นจึงเป็นการ
+ * ทับตัวแปรชุดนั้นเฉพาะตรงนี้ ไม่ใช่ไปแก้ธีมของ /2026 ซึ่งยังต้องดำเหมือนเดิม
+ * ต้องเจาะจงกว่า .v2-theme (จึงเขียนเป็น .v3 .v3-whatido) ไม่งั้นค่าดำชนะเพราะมาทีหลัง
+ *
+ * สีกระเบื้องสกิล (ฟ้า/ม่วง/ส้ม) กับพื้นเบจของกระเบื้องตัวละครไม่ใช่ตัวแปร — เป็นสีของแบรนด์
+ * ที่ต้องคงเดิมทั้งสองธีมอยู่แล้ว จึงไม่ถูกแตะ
+ */
+.v3 .v3-whatido {
+  --v2-bg: var(--v3-blue);
+  --v2-surface: var(--v3-blue-deep);
+  --v2-raise: var(--v3-blue-deep);
+  --v2-line: rgb(255 255 255 / 0.28);
+  --v2-ink: var(--v3-ink);
+  --v2-muted: rgb(240 240 240 / 0.7);
+}
+
+/**
+ * บีตสุดท้ายของอุโมงค์: ตัวละครทะลุกระจกออกมาหาจอ Works
+ *
+ * ทั้งบีตขับด้วยตัวแปรตัวเดียว --brk (0..1) ที่ ExperienceTunnel เขียนลงเลเยอร์ทุกเฟรม
+ * เศษกระจกสิบสี่ชิ้นกับรอยร้าวอ่านค่าเดียวกันผ่าน calc() — JS จึงแตะ DOM แค่จุดเดียว
+ * ต่อเฟรม ไม่ใช่ไล่เขียน transform ทีละชิ้น (สิบสี่ชิ้น x 60 เฟรม = งานที่ไม่ต้องทำเลย)
+ */
+.v3-glass {
+  pointer-events: none;
+}
+
+/* รอยร้าว: วิ่งออกจากจุดชนก่อนที่เศษจะปลิว จบหน้าที่ตัวเองตอนเศษเริ่มออก */
+.v3-crack {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* โผล่ช่วง brk 0-0.3 แล้วหายไป — ตัวคูณ 4.2 คือ 1/0.24 ให้ทึบเต็มก่อนเศษเริ่มขยับ */
+  /* เดินรอยร้าวช่วง 0-0.34 แล้วหายไปพร้อมกับที่เศษเริ่มปลิว */
+  opacity: clamp(0, calc(min(var(--brk, 0) * 4, (0.44 - var(--brk, 0)) * 10)), 1);
+  transform: scale(calc(0.82 + var(--brk, 0) * 0.18));
+}
+
+.v3-crack line {
+  stroke: #ffffff;
+  stroke-width: 0.35;
+  vector-effect: non-scaling-stroke;
+}
+
+/**
+ * เศษกระจกหนึ่งชิ้น — ภาพเต็มจอที่ถูก clip เหลือลิ่มเดียว
+ *
+ * ทุกชิ้นใช้ภาพเดียวกันและวางตำแหน่งเดียวกันเป๊ะ ตอน --brk = 0 จึงต่อกันเป็นภาพเดิม
+ * สนิทไม่มีรอยต่อ พอเริ่มขยับถึงเห็นว่าเป็นชิ้น ๆ — ถ้าแต่ละชิ้นครอปภาพของตัวเองมา
+ * ขอบจะไม่ตรงกันตั้งแต่เฟรมแรก
+ *
+ * ปลิวออกตามทิศของลิ่มตัวเอง (--a) โดยหมุนกลับหลัง translate เพื่อไม่ให้ภาพในชิ้นเอียงตาม
+ */
+.v3-shard {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  /* ค้างอยู่กับที่จนรอยร้าวเดินครบ (0.34) แล้วค่อยปลิว ชิ้นละจังหวะตาม --d */
+  transform: rotate(var(--a))
+    translateX(calc(max(0, var(--brk, 0) - 0.34 - var(--d, 0)) * 150vmax))
+    rotate(calc(-1 * var(--a)))
+    scale(calc(1 + max(0, var(--brk, 0) - 0.34 - var(--d, 0)) * 0.4));
+  opacity: clamp(0, calc(1 - max(0, var(--brk, 0) - 0.62) * 3.4), 1);
+  will-change: transform, opacity;
+}
+
+
+/*
+ * แถบบน (TopBar) — ถอดท่าจาก zoox.com: top โปร่งเต็มกว้าง → down หุบเป็นก้อนขาวกลางจอ → up คลี่เป็นแคปซูลขาว
+ * ทุกสถานะเป็นแถบเดียวกัน เปลี่ยนแค่ clip-path (inset สองข้าง) สีพื้น และความทึบของปุ่มข้าง — clip-path
+ * inset() ต่อ inset() ไล่ค่าได้ลื่น จึงไม่ใช้ none ในสถานะไหนเลย
+ */
+.v3-nav {
+  --nav-ease: cubic-bezier(0.2, 0, 0, 1);
+  --nav-text: #fff;
+  --nav-h: 64px;
+  --clip-x: 0px;
+  --clip-r: 16px;
+  position: fixed;
+  top: calc(var(--v3-frame-gap) + 20px);
+  left: 50%;
+  z-index: 30;
+  width: calc(100% - 2 * var(--v3-frame-gap) - 48px);
+  height: var(--nav-h);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+/*
+ * ตอนเลื่อนลง = ไม่เหลือแถบเลย (เดิมหุบเป็นก้อนแก้วเล็กกลางจอ มีหัวตัวละครในวงความคืบหน้า — ถอดออกแล้ว)
+ * หุบเข้ากลางพร้อมจางหาย · เลื่อนขึ้นแล้วคลี่กลับเป็นแคปซูลเต็มกว้าง
+ */
+.v3-nav[data-mode='down'] {
+  --nav-text: #1d2433;
+  --clip-x: calc(50% - 34px);
+  --clip-y: 9px;
+  --clip-r: 14px;
+}
+.v3-nav[data-mode='down'] .v3-nav-main {
+  opacity: 0;
+  pointer-events: none;
+}
+/* แคปซูลตอนเลื่อนขึ้น = เต็มกว้างของแถบ ไม่ตัดข้าง (ตัด 40px เดิมเฉือนปุ่มเมนูกับ Resume ครึ่งชิ้น)
+ * มุมเท่า border-radius ของแถบ เส้นขอบ (.v3-nav-shadow) จึงทับขอบที่ตัดพอดี */
+.v3-nav[data-mode='up'] {
+  --nav-text: #1d2433;
+  --clip-x: 0px;
+  --clip-r: 24px;
+}
+.v3-nav-main {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  align-items: center;
+  height: 100%;
+  padding: 0 8px;
+  border-radius: 24px;
+  background-color: transparent;
+  clip-path: inset(var(--clip-y, 0px) var(--clip-x) var(--clip-y, 0px) var(--clip-x) round var(--clip-r));
+  pointer-events: auto;
+  transition:
+    clip-path 0.6s var(--nav-ease),
+    background-color 0.25s var(--nav-ease),
+    opacity 0.3s var(--nav-ease);
+}
+.v3-nav[data-mode='top'] .v3-nav-main {
+  pointer-events: none;
+}
+.v3-nav[data-mode='top'] .v3-nav-main > * {
+  pointer-events: auto;
+}
+.v3-nav:not([data-mode='top']) .v3-nav-main {
+  background-color: #fff;
+}
+.v3-nav[data-mode='down'] .v3-nav-main {
+  background-color: rgb(255 255 255 / 0.5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+}
+/* เส้นขอบบาง + เงายาวจาง — โผล่เฉพาะตอนเป็นก้อน/แคปซูล */
+.v3-nav-shadow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid rgb(0 0 0 / 0.1);
+  border-radius: inherit;
+  box-shadow: 0 30px 30px rgb(23 33 30 / 0.03);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s var(--nav-ease);
+}
+.v3-nav[data-mode='up'] .v3-nav-shadow {
+  opacity: 1;
+}
+
+/* ลิงก์: ซ้ายสองชิดโลโก้ · โลโก้กลาง · ขวาสองชิดโลโก้ */
+.v3-nav-routes {
+  display: grid;
+  grid-template-areas: 'left logo right';
+  grid-template-columns: 1fr auto 1fr;
+  grid-column: 2;
+  align-items: center;
+  gap: 40px;
+  padding: 0 24px;
+}
+.v3-nav-routes > li {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+}
+.v3-nav-routes > li:first-child {
+  grid-area: logo;
+}
+.v3-nav-routes > li:nth-child(2) {
+  grid-area: left;
+  margin-left: auto;
+}
+.v3-nav-routes > li:nth-child(3) {
+  grid-area: right;
+  margin-right: auto;
+}
+.v3-nav-link {
+  color: var(--nav-text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 0.3s cubic-bezier(1, 0, 1, 0.6),
+    opacity 0.3s var(--nav-ease);
+}
+/*
+ * ป้ายพลิกม้วน (NavFlip) — ref eduardbodak.com .nav-button: ปกติพลิกหงายถอยขึ้น · ชั้น hover ม้วนขึ้นจากล่าง
+ * ป้ายสีเน้นบนชั้น hover เช็ดหายจากบนลงล่าง หน่วง 0.115s · ทุกอย่าง 0.4s ease เดียวกับต้นแบบ
+ */
+.v3-nf {
+  --nf-ease: cubic-bezier(0.5, 0.6, 0, 1);
+  display: grid;
+  perspective: 25rem;
+  transform-style: preserve-3d;
+}
+.v3-nf-default,
+.v3-nf-hover {
+  grid-area: 1 / 1;
+  display: grid;
+  pointer-events: none;
+  transition:
+    translate 0.4s var(--nf-ease),
+    rotate 0.4s var(--nf-ease),
+    opacity 0.25s var(--nf-ease);
+}
+.v3-nf-default {
+  transform-origin: center bottom;
+}
+.v3-nf-hover {
+  backface-visibility: hidden;
+  translate: 0 100% -12.5rem;
+  rotate: x -120deg;
+  transform-origin: center center;
+}
+.v3-nf-text {
+  grid-area: 1 / 1;
+  z-index: 1;
+  padding: 0.3rem 0.45rem 0.35rem;
+}
+.v3-nf-bg {
+  grid-area: 1 / 1;
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--nav-text) 16%, transparent);
+}
+.v3-nf-accent {
+  z-index: 2;
+  color: var(--v3-orange);
+  clip-path: inset(0);
+  transition: clip-path 0.4s var(--nf-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .v3-nav-link:is(:hover, :focus-visible) .v3-nf-default {
+    translate: 0 -35% -7.5rem;
+    rotate: x -54deg;
+    /* พลิกหงายแล้วเหลือเป็นแผ่นบางขีดผ่านป้ายใหม่ — จางหายระหว่างพลิก */
+    opacity: 0;
+    transition-delay: 0.05s;
+  }
+  .v3-nav-link:is(:hover, :focus-visible) .v3-nf-hover {
+    translate: 0;
+    rotate: x 0deg;
+    transition-delay: 75ms;
+  }
+  .v3-nav-link:is(:hover, :focus-visible) .v3-nf-accent {
+    clip-path: inset(0 0 100%);
+    transition-delay: 0.115s;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .v3-nf-default,
+  .v3-nf-hover,
+  .v3-nf-accent {
+    transition: none;
+  }
+}
+.v3-nav-logo {
+  position: relative;
+  display: block;
+  padding: 0 10px;
+  cursor: pointer;
+}
+/* ปุ่มข้าง (เมนู / Resume) — ตอนหุบเป็นก้อน จางออกก่อนแถบหุบ ตอนคลี่ค่อยโผล่ตามหลัง */
+.v3-nav-side {
+  transition:
+    opacity 0.35s var(--nav-ease) 0.15s,
+    color 0.3s cubic-bezier(1, 0, 1, 0.6);
+}
+.v3-nav[data-mode='down'] .v3-nav-side,
+.v3-nav[data-mode='down'] .v3-nav-link {
+  opacity: 0;
+  pointer-events: none;
+  transition-delay: 0s;
+  transition-duration: 0.2s;
+}
+
+/* ปุ่มเมนู: สี่เหลี่ยมมน 48px ขอบบางจาง ขีดสองเส้น — ชี้แล้วสองขีดเข้าหากัน ขอบเข้มขึ้น */
+.v3-nav-ham {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 48px;
+  height: 48px;
+  border-radius: 33.33%;
+  color: var(--nav-text);
+  cursor: pointer;
+}
+.v3-nav-ham::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid currentColor;
+  border-radius: inherit;
+  opacity: 0.2;
+  transition: opacity 0.25s var(--nav-ease);
+}
+.v3-nav-ham > span {
+  width: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transition: translate 0.25s var(--nav-ease);
+}
+.v3-nav-ham:hover::after {
+  opacity: 0.7;
+}
+.v3-nav-ham:hover > span:first-child {
+  translate: 0 2px;
+  transition-duration: 0.5s;
+}
+.v3-nav-ham:hover > span:nth-child(2) {
+  translate: 0 -2px;
+  transition-duration: 0.5s;
+}
+
+/* Resume: ปุ่มเข้มมน 16px — ชี้แล้วลูกศรขวาวิ่งออก ลูกศรใหม่เลื่อนเข้ามาทางซ้าย ตัวหนังสือขยับตาม */
+.v3-nav-cta {
+  display: flex;
+  align-items: stretch;
+  /* ทรงตั๋ว: สองชิ้นสูงเท่ากัน มุมมนเล็ก ชิดกันสนิท — มุมมนที่ชนกันกลายเป็นรอยบาก V บน-ล่างแบบตั๋วฉีก */
+  gap: 0;
+  height: 44px;
+  justify-self: end;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+/*
+ * ปุ่ม Resume แบบ ref aardvarkbookclub.com (.button-alt): แผ่นข้อความ + แผ่นลูกศร แยกกัน
+ * ชี้ (เข้าแต่ละครั้งเล่นหนึ่งรอบ): สองแผ่นเอียงสวนกัน (−4° · +18°) แล้วดีดกลับ · พื้นพองนิด · ตัวอักษรยุบเป็นคลื่นไล่ซ้ายไปขวา
+ */
+.v3-cta-pill {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 26px;
+}
+.v3-cta-pill-icon {
+  justify-content: center;
+  width: 46px;
+  padding: 0;
+}
+.v3-cta-bg {
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  background: #1d2433;
+}
+.v3-cta-label,
+.v3-cta-pill-icon > svg {
+  position: relative;
+  z-index: 1;
+}
+.v3-cta-ch {
+  display: inline-block;
+}
+@keyframes v3-cta-tilt-text {
+  35% {
+    rotate: -4deg;
+    translate: -3px -1px;
+  }
+}
+@keyframes v3-cta-tilt-icon {
+  35% {
+    rotate: 18deg;
+    translate: 6px -1px;
+  }
+}
+@keyframes v3-cta-pop {
+  35% {
+    scale: 1.047 1.08;
+  }
+}
+@keyframes v3-cta-ch {
+  40% {
+    translate: 0 30%;
+    scale: 0.55;
+    rotate: -14deg;
+  }
+}
+@media (hover: hover) and (pointer: fine) {
+  .v3-nav-cta:is(:hover, :focus-visible) .v3-cta-pill-text {
+    animation: v3-cta-tilt-text 0.55s cubic-bezier(0.34, 1.4, 0.5, 1);
+  }
+  .v3-nav-cta:is(:hover, :focus-visible) .v3-cta-pill-icon {
+    animation: v3-cta-tilt-icon 0.55s cubic-bezier(0.34, 1.4, 0.5, 1);
+  }
+  .v3-nav-cta:is(:hover, :focus-visible) .v3-cta-bg {
+    animation: v3-cta-pop 0.55s cubic-bezier(0.34, 1.4, 0.5, 1);
+  }
+  .v3-nav-cta:is(:hover, :focus-visible) .v3-cta-ch {
+    animation: v3-cta-ch 0.42s cubic-bezier(0.5, 0, 0.3, 1) calc(var(--i) * 28ms) both;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .v3-nav-cta .v3-cta-pill,
+  .v3-nav-cta .v3-cta-bg,
+  .v3-nav-cta .v3-cta-ch {
+    animation: none !important;
+  }
+}
+
+/*
+ * โลโก้ = แถบความคืบหน้า (ดู ProgressLogo): ชั้นจาง (ghost) + ชั้นทึบที่ clip ตามระยะเลื่อน
+ * นอกสถานะ down ชั้นจางทึบเต็ม — โลโก้ดูปกติ · ถึงท้ายหน้า ดอก (ตัว O) เด้งบานหนึ่งที
+ */
+.v3-logo {
+  fill: var(--nav-text);
+  overflow: hidden;
+}
+.v3-logo-ghost {
+  transition: opacity 0.4s var(--nav-ease);
+}
+.v3-nav[data-mode='down'] .v3-logo-ghost {
+  opacity: 0.22;
+}
+.v3-logo {
+  transition:
+    fill 0.3s cubic-bezier(1, 0, 1, 0.6),
+    opacity 0.4s var(--nav-ease),
+    scale 0.5s var(--nav-ease);
+}
+.v3-nav[data-mode='down'] .v3-logo {
+  opacity: 0.72;
+  scale: 0.82;
+}
+.v3-logo-bloom {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.5s cubic-bezier(0.34, 1.8, 0.5, 1);
+}
+.v3-nav[data-mode='down'] .v3-logo.is-done .v3-logo-bloom {
+  transform: scale(1.15);
+}
+
+/*
+ * ท่าโผล่ของแถบ: โลโก้ประกอบตัวก่อน (ProgressLogo) แล้วของที่เหลือกระเพื่อมจากโลโก้ออกไปหาขอบ
+ * (--d = ลำดับนับจากกลาง) — ลอยขึ้น + หายเบลอ + ชัดขึ้น · ถอดแอนิเมชันทิ้งตอน done
+ */
+.v3-nav[data-phase='pre'] .v3-nav-enter,
+.v3-nav[data-phase='logo'] .v3-nav-enter {
+  opacity: 0;
+  pointer-events: none;
+}
+.v3-nav[data-phase='in'] .v3-nav-enter {
+  animation: v3-nav-enter 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc((var(--d, 1) - 1) * 90ms);
+}
+@keyframes v3-nav-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -10px, 0);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+/* ของลอยรอบเครื่องใน What I do (sections/hero/BenchTokens) — ลอยขึ้นลงเบา ๆ */
+@keyframes v3-token-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+/* ลูกล้อของตัวชวนเลื่อนท้ายจอแรก (sections/hero/ScrollMouse) — แบบ animscroll ของ artpill.studio */
+@keyframes v3-mouse-wheel {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  10% {
+    opacity: 1;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+}
+
+/* section My Works (hero/WorkStory): แผงรายละเอียดงานโผล่หลังไทล์ขยายเต็มจอ */
+@keyframes ws-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* tooltip "About me" ตอนชี้ตัวละครใน hero (HeroAboutTip) — แคปซูลมืดตามเคอร์เซอร์ */
+.v3-about-tip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px 9px 12px;
+  border-radius: 999px;
+  background: #1d2433;
+  color: #fff;
+  font: 600 14px/1 var(--v3-body);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  scale: 0.85;
+  transition:
+    opacity 0.18s ease,
+    scale 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 10px 30px rgba(10, 30, 80, 0.25);
+}
+.v3-about-tip[data-on='true'] {
+  opacity: 1;
+  scale: 1;
+}
+.v3-about-tip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #5ad17a;
+  box-shadow: 0 0 0 3px rgba(90, 209, 122, 0.25);
+}
+
+/* NavMark: ช่องโลโก้ JOE กลางแถบ */
+.v3-nav-mark {
+  display: grid;
+  place-items: center;
+}
+
+/*
+ * บรรทัดสถานะของด่านโหลด (pages/Final2026Gate ThoughtLine) — อารมณ์ "AI กำลังคิด"
+ * แสงกวาดผ่านตัวหนังสือเป็นจังหวะ (ฟ้า → ม่วงของ hero วิ่งผ่านตัวเทาฟ้า)
+ */
+.v3-think-shimmer {
+  background: linear-gradient(90deg, #8fa3c4 0%, #8fa3c4 36%, #2f6be0 46%, #b44be0 54%, #8fa3c4 64%, #8fa3c4 100%);
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: v3-think-sweep 1.6s linear infinite;
+}
+@keyframes v3-think-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -160% 0;
+  }
+}
+
+
+/*
+ * "Joe is ready to meet you" — คำลอยขึ้นจากเบลอทีละคำ แล้วแสงกวาดผ่าน "ทั้งบรรทัด" ทีเดียว
+ * ไล่สีผืนเดียวกว้างสามเท่าบรรทัด (--lw) แต่ละคำเลื่อนผืนชดเชยตำแหน่งตัวเอง (--ox) — แสงเป็นแถบเดียวต่อเนื่องข้ามคำ
+ * แสงเป็นฟ้าอ่อน→ม่วง (ไม่ใช่ขาว — ขาวบนพื้นขาวตัวอักษรหายเป็นรู)
+ */
+.v3-ready-line {
+  display: inline-flex;
+  gap: 0.28em;
+}
+.v3-ready-word {
+  display: inline-block;
+  background: linear-gradient(90deg, #1f4fb8 0%, #1f4fb8 45.5%, #6f9bff 48%, #b44be0 50%, #6f9bff 52%, #1f4fb8 54.5%, #1f4fb8 100%);
+  background-size: calc(var(--lw, 200px) * 3) 100%;
+  background-position: calc(var(--lw, 200px) * -1.8 - var(--ox, 0px)) 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  opacity: 0;
+  animation:
+    v3-ready-in 620ms cubic-bezier(0.16, 1, 0.3, 1) both,
+    v3-ready-sweep 1200ms cubic-bezier(0.45, 0, 0.25, 1) 700ms both;
+}
+@keyframes v3-ready-in {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+@keyframes v3-ready-sweep {
+  from {
+    background-position: calc(var(--lw, 200px) * -1.8 - var(--ox, 0px)) 0;
+  }
+  to {
+    background-position: calc(var(--lw, 200px) * -0.2 - var(--ox, 0px)) 0;
+  }
+}
+
+/* dev mode (สวิตช์ในฉาก hero — src/newhero/devMode.ts): พื้นหน้ารอบการ์ดมืดตามฉากที่ย้อมเป็นกลางคืน */
+html[data-mode='dev'] .v3 {
+  --v3-shell: #0b0e17;
+  --v3-shell-ink: #e7eaf3;
+}

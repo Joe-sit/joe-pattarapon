@@ -1,0 +1,2734 @@
+import {
+  createContext,
+  Suspense,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react'
+import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber'
+import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js'
+import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js'
+import { Environment, Lightformer, MeshTransmissionMaterial, Text3D } from '@react-three/drei'
+import * as THREE from 'three'
+import { useNewHeroReady } from '@/newhero/ready'
+import { getTuner } from '@/newhero/tuner'
+import { introSince } from '@/newhero/intro'
+import { headlineReady } from './headlineReady'
+import { BubbleCrowd, CHROME, chromeOutline } from './bubbleCrowd'
+import { useTuner } from '@/newhero/tuner'
+import { bubbleTravel, setHeadBubbleLive, subscribeBubbleAway } from './bubbleTravel'
+import { WarmShaders } from '@/lib/WarmShaders'
+import { devMode, subscribeDevMode } from '@/newhero/devMode'
+
+/**
+ * หัวเรื่องจอแรกเป็นตัวอักษรสามมิติจริง — เรขาคณิตอัดขึ้นรูปจากเส้นของฟอนต์เดียวกับหน้า
+ *
+ * ทำไมไม่ยัดเข้าฉาก hero: หัวเรื่องอยู่ในคอลัมน์ที่ HTML จัดวางให้ (ฟองคำพูดกับคำว่า LIFE
+ * ยังไหลตามมันอยู่) ถ้าย้ายเข้าฉากต้องจำลองการจัดวางทั้งบล็อกจากกรอบภาพกล้องใหม่หมด
+ *
+ * ทั้งบล็อกใช้ "แคนวาสใบเดียว" ไม่ใช่ใบต่อบรรทัด — สามใบคือสามบริบท WebGL สามลูปวาด
+ * (วัดตอนอินโทร: 58.4fps เหลือ 45.6fps) ใบเดียวคุมได้ทั้งสามบรรทัดเพราะแต่ละบรรทัดบอก
+ * กรอบของตัวเองผ่าน context แล้วแคนวาสวางกลุ่มตัวอักษรตามกรอบนั้น
+ *
+ * วาดตามคำขอ (demand): ขอเฟรมเมื่อเมาส์ขยับหรือตัวอักษรยังไม่เข้าที่ นอกนั้นหยุดสนิท
+ */
+
+export const FONT = '/fonts/momo-trust-display.json'
+
+
+
+/** มิลลิวินาทีหลังฉากพร้อม ที่จะยอมขึ้นหัวเรื่องแม้อินโทรจะยังไม่รายงานว่าจบ */
+const FALLBACK_AFTER = 9000
+
+/** ต่ำกว่านี้ถือว่าเข้าที่แล้ว — ใช้ตัดสินว่าหยุดวาดได้ */
+const REST = 0.0015
+
+/**
+ * เมาส์ล่าสุดในพิกัดหน้าจอ และกรอบของแคนวาสบนหน้าจอ
+ *
+ * แคนวาสหัวเรื่องปิดรับเมาส์ (ฉาก 3D ข้างหลังต้องได้ hover ของมันเอง) r3f จึงไม่มีทางรู้
+ * ตำแหน่งเมาส์ — state.pointer ค้างที่ศูนย์ตลอด ต้องอ่านจาก window เองแล้วแปลงพิกัดเอง
+ */
+const mouse = { x: -1e5, y: -1e5 }
+const fieldRect = { left: 0, top: 0 }
+
+/**
+ * ตัวสั่งวาดของแคนวาสหัวเรื่อง — แคนวาสนี้วาดแบบตามสั่ง (frameloop demand)
+ *
+ * เก็บไว้ระดับโมดูลเพราะคนที่ยิงตำแหน่งเข้ามาอยู่นอกฉาก (ดู driveHeroPointer)
+ * ถ้าไม่สั่งวาด ตัวอักษรจะไม่ขยับจนกว่าจะมีเหตุอื่นทำให้วาด
+ */
+let kickHeadline: (() => void) | null = null
+
+/**
+ * ยิงตำแหน่ง "เมาส์" เข้ามาจากข้างนอก — พิกเซลบนจอ
+ *
+ * เคอร์เซอร์นำสายตาของหน้า (cursorguide/) ใช้ช่องนี้ขับแม่เหล็กของหัวเรื่องตอนมันกวาด
+ * ผ่านตัวอักษร ฟิสิกส์ที่ดูดตัวอักษรอ่านตำแหน่งเมาส์อยู่แล้ว จึงเป็นทางเดียวกันเป๊ะ
+ * ไม่ใช่เอฟเฟกต์แยกที่ทำให้คล้าย
+ */
+export function driveHeroPointer(x: number, y: number) {
+  if (Math.abs(x - mouse.x) < 0.5 && Math.abs(y - mouse.y) < 0.5) return
+  mouse.x = x
+  mouse.y = y
+  kickHeadline?.()
+}
+
+type LineBox = {
+  id: number
+  /** ข้อความของบรรทัด — ว่างถ้าเป็นงานเวกเตอร์ */
+  text: string
+  /** ไฟล์ SVG ที่จะอัดขึ้นรูป (ฟองคำพูด / คำว่า LIFE) */
+  src?: string
+  /** ทำเป็นกระจกใส (ฟองคำพูด) — เห็นฉากข้างหลังทะลุ ไม่ใช่แผ่นทึบสีเดียว */
+  glass?: boolean
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+/**
+ * ค่าที่ลากได้จากแผงจูน (DEV) — นอกโหมด dev แผงอ่านค่าตั้งต้นอย่างเดียว ค่าจึงนิ่งเท่าเดิม
+ *
+ * ส่งเป็น prop ลงไปในแคนวาส ไม่ใช่ผ่าน context: r3f สร้าง React root แยก คอนเท็กซ์ของ
+ * ต้นไม้นอกแคนวาสไม่ไหลเข้าไปข้างใน
+ */
+type Cfg = {
+  rad: number
+  push: number
+  lift: number
+  ease: number
+  depth: number
+  bevT: number
+  bevS: number
+  seg: number
+  rough: number
+  emis: number
+  /** ความสว่างของเนื้อวัสดุ (สีเทากลาง) — ต่ำกว่า 1 เพื่อให้แสงรวมยังไม่ตันขาว จึงเหลือไล่เงา */
+  alb: number
+  enter: number
+  rise: number
+  stag: number
+  /** เอียงตัวอักษรทั้งชุด (เรเดียน) — ท่าตั้งต้น แรงแม่เหล็กบวกทับค่านี้ */
+  rot: [number, number, number]
+  /** ระยะห่างตัวอักษร (em) — ตัวเดียวกับ letter-spacing ของฝั่ง HTML */
+  track: number
+}
+
+type Field = {
+  /** บรรทัดที่ลงทะเบียนไว้ พร้อมกรอบของมันเทียบกับบล็อก */
+  lines: Map<number, LineBox>
+  /** บอกบล็อกว่ากรอบเปลี่ยน — ให้ React วาดรายการบรรทัดใหม่ */
+  bump: () => void
+  /** ถึงคิวโชว์หรือยัง — แคนวาสขึ้นก่อนหน้านี้นานแล้ว (ดู Headline3DField) */
+  live: boolean
+  /**
+   * เวลา (performance.now) ที่ถึงคิวโชว์ — Infinity = ยังไม่ถึง
+   *
+   * ท่าเปิดตัวของทุกตัวอักษรนับจากจุดนี้ ไม่ใช่จากตอนที่ mesh ของมันถูกสร้าง ซึ่งเป็นจังหวะ
+   * ที่ขึ้นกับว่าเธรดหลักว่างตอนไหน — ตาจับได้ทันทีว่าตัวอักษร "ทยอยโหลด" มาไม่เท่ากัน
+   */
+  revealAt: number
+}
+
+const FieldCtx = createContext<Field | null>(null)
+
+/**
+ * ท่าโผล่ของหัวเรื่อง: ทีละตัว ไล่ซ้ายไปขวาข้ามทุกบรรทัด (LIFE ท้ายสุด) — จางขึ้น ยกขึ้นจากต่ำกว่านิด ถอยลึกนิด
+ * แล้วพลิกตั้งจากท่าเอนหลัง เข้าที่แบบชะลอยาว (quart out)
+ * dur = วินาทีต่อตัว · stag = ระยะห่างระหว่างตัว · drop/back = ยกขึ้น/ถอยลึก (em) · tilt = มุมเอนหลังตอนเริ่ม (เรเดียน)
+ */
+const APPEAR = { dur: 0.9, stag: 0.045, drop: 0.45, back: 0.8, tilt: 1.15 }
+
+/** ลำดับเริ่มของบรรทัดนี้ = จำนวนตัวอักษรของบรรทัดที่อยู่ก่อนหน้า (บนลงล่าง แล้วซ้ายไปขวา) — ท่าโผล่ไหลต่อกันข้ามบรรทัด */
+function charsBefore(lines: Map<number, LineBox>, box: LineBox) {
+  let n = 0
+  lines.forEach((b) => {
+    if (b.src) return
+    if (b.top < box.top - 1 || (Math.abs(b.top - box.top) <= 1 && b.left < box.left)) n += b.text.replace(/\s/g, '').length
+  })
+  return n
+}
+/** จำนวนตัวอักษรทั้งหัวเรื่อง — LIFE (รูป) โผล่ต่อจากตัวสุดท้าย */
+function charsAll(lines: Map<number, LineBox>) {
+  let n = 0
+  lines.forEach((b) => {
+    if (!b.src) n += b.text.replace(/\s/g, '').length
+  })
+  return n
+}
+
+/** เลขประจำบรรทัด — เพิ่มทีละหนึ่งตอน mount ไม่ต้องพึ่งข้อความซ้ำกันได้ */
+let nextId = 0
+
+type GlyphSpec = {
+  ch: string
+  /** ตำแหน่งซ้ายของตัวอักษร (em) */
+  x: number
+  /** ความกว้างของตัวเอง (em) — ใช้หาใจกลางตอนคิดแรงแม่เหล็ก */
+  ha: number
+  /** ความกว้างรวมของบรรทัด (em) — เท่ากันทุกตัว ใช้ตอนบีบให้พอดีกล่อง */
+  w: number
+}
+
+/**
+ * ตัวอักษรหนึ่งตัว — ขยับเองทุกเฟรม ไม่ผ่าน state ของ React
+ *
+ * รับเมาส์มาเป็นพิกัด "ในกลุ่ม" (หน่วย em ของตัวอักษร) แล้วเทียบกับตำแหน่งตัวเองตรง ๆ
+ * ทุกตัวอยู่บนระนาบ z เดียวกัน จึงไม่ต้องยิงเรย์
+ */
+function Glyph({
+  spec,
+  local,
+  onMoving,
+  startAt,
+  cfg,
+}: {
+  spec: GlyphSpec
+  local: { x: number; y: number }
+  onMoving: (moving: boolean) => void
+  /** เวลา (performance.now) ที่ตัวนี้ควรเริ่มไถลขึ้น */
+  startAt: number
+  cfg: Cfg
+}) {
+  const ref = useRef<THREE.Group>(null)
+  const mat = useRef<THREE.MeshStandardMaterial>(null)
+  const albedo = useMemo(() => new THREE.Color().setScalar(cfg.alb), [cfg.alb])
+  const cur = useRef({ x: 0, y: 0, z: 0 })
+  /**
+   * เวลาที่เริ่มไถลจริง — ช้ากว่าตารางได้ถ้ารูปทรงยังสร้างไม่เสร็จ แต่เร็วกว่าไม่ได้
+   *
+   * ตารางเดียวกันทั้งบรรทัด ระยะเหลื่อมจึงเท่ากันทุกตัว ไม่ใช่ตามจังหวะที่เธรดหลักว่าง
+   * ซึ่งไม่สม่ำเสมอ — ตาจับได้ว่าบางตัวมาติดกันแล้วบางตัวทิ้งช่วง
+   */
+  const from = useRef(Math.max(startAt, performance.now()))
+  const { invalidate } = useThree()
+  /* คิวเปิดตัวมาทีหลังการสร้าง mesh — ตั้งเวลาเริ่มใหม่ตอนคิวมาถึง ไม่ใช่ตอน mount */
+  useEffect(() => {
+    /*
+     * ลำดับของตัวนี้ (startAt) เปลี่ยนได้ตอนบรรทัดอื่นเพิ่งลงทะเบียน (ลำดับไหลข้ามบรรทัด — ดู charsBefore)
+     * ถ้าท่าเริ่มเล่นไปแล้ว ห้ามตั้งเวลาใหม่ — ไม่งั้นตัวที่โผล่แล้วหายวาบแล้วโผล่ใหม่พร้อมกันทุกบรรทัด
+     */
+    const now = performance.now()
+    if (!Number.isFinite(from.current) || now < from.current) from.current = Math.max(startAt, now)
+    invalidate()
+  }, [startAt, invalidate])
+
+  useFrame(() => {
+    const g = ref.current
+    if (!g) return
+    /**
+     * ยังไม่ถึงคิว = นอนนิ่ง ไม่ขอเฟรม
+     *
+     * ตัวอักษรถูกปั้นไว้ล่วงหน้าตั้งแต่ก่อนฉากเริ่มเล่น ถ้าปล่อยให้ยังเดินท่าอยู่ มันจะขอเฟรม
+     * ทุกเฟรมตลอดช่วงอินโทร (แคนวาสตัวนี้วาดตามคำขอ) = แย่งเวลากับฉากที่กำลังเล่นเปล่า ๆ
+     */
+    if (!Number.isFinite(from.current)) {
+      onMoving(false)
+      return
+    }
+    const t = (performance.now() - from.current) / (APPEAR.dur * 1000)
+    const rising = t < 1
+    const e = t < 0 ? 0 : t > 1 ? 1 : t
+    // ท่าโผล่ (APPEAR): เข้าที่แบบชะลอยาว — ตัวชัดก่อนเข้าที่นิด (ความทึบเร็วกว่าท่าเคลื่อน)
+    const k = 1 - (1 - e) ** 4
+    if (mat.current) mat.current.opacity = 1 - (1 - Math.min(1, e * 1.6)) ** 2
+    // ใจกลางตัวอักษรอยู่สูงจากเส้นฐานราวหนึ่งในสามของขนาด และเยื้องไปครึ่งตัวทางขวา
+    const dx = spec.x + spec.ha * 0.5 - local.x
+    const dy = 0.36 - local.y
+    const dist = Math.hypot(dx, dy)
+    let tx = 0
+    let ty = 0
+    let tz = 0
+    if (dist < cfg.rad) {
+      // แรงโตแบบกำลังสอง — ไกลแทบไม่ขยับ ใกล้ใจกลางถึงดีดออก เหมือนสนามแม่เหล็กจริง
+      const f = (1 - dist / cfg.rad) ** 2
+      const len = dist || 1
+      tx = (dx / len) * cfg.push * f
+      ty = (dy / len) * cfg.push * f
+      tz = cfg.lift * f
+    }
+    const c = cur.current
+    c.x += (tx - c.x) * cfg.ease
+    c.y += (ty - c.y) * cfg.ease
+    c.z += (tz - c.z) * cfg.ease
+    g.position.set(spec.x + c.x, c.y - (1 - k) * APPEAR.drop, c.z - (1 - k) * APPEAR.back)
+    // เอียงตามทิศที่ถูกผลัก ตัวอักษรจึงหันสันข้างให้เห็นความหนา ไม่ใช่เลื่อนแบน ๆ
+    // ท่าตั้งต้นจากแผงจูน + การเอียงตามทิศที่ถูกผลัก (สันข้างจะได้หันมารับแสง)
+    g.rotation.set(
+      cfg.rot[0] - (1 - k) * APPEAR.tilt + (-c.y / cfg.push) * 0.16,
+      cfg.rot[1] + (c.x / cfg.push) * 0.2,
+      cfg.rot[2],
+    )
+    onMoving(
+      rising || Math.abs(c.x - tx) + Math.abs(c.y - ty) + Math.abs(c.z - tz) > REST || tz > 0,
+    )
+  })
+
+  return (
+    <group ref={ref}>
+      <Text3D
+        font={FONT}
+        size={1}
+        /** ความลึกของการอัดขึ้นรูป — สัดส่วนของขนาด ตัวจึงหนาเท่ากันทุกขนาดจอ */
+        height={cfg.depth}
+        bevelEnabled
+        /**
+         * bevelSize ดันขอบออกนอกเส้นเดิม = เส้นอ้วนขึ้นจริง ไม่ใช่ตัวหนาปลอม
+         *
+         * ฟอนต์ Display มีน้ำหนักเดียว (400) จะขอตัวหนากว่านี้จากไฟล์ไม่ได้ — ยืดขอบออกแทน
+         * ได้เส้นที่หนาขึ้นโดยรูปทรงยังเป็นของฟอนต์เดิม และขอบที่ยืดออกกลายเป็นสันรับแสง
+         */
+        bevelThickness={cfg.bevT}
+        bevelSize={cfg.bevS}
+        bevelSegments={2}
+        curveSegments={cfg.seg}
+      >
+        {spec.ch}
+        {/**
+         * ขาวจริง ไม่ใช่ขาวหม่น
+         *
+         * toneMapped ปิด: ตัวแมปโทนของเรนเดอเรอร์กดค่าสว่างลงมาให้อยู่ในช่วงที่ "ถ่ายรูปสวย"
+         * ผลคือหน้าที่รับแสงเต็มที่ไม่เคยถึงขาวสุด อ่านเป็นเทาอ่อนบนพื้นฟ้า (ตัว LIFE ที่ปิดไป
+         * ก่อนหน้าจึงสดกว่าทั้งที่เป็นวัสดุแบบเดียวกัน)
+         *
+         * เรืองในตัวเป็นสีขาวด้วย ไม่ใช่ฟ้าอ่อน — สีฟ้าที่บวกเข้าไปคือเหตุที่ทำให้ดูหม่น
+         *
+         * แต่เนื้อวัสดุต้องไม่ขาวสุด (alb < 1): toneMapped ปิดแล้วทุกค่าที่เกิน 1 ถูกตัดเป็นขาว
+         * เท่ากันหมด แสงรวมที่นี่ ~2.7 เท่า ถ้า albedo = 1 ทุกด้านตันขาว = แบนไม่มีเงา
+         * ตั้ง albedo ให้ด้านหน้าที่รับแสงเต็มพอดีถึงขาวสุด ด้านข้าง/ด้านล่างจึงเหลือไล่เงา
+         */}
+        <meshStandardMaterial
+          ref={mat}
+          color={albedo}
+          roughness={cfg.rough}
+          metalness={0}
+          emissive="#ffffff"
+          emissiveIntensity={cfg.emis}
+          /* แผงไฟที่อบไว้ให้กระจกใช้ เป็นแสงรอบทิศ ถ้าเปิดจะกลบเงาของตัวอักษรจนเรียบ */
+          envMapIntensity={0}
+          toneMapped={false}
+          transparent
+          opacity={0}
+        />
+      </Text3D>
+    </group>
+  )
+}
+
+/**
+ * วัดความกว้างของแต่ละตัวจากฟอนต์จริง แล้ววางเรียงเอง
+ *
+ * ปล่อยให้ Text3D วาดทั้งบรรทัดทีเดียวไม่ได้ เพราะต้องขยับ "รายตัว" — จึงต้องรู้ระยะก้าว
+ * ของแต่ละตัว (advance width) ซึ่งอยู่ในไฟล์ฟอนต์อยู่แล้ว
+ */
+/**
+ * ไฟล์ฟอนต์ใบเดียวที่ทุกบรรทัดใช้ร่วมกัน — ของเดิมแต่ละบรรทัด fetch เองคนละคำขอ
+ *
+ * ไฟล์เดียวกันสี่คำขอพร้อมกันตอน mount ซึ่งเป็นจังหวะที่คับคั่งอยู่แล้ว (เบราว์เซอร์อาจ
+ * ยุบให้เหลือหนึ่งหรือไม่ก็ได้ ขึ้นกับ cache header) แคชสัญญาไว้ที่นี่ชัดกว่า
+ */
+let fontData: Promise<{ glyphs: Record<string, { ha: number }>; resolution: number }> | null = null
+function loadFont() {
+  fontData ??= fetch(FONT).then((r) => r.json())
+  return fontData
+}
+
+function useLayout(text: string, track: number) {
+  const [specs, setSpecs] = useState<GlyphSpec[] | null>(null)
+  useEffect(() => {
+    let alive = true
+    void loadFont()
+      .then((data: { glyphs: Record<string, { ha: number }>; resolution: number }) => {
+        if (!alive) return
+        const scale = 1 / data.resolution
+        let x = 0
+        const out: GlyphSpec[] = []
+        for (const ch of text) {
+          const ha = data.glyphs[ch]?.ha ?? data.resolution * 0.5
+          if (ch !== ' ') out.push({ ch, x, ha: ha * scale, w: 0 })
+          // ระยะห่างตัวอักษรตัวเดียวกับ letter-spacing ของ .v3-h1 (มาจากแผงจูนทั้งคู่)
+          // ไม่บวกด้วย บรรทัดจะกว้างไม่เท่ากล่อง HTML แล้วตัวท้ายพ้นคอลัมน์ออกไป
+          x += ha * scale + track
+        }
+        for (const g of out) g.w = x
+        setSpecs(out)
+      })
+    return () => {
+      alive = false
+    }
+  }, [text, track])
+  return specs
+}
+
+/**
+ * บรรทัดหนึ่งบรรทัดในแคนวาสรวม — วางตามกรอบที่ฝั่ง HTML วัดมาให้
+ *
+ * พิกัดฉาก: กล้องออร์โธ zoom 1 = หนึ่งหน่วยต่อหนึ่งพิกเซล ศูนย์อยู่กลางแคนวาส แกน y ชี้ขึ้น
+ */
+function Line({ box, cfg }: { box: LineBox; cfg: Cfg }) {
+  const specs = useLayout(box.text, cfg.track)
+  const field = useContext(FieldCtx)
+  const live = field?.live ?? false
+  /** เวลาอ้างอิงของบรรทัด — ตารางเริ่มไถลนับจาก "คิวโชว์" ไม่ใช่จากตอน mount */
+  const lineStart = field?.revealAt ?? Infinity
+  const { invalidate, size } = useThree()
+  const moving = useRef(new Set<number>())
+  /** เมาส์ในพิกัดของกลุ่มตัวอักษร — ออบเจกต์เดียวที่ทุกตัวในบรรทัดอ่านร่วมกัน */
+  const local = useMemo(() => ({ x: -1e5, y: -1e5 }), [])
+
+  /** ตัวไหนยังขยับอยู่ก็ขอเฟรมถัดไป — ไม่มีใครขยับแล้วปล่อยให้แคนวาสหยุด */
+  const report = useMemo(
+    () => (i: number) => (m: boolean) => {
+      if (m) moving.current.add(i)
+      else moving.current.delete(i)
+      if (moving.current.size) invalidate()
+    },
+    [invalidate],
+  )
+
+  useEffect(() => {
+    if (specs) invalidate()
+  }, [specs, invalidate])
+
+  /**
+   * ทยอยประกอบตัวอักษรทีละตัวต่อเฟรม ไม่ใช่ทั้งบรรทัดในเฟรมเดียว
+   *
+   * TextGeometry ถูกสร้างตอน mount และเป็นงานบนเธรดหลัก สิบกว่าตัวพร้อมกันคือเฟรมเดียว
+   * ยาวเกือบครึ่งวินาที (วัดได้ 484ms) ซึ่งเห็นเป็นการกระตุกของฉากที่กำลังเล่นอยู่ —
+   * แบ่งเป็นตัวละเฟรมแล้วงานก้อนเดียวกันกลายเป็นงานเล็ก ๆ ที่แทรกระหว่างเฟรมได้
+   */
+  const [ready, setReady] = useState(0)
+  const readyRef = useRef(0)
+  readyRef.current = ready
+  useEffect(() => {
+    if (!specs) return undefined
+    /**
+     * ยังไม่ถึงคิวโชว์ = ปั้นทั้งบรรทัดรวดเดียว
+     *
+     * นี่คือเหตุผลทั้งหมดที่ย้ายการ mount แคนวาสมาไว้ก่อนอินโทร: ช่วงนั้นเธรดหลักว่าง
+     * (ผ้าคลุมของด่านโหลดยังบังอยู่ อินโทรถูกกดไว้) งานก้อน 484ms จึงไม่ชนกับอะไร แล้วถึง
+     * คิวโชว์ทุกตัวก็พร้อมอยู่แล้ว — ไม่มีการทยอยปั้นให้เห็นเป็น "ตัวอักษรค่อย ๆ โหลด" อีก
+     */
+    if (!live) {
+      setReady(specs.length)
+      invalidate()
+      return undefined
+    }
+    let id = 0
+    /* ปั้นไว้ครบแล้ว (ตอนก่อนถึงคิว) = ไม่ต้องเริ่มนับใหม่ — เริ่มจากศูนย์จะถอดตัวที่ปั้นแล้วออกแล้วใส่ใหม่ ท่าโผล่เริ่มซ้ำ */
+    let n = readyRef.current
+    if (n >= specs.length) return undefined
+    /**
+     * ต่อคิวตอนเธรดหลักว่าง (requestIdleCallback) ไม่ใช่ทุกเฟรม — ถ้าเบียดเข้าไปทุกเฟรม
+     * งานสร้างรูปทรงจะไปแย่งเวลากับฉากที่กำลังเล่นอยู่พอดี เบราว์เซอร์ที่ไม่มี API นี้
+     * (Safari รุ่นเก่า) ถอยไปใช้ timeout สั้น ๆ ซึ่งให้ผลใกล้กัน
+     */
+    const idle: (cb: () => void) => number =
+      'requestIdleCallback' in window
+        ? (cb) => (window as unknown as { requestIdleCallback: (c: () => void) => number }).requestIdleCallback(cb)
+        : (cb) => window.setTimeout(cb, 32)
+    const step = () => {
+      n += 1
+      setReady(n)
+      invalidate()
+      if (n < specs.length) id = idle(step)
+    }
+    id = idle(step)
+    return () => {
+      if ('cancelIdleCallback' in window) {
+        ;(window as unknown as { cancelIdleCallback: (h: number) => void }).cancelIdleCallback(id)
+      } else {
+        clearTimeout(id)
+      }
+    }
+  }, [specs, invalidate, live])
+
+  /**
+   * ขนาด: กล่อง HTML สูงเท่า font-size (line-height เป็น 1) สเกลจึงเท่าขนาดฟอนต์ตรง ๆ
+   * แล้วบีบอีกชั้นถ้าบรรทัดยาวเกินกล่อง — ความกว้างจาก advance ของฟอนต์ไม่รวม kerning
+   * ที่เบราว์เซอร์ใช้ บรรทัดจึงกว้างกว่าของ HTML ราวหนึ่งในห้า
+   */
+  /**
+   * รายงานตัวเองว่า "ยังปั้นไม่ครบ" ให้ด่านโหลดรู้ (ดู ./headlineReady)
+   *
+   * นับเป็นรายบรรทัด ไม่ใช่รายตัวอักษร — ด่านแค่ต้องรู้ว่ายังมีงานค้างอยู่ไหม
+   */
+  const built = specs !== null && ready >= specs.length
+  useEffect(() => {
+    if (built) return undefined
+    headlineReady.pending += 1
+    return () => {
+      headlineReady.pending -= 1
+    }
+  }, [built])
+
+  const wide = specs?.at(-1)?.w ?? 1
+  const fit = box.width > 0 ? Math.min(1, box.width / (wide * box.height)) : 1
+  const s = box.height * fit
+  // กรอบจาก HTML นับจากมุมซ้ายบนของแคนวาส แปลงเป็นพิกัดฉาก (ศูนย์กลางจอ, y ชี้ขึ้น)
+  /**
+   * ยึดขอบซ้าย — ทุกบรรทัดเริ่มที่แนวเดียวกัน นั่นคือแนวที่ตาใช้อ่านว่าตรงหรือไม่ตรง
+   *
+   * ความกว้างของบรรทัดที่คิดจาก advance ของฟอนต์ไม่เท่ากับที่เบราว์เซอร์วัด (เรื่อง kerning)
+   * ส่วนต่างจึงถูกปล่อยให้ไปโผล่ที่ปลายบรรทัด ซึ่งไม่มีแนวให้เทียบอยู่แล้ว
+   */
+  const originX = box.left - size.width / 2
+  const originY = size.height / 2 - box.top - box.height + s * 0.2
+  const lineOrder = field ? charsBefore(field.lines, box) : 0
+
+  useFrame(() => {
+    local.x = (mouse.x - fieldRect.left - box.left) / s
+    local.y = (fieldRect.top + box.top + box.height - mouse.y - s * 0.2) / s
+  })
+
+  if (!specs) return null
+  return (
+    <group position={[originX, originY, 0]} scale={s} visible={live}>
+      {specs.slice(0, ready).map((spec, i) => (
+        <Glyph
+          key={`${spec.ch}-${i}`}
+          spec={spec}
+          local={local}
+          onMoving={report(i)}
+          startAt={lineStart + (lineOrder + i) * APPEAR.stag * 1000}
+          cfg={cfg}
+        />
+      ))}
+    </group>
+  )
+}
+
+/**
+ * ลงทะเบียนกรอบของชิ้นหนึ่งเข้าบล็อก แล้วเฝ้าไว้ว่ากรอบเปลี่ยนเมื่อไร
+ *
+ * วัดด้วยพิกัดผัง (offset*) ไม่ใช่ getBoundingClientRect — บล็อกหัวเรื่องถูก skew อยู่
+ * (.v3-hero-skew) rect ที่ได้จะเป็น "กล่องครอบของรูปที่เอียงแล้ว" ซึ่งบวมตามความกว้าง
+ * (บรรทัดกว้าง 378 วัดได้สูง 108 ทั้งที่ตัวอักษรสูง 75) ของ 3D จะถูกวางผิดขนาดผิดที่ทันที
+ * ส่วน offset* เป็นค่าจากผังก่อนแปลงร่าง และแคนวาสอยู่ในกล่องที่ถูก skew ใบเดียวกัน
+ * ภาพที่วาดออกมาจึงเอียงตามไปเองพร้อมของ HTML
+ */
+function useBox(el: HTMLElement | null, text: string, src?: string, glass?: boolean) {
+  const field = useContext(FieldCtx)
+  const id = useMemo(() => nextId++, [])
+  const pad = useTuner().hlPad
+  useEffect(() => {
+    if (!el || !field) return undefined
+    const read = () => {
+      const host = el.closest('[data-headline-field]')
+      if (!(host instanceof HTMLElement)) return
+      let left = 0
+      let top = 0
+      let node: HTMLElement | null = el
+      while (node && node !== host) {
+        left += node.offsetLeft
+        top += node.offsetTop
+        node = node.offsetParent instanceof HTMLElement ? node.offsetParent : null
+      }
+      if (node !== host) return
+      const next: LineBox = {
+        id,
+        text,
+        src,
+        glass,
+        // เทียบกับมุมซ้ายบนของบล็อก แล้วบวกขอบเผื่อ — แคนวาสกางเกินบล็อกไปด้านละ PAD
+        left: left + pad,
+        top: top + pad,
+        width: el.offsetWidth,
+        height: el.offsetHeight,
+      }
+      const prev = field.lines.get(id)
+      if (
+        prev &&
+        prev.left === next.left &&
+        prev.top === next.top &&
+        prev.width === next.width &&
+        prev.height === next.height
+      ) {
+        return
+      }
+      field.lines.set(id, next)
+      field.bump()
+    }
+    read()
+    void document.fonts?.ready.then(read)
+    const ro = new ResizeObserver(read)
+    ro.observe(el)
+    window.addEventListener('resize', read)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', read)
+      field.lines.delete(id)
+      field.bump()
+    }
+  }, [el, field, id, text, src, pad])
+}
+
+/**
+ * ฉากหลังที่กระจก "มองเห็น"
+ *
+ * MeshTransmissionMaterial หักเหจากบัฟเฟอร์ที่มันถ่ายฉากของตัวเองลงไป แคนวาสนี้มีแต่หัวเรื่อง
+ * ฉาก hero อยู่คนละแคนวาสข้างหลัง (คนละ WebGL context) ถ้าไม่บอกฉากหลัง กระจกจะหักเห
+ * ความว่าง = ก้อนมืด — ป้อนสีฟ้าอ่อนของท้องฟ้าหลังหัวเรื่องให้มันแทน
+ */
+export const GLASS_BG = new THREE.Color('#a6d4f4')
+/** ความหนาของฟิล์มบาง (นาโนเมตร) — ช่วงนี้ให้รุ้งครบวงตามมุมมอง */
+export const IRID_RANGE: [number, number] = [180, 720]
+
+/**
+ * ฟองคำพูดแบบกรอบโครเมียม + ของเล่นล้นกรอบ (ภาพอ้างอิงหน้าโปรโมโค้ด ดู ./bubbleCrowd)
+ * ปิดแล้วได้ฟองแก้วใสกับของฟิสิกส์ข้างในแบบเดิมคืน
+ */
+const CHROME_BUBBLE = false
+/** ทรายกับของเล่นในฟองแก้ว (BubbleLife) — ปิดไว้ ฟองเหลือแก้วใสเปล่า ๆ เปิดคืนได้ทั้งชุด */
+const BUBBLE_TOYS = false
+
+/**
+ * งานเวกเตอร์ที่ถูกอัดขึ้นรูป — ฟองคำพูดกับคำว่า LIFE ใช้ไฟล์ SVG ใบเดียวกับที่ HTML เคยวาง
+ *
+ * ไม่ได้ปั้นทรงขึ้นใหม่: สีกับรูปร่างมาจากไฟล์ต้นฉบับทั้งหมด สิ่งที่เพิ่มคือความหนาเท่านั้น
+ * (ไฟล์เดิมยังถูกใช้เป็นตัววัดกรอบในผัง HTML อยู่ แค่ถูกซ่อนไม่ให้เห็น)
+ */
+/** สูงตัวพิมพ์ใหญ่ของฟอนต์หัวเรื่องเทียบขนาด 1 · สูงตัวอักษรในไฟล์ LIFE (หน่วย viewBox) */
+const CAP_H = 0.72
+const LIFE_GLYPH = 84
+
+/**
+ * LIFE แบบตัวอักษรลูกโป่ง (balloon bubble letters — ref "KEEP GOING" อ้วนกลมเนื้อยาง) แทนชิ้นอัดขอบมน
+ *
+ * ทรง: แต่ละตัว (ชิ้นสีเดียวกันในไฟล์) วาดลงหน้ากาก → เบลอ (box blur 3 รอบ ≈ เกาส์) = สนาม f 0..1
+ *   ขอบ = เส้นระดับ f = T (เบลอแล้วมุมทั้งนูน/เว้ามนเอง แบบยางเป่าลม)
+ *   สูงโดม = หน้าตัดวงกลมจากระยะถึงขอบ (ระยะ chamfer ของทรงอ้วนสุด แล้วเกลี่ย) — เส้นหนาเท่าไรก็ป่องกลม ไม่เป็นที่ราบ
+ *   ตารางจุดละเอียด ~1 ช่องต่อพิกเซลบนจอ สองหน้า (หน้า/หลัง) — ทรงคิดใน vertex shader จากโดม + ความชัน (ไม่สร้างใหม่ทุกเฟรม)
+ * ท่าโผล่ = เติมลม: ทีละตัว L · i · F · E ต่อจากตัวอักษรตัวสุดท้ายของหัวเรื่อง — แบนบางตัวเล็ก → ป่องอ้วนเกินนิดแล้วเด้งเข้าที่
+ *   inf คุม สูงโดม + ความอ้วน (T ลด) + ขนาดตัว · ขอบนุ่มด้วย alphaToCoverage (MSAA ของแคนวาส)
+ */
+const BALLOON_LIFE = true
+/**
+ * ทรงตัวอักษรของลูกโป่ง: 'font' = ฟอนต์หัวเรื่อง (Momo Trust Display — มนอ้วนอยู่แล้ว เป่าแล้วเป็น bubble letter แบบ ref)
+ * 'svg' = ตัว LIFE พิกเซลในไฟล์เดิม (เป่าแล้วเป็นก้อนเหลี่ยม ๆ) — สีตามตัวเดียวกันทั้งสองแบบ
+ */
+const BAL_GLYPHS: 'font' | 'svg' = 'font'
+/**
+ * คำที่วนต่อจาก "to" (word pool): เป่าลมเข้าทีละตัว → ค้าง → ปล่อยลมออก (ลอยหนีขึ้น) → คำถัดไปเป่าเข้า
+ * ทุกคำมีตัวละคร: eyes = ตัวที่มีตาโต (ตัวกลม O/C หรือ E) · fuzz = ตัวกำมะหยี่ (i ตัวเล็ก — จุดมีตาจิ๋ว)
+ */
+type BalWord = { text: string; eyes: number; fuzz: number }
+const BAL_WORDS: readonly BalWord[] = [
+  { text: 'LiFE', eyes: 3, fuzz: 1 },
+  { text: 'PRODUCT', eyes: 2, fuzz: 4 },
+  { text: 'SOLUTiON', eyes: 1, fuzz: 5 },
+  { text: 'iMPACT', eyes: 4, fuzz: 0 },
+]
+/**
+ * สีวนตามตัว — สี่สีแรก = สีตามตัวของ LIFE เดิม (hero-life.svg: L เขียว · i ม่วง · F ฟ้าเขียว · E ส้ม) อิ่มขึ้นแบบห่วงยางเป่าลม
+ * ต่อด้วยชมพู · เหลือง · ฟ้า (ref Summer DAYDREAM) สำหรับคำที่ยาวกว่าสี่ตัว
+ */
+/** ตัวที่ช่องในตัวแคบ/ขาชิดกัน — พองเต็มที่แล้วช่องปิด (R กลายเป็น A) */
+const BAL_TIGHT = 'RAEBKMNWS'
+const BAL_COLORS = ['#34C25F', '#B07AE6', '#1FC3D8', '#FF7442', '#FF5FA8', '#FFC21F', '#3F86FF']
+const BAL = {
+  /** ช่องตารางต่อหน่วย SVG */
+  res: 1.2,
+  /** รัศมีเบลอ (หน่วย SVG) — มุมมนแบบยางเป่าลม + พองเส้นออกได้มาก (ตัวฟอนต์ช่องกว้างพอ แขน E/F ยังไม่หลอม) */
+  blur: 7.5,
+  /** เส้นระดับขอบ: ตอนแฟบ (เส้นบางเท่าฟอนต์) → ตอนป่องเต็ม (อ้วนจนช่องในตัวเหลือแคบ แบบ ref) */
+  tThin: 0.5,
+  tFat: 0.155,
+  /** ตัวช่องแคบ (BAL_TIGHT) พองน้อยกว่า */
+  tTight: 0.27,
+  /** รัศมีโค้งของโดม (หน่วย SVG — ราวครึ่งความหนาเส้น) · สูงโดม (หน่วย SVG) */
+  radius: 30,
+  height: 21,
+  /** ระยะห่างตัวอักษร (× ขนาดฟอนต์ — ติดลบ = ชิดกัน ป่องแล้วเกือบชนแบบ ref) */
+  track: -0.015,
+  /** วินาทีต่อตัว · ระยะห่างระหว่างตัว */
+  dur: 1.25,
+  stag: 0.14,
+  /** ค้างให้อ่านหลังป่องครบ (วินาที) · ปล่อยลมต่อตัว · ระยะห่างระหว่างตัวตอนปล่อยลม */
+  hold: 2.6,
+  outDur: 0.55,
+  outStag: 0.06,
+}
+/**
+ * จัดวางแบบเล่น ๆ (ref "KEEP GOING" — ตัวเอียงคนละทาง สูงต่ำไม่เท่ากัน ขนาดไม่เท่ากัน เบียดกัน)
+ * rot องศา (ในกลุ่มที่พลิกแกน y — บวก = ตามเข็มบนจอ) · dx/dy หน่วย SVG (dy บวก = ลง) · s ขนาด
+ */
+/* dz = ซ้อนหน้า/หลัง (หน่วย SVG) — ตัวที่เบียดกันจมเข้าหากันแบบลูกโป่งอัดกัน ไม่ใช่วางเรียงแยกกัน (ref DAYDREAM) */
+/* วนตามลำดับตัว (คำยาวสุด 8 ตัว) — สี่ตัวแรก = ท่าของ LIFE */
+const BAL_ARR = [
+  { rot: -10, dx: 4, dy: 5, dz: 0, s: 1.08 },
+  { rot: 12, dx: 2, dy: -9, dz: 9, s: 1.04 },
+  { rot: -6, dx: -3, dy: 6, dz: -7, s: 0.98 },
+  { rot: 10, dx: -4, dy: -4, dz: 4, s: 1.08 },
+  { rot: -8, dx: -2, dy: 7, dz: -4, s: 1.02 },
+  { rot: 9, dx: -4, dy: -6, dz: 7, s: 1.06 },
+  { rot: -11, dx: -5, dy: 4, dz: -3, s: 0.97 },
+  { rot: 7, dx: -6, dy: -5, dz: 6, s: 1.05 },
+]
+/**
+ * เล่นกับเคอร์เซอร์ (สปริงหน่วงน้อย — ดุ๊กดิ๊กก่อนนิ่ง): ใกล้ตัวไหน ตัวนั้นถอยหนี เอนหนี ป่องขึ้นนิด
+ * คลิกโดนตัว = กระดอนแบบเยลลี่ (บีบ-ยืด) + กระโดดนิด + หมุนนิด
+ */
+const BAL_PLAY = { reach: 1.3, push: 11, lean: 0.24, puff: 0.1, k: 230, c: 13, jelly: 7, hop: 70 }
+type BalSpring = { x: number; y: number; r: number; p: number; q: number; vx: number; vy: number; vr: number; vp: number; vq: number }
+const springOf = (): BalSpring => ({ x: 0, y: 0, r: 0, p: 0, q: 0, vx: 0, vy: 0, vr: 0, vp: 0, vq: 0 })
+const _balW = new THREE.Vector3()
+/** r = รัศมีคร่าว ๆ ของตัว (หน่วย SVG — ระยะที่เคอร์เซอร์เริ่มดันตัว/คลิกโดน) · top = กลางชิ้นบนสุดเทียบกลางตัว (จุดของ i) */
+type BalLetter = { geo: THREE.BufferGeometry; color: string; fat: number; cx: number; cy: number; r: number; hw: number; hh: number; top: { x: number; y: number } }
+
+/** box blur แนวเดียว (รัศมี r ช่อง) ของตาราง w × h ลง out */
+function boxBlur(src: Float32Array, out: Float32Array, w: number, h: number, r: number, horiz: boolean) {
+  const n = horiz ? w : h
+  const m = horiz ? h : w
+  const k = 1 / (2 * r + 1)
+  for (let j = 0; j < m; j++) {
+    const at = (i: number) => (horiz ? j * w + i : i * w + j)
+    let acc = 0
+    for (let i = -r; i <= r; i++) acc += src[at(Math.min(n - 1, Math.max(0, i)))]
+    for (let i = 0; i < n; i++) {
+      out[at(i)] = acc * k
+      acc += src[at(Math.min(n - 1, i + r + 1))] - src[at(Math.max(0, i - r))]
+    }
+  }
+}
+
+type StyledPath = THREE.ShapePath & { userData?: { style?: { fill?: string } } }
+type BalLoop = { outer: THREE.Vector2[]; holes: THREE.Vector2[][] }
+/** fat = เส้นระดับขอบตอนป่องเต็มของตัวนี้ (ตัวช่องแคบพองน้อยกว่า ไม่งั้นช่องปิดอ่านไม่ออก) */
+type BalSrc = { color: string; loops: BalLoop[]; fat?: number }
+const loopsOf = (shapes: THREE.Shape[]) => shapes.map((sh) => ({ outer: sh.getPoints(16), holes: sh.holes.map((hh) => hh.getPoints(16)) }))
+
+/** ตัวจากไฟล์ SVG: ชิ้นสีเดียวกัน = ตัวเดียวกัน (พิกัด SVG แกน y ชี้ลง) */
+function svgLetters(data: { paths: StyledPath[] }): BalSrc[] {
+  const groups = new Map<string, THREE.Shape[]>()
+  for (const path of data.paths) {
+    const fill = path.userData?.style?.fill
+    if (!fill || fill === 'none') continue
+    const list = groups.get(fill) ?? []
+    list.push(...SVGLoader.createShapes(path))
+    groups.set(fill, list)
+  }
+  return [...groups].map(([color, shapes]) => ({ color, loops: loopsOf(shapes) }))
+}
+
+/** ตัวจากฟอนต์หัวเรื่อง: วางเรียงตาม advance ของฟอนต์ แล้วย่อ/ขยายเข้ากรอบของไฟล์ LIFE (w × h หน่วย viewBox) · แกน y กลับเป็นชี้ลง */
+function fontLetters(json: unknown, frame: { x: number; y: number; w: number; h: number }, text: string): BalSrc[] {
+  const font = new FontLoader().parse(json as Parameters<FontLoader['parse']>[0])
+  const SIZE = 100
+  const res = (json as { resolution: number }).resolution || 1000
+  const glyphs = (json as { glyphs: Record<string, { ha: number }> }).glyphs
+  let x = 0
+  const raw = [...text].map((ch, i) => {
+    const loops = loopsOf(font.generateShapes(ch, SIZE)).map((l) => ({
+      outer: l.outer.map((p) => new THREE.Vector2(p.x + x, -p.y)),
+      holes: l.holes.map((hh) => hh.map((p) => new THREE.Vector2(p.x + x, -p.y))),
+    }))
+    x += ((glyphs[ch]?.ha ?? res * 0.6) * SIZE) / res + BAL.track * SIZE
+    /* หลายชิ้น (i): ชิ้นบนสุด (จุด) ยกขึ้นนิด — พองแล้วยังมีช่องกับก้าน */
+    if (loops.length > 1) {
+      const top = loops.reduce((a, b) => (Math.min(...b.outer.map((p) => p.y)) < Math.min(...a.outer.map((p) => p.y)) ? b : a))
+      for (const p of top.outer) p.y -= SIZE * 0.1
+    }
+    return { color: BAL_COLORS[i % BAL_COLORS.length], loops, fat: BAL_TIGHT.includes(ch.toUpperCase()) ? BAL.tTight : BAL.tFat }
+  })
+  const bb = new THREE.Box2()
+  for (const l of raw) for (const lp of l.loops) for (const p of lp.outer) bb.expandByPoint(p)
+  const sz = bb.getSize(new THREE.Vector2())
+  /* ชิดซ้าย + ฐานตรงขอบล่างของกรอบ (ต่อจาก "to" แบบ LIFE เดิม) · สูงเกินกรอบได้นิด (จุดของ i ยื่นขึ้นไป) */
+  const k = Math.min(frame.w / sz.x, (frame.h * 1.3) / sz.y)
+  const ox = frame.x - bb.min.x * k
+  const oy = frame.y + frame.h - bb.max.y * k
+  const map = (p: THREE.Vector2) => p.set(p.x * k + ox, p.y * k + oy)
+  for (const l of raw) for (const lp of l.loops) {
+    lp.outer.forEach(map)
+    lp.holes.forEach((hh) => hh.forEach(map))
+  }
+  return raw
+}
+
+function buildBalloon(src: BalSrc[]): BalLetter[] {
+  const out: BalLetter[] = []
+  const M = BAL.blur * 2.2
+  const r = Math.max(1, Math.round(BAL.blur * BAL.res))
+  for (const { color, loops, fat = BAL.tFat } of src) {
+    const bb = new THREE.Box2()
+    for (const l of loops) for (const p of l.outer) bb.expandByPoint(p)
+    const x0 = bb.min.x - M
+    const y0 = bb.min.y - M
+    const W = Math.ceil((bb.max.x - bb.min.x + 2 * M) * BAL.res)
+    const H = Math.ceil((bb.max.y - bb.min.y + 2 * M) * BAL.res)
+    const cv = document.createElement('canvas')
+    cv.width = W
+    cv.height = H
+    const ctx = cv.getContext('2d', { willReadFrequently: true })
+    if (!ctx) continue
+    ctx.setTransform(BAL.res, 0, 0, BAL.res, -x0 * BAL.res, -y0 * BAL.res)
+    ctx.fillStyle = '#fff'
+    /* แต่ละชิ้น (เช่นจุดกับก้านของ i) เบลอแยกแล้วรวมด้วยค่ามากสุด — พองแล้วไม่หลอมติดกันข้ามช่อง */
+    const f = new Float32Array(W * H)
+    const one = new Float32Array(W * H)
+    const tmp = new Float32Array(W * H)
+    for (const l of loops) {
+      ctx.clearRect(-x0, -y0, W / BAL.res, H / BAL.res)
+      ctx.beginPath()
+      for (const ring of [l.outer, ...l.holes]) {
+        ring.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)))
+        ctx.closePath()
+      }
+      ctx.fill('evenodd')
+      const px = ctx.getImageData(0, 0, W, H).data
+      for (let i = 0; i < W * H; i++) one[i] = px[i * 4 + 3] / 255
+      for (let pass = 0; pass < 3; pass++) {
+        boxBlur(one, tmp, W, H, r, true)
+        boxBlur(tmp, one, W, H, r, false)
+      }
+      for (let i = 0; i < W * H; i++) if (one[i] > f[i]) f[i] = one[i]
+    }
+    /* ระยะถึงขอบของทรงอ้วนสุด (chamfer 1/√2 สองรอบ, หน่วย SVG) → เกลี่ย → หน้าตัดวงกลม z = √(t(2 − t)), t = ระยะ/รัศมี */
+    const dist = new Float32Array(W * H)
+    const BIG = 1e6
+    for (let i = 0; i < W * H; i++) dist[i] = f[i] >= fat ? BIG : 0
+    const D1 = 1 / BAL.res
+    const D2 = Math.SQRT2 / BAL.res
+    const relax = (i: number, j: number, di: number, dj: number, c: number) => {
+      const ii = i + di
+      const jj = j + dj
+      if (ii < 0 || jj < 0 || ii >= W || jj >= H) return
+      const v = dist[jj * W + ii] + c
+      if (v < dist[j * W + i]) dist[j * W + i] = v
+    }
+    for (let j = 0; j < H; j++)
+      for (let i = 0; i < W; i++) {
+        relax(i, j, -1, 0, D1)
+        relax(i, j, 0, -1, D1)
+        relax(i, j, -1, -1, D2)
+        relax(i, j, 1, -1, D2)
+      }
+    for (let j = H - 1; j >= 0; j--)
+      for (let i = W - 1; i >= 0; i--) {
+        relax(i, j, 1, 0, D1)
+        relax(i, j, 0, 1, D1)
+        relax(i, j, 1, 1, D2)
+        relax(i, j, -1, 1, D2)
+      }
+    const rs = Math.max(1, Math.round(1.5 * BAL.res))
+    for (let pass = 0; pass < 2; pass++) {
+      boxBlur(dist, tmp, W, H, rs, true)
+      boxBlur(tmp, dist, W, H, rs, false)
+    }
+    const hz = new Float32Array(W * H)
+    for (let i = 0; i < W * H; i++) {
+      const q = Math.min(1, dist[i] / BAL.radius)
+      hz[i] = Math.sqrt(q * (2 - q))
+    }
+    /* ตารางจุด (กลางช่อง) — พิกัดเทียบกลางตัว · ความชันของโดมต่อหน่วย SVG · สองหน้า (aSide ±1) */
+    const cx = (bb.min.x + bb.max.x) / 2
+    const cy = (bb.min.y + bb.max.y) / 2
+    const nv = W * H
+    const pos = new Float32Array(nv * 2 * 3)
+    const aF = new Float32Array(nv * 2)
+    const aZ = new Float32Array(nv * 2)
+    const aG = new Float32Array(nv * 2 * 2)
+    const aSide = new Float32Array(nv * 2)
+    for (let j = 0; j < H; j++) {
+      for (let i = 0; i < W; i++) {
+        const v = j * W + i
+        const x = x0 + (i + 0.5) / BAL.res - cx
+        const y = y0 + (j + 0.5) / BAL.res - cy
+        const gx = ((hz[j * W + Math.min(W - 1, i + 1)] - hz[j * W + Math.max(0, i - 1)]) * BAL.res) / 2
+        const gy = ((hz[Math.min(H - 1, j + 1) * W + i] - hz[Math.max(0, j - 1) * W + i]) * BAL.res) / 2
+        for (let side = 0; side < 2; side++) {
+          const q = v + side * nv
+          pos[q * 3] = x
+          pos[q * 3 + 1] = y
+          aF[q] = f[v]
+          aZ[q] = hz[v]
+          aG[q * 2] = gx
+          aG[q * 2 + 1] = gy
+          aSide[q] = side ? -1 : 1
+        }
+      }
+    }
+    /* เฉพาะช่องที่ถึงเส้นขอบตอนอ้วนสุดได้ — หน้าหลังกลับลำดับจุด (หันออกด้านหลัง) */
+    const idx: number[] = []
+    const cut = fat - 0.06
+    for (let j = 0; j < H - 1; j++) {
+      for (let i = 0; i < W - 1; i++) {
+        const a = j * W + i
+        const b = a + 1
+        const c = a + W
+        const d = c + 1
+        if (Math.max(f[a], f[b], f[c], f[d]) < cut) continue
+        idx.push(a, b, c, b, d, c)
+        idx.push(a + nv, c + nv, b + nv, b + nv, c + nv, d + nv)
+      }
+    }
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    geo.setAttribute('aF', new THREE.BufferAttribute(aF, 1))
+    geo.setAttribute('aZ', new THREE.BufferAttribute(aZ, 1))
+    geo.setAttribute('aG', new THREE.BufferAttribute(aG, 2))
+    geo.setAttribute('aSide', new THREE.BufferAttribute(aSide, 1))
+    geo.setIndex(nv * 2 > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1))
+    /* กรอบกว้างพอทั้งทรงป่องเต็ม (frustum culling) */
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), Math.hypot(W, H) / BAL.res / 2 + BAL.height)
+    const topLoop = loops.reduce((a, b) => (Math.min(...b.outer.map((p) => p.y)) < Math.min(...a.outer.map((p) => p.y)) ? b : a))
+    const tb = new THREE.Box2().setFromPoints(topLoop.outer)
+    const top = { x: (tb.min.x + tb.max.x) / 2 - cx, y: (tb.min.y + tb.max.y) / 2 - cy }
+    out.push({ geo, color, fat, cx, cy, r: Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y) / 2 + BAL.blur, hw: (bb.max.x - bb.min.x) / 2, hh: (bb.max.y - bb.min.y) / 2, top })
+  }
+  return out.sort((p, q) => p.cx - q.cx)
+}
+
+/**
+ * วัสดุพลาสติกเป่าลมเงา (ref Summer DAYDREAM — ห่วงยาง/ของเล่นสระ): physical + เคลือบเงา (clearcoat) สะท้อนเวทีไฟของฟองแก้ว
+ * โดมใน vertex shader (uInf × uH × aZ) + ขอบนุ่มจากเส้นระดับ f (uT)
+ */
+function balloonMaterial(color: string, kind: 'gloss' | 'fuzz' = 'gloss') {
+  const fuzz = kind === 'fuzz'
+  const m = new THREE.MeshPhysicalMaterial({
+    color,
+    roughness: fuzz ? 0.9 : 0.24,
+    metalness: 0,
+    clearcoat: fuzz ? 0 : 0.7,
+    clearcoatRoughness: 0.04,
+    /* กำมะหยี่: ขนสั้นรับแสงเฉียงเป็นนวลสีอ่อนตามขอบ (sheen) แทนไฮไลต์เงา */
+    sheen: fuzz ? 1 : 0,
+    sheenColor: new THREE.Color(color).lerp(new THREE.Color('#ffffff'), 0.55),
+    sheenRoughness: 0.5,
+    envMapIntensity: fuzz ? 0.25 : 0.75,
+    toneMapped: false,
+    alphaToCoverage: true,
+  })
+  const u = { uInf: { value: 0 }, uT: { value: BAL.tThin }, uH: { value: BAL.height } }
+  m.userData.u = u
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u)
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aF;\nattribute float aZ;\nattribute vec2 aG;\nattribute float aSide;\nuniform float uInf;\nuniform float uH;\nvarying float vF;')
+      .replace('#include <beginnormal_vertex>', 'float bk = uH * uInf;\nvec3 objectNormal = normalize(vec3(-bk * aG.x, -bk * aG.y, aSide));')
+      .replace('#include <begin_vertex>', 'vec3 transformed = vec3(position.xy, bk * aZ * aSide);\nvF = aF;\nvBp = position.xy;')
+      .replace('varying float vF;', 'varying float vF;\nvarying vec2 vBp;')
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform float uT;
+varying float vF;
+varying vec2 vBp;
+float bH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float bN(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(bH(i), bH(i + vec2(1.0, 0.0)), f.x), mix(bH(i + vec2(0.0, 1.0)), bH(i + vec2(1.0, 1.0)), f.x), f.y); }`)
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.a *= smoothstep(uT - 0.025, uT + 0.025, vF);\nif (diffuseColor.a < 0.004) discard;' + (fuzz ? '\ndiffuseColor.rgb *= 0.86 + 0.22 * bN(vBp * 0.9);' : ''))
+      /* กำมะหยี่: ผิวเป็นเม็ดขน (นอร์มอลสั่นด้วยนอยส์ในพิกัดตัว — ไม่ไหลตามจอ) */
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>' + (fuzz ? '\nnormal = normalize(normal + 0.5 * vec3(bN(vBp * 0.7) - 0.5, bN(vBp * 0.7 + 17.3) - 0.5, 0.0));' : ''))
+      /* เนื้อยางหนา: สีเข้มลงตามขอบที่โค้งหนีกล้อง (ไม่ใช่ขอบสว่างเรือง) — ทรงป่องอ่านจากเงาไล่ ไม่ใช่เส้นขอบ */
+      .replace('#include <opaque_fragment>', 'outgoingLight *= mix(0.44, 0.8, pow(clamp(normal.z, 0.0, 1.0), 1.2));\n#include <opaque_fragment>')
+  }
+  return m
+}
+
+/** เติมลม 0 → 1: ช้าตอนเริ่มสูบ · ป่องเกินนิดท้ายท่า แล้วเด้งเข้าที่ */
+const inflate = (e: number) => (e >= 1 ? 1 : 1 - (1 - e) ** 3 + 0.14 * Math.sin(Math.PI * e) * e * e)
+
+/** กรอบอ้างอิง = viewBox ของไฟล์ (ฝั่ง HTML ย่อ/ขยายตามนี้) · data.xml = ราก <svg> (ไม่ใช่ document) */
+function vbOf(data: { xml: unknown }) {
+  const root = data.xml as Element & { documentElement?: Element }
+  const vb = (root?.getAttribute?.('viewBox') ?? root?.documentElement?.getAttribute('viewBox'))?.split(/[\s,]+/).map(Number)
+  return vb && vb.length === 4 && vb.every((n) => Number.isFinite(n)) ? { x: vb[0], y: vb[1], w: vb[2], h: vb[3] } : null
+}
+
+/**
+ * ตาโต (ref Summer — ตัวในคำมีตา): ลูกตาขาวแบนนิดติดบนโดม ขอบเข้ม · ตาดำมองตามเคอร์เซอร์
+ * ตาคู่ใหญ่บนตัว word.eyes (ตัวกลม O/C: กลางแถบบน · E: บนแขนบน) · ตาจิ๋วบนจุดของ i ตัวกำมะหยี่ (ลูกบอลมีหน้าแบบตัวเหลืองของ ref)
+ * พิกัดเทียบกลางตัว (หน่วย SVG แกน y ชี้ลง) · ติดอยู่ใต้ mesh ของตัว — บีบ/ยืด/กระดอนไปพร้อมตัว
+ */
+type EyeSet = { on: number; at: [number, number][]; r: number; pupil: number; look: number }
+const eyeSetsOf = (list: BalLetter[], word: BalWord): EyeSet[] => {
+  const out: EyeSet[] = []
+  const B = list[word.eyes]
+  if (B) {
+    const round = 'OCDGQU'.includes(word.text[word.eyes].toUpperCase())
+    const at: [number, number][] = round
+      ? [[-B.hw * 0.27, -B.hh * 0.6], [B.hw * 0.2, -B.hh * 0.62]]
+      : [[-B.hw * 0.4, -B.hh * 0.66], [B.hw * 0.02, -B.hh * 0.68]]
+    out.push({ on: word.eyes, at, r: B.hh * 0.17, pupil: B.hh * 0.085, look: B.hh * 0.06 })
+  }
+  const I = list[word.fuzz]
+  if (I && word.text[word.fuzz] === 'i') out.push({ on: word.fuzz, at: [[I.top.x - 4.4, I.top.y + 0.6], [I.top.x + 4.4, I.top.y - 0.6]], r: 3.9, pupil: 2.1, look: 1.3 })
+  return out
+}
+const _eyeW = new THREE.Vector3()
+
+/** คำหนึ่งคำที่ปั้นแล้ว (ตัวอักษร + วัสดุ + ตา) — ปั้นทีละคำ (คำที่โชว์ + คำถัดไประหว่างค้าง) ทิ้งคำเก่าเมื่อสลับ */
+type BalSlot = { wi: number; list: BalLetter[]; mats: THREE.MeshPhysicalMaterial[]; eyes: EyeSet[] }
+const disposeSlot = (sl: BalSlot | null) => {
+  sl?.list.forEach((l) => l.geo.dispose())
+  sl?.mats.forEach((m) => m.dispose())
+}
+/** จังหวะของคำ n ตัว (ms นับจากจุดเริ่มคำ): เป่าเข้าครบ · เริ่มปล่อยลม · ปล่อยลมครบ (= สลับคำ) */
+const slotTimes = (n: number) => {
+  const inEnd = ((n - 1) * BAL.stag + BAL.dur) * 1000
+  const outAt = inEnd + BAL.hold * 1000
+  return { inEnd, outAt, end: outAt + ((n - 1) * BAL.outStag + BAL.outDur) * 1000 }
+}
+const clamp01b = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x)
+
+/** โหมด dev ของหน้า (สวิตช์ในฉาก hero) = ของ 3D เป็น clay — ลูกโป่ง/ตาเป็นเทาดินเรียบ ไม่มีสี */
+const CLAY_TINT = '#b9b9bd'
+const CLAY_EYE = ['#d9d9dc', '#5a5a60'] as const
+
+function BalloonArt({ box }: { box: LineBox }) {
+  const data = useLoader(SVGLoader, box.src ?? '')
+  const dev = useSyncExternalStore(subscribeDevMode, () => devMode.on)
+  const field = useContext(FieldCtx)
+  const live = field?.live ?? false
+  const { size, invalidate } = useThree()
+  const t = useTuner()
+  const thick = (t.hlDepth / CAP_H) * LIFE_GLYPH
+  const vbox = useMemo(() => vbOf(data), [data])
+  /*
+   * กรอบให้คำ: สูงเท่า LIFE เดิม · กว้างได้ถึงขอบขวาของแคนวาสหรือของจอ (แคนวาสล้นจอได้ — ขอบจอคือขอบจริง)
+   * เว้นเผื่อตัวที่พองออก/เอียง · คำยาวกว่า LIFE ย่อลงให้พอดีที่ว่าง
+   */
+  const sc0 = vbox ? Math.min(box.width / vbox.w, box.height / vbox.h) : 1
+  const roomPx = Math.min(size.width - box.left, window.innerWidth - fieldRect.left - box.left) - 36 - BAL.blur * 2 * sc0
+  const availW = vbox ? Math.max(vbox.w, Math.floor(roomPx / sc0)) : 0
+  const make = useCallback(
+    async (wi: number): Promise<BalSlot | null> => {
+      if (!vbox) return null
+      const word = BAL_WORDS[wi]
+      const src = BAL_GLYPHS === 'font' ? fontLetters(await loadFont(), { ...vbox, w: availW }, word.text) : svgLetters(data as unknown as { paths: StyledPath[] })
+      const list = buildBalloon(src)
+      return { wi, list, mats: list.map((l, i) => balloonMaterial(l.color, i === word.fuzz ? 'fuzz' : 'gloss')), eyes: eyeSetsOf(list, word) }
+    },
+    [vbox, availW, data],
+  )
+  const [slot, setSlot] = useState<BalSlot | null>(null)
+  /** จุดเริ่มของคำที่โชว์ (performance.now) — NaN = คำแรก: เริ่มตามคิวโชว์ของหัวเรื่อง */
+  const start = useRef(NaN)
+  const next = useRef<BalSlot | null>(null)
+  const cur = useRef<BalSlot | null>(null)
+  cur.current = slot
+  const springs = useRef<BalSpring[]>([])
+  /* ปั้นคำแรกตอนเธรดหลักว่าง (แบบ SvgArt) · ถอดออก = ทิ้งทั้งคำที่โชว์และคำที่ปั้นรอ */
+  useEffect(() => {
+    let dead = false
+    const run = async () => {
+      const made = await make(0)
+      if (dead) return disposeSlot(made)
+      start.current = NaN
+      springs.current = []
+      const old = cur.current
+      setSlot(made)
+      if (old) window.setTimeout(() => disposeSlot(old), 100)
+      invalidate()
+    }
+    const hasIdle = 'requestIdleCallback' in window
+    const id = hasIdle ? window.requestIdleCallback(() => void run(), { timeout: 1200 }) : window.setTimeout(() => void run(), 60)
+    return () => {
+      dead = true
+      if (hasIdle) window.cancelIdleCallback(id)
+      else window.clearTimeout(id)
+    }
+  }, [make, invalidate])
+  useEffect(
+    () => () => {
+      disposeSlot(cur.current)
+      disposeSlot(next.current)
+      next.current = null
+    },
+    [],
+  )
+  /* วนคำ: ปั้นคำถัดไประหว่างค้าง · ปลุกเฟรมตอนเริ่มปล่อยลม (แคนวาสวาดเมื่อสั่ง) · ปล่อยลมครบ = สลับคำ */
+  useEffect(() => {
+    if (!slot || !field?.live || BAL_WORDS.length < 2) return
+    const base = Number.isFinite(start.current) ? start.current : field.revealAt + charsAll(field.lines) * APPEAR.stag * 1000
+    if (!Number.isFinite(base)) return
+    const tm = slotTimes(slot.list.length)
+    const now = performance.now()
+    const wi = (slot.wi + 1) % BAL_WORDS.length
+    let dead = false
+    const prep = window.setTimeout(() => {
+      void make(wi).then((sl) => {
+        if (dead) return disposeSlot(sl)
+        disposeSlot(next.current)
+        next.current = sl
+      })
+    }, Math.max(0, base + tm.inEnd - now + 200))
+    const kick = window.setTimeout(() => invalidate(), Math.max(0, base + tm.outAt - now))
+    const swap = window.setTimeout(() => {
+      void (async () => {
+        const sl = next.current?.wi === wi ? next.current : await make(wi)
+        next.current = null
+        if (dead) return disposeSlot(sl)
+        start.current = performance.now()
+        springs.current = []
+        const old = cur.current
+        setSlot(sl)
+        if (old) window.setTimeout(() => disposeSlot(old), 100)
+        invalidate()
+      })()
+    }, Math.max(0, base + tm.end - now))
+    return () => {
+      dead = true
+      window.clearTimeout(prep)
+      window.clearTimeout(kick)
+      window.clearTimeout(swap)
+    }
+  }, [slot, field, make, invalidate])
+  const meshes = useRef<(THREE.Mesh | null)[]>([])
+  const eyeRes = useMemo(
+    () => ({
+      ball: new THREE.SphereGeometry(1, 24, 16),
+      white: new THREE.MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 0.6, toneMapped: false }),
+      black: new THREE.MeshPhysicalMaterial({ color: '#1b1420', roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.04, envMapIntensity: 0.8, toneMapped: false }),
+    }),
+    [],
+  )
+  useEffect(
+    () => () => {
+      eyeRes.ball.dispose()
+      eyeRes.white.dispose()
+      eyeRes.black.dispose()
+    },
+    [eyeRes],
+  )
+  /* clay: สีทุกตัว/ตาเป็นเทา เคลือบเงาออก · ออกจาก dev คืนสีเดิมของตัว */
+  useEffect(() => {
+    slot?.mats.forEach((m, i) => {
+      m.color.set(dev ? CLAY_TINT : slot.list[i].color)
+      m.clearcoat = dev ? 0 : m.sheen > 0 ? 0 : 0.7
+      m.needsUpdate = true
+    })
+    eyeRes.white.color.set(dev ? CLAY_EYE[0] : '#ffffff')
+    eyeRes.black.color.set(dev ? CLAY_EYE[1] : '#1b1420')
+    invalidate()
+  }, [dev, slot, eyeRes, invalidate])
+  const pupils = useRef<(THREE.Mesh | null)[][]>([])
+  const eyesG = useRef<(THREE.Group | null)[]>([])
+  /** ตัวที่เคอร์เซอร์ชี้อยู่ (−1 = ไม่มี) — คลิกที่ไหนก็ตาม (แคนวาสไม่รับเมาส์) ถ้าชี้ตัวอยู่ = ตัวนั้นกระดอน */
+  const hot = useRef(-1)
+  useEffect(() => {
+    const down = () => {
+      const sp = springs.current[hot.current]
+      if (!sp) return
+      sp.vq += BAL_PLAY.jelly
+      sp.vy -= BAL_PLAY.hop
+      sp.vr += (Math.random() - 0.5) * 6
+      invalidate()
+    }
+    window.addEventListener('pointerdown', down)
+    return () => {
+      window.removeEventListener('pointerdown', down)
+      if (hot.current >= 0) document.documentElement.style.cursor = ''
+    }
+  }, [invalidate])
+  useFrame((_, dtRaw) => {
+    if (!slot || !field || !vbox) return
+    const dt = Math.min(dtRaw, 1 / 30)
+    const base = Number.isFinite(start.current) ? start.current : field.revealAt + charsAll(field.lines) * APPEAR.stag * 1000
+    const ok = Number.isFinite(base)
+    const tm = slotTimes(slot.list.length)
+    const now = performance.now()
+    const cycle = BAL_WORDS.length > 1
+    const mx = mouse.x - fieldRect.left - size.width / 2
+    const my = size.height / 2 - (mouse.y - fieldRect.top)
+    let moving = false
+    let near = -1
+    let nearD = Infinity
+    slot.mats.forEach((m, i) => {
+      const ein = ok ? (now - base - i * BAL.stag * 1000) / (BAL.dur * 1000) : 0
+      const eout = ok && cycle ? (now - base - tm.outAt - i * BAL.outStag * 1000) / (BAL.outDur * 1000) : 0
+      if (ein < 1 || (eout > 0 && eout < 1)) moving = true
+      const e = clamp01b(ein)
+      const o = clamp01b(eout)
+      /* ปล่อยลม: แฟบลงเร็วขึ้นเรื่อย ๆ (o²) ลอยหนีขึ้น + หมุน แล้วจางท้ายท่า */
+      const k = inflate(e) * (1 - o * o)
+      const u = m.userData.u as { uInf: { value: number }; uT: { value: number } }
+      u.uInf.value = k
+      u.uT.value = BAL.tThin + (slot.list[i].fat - BAL.tThin) * Math.min(1.08, k)
+      m.opacity = Math.min(1, e / 0.12) * (1 - clamp01b((o - 0.55) / 0.45))
+      const me = meshes.current[i]
+      if (!me) return
+      const L = slot.list[i]
+      const A = BAL_ARR[i % BAL_ARR.length]
+      const sp = (springs.current[i] ??= springOf())
+      /* เคอร์เซอร์ → แรงผลักของตัวนี้ (ระยะบนจอ px · ทิศแปลงกลับเป็นพิกัด SVG ที่แกน y ชี้ลง) — เฉพาะตอนป่องเต็มค้างอยู่ */
+      let tx = 0
+      let ty = 0
+      let tr = 0
+      let tp = 0
+      me.parent?.localToWorld(_balW.set(L.cx + A.dx, L.cy + A.dy, thick / 2))
+      const ddx = _balW.x - mx
+      const ddy = _balW.y - my
+      const d = Math.hypot(ddx, ddy)
+      const R = L.r * A.s * sc0 * BAL_PLAY.reach
+      if (e >= 1 && o <= 0 && d < R) {
+        const f = (1 - d / R) ** 2
+        const len = d || 1
+        tx = (ddx / len) * BAL_PLAY.push * f
+        ty = (-ddy / len) * BAL_PLAY.push * f
+        tr = (ddx / len) * BAL_PLAY.lean * f
+        tp = BAL_PLAY.puff * f
+        if (d < nearD && d < R * 0.75) {
+          nearD = d
+          near = i
+        }
+      }
+      /* สปริงหน่วงน้อย: a = k(เป้า − ค่า) − c·ความเร็ว */
+      const K = BAL_PLAY.k
+      const C = BAL_PLAY.c
+      sp.vx += (K * (tx - sp.x) - C * sp.vx) * dt
+      sp.vy += (K * (ty - sp.y) - C * sp.vy) * dt
+      sp.vr += (K * (tr - sp.r) - C * sp.vr) * dt
+      sp.vp += (K * (tp - sp.p) - C * sp.vp) * dt
+      sp.vq += (K * 0.8 * (0 - sp.q) - C * 0.6 * sp.vq) * dt
+      sp.x += sp.vx * dt
+      sp.y += sp.vy * dt
+      sp.r += sp.vr * dt
+      sp.p += sp.vp * dt
+      sp.q += sp.vq * dt
+      if (Math.abs(sp.vx) + Math.abs(sp.vy) + Math.abs(sp.vr) * 20 + Math.abs(sp.vp) * 40 + Math.abs(sp.vq) * 40 + Math.abs(tx - sp.x) + Math.abs(ty - sp.y) > 0.02) moving = true
+      const sc = (0.78 + 0.22 * k) * A.s * (1 + sp.p)
+      const fly = o * o
+      me.position.set(L.cx + A.dx + sp.x, L.cy + A.dy + sp.y - fly * 26, thick / 2 + A.dz)
+      me.rotation.z = (A.rot * Math.PI) / 180 + sp.r + fly * (i % 2 ? 0.9 : -0.9)
+      me.scale.set(sc * (1 + sp.q), sc * (1 - 0.8 * sp.q), 1 + sp.p)
+      me.visible = e > 0 && o < 1
+    })
+    /* ตา: ลอยบนโดม (สูงตามการเติมลม) · ตาดำเลื่อนไปทางเคอร์เซอร์ (หน่วง) */
+    const seen = mouse.x > -1e4
+    slot.eyes.forEach((set, si) => {
+      const eg = eyesG.current[si]
+      const eMesh = meshes.current[set.on]
+      const eMat = slot.mats[set.on]
+      if (!eg || !eMesh || !eMat) return
+      const k = (eMat.userData.u as { uInf: { value: number } }).uInf.value
+      eg.position.z = BAL.height * k * 0.98
+      eg.scale.setScalar(Math.max(1e-3, Math.min(1, k)))
+      eg.visible = eMesh.visible && k > 0.05
+      ;(pupils.current[si] ?? []).forEach((pm, j) => {
+        if (!pm) return
+        const [ex, ey] = set.at[j]
+        eMesh.localToWorld(_eyeW.set(ex, ey, eg.position.z))
+        const lx = seen ? mx - _eyeW.x : -60
+        const ly = seen ? -(my - _eyeW.y) : 20
+        const ll = Math.hypot(lx, ly) || 1
+        const reach = Math.min(1, ll / 120)
+        const tx = ex + (lx / ll) * set.look * reach
+        const ty = ey + (ly / ll) * set.look * reach
+        const nx = pm.position.x + (tx - pm.position.x) * 0.35
+        const ny = pm.position.y + (ty - pm.position.y) * 0.35
+        if (Math.abs(nx - pm.position.x) + Math.abs(ny - pm.position.y) > 0.01) moving = true
+        pm.position.x = nx
+        pm.position.y = ny
+      })
+    })
+    /* ชี้ตัวไหนอยู่ = คลิกได้ (เคอร์เซอร์มือ) */
+    if ((near >= 0) !== (hot.current >= 0)) document.documentElement.style.cursor = near >= 0 ? 'pointer' : ''
+    hot.current = near
+    if (moving && ok) invalidate()
+  })
+  if (!slot || !vbox) return null
+  const { x: bx, y: by, w, h } = vbox
+  const s = sc0
+  const originX = box.left - size.width / 2
+  const originY = size.height / 2 - box.top
+  return (
+    <group
+      position={[originX + (w * s) / 2, originY - (h * s) / 2, 0]}
+      rotation={[(t.hlRotX * Math.PI) / 180, (t.hlRotY * Math.PI) / 180, (t.hlRotZ * Math.PI) / 180]}
+    >
+      <group position={[(-w * s) / 2, (h * s) / 2, 0]} scale={[s, -s, s]} visible={live}>
+        <group position={[-bx, -by, 0]}>
+          {slot.list.map((l, i) => (
+            <mesh
+              key={`${slot.wi}-${i}`}
+              ref={(el) => {
+                meshes.current[i] = el
+              }}
+              geometry={l.geo}
+              material={slot.mats[i]}
+              position={[l.cx, l.cy, thick / 2]}
+              visible={false}
+            >
+              {slot.eyes.map((set, si) =>
+                set.on !== i ? null : (
+                  <group
+                    key={si}
+                    ref={(el) => {
+                      eyesG.current[si] = el
+                    }}
+                    visible={false}
+                  >
+                    {set.at.map(([ex, ey], j) => (
+                      <group key={j}>
+                        {/* ขอบเข้มรอบลูกตา — ตาขาวไม่จมหายในไฮไลต์ของผิวเงา */}
+                        <mesh geometry={eyeRes.ball} material={eyeRes.black} position={[ex, ey, -0.6]} scale={[set.r * 1.14, set.r * 1.14, set.r * 0.5]} />
+                        <mesh geometry={eyeRes.ball} material={eyeRes.white} position={[ex, ey, 0]} scale={[set.r, set.r, set.r * 0.55]} />
+                        <mesh
+                          ref={(el) => {
+                            ;(pupils.current[si] ??= [])[j] = el
+                          }}
+                          geometry={eyeRes.ball}
+                          material={eyeRes.black}
+                          position={[ex, ey, set.r * 0.42]}
+                          scale={[set.pupil, set.pupil, set.pupil * 0.6]}
+                        />
+                      </group>
+                    ))}
+                  </group>
+                ),
+              )}
+            </mesh>
+          ))}
+        </group>
+      </group>
+    </group>
+  )
+}
+
+function SvgArt({ box }: { box: LineBox }) {
+  const data = useLoader(SVGLoader, box.src ?? '')
+  /* โหลดและปั้นไว้ล่วงหน้าเหมือนตัวอักษร แต่ไม่ให้เห็นจนถึงคิวโชว์ (ดู Headline3DField) */
+  const live = useContext(FieldCtx)?.live ?? false
+  const { size, invalidate } = useThree()
+  /*
+   * ท่าโผล่ของ LIFE (APPEAR) — ทีละตัว L · i · F · E ต่อจากตัวอักษรตัวสุดท้ายของหัวเรื่อง (ชิ้นในไฟล์แยกตัวตามสี)
+   * แต่ละตัวยกขึ้น ถอยลึก พลิกตั้งรอบกลางของตัวเอง · ฟองแก้วไม่มีท่านี้
+   * หน่วยเป็นหน่วย SVG (อยู่ใต้กลุ่มที่ย่อด้วย s แล้ว) — 1 em ≈ LIFE_GLYPH / CAP_H
+   */
+  const field = useContext(FieldCtx)
+  const meshRefs = useRef<(THREE.Mesh | null)[]>([])
+  const letterRef = useRef<{ of: number[]; c: { x: number; y: number }[]; z: number } | null>(null)
+  useFrame(() => {
+    const L = letterRef.current
+    if (!L || box.glass || !field) return
+    const base = field.revealAt + charsAll(field.lines) * APPEAR.stag * 1000
+    const em = LIFE_GLYPH / CAP_H
+    let moving = false
+    meshRefs.current.forEach((m, i) => {
+      if (!m) return
+      const li = L.of[i] ?? 0
+      const start = base + li * APPEAR.stag * 1000
+      const t = Number.isFinite(start) ? (performance.now() - start) / (APPEAR.dur * 1000) : 0
+      if (t < 1) moving = true
+      const e = t < 0 ? 0 : t > 1 ? 1 : t
+      const k = 1 - (1 - e) ** 4
+      const c = L.c[li]
+      const th = (1 - k) * APPEAR.tilt
+      /* หมุนรอบแกน x ผ่านกลางตัวอักษร (c, z) = เลื่อนชิ้นให้กลางตัวอยู่ที่เดิมหลังหมุน · แกน y ของ SVG ชี้ลง: ยกขึ้น = y บวก */
+      const cs = Math.cos(th)
+      const sn = Math.sin(th)
+      m.rotation.x = th
+      m.position.set(0, c.y - (c.y * cs - L.z * sn) + (1 - k) * APPEAR.drop * em, L.z - (c.y * sn + L.z * cs) - (1 - k) * APPEAR.back * em)
+      const mat = m.material as THREE.Material
+      mat.transparent = true
+      mat.opacity = 1 - (1 - Math.min(1, e * 1.6)) ** 2
+    })
+    if (moving) invalidate()
+  })
+  /**
+   * แผงจูนอ่านได้จากในแคนวาสด้วย เพราะสโตร์เป็น useSyncExternalStore ไม่ใช่ React context
+   * (ค่าที่ส่งเข้าแคนวาสเป็น prop คือชุดของตัวอักษร ซึ่งถูกคิดไว้ก่อนหน้าอยู่แล้ว)
+   */
+  const t = useTuner()
+  /*
+   * LIFE หนาเท่าตัวอักษรอื่น: ตัวอักษรอัดลึก hlDepth × ขนาดฟอนต์ (สูงตัวพิมพ์ใหญ่ ~0.72 ของขนาด)
+   * ตัวในไฟล์ LIFE สูงราว LIFE_GLYPH หน่วย SVG — แปลงสัดส่วนเดียวกัน (เดิมตายตัว 26 หน่วย ขอบ 2 = บางแบนกว่าตัวอื่นเห็นชัด)
+   */
+  const thick = box.glass ? t.bbThick : (t.hlDepth / CAP_H) * LIFE_GLYPH
+  /**
+   * หน้าที่มีฟองเดินทาง (ดู ./BubbleTraveler) ใบนั้นเป็นฟองใบเดียวของหน้า นั่งอยู่ตรงนี้ตั้งแต่ต้น = ใบนี้ไม่วาด
+   * (ยังวัดกรอบจากผัง HTML เหมือนเดิม) แค่บอกเขาว่าถึงคิวโชว์เมื่อไร
+   */
+  const away = useSyncExternalStore(subscribeBubbleAway, () => bubbleTravel.away)
+  useEffect(() => {
+    invalidate()
+  }, [away, invalidate])
+  /* ล็อกไว้ครั้งเดียว — หัวเรื่องปิดตัวเองเมื่อเลื่อนพ้น hero (active={onHero}) แต่ฟองใบนั้นยังเดินทางต่อ */
+  useEffect(() => {
+    if (box.glass && live) setHeadBubbleLive(true)
+  }, [box.glass, live])
+
+  /**
+   * profile = ขอบล่างของรูปทีละช่วงความกว้าง (0 = ขอบบนของกรอบ, 1 = ขอบล่าง)
+   * ทรายในฟองต้องเทลงไปตามรอยนี้ ไม่ใช่นอนบนระนาบเดียว — ฟองคำพูดมีแง่งลูกศรที่ลงลึกกว่าตัวฟอง
+   */
+  type Parts = {
+    list: { geo: THREE.ExtrudeGeometry; color: string }[]
+    bb: THREE.Box3
+    profile: Float32Array | null
+    /** กรอบโครเมียมของฟอง (ท่อตามขอบนอก) — มีเฉพาะงานที่เป็นฟอง */
+    outline: THREE.TubeGeometry | null
+  }
+  const [parts, setParts] = useState<Parts | null>(null)
+  const chromeMat = useMemo(() => CHROME(), [])
+  useEffect(() => () => chromeMat.dispose(), [chromeMat])
+
+  /**
+   * อัดขึ้นรูปตอนเธรดหลักว่าง ไม่ใช่ตอน mount
+   *
+   * งานนี้เป็นงานซิงโครนัสบนเธรดหลัก (ทั้งฟองและ LIFE รวมกันวัดได้ ~150ms ในเฟรมเดียว)
+   * ถ้าทำตอน mount มันไปตกกลางฉากที่กำลังเล่นอยู่ เห็นเป็นการกระตุกก้อนเดียวชัด ๆ
+   */
+  const build = useMemo(() => () => {
+    const out: { geo: THREE.ExtrudeGeometry; color: string }[] = []
+    /**
+     * กรอบอ้างอิงคือ viewBox ของไฟล์ ไม่ใช่ขอบเขตของเส้นที่วาดจริง
+     *
+     * ฝั่ง HTML ย่อ/ขยายไฟล์ตาม viewBox เสมอ ถ้าเราวัดจากขอบเขตของเส้น (ซึ่งไม่เท่ากัน
+     * เมื่อไฟล์มีที่ว่างรอบรูปหรือเส้นล้นกรอบ) ของ 3D จะเลื่อนและมีขนาดไม่ตรงกับที่ผังกันไว้
+     */
+    const vb = (data.xml as unknown as XMLDocument)?.documentElement
+      ?.getAttribute('viewBox')
+      ?.split(/[\s,]+/)
+      .map((n: string) => Number(n))
+    const box3 = new THREE.Box3()
+    for (const path of data.paths) {
+      const fill = path.userData?.style?.fill
+      if (!fill || fill === 'none') continue
+      for (const shape of SVGLoader.createShapes(path)) {
+        /**
+         * กระจกต้องมนตามความหนาด้วย ไม่ใช่แผ่นขอบคม
+         *
+         * แผ่นที่ bevel แค่ 2 หน่วยมีสันคมรอบตัว แสงเลยเข้าเป็นแถบเดียวกันทั้งขอบ อ่านไม่ออก
+         * ว่าหนาแค่ไหน ทรงจึงดูแบน วิธีเดียวกับรางสวิตช์ (newhero/Switch capsuleSlab):
+         * bevel = ครึ่งความหนา แล้วอัดเนื้อตรงเกือบศูนย์ — ทั้งชิ้นกลายเป็นผิวโค้งต่อกัน
+         * ขอบจึงกวาดไฮไลต์เป็นแถบไล่ระดับ และความหนาอ่านได้จากภาพหักเหที่บีบตรงขอบ
+         */
+        const bev = box.glass ? thick * 0.499 * Math.max(0, Math.min(1, t.bbRound)) : Math.min(thick * 0.45, (t.hlBevS / CAP_H) * LIFE_GLYPH)
+        const geo = new THREE.ExtrudeGeometry(shape, {
+          depth: Math.max(1e-4, thick - bev * 2),
+          bevelEnabled: true,
+          bevelThickness: bev,
+          bevelSize: bev,
+          // หยาบพอ: รูปทรงพวกนี้เป็นมุมมนใหญ่ ๆ เพิ่มส่วนย่อยแล้วตาไม่เห็นต่าง แต่เวลาสร้างพุ่ง
+          bevelSegments: box.glass ? 5 : 1,
+          curveSegments: box.glass ? 12 : 4,
+        })
+        /** ให้ช่วง z เท่าเดิม (0..thick) — ฟิสิกส์ในฟองกับฉากหลังคิดจากช่วงนี้ */
+        geo.translate(0, 0, bev)
+        /**
+         * bevelSize ดันขอบออกนอกเส้นเดิม ครึ่งความหนาจึงทำให้รูปบวมออกจริง — หดกลับให้เท่า
+         * รอยของ path เดิม ไม่งั้นฟองล้นกรอบที่ HTML กันไว้ (กรอบวัดจาก viewBox ไม่ใช่จากทรง)
+         */
+        if (box.glass && bev > 0) {
+          const flat = new THREE.Box3().setFromPoints(
+            shape.getPoints(12).map((v) => new THREE.Vector3(v.x, v.y, 0)),
+          )
+          geo.computeBoundingBox()
+          const gb = geo.boundingBox
+          if (gb) {
+            const fx = (flat.max.x - flat.min.x) / Math.max(1e-6, gb.max.x - gb.min.x)
+            const fy = (flat.max.y - flat.min.y) / Math.max(1e-6, gb.max.y - gb.min.y)
+            const cx = (gb.max.x + gb.min.x) / 2
+            const cy = (gb.max.y + gb.min.y) / 2
+            geo.translate(-cx, -cy, 0)
+            geo.scale(fx, fy, 1)
+            geo.translate((flat.max.x + flat.min.x) / 2, (flat.max.y + flat.min.y) / 2, 0)
+          }
+        }
+        geo.computeBoundingBox()
+        box3.union(geo.boundingBox ?? new THREE.Box3())
+        out.push({ geo, color: fill })
+      }
+    }
+    const bb =
+      vb && vb.length === 4 && vb.every((n) => Number.isFinite(n))
+        ? new THREE.Box3(
+            new THREE.Vector3(vb[0], vb[1], 0),
+            new THREE.Vector3(vb[0] + vb[2], vb[1] + vb[3], 0),
+          )
+        : box3
+    /**
+     * รอยขอบล่างของรูป — ยิงเส้นตั้งฉากตัดเส้นขอบจริง ไม่ใช่แบ่งช่องแล้วเก็บจุดที่ตกลงไป
+     *
+     * ขอบล่างของฟองเป็นเส้นตรงยาว ซึ่งมีจุดอยู่แค่หัวกับท้าย (getPoints ย่อยเฉพาะส่วนโค้ง)
+     * วิธีเก็บจุดลงช่องจึงได้ช่องกลางที่ "ไม่มีจุดขอบล่างเลย แต่มีจุดขอบบน" — ก้นของสนามทราย
+     * เด้งขึ้นไปอยู่บนหลังฟอง ทรายเหลือกองอยู่สองปลาย (วัดจากไฟล์จริงแล้ว: จาก 22 ช่อง
+     * มีแค่ 8 ช่องที่มีจุดขอบล่าง)
+     *
+     * ตัดกับด้านของรูปหลายเหลี่ยมทีละด้าน แล้วเอา y ที่มากสุด (แกน y ของ SVG ชี้ลง) จึงถูก
+     * ทั้งกับส่วนโค้งและเส้นตรง
+     */
+    let profile: Float32Array | null = null
+    if (box.glass) {
+      const loops: THREE.Vector2[][] = []
+      for (const path of data.paths) {
+        const fill = path.userData?.style?.fill
+        if (!fill || fill === 'none') continue
+        for (const shape of SVGLoader.createShapes(path)) loops.push(shape.getPoints(16))
+      }
+      const spanX = Math.max(1e-6, bb.max.x - bb.min.x)
+      const spanY = Math.max(1e-6, bb.max.y - bb.min.y)
+      profile = new Float32Array(PROFILE_N)
+      for (let k = 0; k < PROFILE_N; k += 1) {
+        const x = bb.min.x + (k / (PROFILE_N - 1)) * spanX
+        let low = -Infinity
+        for (const loop of loops) {
+          for (let n = 0; n < loop.length; n += 1) {
+            const a = loop[n]
+            const b = loop[(n + 1) % loop.length]
+            if (a.x === b.x) continue
+            const tt = (x - a.x) / (b.x - a.x)
+            if (tt < 0 || tt > 1) continue
+            const y = a.y + (b.y - a.y) * tt
+            if (y > low) low = y
+          }
+        }
+        profile[k] = low === -Infinity ? 1 : (low - bb.min.y) / spanY
+      }
+    }
+    /* ขอบนอกของฟอง = รูปที่ใหญ่ที่สุดในไฟล์ → ท่อโครเมียม (ดู CHROME_BUBBLE) */
+    let outline: THREE.TubeGeometry | null = null
+    if (box.glass && CHROME_BUBBLE) {
+      let best: THREE.Vector2[] | null = null
+      let area = 0
+      for (const path of data.paths) {
+        const fill = path.userData?.style?.fill
+        if (!fill || fill === 'none') continue
+        for (const shape of SVGLoader.createShapes(path)) {
+          const pts = shape.getPoints(24)
+          const a = Math.abs(THREE.ShapeUtils.area(pts))
+          if (a > area) {
+            area = a
+            best = pts
+          }
+        }
+      }
+      if (best) outline = chromeOutline(best, Math.max(2, (bb.max.y - bb.min.y) * 0.034))
+    }
+    return { list: out, bb, profile, outline }
+  }, [data, thick, box.glass, t.bbRound])
+
+  useEffect(() => {
+    let made: Parts | null = null
+    const run = () => {
+      made = build()
+      setParts(made)
+      invalidate()
+    }
+    const hasIdle = 'requestIdleCallback' in window
+    const id = hasIdle ? window.requestIdleCallback(run, { timeout: 1200 }) : window.setTimeout(run, 60)
+    return () => {
+      if (hasIdle) window.cancelIdleCallback(id)
+      else window.clearTimeout(id)
+      for (const p of made?.list ?? []) p.geo.dispose()
+      made?.outline?.dispose()
+    }
+  }, [build, invalidate])
+
+  /* แต่ละชิ้นเป็นตัวไหน (จับตามสี เรียงซ้ายไปขวา) + กลางของตัว — ให้ท่าโผล่ทีละตัว */
+  if (parts && !box.glass) {
+    const byColor = new Map<string, number>()
+    const boxes: THREE.Box3[] = []
+    const of = parts.list.map((p) => {
+      let li = byColor.get(p.color)
+      if (li === undefined) {
+        li = boxes.length
+        byColor.set(p.color, li)
+        boxes.push(new THREE.Box3())
+      }
+      if (p.geo.boundingBox) boxes[li].union(p.geo.boundingBox)
+      return li
+    })
+    const centers = boxes.map((b) => ({ x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2 }))
+    const order = centers.map((c, i) => ({ i, x: c.x })).sort((a, b) => a.x - b.x).map((q) => q.i)
+    const rank = new Map(order.map((li, r) => [li, r]))
+    letterRef.current = { of: of.map((li) => rank.get(li) ?? 0), c: order.map((li) => centers[li]), z: thick / 2 }
+  }
+
+  if (!parts) return null
+
+  const w = Math.max(1e-3, parts.bb.max.x - parts.bb.min.x)
+  const h = Math.max(1e-3, parts.bb.max.y - parts.bb.min.y)
+  // พอดีกรอบที่ HTML กันที่ไว้ให้ ด้านที่คับกว่าเป็นตัวกำหนด สัดส่วนจึงไม่เพี้ยน
+  const s = Math.min(box.width / w, box.height / h)
+  const originX = box.left - size.width / 2
+  const originY = size.height / 2 - box.top
+
+  return (
+    <>
+    {/**
+     * ของที่อยู่ในฟอง — อยู่นอกกลุ่มที่พลิกแกน y (สเกลติดลบ) เพราะฟิสิกส์อ่านสเกลของ
+     * กลุ่มพ่อไม่ได้ ถ้าอยู่ในกลุ่มที่กลับด้าน โลกของ rapier จะกลับด้านตามและของจะ "ตกขึ้น"
+     * จึงคิดใจกลาง/ครึ่งขนาดเป็นพิกเซลของแคนวาสให้เสร็จแล้วส่งเข้าไปเลย
+     */}
+    {box.glass && !CHROME_BUBBLE && (
+      <GlassBackdrop
+        cx={originX + (w * s) / 2}
+        cy={originY - (h * s) / 2}
+        w={w * s * 2.4}
+        h={h * s * 2.4}
+        z={-t.bbThick * s * 0.6}
+      />
+    )}
+    {box.glass && CHROME_BUBBLE && (
+      <BubbleCrowd cx={originX + (w * s) / 2} cy={originY - (h * s) / 2} hy={(h * s) / 2} live={live} />
+    )}
+    {box.glass && !CHROME_BUBBLE && BUBBLE_TOYS && (
+      <BubbleLife
+        cx={originX + (w * s) / 2}
+        cy={originY - (h * s) / 2}
+        cz={(t.bbThick * s) / 2}
+        hx={(w * s) / 2}
+        hy={(h * s) / 2}
+        hz={(t.bbThick * s) / 2}
+        profile={parts.profile}
+      />
+    )}
+    {/* แกน y ของ SVG ชี้ลง ของฉากชี้ขึ้น — พลิกด้วยสเกลติดลบ แล้วเลื่อนมุมซ้ายบนมาที่กรอบ */}
+    {/* งานทึบ (LIFE) เอียงท่าเดียวกับตัวอักษรอื่น (hlRot*) รอบกลางของตัวเอง — สันข้างหันมารับแสงเหมือนกัน */}
+    <group
+      position={[originX + (w * s) / 2, originY - (h * s) / 2, 0]}
+      rotation={box.glass ? [0, 0, 0] : [(t.hlRotX * Math.PI) / 180, (t.hlRotY * Math.PI) / 180, (t.hlRotZ * Math.PI) / 180]}
+    >
+    <group>
+    <group position={[(-w * s) / 2, (h * s) / 2, 0]} scale={[s, -s, s]} visible={live && !(box.glass && away)}>
+      <group position={[-parts.bb.min.x, -parts.bb.min.y, 0]}>
+        {parts.outline && <mesh geometry={parts.outline} material={chromeMat} />}
+        {!parts.outline && parts.list.map((p, i) => (
+          <mesh
+            key={i}
+            geometry={p.geo}
+            ref={(el) => {
+              meshRefs.current[i] = el
+            }}
+          >
+            {box.glass ? (
+              /**
+               * กระจก: โปร่งจริงด้วย alpha ของแคนวาส ไม่ใช่ transmission
+               *
+               * MeshTransmissionMaterial หักเหจาก "ของที่อยู่ในแคนวาสเดียวกัน" แคนวาสนี้มี
+               * แต่หัวเรื่อง ฉาก hero อยู่คนละแคนวาสข้างหลัง (คนละ WebGL context) กระจกแบบนั้น
+               * จึงหักเหความว่าง เห็นเป็นก้อนมืด — ใช้วัสดุโปร่งผสมกับสิ่งที่อยู่ข้างหลังหน้าเว็บ
+               * ตรง ๆ แทน ได้ทะลุจริงพร้อมไฮไลต์ขอบ (แลกกับที่มันไม่ฝ้า/ไม่บิดภาพข้างหลัง)
+               *
+               * depthWrite ปิด + DoubleSide: เห็นผิวหลังผ่านผิวหน้า ความหนาจึงอ่านเป็นแก้ว
+               */
+              <MeshTransmissionMaterial
+                transmission={1}
+                thickness={t.bbThick}
+                ior={t.bbIor}
+                /**
+                 * roughness 0 + anisotropicBlur: ผิวยังเงาเหมือนแก้วขัดมัน แต่ภาพที่ลอดผ่าน
+                 * เบลอ — แยกสองเรื่องออกจากกันได้แบบเดียวกับรางสวิตช์ (ดู newhero/Switch)
+                 */
+                roughness={0}
+                anisotropicBlur={t.bbBlur}
+                chromaticAberration={t.bbChroma}
+                envMapIntensity={3}
+                distortion={0}
+                /**
+                 * จำนวนรอบที่วัสดุสุ่มภาพหลังกระจก = ความละเอียดของการแยกสี
+                 *
+                 * เชดเดอร์ของ drei ไล่ ior ทีละขั้นต่อรอบ (ior × (1 + chroma·i/samples)) แสงที่
+                 * ลอดผ่านจึงถูกแยกเป็นสีตามมุมหักเหจริงแบบปริซึม ไม่ใช่ย้อมสีทับ — 6 รอบเห็นเป็น
+                 * แถบ 3 สีหยาบ ๆ ยิ่งเพิ่มรอบยิ่งเป็นสเปกตรัมต่อเนื่อง (แลกกับการอ่านบัฟเฟอร์
+                 * เพิ่มรอบละครั้งต่อพิกเซล)
+                 */
+                samples={Math.max(2, Math.round(t.bbSamples))}
+                resolution={1024}
+                /**
+                 * ฟิล์มบางบนผิว (iridescence) — สีรุ้งที่เกิดจากการแทรกสอด ไม่ใช่การย้อมสี
+                 *
+                 * ตัวแยกสีตอนหักเห (chromaticAberration) เห็นชัดเฉพาะเมื่อของหลังกระจกมีขอบ
+                 * ตัดกันแรง ฉากหลังของฟองเป็นไล่สีฟ้านุ่ม ๆ จึงแทบไม่เห็นสเปกตรัม ฟิล์มบางเป็น
+                 * คุณสมบัติของ *ผิว* จึงให้รุ้งตามมุมมองแม้ฉากหลังจะเรียบ — สองตัวนี้ทำงานคู่กัน
+                 */
+                iridescence={t.bbIrid}
+                iridescenceIOR={1.5}
+                iridescenceThicknessRange={IRID_RANGE}
+                attenuationDistance={t.bbThick * t.bbAtten}
+                attenuationColor="#ffffff"
+                background={GLASS_BG}
+                transparent
+                opacity={t.bbOpacity}
+              />
+            ) : (
+              /**
+               * toneMapped ปิด: ตัวแมปโทนของเรนเดอเรอร์ดึงสีอิ่ม ๆ ให้ซีดลง สีที่ออกมาจึงไม่ใช่
+               * สีในไฟล์ต้นฉบับอีกต่อไป — งานชิ้นนี้ต้องเป็นสีเดียวกับแบบเป๊ะ ๆ
+               * ยังรับแสงตามปกติ (standard material) จึงเห็นความหนาเป็นด้านสว่าง/ด้านเงา
+               */
+              <meshStandardMaterial
+                color={p.color}
+                roughness={0.38}
+                metalness={0}
+                /* แผงไฟที่อบไว้ให้กระจกใช้ ต้องไม่ไปย้อมงานสีทึบ (LIFE) ให้อิ่มขึ้นกว่าไฟล์ต้นฉบับ */
+                envMapIntensity={0}
+                toneMapped={false}
+              />
+            )}
+          </mesh>
+        ))}
+      </group>
+    </group>
+    </group>
+    </group>
+    </>
+  )
+}
+
+
+/**
+ * ไฟสตูดิโอของฟองแก้ว — ชุดคงที่ จัดให้สวย ไม่ได้อ่านของที่อยู่ข้าง ๆ
+ *
+ * ก่อนหน้านี้แผงไฟถูกวางตามทิศจากฟองไปหาตัวอักษร/LIFE เพื่อให้ "รับแสงจริงจากเพื่อนบ้าน"
+ * ผลคือหน้าตาของแก้วขึ้นอยู่กับผังบรรทัด: ขนาดจอเปลี่ยน ทิศเปลี่ยน ไฮไลต์ย้ายที่
+ * และสีของ LIFE ก็ไปย้อมแก้วจนเลอะ ชุดนี้เป็นเวทีนิ่ง — ผิวแก้วสะท้อนอะไรก็รู้ล่วงหน้า
+ *
+ * env map เก็บแค่ทิศ ระยะไม่มีความหมาย — ตัวเลข position คือทิศจากใจกลางฟองล้วน ๆ
+ * และเพราะไม่ผูกกับผังอีกแล้ว จึงอบครั้งเดียวตลอดอายุแคนวาส (key คงที่ + frames={1})
+ */
+export function StageLight({ gain }: { gain: number }) {
+  return (
+    <>
+      <Environment resolution={128} frames={1}>
+        {/* คีย์: แผงใหญ่บนซ้ายหน้า อุ่น — ตัวที่ให้ไฮไลต์ก้อนโตบนหลังโดม */}
+        <Lightformer
+          form="rect"
+          intensity={3.4 * gain}
+          color="#fff3e2"
+          position={[-5, 9, 9]}
+          scale={[16, 12, 1]}
+        />
+        {/* ฟิล: กว้าง เย็น อยู่ล่างขวาหน้า กันด้านมืดตัน โดยไม่ไปแย่งคีย์ */}
+        <Lightformer
+          form="rect"
+          intensity={1.5 * gain}
+          color="#dbeeff"
+          position={[7, -4, 8]}
+          scale={[14, 10, 1]}
+        />
+        {/**
+         * ริม: แถบแคบสองข้าง สว่างกว่าคีย์
+         *
+         * นี่คือเส้นที่ทำให้ขอบโค้งอ่านออก — แผงกว้างให้แสงเรียบทั้งผิว แถบแคบ ๆ ที่สว่างจัด
+         * ถูกขอบมนบีบเป็นเส้นวิ่งตามสัน ตาจึงเห็นรูปทรงของความหนา
+         */}
+        <Lightformer
+          form="rect"
+          intensity={7 * gain}
+          color="#ffffff"
+          position={[11, 2, 2]}
+          scale={[1.2, 9, 1]}
+        />
+        <Lightformer
+          form="rect"
+          intensity={5 * gain}
+          color="#ffffff"
+          position={[-9, 4, -3]}
+          scale={[1, 8, 1]}
+        />
+        {/* accent สองสีจาง ๆ ให้ขอบแก้วมีสีเหลื่อมแบบกระจกจริง ไม่ใช่ขาว-เทาล้วน */}
+        <Lightformer
+          form="ring"
+          intensity={2.2 * gain}
+          color="#7fd8ff"
+          position={[3, -8, -6]}
+          scale={[7, 7, 1]}
+        />
+        <Lightformer
+          form="ring"
+          intensity={1.6 * gain}
+          color="#ffd3a8"
+          position={[-6, -6, 6]}
+          scale={[6, 6, 1]}
+        />
+      </Environment>
+      {/**
+       * ไฟจริงสำหรับของที่กองอยู่ในฟอง (วัสดุ standard ไม่กิน env ของฟอง)
+       *
+       * ใช้ directional ไม่ใช่ point: ฉากนี้เป็นหน่วยพิกเซล ระยะเป็นหลักร้อย จุดไฟต้องปิด decay
+       * แล้วเดาความสว่างกันใหม่ทุกครั้งที่ผังขยับ — แสงมีทิศเดียวไม่มีระยะจึงตรงกับคำว่า "เวที"
+       */}
+      <directionalLight color="#ffffff" intensity={1.1 * gain} position={[-160, 240, 320]} />
+      <directionalLight color="#bfe4ff" intensity={0.5 * gain} position={[220, -80, 180]} />
+    </>
+  )
+}
+
+/**
+ * ฉากหลังที่ "เห็นได้เฉพาะในกระจก"
+ *
+ * รางสวิตช์ (newhero/Switch) ดูเป็นแก้วจริงเพราะมันหักเห *พิกเซลของฉากที่อยู่ข้างหลังมันจริง ๆ*
+ * ฟองอยู่คนละแคนวาส (คนละ WebGL context) ข้างหลังมันในแคนวาสนี้ว่างเปล่า ป้อนสีแบน ๆ ให้
+ * MeshTransmissionMaterial แล้วก็ได้แค่แผ่นสีเดียว — ไม่มีอะไรให้บิด ไม่มีอะไรให้เบลอ
+ *
+ * แผ่นนี้คือ "ของข้างหลัง" ที่ทำขึ้นเอง: ไล่สีฟ้าของหน้า + ก้อนสีชุด accent เบลอ ๆ วางไว้หลังฟอง
+ * แล้ว *ปิดการเขียนสีตอนวาดลงจอ* เปิดเฉพาะตอนกระจกถ่ายฉากหลังของตัวเองลง render target
+ * (กลับด้านกับ hideInBuffers ที่ Switch ใช้ซ่อนเส้นขอบจากบัฟเฟอร์) — บนจอจึงไม่มีแผ่นนี้
+ * เห็นมันได้ทางเดียวคือมองผ่านแก้ว
+ */
+function backdropTexture() {
+  const c = document.createElement('canvas')
+  c.width = 512
+  c.height = 512
+  const ctx = c.getContext('2d')
+  if (ctx) {
+    const g = ctx.createLinearGradient(0, 0, 0, c.height)
+    g.addColorStop(0, '#b6dcf7')
+    g.addColorStop(1, '#7cbaee')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, c.width, c.height)
+    // ก้อนสีของหน้า — กระจกฝ้าจะกวนให้เป็นรอยสีเลือน ๆ เหมือนของหลังรางสวิตช์
+    /**
+     * ก้อนสีเบา ๆ ใหญ่ ๆ ไม่ใช่จุดสีเข้ม
+     *
+     * ตอนแก้วเป็นฝ้า ก้อนเข้มถูกกวนจนเป็นคราบสีสวย แต่ตอนแก้ว "ใสแจ๋ว" มันจะถูกฉายออกมา
+     * คมชัด กลายเป็นก้อนสีลอยอยู่หลังฟองที่ไม่มีอยู่จริงในฉาก — เหลือไว้แค่ให้ผิวแก้ว
+     * มีอะไรเปลี่ยนสีบ้างตอนบิด ไม่ให้เป็นฟ้าเรียบก้อนเดียว
+     */
+    ctx.globalAlpha = 0.22
+    const blobs: [number, number, number, string][] = [
+      [110, 140, 210, '#fd5000'],
+      [390, 130, 180, '#008254'],
+      [300, 390, 230, '#ad85fe'],
+      [80, 410, 190, '#158ffc'],
+    ]
+    for (const [x, y, r, color] of blobs) {
+      const rg = ctx.createRadialGradient(x, y, 0, x, y, r)
+      rg.addColorStop(0, color)
+      rg.addColorStop(1, 'rgba(255,255,255,0)')
+      ctx.fillStyle = rg
+      ctx.fillRect(x - r, y - r, r * 2, r * 2)
+    }
+    ctx.globalAlpha = 1
+  }
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+function GlassBackdrop({ cx, cy, w, h, z }: { cx: number; cy: number; w: number; h: number; z: number }) {
+  const tex = useMemo(() => backdropTexture(), [])
+  useEffect(() => () => tex.dispose(), [tex])
+  return (
+    <mesh
+      position={[cx, cy, z]}
+      onBeforeRender={(renderer, _scene, _camera, _geo, material) => {
+        // เขียนสีเฉพาะตอนวาดลง render target ของกระจก ไม่ใช่ตอนวาดลงจอ
+        ;(material as THREE.Material).colorWrite = renderer.getRenderTarget() !== null
+      }}
+    >
+      <planeGeometry args={[w, h]} />
+      <meshBasicMaterial map={tex} toneMapped={false} />
+    </mesh>
+  )
+}
+
+/** สีของก้อนที่อยู่ในฟอง — น้ำเงินชุดของหน้า ต่างเฉดกันพอให้แยกก้อนออกจากกันหลังกระจกฝ้า */
+const LIFE_COLORS = ['#2052cd', '#265ada', '#158ffc', '#6aa9ee']
+
+/** สุ่มแบบกำหนดผลได้ — ผังของก้อนต้องเหมือนกันทุกครั้งที่โหลด ไม่ใช่สลับที่ทุกรีเฟรช */
+function seeded(seed: number) {
+  let a = seed
+  return () => {
+    a = (a * 1664525 + 1013904223) % 4294967296
+    return a / 4294967296
+  }
+}
+
+/** ทรงเรขาคณิตพื้นฐานของกล่องทราย — ลูกบาศก์ ลูกกลม กรวย ห่วง */
+type Kind = 'box' | 'sphere' | 'cone' | 'torus'
+
+type Bit = {
+  kind: Kind
+  color: string
+  /** รัศมีที่ใช้ชน (ทุกก้อนชนกันเป็นทรงกลม) และขนาดของรูปที่วาด */
+  r: number
+  /**
+   * ระยะจากใจกลางถึงท้องของ *รูปที่วาด* — ใช้ตอนวางบนทราย
+   *
+   * รัศมีชนครอบมุมที่ไกลสุดของทรง ถ้าเอาค่านั้นมาวางของจะลอยเหนือทราย (ลูกบาศก์ลอยชัดสุด)
+   * ของกลิ้งพลิกไปเรื่อย จึงใช้ระยะที่สั้นที่สุดของทรง — จมทรายนิดหน่อยดีกว่าลอย
+   */
+  rest: number
+  size: number
+  long: number
+  pos: THREE.Vector3
+  vel: THREE.Vector3
+  /** แกนหมุนของก้อน — หมุนเร็วตามความเร็วที่มันเคลื่อนที่ */
+  axis: THREE.Vector3
+  quat: THREE.Quaternion
+}
+
+/**
+ * ── ทำไมไม่ใช้ @react-three/rapier ──
+ *
+ * ลองแล้วมันพังทั้งแคนวาส: `R3F: Hooks can only be used within the Canvas component!`
+ * ตอน <Physics> ขึ้น (rapier 2.2.0 ประกาศ peer เป็น fiber ^9.0.4 แต่โปรเจกต์อยู่ 9.6.1)
+ * หัวเรื่องทั้งบล็อกหายไปทั้งก้อนเพราะแคนวาสถูกถอด
+ *
+ * ของในฟองมีไม่กี่ก้อนและอยู่ในกล่องปิด ไม่ต้องใช้เอนจินเต็มตัว: อินทิเกรตเอง (ความเร่ง →
+ * ความเร็ว → ตำแหน่ง) ชนผนังหกด้าน และชนกันเองแบบทรงกลม-ทรงกลม (9 ก้อน = 36 คู่ต่อเฟรม)
+ * เป็นพลศาสตร์จริง มีแรงโน้มถ่วง การคืนตัว แรงเสียดทาน และโมเมนตัมส่งต่อกันเป็นทอด ๆ
+ * แค่ทรงที่ใช้ชนถูกลดเป็นทรงกลม — หลังกระจกฝ้าตาไม่จับความต่างนั้น
+ */
+/** เสียดทานตามแนวสัมผัสตอนกระทบพื้น — ค่าที่เหลือ (แรงโน้มถ่วง/คืนตัว/หนืด) อยู่ในแผงจูน */
+const TANG = 0.82
+
+/**
+ * ทรายในฟอง — สนามทรายจริง ไม่ใช่พื้นลายทราย
+ *
+ * เก็บเป็น "ความสูงต่อคอลัมน์" (height field) ไม่ใช่เม็ดทรายเป็นล้านเม็ด: พฤติกรรมที่ตาอ่านว่า
+ * ทรายคือ *มุมกอง* (angle of repose) — กองสูงชันเกินค่าหนึ่งแล้วไหลลงเอง ของหนักกดลงไปเป็น
+ * หลุมและดันสันขึ้นข้าง ๆ ทั้งสองอย่างนี้อยู่ในกริดความสูงได้ครบ ด้วยราคาไม่กี่พันเซลล์ต่อเฟรม
+ * (เม็ดจริงต้องแก้การชนแบบคู่ ๆ หลายแสนคู่ต่อเฟรม — ไม่มีทางอยู่ในงบของแคนวาสนี้)
+ *
+ * ปริมาตรคงที่: การไหลย้ายทรายจากคอลัมน์หนึ่งไปอีกคอลัมน์ ไม่ได้ลบทิ้ง และการขุดของก้อนก็เอา
+ * ส่วนที่ถูกกดไปโปะขอบหลุม ทรายจึงไม่หายและไม่งอกออกมาจากไหน
+ */
+/** สีทราย — อ่อนพอให้อยู่ในฟองใสได้โดยไม่กลายเป็นก้อนโคลนทึบ */
+const SAND_COLOR = '#e2c79a'
+/** ความละเอียดของรอยขอบล่าง — ตรงกับจำนวนคอลัมน์ทรายตามแกน x */
+const PROFILE_N = 88
+const SAND_NX = 44
+const SAND_NZ = 22
+
+type Sand = {
+  nx: number
+  nz: number
+  /**
+   * ความสูงของ *ผิวทราย* ต่อคอลัมน์ เป็นค่าสัมบูรณ์ในพิกัดกลุ่ม ไม่ใช่ความหนาเหนือพื้น
+   *
+   * ต้องเป็นค่าสัมบูรณ์เพราะพื้นไม่ได้ราบ: ฟองคำพูดมีแง่งลูกศรที่ก้นลงลึกกว่าตัวฟอง
+   * ทรายไหลไปหา "ระดับเดียวกัน" ซึ่งเทียบกันได้เฉพาะเมื่อวัดจากจุดอ้างอิงเดียวกันทั้งสนาม
+   */
+  top: Float32Array
+  /** ก้นของรูปตรงคอลัมน์นั้น (ตามแกน x เท่านั้น — ความหนาของฟองเท่ากันทุกที่) */
+  floor: Float32Array
+  /** ขนาดเซลล์ตามแกน x และ z */
+  dx: number
+  dz: number
+  /** มุมของสนามในพิกัดกลุ่ม — สนามไม่ได้กลางห้อง มันกินแค่ช่วงที่รูปมีแอ่งให้ทรายอยู่ */
+  x0: number
+  z0: number
+  /** ผิวเป็นเม็ด ๆ — คลื่นความถี่สูงคงที่ที่บวกทับความสูงตอนวาด ไม่ใช่ส่วนที่ไหลได้ */
+  grain: Float32Array
+  dirty: boolean
+}
+
+/**
+ * @param floorAt ก้นของรูปที่พิกัด x (พิกัดกลุ่ม) — พื้นตามรอย silhouette ไม่ใช่ระนาบเดียว
+ * @param level ระดับผิวทรายตั้งต้น (พิกัดกลุ่ม) ทรายเทลงไปเต็มทุกซอกที่ต่ำกว่านี้
+ */
+/**
+ * @param x0 ขอบซ้ายของสนาม, @param x1 ขอบขวา (พิกัดกลุ่ม) — เท่ากับช่วงที่รูปมีแอ่ง
+ * @param floorAt ก้นของรูปที่พิกัด x — พื้นตามรอย silhouette ไม่ใช่ระนาบเดียว
+ * @param level ระดับผิวทรายตั้งต้น ทรายเทลงเต็มทุกซอกที่ต่ำกว่านี้
+ */
+function makeSand(
+  x0: number,
+  x1: number,
+  iz: number,
+  floorAt: (x: number) => number,
+  level: number,
+): Sand {
+  const nx = SAND_NX
+  const nz = SAND_NZ
+  const dx = (x1 - x0) / (nx - 1)
+  const dz = (iz * 2) / (nz - 1)
+  const top = new Float32Array(nx * nz)
+  const floor = new Float32Array(nx)
+  const grain = new Float32Array(nx * nz)
+  const rnd = seeded(20260911)
+  for (let i = 0; i < nx; i += 1) floor[i] = floorAt(x0 + i * dx)
+  for (let j = 0; j < nz; j += 1) {
+    for (let i = 0; i < nx; i += 1) {
+      const k = j * nx + i
+      const u = i / (nx - 1)
+      const v = j / (nz - 1)
+      // เนินอ่อน ๆ ตั้งต้น ไม่ใช่ผิวเรียบกริบ — ทรายที่ไม่มีใครแตะก็ไม่ได้ราบเป็นกระจก
+      const dune =
+        Math.sin(u * 6.1 + 0.7) * 0.05 + Math.sin(v * 4.3 - 1.1) * 0.03 + Math.sin((u + v) * 8.2) * 0.02
+      const span = Math.max(1e-3, level - floor[i])
+      top[k] = Math.max(floor[i], level + span * dune)
+      grain[k] = (rnd() * 2 - 1) * Math.min(span, dz) * 0.06
+    }
+  }
+  return { nx, nz, top, floor, dx, dz, x0, z0: -iz, grain, dirty: true }
+}
+
+/** ก้นของรูปที่พิกัด x — คอลัมน์ที่ใกล้สุด (พื้นเปลี่ยนตามแกน x เท่านั้น) */
+function sandFloorAt(s: Sand, x: number) {
+  const i = Math.max(0, Math.min(s.nx - 1, Math.round((x - s.x0) / s.dx)))
+  return s.floor[i]
+}
+
+/** ระดับผิวทรายที่พิกัดใด ๆ (ค่าสัมบูรณ์) — ประมาณเชิงเส้นสองแกนจากสี่คอลัมน์ที่ล้อมอยู่ */
+function sandHeight(s: Sand, x: number, z: number) {
+  const fx = Math.max(0, Math.min(s.nx - 1, (x - s.x0) / s.dx))
+  const fz = Math.max(0, Math.min(s.nz - 1, (z - s.z0) / s.dz))
+  const i0 = Math.floor(fx)
+  const j0 = Math.floor(fz)
+  const i1 = Math.min(s.nx - 1, i0 + 1)
+  const j1 = Math.min(s.nz - 1, j0 + 1)
+  const tx = fx - i0
+  const tz = fz - j0
+  const a = s.top[j0 * s.nx + i0] * (1 - tx) + s.top[j0 * s.nx + i1] * tx
+  const b = s.top[j1 * s.nx + i0] * (1 - tx) + s.top[j1 * s.nx + i1] * tx
+  return a * (1 - tz) + b * tz
+}
+
+/**
+ * ก้อนกดทราย — คอลัมน์ที่อยู่ใต้ก้อนถูกกดลงถึงท้องก้อน ทรายที่ถูกกดไปโปะเป็นสันรอบหลุม
+ *
+ * ไม่ได้ "ลบ" ทราย: รวมส่วนที่กดได้เท่าไรก็หารแจกลงวงรอบนอกเท่านั้น ปริมาตรจึงคงที่
+ * (เคยลองลบทิ้งเฉย ๆ — ทรายค่อย ๆ หายไปทั้งสนามหลังคนเล่นไปสักพัก)
+ */
+function sandPress(s: Sand, x: number, z: number, r: number, top: number, gain: number) {
+  if (gain <= 0 || r <= 0) return
+  const rim: number[] = []
+  let moved = 0
+  const ri = Math.ceil((r * 1.9) / s.dx) + 1
+  const rj = Math.ceil((r * 1.9) / s.dz) + 1
+  const ci = Math.round((x - s.x0) / s.dx)
+  const cj = Math.round((z - s.z0) / s.dz)
+  for (let j = cj - rj; j <= cj + rj; j += 1) {
+    if (j < 0 || j >= s.nz) continue
+    for (let i = ci - ri; i <= ci + ri; i += 1) {
+      if (i < 0 || i >= s.nx) continue
+      const px = s.x0 + i * s.dx - x
+      const pz = s.z0 + j * s.dz - z
+      const d = Math.hypot(px, pz)
+      const k = j * s.nx + i
+      if (d <= r) {
+        // กดได้ไม่เกินก้นของรูป ทรายในซอกลึกจึงไม่ถูกดันจนกลายเป็นค่าติดลบใต้พื้น
+        const cut = Math.min((s.top[k] - top) * gain, s.top[k] - s.floor[i])
+        if (cut > 0) {
+          s.top[k] -= cut
+          moved += cut
+        }
+      } else if (d <= r * 1.9) rim.push(k)
+    }
+  }
+  if (moved > 0 && rim.length) {
+    const share = moved / rim.length
+    for (const k of rim) s.top[k] += share
+    s.dirty = true
+  }
+}
+
+/**
+ * มุมกอง — ผลต่างความสูงของคอลัมน์ข้างกันเกินเกณฑ์เท่าไร ส่วนเกินไหลลงไปหาคอลัมน์ที่ต่ำกว่า
+ * เกณฑ์คิดเป็น "ความชัน × ขนาดเซลล์" ความละเอียดกริดจึงไม่เปลี่ยนหน้าตาของกอง
+ */
+function sandRelax(s: Sand, slope: number) {
+  const limX = slope * s.dx
+  const limZ = slope * s.dz
+  let flow = 0
+  /** ย้ายทรายจาก a ไป b ได้ไม่เกินที่ a มีอยู่จริงเหนือก้นของมัน */
+  const move = (a: number, b: number, want: number) => {
+    const ai = a % s.nx
+    const give = Math.min(want, s.top[a] - s.floor[ai])
+    if (give <= 0) return 0
+    s.top[a] -= give
+    s.top[b] += give
+    return give
+  }
+  for (let j = 0; j < s.nz; j += 1) {
+    for (let i = 0; i < s.nx; i += 1) {
+      const k = j * s.nx + i
+      if (i + 1 < s.nx) {
+        const d = s.top[k] - s.top[k + 1]
+        if (Math.abs(d) > limX) {
+          const want = (Math.abs(d) - limX) * 0.25
+          flow += d > 0 ? move(k, k + 1, want) : move(k + 1, k, want)
+        }
+      }
+      if (j + 1 < s.nz) {
+        const d = s.top[k] - s.top[k + s.nx]
+        if (Math.abs(d) > limZ) {
+          const want = (Math.abs(d) - limZ) * 0.25
+          flow += d > 0 ? move(k, k + s.nx, want) : move(k + s.nx, k, want)
+        }
+      }
+    }
+  }
+  if (flow > 0) s.dirty = true
+  return flow
+}
+
+/**
+ * เรขาคณิตของสนามทราย — ผิวด้านบนเป็นกริด บวก "ผ้ากันเปื้อน" สี่ด้านที่ห้อยลงถึงพื้นห้อง
+ *
+ * ถ้ามีแค่ผิวด้านบน มองผ่านกระจกด้านหน้าจะเห็นใต้แผ่นเป็นช่องว่างลอยอยู่เหนือพื้น (ลองแล้ว)
+ * ผ้าสี่ด้านทำให้ทรายอ่านเป็นชั้นที่มีความหนาจริง ก้นไม่ต้องปิดเพราะพื้นห้องบังอยู่
+ */
+function sandGeometry(s: Sand) {
+  const { nx, nz } = s
+  const top = nx * nz
+  // ขอบรอบสนาม เดินตามเข็ม: บน → ขวา → ล่าง → ซ้าย (ใช้คู่กับจุดล่างที่พื้น)
+  const ring: number[] = []
+  for (let i = 0; i < nx; i += 1) ring.push(i)
+  for (let j = 1; j < nz; j += 1) ring.push(j * nx + nx - 1)
+  for (let i = nx - 2; i >= 0; i -= 1) ring.push((nz - 1) * nx + i)
+  for (let j = nz - 2; j >= 1; j -= 1) ring.push(j * nx)
+  const count = top + ring.length
+  const pos = new Float32Array(count * 3)
+  const idx: number[] = []
+  for (let j = 0; j < nz - 1; j += 1) {
+    for (let i = 0; i < nx - 1; i += 1) {
+      const a = j * nx + i
+      idx.push(a, a + nx, a + 1, a + 1, a + nx, a + nx + 1)
+    }
+  }
+  for (let k = 0; k < ring.length; k += 1) {
+    const a = ring[k]
+    const b = ring[(k + 1) % ring.length]
+    const la = top + k
+    const lb = top + ((k + 1) % ring.length)
+    idx.push(a, la, b, b, la, lb)
+  }
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+  geo.setIndex(idx)
+  return { geo, ring }
+}
+
+/** เขียนความสูงล่าสุดลงในเรขาคณิต — เรียกเฉพาะเฟรมที่ทรายขยับจริง */
+function sandSync(s: Sand, geo: THREE.BufferGeometry, ring: number[]) {
+  const pos = geo.attributes.position as THREE.BufferAttribute
+  const arr = pos.array as Float32Array
+  for (let j = 0; j < s.nz; j += 1) {
+    for (let i = 0; i < s.nx; i += 1) {
+      const k = j * s.nx + i
+      const o = k * 3
+      arr[o] = s.x0 + i * s.dx
+      arr[o + 1] = Math.max(s.floor[i], s.top[k] + s.grain[k])
+      arr[o + 2] = s.z0 + j * s.dz
+    }
+  }
+  const base = s.nx * s.nz
+  for (let k = 0; k < ring.length; k += 1) {
+    const src = ring[k] * 3
+    const o = (base + k) * 3
+    arr[o] = arr[src]
+    // ผ้ากันเปื้อนห้อยลงถึงก้นของรูปตรงคอลัมน์นั้น ไม่ใช่ระดับเดียวกันทั้งแถบ
+    arr[o + 1] = s.floor[ring[k] % s.nx]
+    arr[o + 2] = arr[src + 2]
+  }
+  pos.needsUpdate = true
+  geo.computeVertexNormals()
+  geo.computeBoundingSphere()
+}
+
+function BubbleLife({
+  cx,
+  cy,
+  cz,
+  hx,
+  hy,
+  hz,
+  profile,
+}: {
+  /** ใจกลางฟองในพิกัดแคนวาส (พิกเซล) */
+  cx: number
+  cy: number
+  cz: number
+  /** ครึ่งขนาดของฟองทั้งใบ — ห้องข้างในยุบเข้ามาจากค่านี้ */
+  hx: number
+  hy: number
+  hz: number
+  /** ขอบล่างของรูปทีละช่วงความกว้าง (0 = ขอบบนกรอบ, 1 = ขอบล่าง) — พื้นของสนามทราย */
+  profile: Float32Array | null
+}) {
+  const { invalidate, size } = useThree()
+  const t = useTuner()
+  /** ผนังยุบเข้ามาจากผิวฟอง — ฟองเป็นสี่เหลี่ยมมุมมนมีหางล่างซ้าย ของจึงต้องไม่ชิดขอบ */
+  const ix = Math.max(8, hx * t.bbRoomX)
+  const iz = Math.max(6, hz * t.bbRoomZ)
+  /**
+   * พื้นห้องอยู่ที่ก้นฟองเสมอ ไม่ใช่กลางฟอง
+   *
+   * ถ้าคิดห้องเป็นกล่องสมมาตรรอบใจกลางฟอง ห้องที่เตี้ยกว่าฟอง (bbRoomY < 1) จะมีพื้นลอย
+   * อยู่กลางใบ ของกองค้างกลางอากาศ — ยึดพื้นไว้ที่ขอบล่างในของฟองแล้วให้ bbRoomY คุม
+   * "ความสูงของห้อง" ขึ้นไปจากพื้นนั้น เพดานเตี้ยลงแทน
+   */
+  const wallY = hy * 0.86
+  const iy = Math.max(8, wallY * t.bbRoomY)
+  /** ระยะที่ต้องเลื่อนห้องลง เพื่อให้พื้น (−iy ในพิกัดห้อง) ไปอยู่ที่ขอบล่างในของฟอง */
+  const oy = -(wallY - iy)
+  /** ขนาดก้อนอ้างอิงความสูงห้อง — ฟองโตขึ้นของโตตาม สัดส่วนภาพคงเดิมทุกขนาดจอ */
+  const unit = iy * t.bbSize
+  const count = Math.max(0, Math.round(t.bbCount))
+
+  const bits = useMemo<Bit[]>(() => {
+    const rnd = seeded(20260910)
+    const cycle: Kind[] = ['box', 'sphere', 'cone', 'torus']
+    const kinds: Kind[] = Array.from({ length: count }, (_, i) => cycle[i % cycle.length])
+    return kinds.map((kind, i) => {
+      const size = unit * (0.72 + rnd() * 0.5)
+      const long = unit * (1.1 + rnd() * 1.4)
+      return {
+        kind,
+        color: LIFE_COLORS[i % LIFE_COLORS.length],
+        size,
+        long,
+        /**
+         * ทรงกลมที่ใช้ชนต้องครอบรูปที่วาดทั้งชิ้น ไม่ใช่แค่ครึ่งความกว้าง
+         * ไม่งั้นมุมของลูกบาศก์หรือขอบห่วงจะโผล่ออกนอกผนัง (เห็นเป็นของทะลุขอบฟองออกมา)
+         */
+        r:
+          kind === 'sphere'
+            ? size * 0.62
+            : kind === 'box'
+              ? size * 0.87
+              : kind === 'cone'
+                ? size * 0.75
+                : size * 0.85,
+        rest:
+          kind === 'sphere'
+            ? size * 0.62
+            : kind === 'box'
+              ? size * 0.5
+              : kind === 'cone'
+                ? size * 0.6
+                : size * 0.24,
+        // เริ่มลอยกระจายในห้องแล้วปล่อยให้ตกลงไปกองเอง ไม่ได้จัดกองไว้ให้ตั้งแต่แรก
+        pos: new THREE.Vector3(
+          (rnd() * 2 - 1) * ix * 0.55,
+          iy * (0.1 + rnd() * 0.8),
+          (rnd() * 2 - 1) * iz * 0.4,
+        ),
+        vel: new THREE.Vector3((rnd() * 2 - 1) * 60, 0, (rnd() * 2 - 1) * 30),
+        axis: new THREE.Vector3(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1).normalize(),
+        quat: new THREE.Quaternion().setFromAxisAngle(
+          new THREE.Vector3(rnd(), rnd(), rnd()).normalize(),
+          rnd() * Math.PI,
+        ),
+      }
+    })
+  }, [ix, iy, iz, unit, count])
+
+  /**
+   * สนามทราย — สร้างใหม่เมื่อขนาดห้องหรือระดับทรายเปลี่ยน (สลับหน้าจอ/ลากสไลเดอร์)
+   * ปั้นกองให้เข้าที่ก่อนเฟรมแรกด้วยการไหลซ้ำ ๆ ไม่ปล่อยให้คนเห็นกองยุบตัวตอนเปิดหน้า
+   */
+  const sand = useMemo(() => {
+    /**
+     * ก้นของสนามทรายคือขอบล่างของรูปจริง ยกขึ้นมาเท่าความหนาผนัง — ไม่ใช่ย่อเข้าหาใจกลาง
+     *
+     * เคยคูณพิกัด y ด้วย 0.86 (อัตราเดียวกับผนัง) ซึ่งไม่ใช่การยุบขอบเข้ามา: มันทำให้ส่วนที่
+     * *โค้ง* แบนลง ปลายขวาของฟองที่ก้นไต่ขึ้นจาก y 99 → 48 (วัดจากไฟล์แล้ว) จึงเพี้ยนไปครึ่งหนึ่ง
+     * การยกขึ้นเท่ากันทุกจุดคือ offset ที่รักษารูปโค้งไว้
+     */
+    const inset = hy - wallY
+    const floorAt = (x: number) => {
+      const flat = -iy
+      if (!profile || profile.length === 0) return flat
+      const u = (x + hx) / Math.max(1e-6, hx * 2)
+      const f = Math.max(0, Math.min(1, u)) * (profile.length - 1)
+      const k0 = Math.floor(f)
+      const k1 = Math.min(profile.length - 1, k0 + 1)
+      const p = profile[k0] + (profile[k1] - profile[k0]) * (f - k0)
+      /** p = สัดส่วนจากขอบบนกรอบ (0) ถึงขอบล่าง (1) → พิกัดกลางฟอง → พิกัดกลุ่มนี้ */
+      const bottom = hy - p * hy * 2
+      return Math.min(iy, bottom + inset - oy)
+    }
+    /**
+     * ระดับทรายวัดจากก้นของ *ตัวฟอง* ไม่ใช่จากปลายที่ต่ำสุด และสนามกินความกว้างของฟองทั้งใบ
+     * ไม่ใช่แค่ช่วงที่ก้อนวิ่งได้ (ix) — ไม่งั้นทรายจบเป็นกำแพงตัดตรงก่อนถึงส่วนโค้งปลายฟอง
+     */
+    const probe = Array.from({ length: SAND_NX * 3 }, (_, i) => {
+      const x = -hx + (i / (SAND_NX * 3 - 1)) * hx * 2
+      return { x, y: floorAt(x) }
+    })
+    const base = probe.map((q) => q.y).sort((a, b) => a - b)[Math.floor(probe.length / 2)]
+    const level = base + (iy - base) * Math.max(0, Math.min(0.6, t.bbSand))
+    /**
+     * สนามจบตรงที่ก้นของรูปไต่ขึ้นมาถึงระดับทราย — ขอบทรายจึงค่อย ๆ บางลงตามส่วนโค้งของฟอง
+     * แทนที่จะถูกตัดเป็นหน้าตัดตรง (มุมมนซ้าย-ขวาไม่มีแอ่งให้ทรายอยู่ ปูกริดไปก็ได้แผ่นหนาศูนย์)
+     */
+    const wet = probe.filter((q) => q.y < level)
+    const x0 = wet.length ? wet[0].x : -ix
+    const x1 = wet.length ? wet[wet.length - 1].x : ix
+    const made = makeSand(x0, x1, iz, floorAt, level)
+    for (let n = 0; n < 24; n += 1) sandRelax(made, t.bbRepose)
+    return made
+  }, [ix, iy, iz, hx, hy, oy, wallY, profile, t.bbSand, t.bbRepose])
+  const sandMesh = useMemo(() => sandGeometry(sand), [sand])
+  useEffect(() => () => sandMesh.geo.dispose(), [sandMesh])
+
+  const meshes = useRef<(THREE.Mesh | null)[]>([])
+  /** ลูกกวน = เมาส์ในพิกัดห้อง เก็บตำแหน่งเฟรมก่อนไว้คิดความเร็วของมันเอง */
+  const stir = useMemo(
+    () => ({ p: new THREE.Vector3(1e5, 1e5, 0), v: new THREE.Vector3(), on: false }),
+    [],
+  )
+  const tmp = useMemo(() => ({ d: new THREE.Vector3(), n: new THREE.Vector3(), q: new THREE.Quaternion() }), [])
+
+  useFrame((_state, raw) => {
+    // เฟรมยาว ๆ (แท็บกลับมา/โหลดสะดุด) ต้องไม่กลายเป็นก้าวเดียวยาวจนของทะลุผนัง
+    const dt = Math.min(raw, 1 / 30)
+    const stirR = unit * 1.1
+
+    /** เมาส์เข้าห้องไหม — พิกัดเมาส์เป็นพิกเซลหน้าต่าง แปลงเข้าพิกัดแคนวาสแล้วลบใจกลางห้อง */
+    const mx = mouse.x - fieldRect.left - size.width / 2 - cx
+    const my = size.height / 2 - (mouse.y - fieldRect.top) - (cy + oy)
+    const on = Math.abs(mx) < ix + stirR && Math.abs(my) < iy + stirR
+    if (on) {
+      tmp.d.set(mx, my, 0)
+      stir.v.subVectors(tmp.d, stir.p).divideScalar(Math.max(dt, 1e-4))
+      if (!stir.on) stir.v.set(0, 0, 0)
+      stir.p.copy(tmp.d)
+    }
+    stir.on = on
+
+    let moving = false
+    for (const b of bits) {
+      b.vel.y -= t.bbG * dt
+      b.vel.multiplyScalar(Math.max(0, 1 - t.bbDrag * dt))
+      b.pos.addScaledVector(b.vel, dt)
+
+      // ผนังหกด้าน: ดันกลับเข้าห้อง สะท้อนตามแนวตั้งฉาก หน่วงตามแนวสัมผัส
+      const lim: [ 'x' | 'y' | 'z', number ][] = [
+        ['x', ix],
+        ['y', iy],
+        ['z', iz],
+      ]
+      /** ก้นห้องตรงคอลัมน์นี้ — ของตกลงในซอกแง่งได้ ไม่ใช่ค้างบนระนาบสมมติ */
+      const deck = sandFloorAt(sand, b.pos.x)
+      for (const [axis, half] of lim) {
+        /**
+         * ห้องแคบกว่าก้อน (ฟองบางมาก / ก้อนใหญ่มาก) ต้องได้ 0 ไม่ใช่ค่าติดลบ
+         * ค่าติดลบทำให้การหนีบตำแหน่งกลับด้าน ก้อนจะถูกดีดไปค้างนอกห้องแทน
+         */
+        const room = Math.max(0, half - b.r)
+        const low = axis === 'y' ? deck + b.rest : -room
+        if (b.pos[axis] > room) {
+          b.pos[axis] = room
+          if (b.vel[axis] > 0) b.vel[axis] = -b.vel[axis] * t.bbBounce
+        } else if (b.pos[axis] < low) {
+          b.pos[axis] = low
+          if (b.vel[axis] < 0) b.vel[axis] = -b.vel[axis] * t.bbBounce
+        } else {
+          continue
+        }
+        if (axis === 'y') {
+          b.vel.x *= TANG
+          b.vel.z *= TANG
+        }
+      }
+
+      /**
+       * ท้องก้อนชนผิวทราย — ผิวไม่ใช่ระนาบ ความสูงอ่านจากกริดตรงใต้ก้อน
+       *
+       * ทรายดูดแรงกว่าผนังแก้ว: เด้งน้อยกว่าและเสียดทานมากกว่า ของจึงหยุดจมอยู่ในหลุมของตัวเอง
+       * ไม่กระเด้งกลิ้งต่อเหมือนตกบนพื้นแข็ง
+       */
+      const ground = sandHeight(sand, b.pos.x, b.pos.z)
+      if (b.pos.y - b.rest < ground) {
+        b.pos.y = ground + b.rest
+        if (b.vel.y < 0) b.vel.y = -b.vel.y * t.bbBounce * 0.35
+        b.vel.x *= 0.86
+        b.vel.z *= 0.86
+        // กดทรายเป็นหลุมตามน้ำหนัก แรงกดคิดจากความเร็วที่ลงมา (ตกแรง = หลุมลึก)
+        sandPress(
+          sand,
+          b.pos.x,
+          b.pos.z,
+          b.r * 0.9,
+          b.pos.y - b.rest,
+          Math.min(0.5, 0.06 + Math.abs(b.vel.y) * 0.0015) * t.bbDig,
+        )
+      }
+
+      // ลูกกวนของเมาส์ — ดันก้อนออกแล้วส่งความเร็วของตัวเองให้ ของจึงกลิ้งตามมือ
+      if (stir.on) {
+        tmp.d.subVectors(b.pos, stir.p)
+        const reach = b.r + stirR
+        const len = tmp.d.length()
+        if (len < reach && len > 1e-4) {
+          tmp.n.copy(tmp.d).divideScalar(len)
+          b.pos.addScaledVector(tmp.n, reach - len)
+          b.vel.addScaledVector(tmp.n, (reach - len) * 12 * t.bbStir)
+          b.vel.addScaledVector(stir.v, 0.28 * t.bbStir)
+        }
+      }
+    }
+
+    // ชนกันเอง: แยกออกครึ่งทางคนละครึ่ง แล้วแลกโมเมนตัมตามแนวเชื่อมศูนย์ (มวลเท่ากัน)
+    for (let i = 0; i < bits.length; i += 1) {
+      for (let j = i + 1; j < bits.length; j += 1) {
+        const a = bits[i]
+        const c = bits[j]
+        tmp.d.subVectors(c.pos, a.pos)
+        const reach = a.r + c.r
+        const len = tmp.d.length()
+        if (len >= reach || len < 1e-4) continue
+        tmp.n.copy(tmp.d).divideScalar(len)
+        const push = (reach - len) * 0.5
+        a.pos.addScaledVector(tmp.n, -push)
+        c.pos.addScaledVector(tmp.n, push)
+        const rel = tmp.n.dot(tmp.d.subVectors(c.vel, a.vel))
+        if (rel >= 0) continue
+        const imp = -rel * (1 + t.bbBounce) * 0.5
+        a.vel.addScaledVector(tmp.n, -imp)
+        c.vel.addScaledVector(tmp.n, imp)
+      }
+    }
+
+    /**
+     * ปิดท้ายด้วยการยัดทุกก้อนกลับเข้าห้อง
+     *
+     * ทั้งลูกกวนของเมาส์และการแยกก้อนที่ซ้อนกันดัน "ตำแหน่ง" ตรง ๆ หลังจากเช็คผนังไปแล้ว
+     * ถ้าไม่เช็คอีกรอบ ก้อนที่ถูกดันจะค้างอยู่นอกผนังตลอดเวลาที่เมาส์ยังกดอยู่ที่เดิม
+     * (เห็นเป็นแท่งโผล่ออกนอกฟอง)
+     */
+    for (const b of bits) {
+      const room: [ 'x' | 'y' | 'z', number ][] = [
+        ['x', Math.max(0, ix - b.r)],
+        ['z', Math.max(0, iz - b.r)],
+      ]
+      for (const [axis, half] of room) {
+        b.pos[axis] = Math.max(-half, Math.min(half, b.pos[axis]))
+      }
+      b.pos.y = Math.max(sandFloorAt(sand, b.pos.x) + b.rest, Math.min(iy - b.r, b.pos.y))
+    }
+
+    for (let i = 0; i < bits.length; i += 1) {
+      const b = bits[i]
+      const m = meshes.current[i]
+      const speed = b.vel.length()
+      if (speed > 6) moving = true
+      // หมุนตามที่วิ่ง — ไม่ได้แก้สมการโมเมนต์ ของกลิ้งเร็วตามความเร็วของตัวเองก็พอ
+      tmp.q.setFromAxisAngle(b.axis, (speed / Math.max(unit, 1)) * dt * 0.9)
+      b.quat.multiply(tmp.q)
+      if (m) {
+        m.position.copy(b.pos)
+        m.quaternion.copy(b.quat)
+      }
+    }
+
+    /**
+     * นิ้วไถทราย — ลูกกวนตัวเดียวกับที่ดันก้อน กดคอลัมน์ที่มันผ่านลงเป็นร่อง
+     * มีผลเฉพาะตอนที่มันอยู่ต่ำกว่าผิวทราย ไม่ใช่ลอยอยู่เหนือกองแล้วทรายยุบตาม
+     */
+    if (stir.on) {
+      const dip = stir.p.y - stirR
+      if (dip < sandHeight(sand, stir.p.x, 0)) {
+        sandPress(sand, stir.p.x, 0, stirR, dip, 0.45 * t.bbDig)
+      }
+    }
+
+    // ทรายไหลหามุมกองของตัวเองต่อ ถึงจะไม่มีใครแตะในเฟรมนี้ (กองที่ยังชันอยู่ต้องยุบต่อ)
+    const flow = sandRelax(sand, t.bbRepose)
+    if (sand.dirty) {
+      sandSync(sand, sandMesh.geo, sandMesh.ring)
+      sand.dirty = false
+    }
+
+    // ยังมีของขยับ (ทราย/ก้อน/มือ) ก็ขอเฟรมใหม่ — นิ่งหมดแล้วแคนวาสหยุดวาดสนิท
+    if (moving || stir.on || flow > unit * 0.002) invalidate()
+  })
+
+  return (
+    <group position={[cx, cy + oy, cz]}>
+      {/**
+       * ทราย — ด้าน ไม่มัน และไม่รับ env ของฟอง (แผงไฟเวทีจะทำให้ทรายเงาเหมือนพลาสติก)
+       * สีมาจากวัสดุเดียว ความลึกของกองอ่านได้จากเงาที่เกิดจาก normal ของกริดเอง
+       */}
+      <mesh geometry={sandMesh.geo}>
+        <meshStandardMaterial color={SAND_COLOR} roughness={0.98} metalness={0} envMapIntensity={0.15} />
+      </mesh>
+      {bits.map((b, i) => (
+        <mesh
+          key={i}
+          ref={(n) => {
+            meshes.current[i] = n
+          }}
+          position={b.pos}
+          quaternion={b.quat}
+        >
+          {b.kind === 'box' && <boxGeometry args={[b.size, b.size, b.size]} />}
+          {b.kind === 'sphere' && <sphereGeometry args={[b.size * 0.62, 20, 14]} />}
+          {b.kind === 'cone' && <coneGeometry args={[b.size * 0.6, b.size * 1.25, 20]} />}
+          {b.kind === 'torus' && (
+            <torusGeometry args={[b.size * 0.55, b.size * 0.24, 12, 24]} />
+          )}
+          <meshStandardMaterial
+            color={b.color}
+            roughness={0.45}
+            metalness={0}
+            envMapIntensity={0.5}
+          />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/**
+ * บล็อกหัวเรื่องทั้งก้อน — แคนวาสใบเดียวคุมทุกบรรทัดที่ลงทะเบียนเข้ามา
+ *
+ * แคนวาสไม่ mount จนกว่าอินโทรของฉากจะผ่านไปแล้ว (introTime) — งานสร้าง TextGeometry
+ * เป็นงานบนเธรดหลัก ถ้าลงมือระหว่างอินโทรกำลังเล่น เฟรมจะตกให้เห็น (วัดแล้ว 40 → 55fps)
+ * ผูกกับนาฬิกาของฉากจริง ไม่ใช่ตัวจับเวลาที่เดาเอา เพราะเครื่องช้าเร็วไม่เท่ากัน
+ * มีทางออกสำรองสองทาง: หมดเวลาสำรอง หรือคนขยับเมาส์ (= เลิกดูอินโทรแล้ว)
+ */
+export function Headline3DField({
+  active,
+  className = '',
+  scale = 1,
+  children,
+}: {
+  /** ยังอยู่ที่จอแรกอยู่ไหม — พ้นไปแล้วถอดแคนวาสทิ้ง ไม่ต้องแบกบริบท WebGL ไว้ */
+  active: boolean
+  className?: string
+  /** ตัวคูณเพิ่มจากฝั่งหน้า (คูณกับ hlSize ของแผงจูน) — เช่นหัวเรื่องย่อในมุมการ์ด */
+  scale?: number
+  children: ReactNode
+}) {
+  const t = useTuner()
+  const pad = t.hlPad
+  /** ตัวคูณขนาดของทั้งบล็อก — ส่งลง CSS ให้ทั้งตัวหนังสือ, LIFE และฟองใช้ค่าเดียวกัน */
+  const size = t.hlSize * scale
+  const cfg = useMemo<Cfg>(
+    () => ({
+      rad: t.hlRad,
+      push: t.hlPush,
+      lift: t.hlLift,
+      ease: t.hlEase,
+      depth: t.hlDepth,
+      bevT: t.hlBevT,
+      bevS: t.hlBevS,
+      seg: Math.max(1, Math.round(t.hlSeg)),
+      rough: t.hlRough,
+      emis: t.hlEmis,
+      alb: t.hlAlb,
+      enter: t.hlEnter,
+      rise: t.hlRise,
+      stag: t.hlStag,
+      track: t.hlTrack,
+      rot: [
+        (t.hlRotX * Math.PI) / 180,
+        (t.hlRotY * Math.PI) / 180,
+        (t.hlRotZ * Math.PI) / 180,
+      ],
+    }),
+    [t],
+  )
+  const [, setTick] = useState(0)
+  const store = useMemo(
+    () => ({ lines: new Map<number, LineBox>(), bump: () => setTick((v) => v + 1) }),
+    [],
+  )
+  const heroReady = useNewHeroReady()
+  const [settled, setSettled] = useState(false)
+
+  /* บอกด่านโหลดว่าบล็อกนี้มีตัวตนแล้ว — ไม่มีสัญญาณนี้ ด่านจะไม่รู้ว่าต้องรอใครอยู่หรือเปล่า */
+  useEffect(() => {
+    headlineReady.armed = true
+    return () => {
+      headlineReady.armed = false
+    }
+  }, [])
+
+  /**
+   * ขึ้นเมื่ออินโทรของฉากเล่นจบ ไม่ใช่เมื่อครบกี่วินาทีที่ตั้งไว้เอง
+   *
+   * hlAfter คือ *ระยะห่างจากจุดจบของอินโทร* (ติดลบได้ = ขึ้นซ้อนท้ายอินโทร) จุดจบมาจาก
+   * introEnd() ซึ่งคิดจากตารางเวลาชุดเดียวกับที่ของทุกชิ้นในฉากใช้โผล่ — ลากสไลเดอร์อินโทร
+   * แล้วหัวเรื่องเลื่อนตามเอง
+   *
+   * เช็คทุกเฟรมด้วย rAF ไม่ใช่ตั้งเวลาทุก 250ms: นาฬิกาอินโทรเดินตามเฟรม การถามด้วยนาฬิกา
+   * ผนังจึงคลาดได้ถึงหนึ่งช่วงถาม ซึ่งมองเห็นเมื่อของทั้งฉากลงจังหวะเดียวกัน
+   */
+  useEffect(() => {
+    if (!heroReady || settled) return undefined
+    let raf = 0
+    let done = false
+    const go = () => {
+      if (done) return
+      done = true
+      setSettled(true)
+    }
+    /**
+     * ขยับเมาส์ = เลิกดูอินโทรแล้ว แต่ต้องไม่ใช่ทางลัดที่ทำให้หัวเรื่องโผล่กลางอินโทร
+     * (นี่คือเหตุที่จังหวะเคยหลุดแบบสุ่ม: ใครขยับเมาส์ตอนวินาทีที่หนึ่ง หัวเรื่องก็ขึ้นเลย)
+     */
+    const skip = () => {
+      if (introSince() >= getTuner().hlAfter) go()
+    }
+    const tick = () => {
+      if (done) return
+      if (getTuner().intro < 0.5 || introSince() >= getTuner().hlAfter) {
+        go()
+        return
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    // ทางออกสำรอง: ไม่มีใครติดอาวุธนาฬิกาอินโทรเลย (ปิดฉาก/โหลดพลาด) ก็ต้องได้ขึ้น
+    const bail = setTimeout(go, FALLBACK_AFTER)
+    window.addEventListener('pointermove', skip, { passive: true })
+    return () => {
+      cancelAnimationFrame(raf)
+      clearTimeout(bail)
+      window.removeEventListener('pointermove', skip)
+    }
+  }, [heroReady, settled])
+
+  const lines = [...store.lines.values()]
+  /**
+   * mount แคนวาสทันทีที่วัดกรอบได้ แล้วค่อย *โชว์* ตอนถึงคิว — สองเรื่องแยกกัน
+   *
+   * ของเดิม mount ตอนถึงคิวโชว์พอดี ซึ่งหมายถึงงานหนักทั้งกองเพิ่งเริ่มตอนนั้น: โหลดไฟล์
+   * ฟอนต์ที่ Text3D ใช้, ปั้น TextGeometry ทีละตัว (ตัวละ requestIdleCallback ซึ่งช่วงที่
+   * ฉากกำลังเล่นแทบไม่มีช่วงว่างให้แทรก) และโหลด SVG ของ LIFE/ฟองคำพูด — ผลคือหัวเรื่อง
+   * โผล่ทีละตัวช้า ๆ อ่านเป็น "เพิ่งโหลด" ไม่ใช่ท่าเปิดตัวที่ออกแบบไว้
+   *
+   * ตอนนี้ของทั้งหมดถูกเตรียมไว้ใต้ผ้าคลุมของด่านโหลด (ดู pages/Final2026Gate) แล้วคิวโชว์
+   * เป็นแค่การเปิดให้เห็น
+   */
+  const mounted = t.hl > 0.5 && active && lines.length > 0
+  // ปิดจากแผงจูน = หัวเรื่องว่างไว้ ไม่มีตัวสำรอง (ดู fadeToArt)
+  const live = mounted && settled
+  const [revealAt, setRevealAt] = useState(Infinity)
+  useEffect(() => {
+    setRevealAt(live ? performance.now() : Infinity)
+  }, [live])
+  const field = useMemo<Field>(() => ({ ...store, live, revealAt }), [store, live, revealAt])
+  return (
+    <FieldCtx.Provider value={field}>
+      <div
+        className={className}
+        data-headline-field
+        style={{
+          position: 'relative',
+          ['--v3-track' as string]: `${cfg.track}em`,
+          ['--v3-hl-size' as string]: String(size),
+        }}
+      >
+        {children}
+        {mounted && (
+          <div className="absolute" style={{ inset: `${-pad}px`, pointerEvents: 'none' }}>
+            <Canvas
+              aria-hidden
+              /* ไม่รับเมาส์จริง ๆ — div ของ r3f ตั้ง pointer-events: auto เอง ชนะ none ของกล่องแม่ แล้วบังคลิกของฉาก hero (สวิตช์) */
+              style={{ width: '100%', height: '100%', pointerEvents: 'none' }}
+              frameloop="demand"
+              dpr={[1, 1.75]}
+              orthographic
+              /**
+               * กล้องต้องถอยไกลกว่าความหนาของตัวอักษร ไม่งั้นระนาบใกล้จะหั่นทะลุเนื้อจนไม่เหลือ
+               * อะไรให้วาด (เจอมาแล้ว: จอว่างทั้งที่ mesh อยู่ครบ)
+               *
+               * zoom 1 บนกล้องออร์โธ = หนึ่งหน่วยฉากต่อหนึ่งพิกเซล พิกัดจาก HTML จึงใช้ได้ตรง ๆ
+               */
+              camera={{ position: [0, 0, 400], zoom: 1, near: 1, far: 1200 }}
+              gl={{ antialias: true, alpha: true }}
+            >
+              <WarmShaders />
+              <ambientLight intensity={1.35} />
+              {/* คีย์จากบนขวาหน้า ให้สันที่ยืดออกมารับแสง อีกดวงจากล่างซ้ายกันด้านมืดตัน */}
+              <directionalLight position={[220, 320, 420]} intensity={1.75} />
+              <directionalLight position={[-260, -140, 260]} intensity={0.6} />
+              {/* เวทีไฟของฟองแก้ว — ชุดคงที่ ไม่ขึ้นกับผังบรรทัดหรือสีของ LIFE */}
+              <StageLight gain={t.bbGlow} />
+              <PointerWake />
+              <Suspense fallback={null}>
+                {lines.map((b) =>
+                  b.src ? BALLOON_LIFE && !b.glass ? <BalloonArt key={b.id} box={b} /> : <SvgArt key={b.id} box={b} /> : <Line key={b.id} box={b} cfg={cfg} />,
+                )}
+              </Suspense>
+            </Canvas>
+          </div>
+        )}
+      </div>
+    </FieldCtx.Provider>
+  )
+}
+
+/**
+ * ให้ชิ้นงาน HTML (ฟองคำพูด / LIFE) ยกรูปของตัวเองขึ้นไปเป็น 3D ในแคนวาสรวม
+ *
+ * ตัวชิ้นเดิมยังอยู่ในผังเพื่อกันที่และเป็นตัววัดกรอบ แค่ถูกซ่อนด้วย visibility
+ * — เอาออกจากผังไม่ได้ ไม่งั้นบรรทัดจะหุบและไม่มีอะไรบอกขนาดให้ของ 3D
+ */
+export function useHeadlineArt(el: HTMLElement | null, src: string, glass?: boolean) {
+  useBox(el, '', src, glass)
+  return useContext(FieldCtx)?.live ?? false
+}
+
+/**
+ * สไตล์ของของ HTML ในบล็อกหัวเรื่อง — **ซ่อนตลอด** ทั้งก่อนและหลังของ 3D ขึ้น
+ *
+ * เดิมให้ตัวอักษรแบน ๆ ยืนแทนระหว่างรออินโทร แล้วจางออกตอน 3D มา ซึ่งอ่านเป็นของสองชิ้น
+ * สลับกันกลางจอ: ของแบนขึ้นมาก่อนฉากจะเข้าที่ (ไม่เกี่ยวกับจังหวะของฉากเลย) แล้วมีอีกชิ้น
+ * หน้าตาไม่เหมือนกันทับเข้ามาทีหลัง จอแรกจึงว่างไว้ก่อน แล้วหัวเรื่อง 3D ขึ้นทีเดียวตอน
+ * อินโทรของฉากใกล้จบ (ดู hlAfter ใน Headline3DField) — ปรากฏครั้งเดียว ไม่มีของสำรอง
+ *
+ * ยังกันที่ในผังเหมือนเดิม (จางด้วย opacity ไม่ใช่ถอดออก) เพราะกล่องพวกนี้เป็นตัววัดกรอบ
+ * ให้ของ 3D — ถอดออกจากผังแล้วบรรทัดหุบและไม่มีอะไรบอกขนาด
+ */
+export function fadeToArt(_live: boolean) {
+  return {
+    opacity: 0,
+    pointerEvents: 'none' as const,
+  }
+}
+
+/** เก็บตำแหน่งเมาส์ ขอเฟรมใหม่ และวัดกรอบแคนวาสไว้ให้ทุกบรรทัดใช้ร่วมกัน */
+function PointerWake() {
+  const { gl, invalidate } = useThree()
+  useEffect(() => {
+    const el = gl.domElement
+    /**
+     * กรอบของแคนวาสบนจอ — ทุกบรรทัดใช้ค่านี้แปลงเมาส์เข้าพิกัดของกลุ่มตัวอักษร
+     *
+     * แคนวาสไม่รับเมาส์ (pointer-events: none) state.pointer ของ r3f จึงไม่มีวันขยับ
+     * ต้องฟังที่ window เอง แล้วแปลงเองด้วยกรอบที่วัดไว้
+     */
+    const read = () => {
+      const r = el.getBoundingClientRect()
+      fieldRect.left = r.left
+      fieldRect.top = r.top
+    }
+    const move = (e: PointerEvent) => {
+      mouse.x = e.clientX
+      mouse.y = e.clientY
+      invalidate()
+    }
+    kickHeadline = invalidate
+    read()
+    window.addEventListener('pointermove', move, { passive: true })
+    window.addEventListener('scroll', read, { passive: true })
+    window.addEventListener('resize', read)
+    return () => {
+      kickHeadline = null
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('scroll', read)
+      window.removeEventListener('resize', read)
+    }
+  }, [gl, invalidate])
+  return null
+}
+
+/**
+ * หนึ่งบรรทัดของหัวเรื่อง — ตัวหนังสือ HTML ที่ซ่อนไว้ (ยังอ่านด้วย screen reader ได้)
+ * ทำหน้าที่เป็น "กล่องวัด" ให้แคนวาสรวมรู้ว่าจะวางตัวอักษร 3D ตรงไหน ขนาดเท่าไร
+ */
+export function Headline3D({ text, className = '' }: { text: string; className?: string }) {
+  const [el, setEl] = useState<HTMLSpanElement | null>(null)
+  useBox(el, text)
+  const live = useContext(FieldCtx)?.live ?? false
+
+  return (
+    <p className={className} aria-label={text}>
+      <span ref={setEl} style={fadeToArt(live)}>
+        {text}
+      </span>
+    </p>
+  )
+}

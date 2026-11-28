@@ -1,20 +1,55 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { Routes, Route, useLocation } from 'react-router'
 import Lenis from '@studio-freight/lenis'
+import { lenisBox } from '@/lib/lenisBox'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+
+// ScrollTrigger คือตัวขับ scroll animation ของทั้งเว็บ (หน้า /joespresso อ่านผ่านมัน)
+gsap.registerPlugin(ScrollTrigger)
 import { SplashScreen } from '@/components/SplashScreen'
 import { JoeSplash } from '@/components/JoeSplash'
+import { JoeLettersSplash } from '@/components/JoeLettersSplash'
+import { IntroSequence } from '@/components/IntroSequence'
 import { NavBar } from '@/components/NavBar'
 import { ThemePicker } from '@/components/ThemePicker'
 import { AnchorNav } from '@/components/AnchorNav'
 import { HomePage } from '@/pages/HomePage'
+import { DriftWallSandbox } from '@/pages/DriftWallSandbox'
+import { IntroSandbox } from '@/pages/IntroSandbox'
 import { MascotPage } from '@/pages/MascotPage'
 import { NotPortedPage } from '@/pages/NotPortedPage'
+import { Portfolio2026Page } from '@/pages/Portfolio2026Page'
+import { Portfolio2026FinalPage } from '@/pages/Portfolio2026FinalPage'
+import { NewHeroPage } from '@/pages/NewHeroPage'
+import { GlassCardsPage } from '@/pages/GlassCardsPage'
+import { WhatIDoLabPage } from '@/pages/WhatIDoLabPage'
+import { HandCompose } from '@/sections/handcompose/HandCompose'
+import { GalleryPage } from '@/sections/gallery/GalleryPage'
+import { TextStoryPage } from '@/pages/TextStoryPage'
+const GlassCubesPage = lazy(() => import('@/sections/glasscubes/GlassCubesPage').then((m) => ({ default: m.GlassCubesPage })))
+const BalloonSkyPage = lazy(() => import('@/sections/balloonsky/BalloonSkyPage').then((m) => ({ default: m.BalloonSkyPage })))
+import { CompactPage } from '@/pages/CompactPage'
 // ฉาก 3D หนัก (three.js) — lazy แยก chunk ไม่ถ่วงหน้าอื่น
 const JoespressoPage = lazy(() => import('@/joespresso/Page'))
 // workspace ปั้นทรง toolbar ของฉาก joespresso — ใช้ three เหมือนกัน แยก chunk เช่นกัน
 const ToolbarWorkspace = lazy(() => import('@/joespresso/ToolbarWorkspace'))
+const CheckerScene = lazy(() => import('@/joespresso/CheckerScene'))
+const RigExportPage = lazy(() => import('@/pages/RigExportPage'))
+const FaviconLab = lazy(() => import('@/pages/FaviconLab'))
+const BubbleBlocks = lazy(() => import('@/pages/BubbleBlocks'))
+const FastworkProfile = lazy(() => import('@/pages/FastworkProfile'))
+const AboutMePage = lazy(() => import('@/pages/AboutMePage'))
+const JoeDeskPage = lazy(() => import('@/pages/JoeDeskPage'))
+const RoomPage = lazy(() => import('@/pages/RoomPage'))
+/* /measure — จัดองค์ประกอบตามภาพ ref (ตัวละครถือไม้บรรทัดวัด device) รอบดินปั้น */
+const MeasurePage = lazy(() => import('@/pages/MeasurePage'))
 import { SITE } from '@/config/site'
 import { setEyeOpen, setIntroDone } from '@/stores/intro'
+import { useSceneReady } from '@/stores/ready'
+import { startIntro } from '@/joespresso/intro'
+import { holdIntro, releaseIntro } from '@/newhero/intro'
+import { useNewHeroReady, resetNewHeroReady } from '@/newhero/ready'
 import { useT } from '@/i18n/store'
 
 function Footer() {
@@ -30,11 +65,91 @@ function Footer() {
   )
 }
 
+/**
+ * สวิตช์สปแลช — ปิดชั่วคราวได้โดยเปลี่ยนเป็น false (เคยปิดไว้ช่วง 2026-08-23 ตอนไล่ทำ what-i-do)
+ * ปิดเมื่อไรต้องเปิดประตูเองสองอย่าง: intro ของฉาก 3D (startIntro) กับ gate ของหน้า (setIntroDone)
+ * ไม่งั้นพาดหัว/eyebrow ที่รอสัญญาณ "สปแลชจบ" จะไม่โผล่เลย
+ * และตัวคืนตำแหน่ง scroll ตอน reload จะทำงานเฉพาะตอนปิดสปแลชเท่านั้น
+ */
+/** สัญญาณว่า "คนดูขยับหน้าเอง" — ใช้เลิกบังคับตำแหน่ง scroll หลังสปแลชจบ */
+const MOVE_EVENTS = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const
+
+const SPLASH_ON = true
+
+/**
+ * route ที่ปิดสปแลชไว้ชั่วคราว — /2026-final ระหว่างไล่จูน hero สปแลชกินเวลารอทุกครั้งที่รีเฟรช
+ *
+ * ปิดเป็นราย route ไม่ใช่ปิด SPLASH_ON ทั้งเว็บ เพราะหน้าอื่น (/joespresso, /2026) ยังต้องมี
+ */
+const SPLASH_OFF_ROUTES = ['/2026-final', '/glass', '/whatido-lab', '/hand', '/gallery', '/text-story', '/compact', '/balloons', '/cubes']
+
 export function App() {
-  const [showSplash, setShowSplash] = useState(true)
+  /**
+   * ตัดสินครั้งเดียวตอนโหลด ไม่อ่าน location สด — เดินเข้าหน้านี้ทีหลังไม่ควรเด้งสปแลชขึ้นมา
+   * และของเดิมก็ตัดสินสปแลชจากที่ "ลงจอด" ไม่ใช่ที่อยู่ปัจจุบัน (ดู landedOn)
+   */
+  const [splashOff] = useState(
+    () =>
+      !SPLASH_ON ||
+      (typeof window !== 'undefined' && SPLASH_OFF_ROUTES.includes(window.location.pathname)),
+  )
+  const [showSplash, setShowSplash] = useState(!splashOff)
+  // ฉาก 3D ของ joespresso รายงานตัวเองว่าโหลด+compile เสร็จ — สปแลชรออันนี้
+  const sceneReady = useSceneReady()
+  /**
+   * /2026-final ใช้ฉากของ /new-hero ไม่ใช่ฉาก joespresso — สัญญาณ "วาดได้จริง" จึงคนละตัว
+   * ถ้าใช้ตัวเดิม สปแลชจะรอสัญญาณที่ไม่มีวันมา แถบโหลดค้างเต็มอยู่อย่างนั้น
+   */
+  const newHeroReady = useNewHeroReady()
   const location = useLocation()
   // ครอบหน้าลูกด้วย (/joespresso/toolbar) — กลุ่มนี้มี layout ของตัวเอง ไม่ใช้ shell ของเว็บ
   const isJoespresso = location.pathname.startsWith('/joespresso')
+  // เวอร์ชันสองของหน้าแรก (layout ตาราง) — มี header ของตัวเอง ไม่ใช้ NavBar/Footer ของ shell
+  const isV2 = location.pathname === '/2026'
+  /** หน้าเวอร์ชันตัดสินแล้ว ถอดจาก Figma — มี shell ของตัวเอง ไม่ใช้ nav ของเว็บ */
+  const isV3 = location.pathname === '/2026-final'
+  /** หน้าเปล่าสำหรับทดลอง hero ตัวใหม่ — shell ของตัวเองเหมือนกัน (ดู NewHeroPage) */
+  const isNewHero = location.pathname === '/new-hero'
+  /* หน้าปั้น section การ์ดกระจก — ของชิ้นเดียวบนพื้นขาว ไม่ใช้ shell ของเว็บ */
+  const isGlass = location.pathname === '/glass'
+  /* หน้าปั้นจอ "สิ่งที่ทำ" แบบเรนเดอร์ (ตามเว็บอ้างอิง guillaumecolombel.fr) — จอเดียว ไม่ใช้ shell */
+  const isWhatIDoLab = location.pathname === '/whatido-lab'
+  /* หน้าปั้นองค์ประกอบ "มือชูจอ" ตามภาพอ้างอิง — จอเดียว ไม่ใช้ shell */
+  const isHand = location.pathname === '/hand'
+  /* หน้า gallery — ฉาก 3D ตัวละครนั่งทำงานหน้าผนังไอคอน จอเดียว ไม่ใช้ shell */
+  const isGallery = location.pathname === '/gallery'
+  /* เล่าเรื่องด้วยตัวหนังสือแบบภาพยนตร์ (ซูมข้อความ → ยิงลำแสงไปขวา) — จอเดียว ไม่ใช้ shell */
+  const isTextStory = location.pathname === '/text-story'
+  const isCompact = location.pathname === '/compact'
+  /* จัดองค์ประกอบตามภาพ ref: ตัวละครถือไม้บรรทัดวัด device (ดินปั้นก่อน) — จอเดียว ไม่ใช้ shell */
+  const isMeasure = location.pathname === '/measure'
+  /* ฉากเล่าเรื่องกล้องน้อยกับบอลลูน (ภาพอ้างอิงพาสเทลฟ้าเมฆ) — จอเดียวเลื่อนเล่า ไม่ใช้ shell */
+  const isBalloons = location.pathname === '/balloons'
+  /* ฉากกล่องแก้วฟ้าประกอบตัวเล่าสกิล (ภาพอ้างอิงแบนเนอร์กล่องแก้ว) — จอเดียวเลื่อนเล่า ไม่ใช้ shell */
+  const isCubes = location.pathname === '/cubes'
+  /**
+   * หน้าส่องอินโทรเดี่ยว ๆ (dev เท่านั้น)
+   *
+   * ต้องอยู่ชั้นเดียวกับ /joespresso คือมี shell ของตัวเอง ไม่ใช่ route ข้างในเลย์เอาต์หลัก
+   * เพราะอินโทรเป็น fixed inset-0 แต่ตัวห่อของเลย์เอาต์มี transform อยู่ กรอบอ้างอิงของ
+   * fixed เลยกลายเป็นตัวห่อนั้นแทนที่จะเป็นวิวพอร์ต แคนวาสจึงถูกบีบเหลือแถบบาง ๆ
+   * และต้องกันสปแลชของเว็บไม่ให้ขึ้นทับด้วย ไม่งั้นมีอินโทรสองตัวซ้อนกัน
+   */
+  const isIntroLab = import.meta.env.DEV && location.pathname === '/sandbox/intro'
+  /** โต๊ะส่งตัวละครไป Mixamo — เต็มจอ ไม่มี shell ของเว็บ และไม่มีใน build production */
+  const isRigExport = import.meta.env.DEV && location.pathname === '/rig-export'
+  /** โต๊ะปั้น favicon (หน้าตัวละครบนแถบสีรุ้ง แบบ githubuniverse.com) — dev เท่านั้น */
+  const isFavLab = import.meta.env.DEV && location.pathname === '/favicon-lab'
+  /** ฉากทดลองแท่นเรียง + ฟอง (แบบ eddie.eco) — dev เท่านั้น */
+  const isBlocks = import.meta.env.DEV && location.pathname === '/bubble-blocks'
+  /* ปกโปรไฟล์ Fastwork — ทำภาพปก (dev) */
+  const isFastwork = import.meta.env.DEV && location.pathname === '/fastwork-profile'
+  /** หน้า About me — เข้าจากคลิกตัวละครใน hero (/2026-final) */
+  const isAbout = location.pathname === '/about'
+  /** หน้า Joe Desk — landing จาก Figma Joe-Space (โต๊ะทำงานไอโซเมตริก) */
+  const isJoeDesk = location.pathname === '/joe-desk'
+  /** ห้องสี่เหลี่ยมเปล่า — side project ไว้หาไอเดียจัดห้อง */
+  const isRoom = location.pathname === '/room'
 
   // Which splash plays is decided by where the visitor landed, not by where
   // they are now — it runs once, on load, and reading `location` live would
@@ -42,23 +157,162 @@ export function App() {
   const [landedOn] = useState(() =>
     typeof window === 'undefined' ? '/' : window.location.pathname,
   )
+  /**
+   * กั้นไม่ให้ฉาก 3D เริ่ม mount จนกว่าตัวอักษรจะเล่นจบ
+   *
+   * โหลดพร้อมกันแล้วแอนิเมชันกระตุกหนัก — การแตก GLB, ปั้น geometry ของ mascot
+   * และ compile shader ทำบน main thread ทั้งหมด rAF ของ gsap เลยโดนอด
+   * ยอมให้รวมเวลานานขึ้นแทน เพื่อให้ช่วงที่คนดูจ้องอยู่ลื่นจริง
+   *
+   * กั้นเฉพาะตอนเปิดเว็บมาลงที่ /joespresso — เดินเข้ามาทีหลังไม่เกี่ยว
+   */
+  // /2026 ฝังฉาก 3D ใบเดียวกัน — ใช้สปแลช/การกั้น mount ชุดเดียวกับ /joespresso
+  // ยกเว้น /joespresso/checker: ฉากทดลองไม่มี IntroClock — สปแลชที่รอ introState จะค้างกลางทาง
+  // /2026-final ก็ฝังฉากเดียวกัน และไม่มี "ตา" ให้เปิดออกเหมือนสปแลชหลัก — ใช้ชุดตัวอักษรด้วย
+  /**
+   * กั้นอินโทรของฉาก /new-hero ไว้ระหว่างสปแลชของ /2026-final
+   *
+   * อินโทรเป็นจังหวะที่นับเป็นวินาที ถ้าปล่อยให้เดินหลังสปแลช คนดูจะเห็นฉากที่เล่นจบไปแล้ว
+   * ปล่อยตอนรูเริ่มเปิด (onOpenStart) ฉากจึงเริ่มขยับพร้อมกับที่สปแลชบานออก
+   */
+  useEffect(() => {
+    if (!isV3 || !showSplash) return undefined
+    holdIntro()
+    return () => releaseIntro()
+  }, [isV3, showSplash])
+  /**
+   * ล้างธง "ฉากพร้อม" ตอนออกจากหน้าเท่านั้น
+   *
+   * เคยล้างในเอฟเฟกต์ข้างบนด้วย ซึ่งผิด: มันถูกถอดตอนสปแลชปิด (showSplash เปลี่ยน) ธงที่ฉาก
+   * เพิ่งตั้งจึงถูกลบทิ้งทันทีและไม่มีใครตั้งให้อีก — ของที่รอสัญญาณนี้ (หัวเรื่องสามมิติ)
+   * เลยไม่ขึ้นเลย
+   */
+  useEffect(() => () => resetNewHeroReady(), [])
+
+  const landedOn3D =
+    (landedOn.startsWith('/joespresso') && landedOn !== '/joespresso/checker') ||
+    landedOn === '/2026' ||
+    landedOn === '/2026-final'
+  /**
+   * ฉากถูก mount ทันที ไม่รอสปแลช
+   *
+   * เดิมกั้นไว้เพราะตัวอักษรเล่นก่อนแล้วการ mount ฉากไปแย่ง main thread จนกระตุก
+   * ตอนนี้ลำดับกลับกัน: แถบโหลดขึ้นก่อน (ถูก ๆ ไม่กินแรง) แล้วตัวอักษรค่อยเล่น
+   * "หลัง" โหลดเสร็จ — ถ้ายังกั้นอยู่ ฉากจะไม่เริ่มโหลดจนกว่าตัวอักษรจะจบ
+   * ซึ่งรอสัญญาณโหลดเสร็จอีกที = ค้างกันเอง
+   */
+
+  /**
+   * ปิดสปแลชอยู่ = ต้องเปิดประตูอินโทรเอง
+   *
+   * ยกเว้น /2026-final: หน้านั้นมีด่านโหลดของตัวเอง (ดู pages/Final2026Gate) ซึ่งรอให้ไฟล์
+   * ของหน้าครบก่อนแล้วค่อยปล่อยอินโทร ถ้าเปิดประตูที่นี่ด้วย ท่าเข้าฉากจะเล่นจบอยู่ใต้
+   * ผ้าคลุมของด่าน แล้วคนดูเปิดมาเจอหน้าที่นิ่งไปแล้ว
+   */
+  useEffect(() => {
+    if (!splashOff || isV3) return
+    startIntro()
+    setIntroDone()
+  }, [splashOff, isV3])
+
+  /**
+   * ปิดสปแลชอยู่ = **โหลดใหม่แล้วต้องกลับหัวหน้าเสมอ**
+   *
+   * เดิมที่นี่จำตำแหน่ง scroll ลง sessionStorage แล้วคืนให้ตอนโหลด (คีย์ `v2:scroll`) —
+   * ตั้งใจให้ reload ระหว่างจูนแล้วอยู่ที่เดิม แต่หน้านี้เล่าเรื่องตามตำแหน่ง scroll:
+   * เปิดมากลางเรื่องคือเปิดมาเจอฉากที่ยังไม่ได้เล่า และด่านโหลดกับม่านเมฆของ /2026-final
+   * คิดจังหวะจากระยะเลื่อนที่เริ่มนับจากศูนย์ (ดู WIPE_FULL ใน components/CloudWipe) —
+   * รีเฟรชค้างอยู่กลางหน้าแล้วท่าทั้งชุดเล่นจบไปแล้วก่อนคนดูเห็น
+   *
+   * route ที่มีสปแลชได้ข้อนี้อยู่แล้วตอนสปแลชปิด (ดู finishSplash) ที่นี่คือทางเดียวกัน
+   * สำหรับ route ที่ไม่มีสปแลชมาบังคับให้
+   */
+  useEffect(() => {
+    if (!splashOff) return undefined
+    return forceTop()
+  }, [splashOff])
+
+  /** Lenis คุมตำแหน่ง scroll จริง — window.scrollTo อย่างเดียวมันดึงกลับที่เดิมในเฟรมถัดไป */
+  const lenisRef = useRef<Lenis | null>(null)
+
+  /**
+   * บังคับกลับหัวหน้า แล้วย้ำอีกสองสามจังหวะ — คืนตัวเลิกย้ำ
+   *
+   * มีหลายทางที่หน้าจะไม่ได้อยู่ที่ 0 ตอนเริ่ม: เบราว์เซอร์คืนตำแหน่งเก่า, มี hash ในลิงก์,
+   * bfcache ตอนกดย้อนกลับ, หรือ HMR ระหว่างพัฒนา — ปิดทีละทางไม่จบ จบด้วยการยืนยัน
+   * ที่จุดเดียวว่า "ตอนเริ่มต้องอยู่ที่ 0"
+   *
+   * ครั้งเดียวไม่พอ: หน้ายังสูงขึ้นอีกหลังจากนั้น (chunk 3D, ฟอนต์, รูปใน works ทยอยลง)
+   * ทุกครั้งที่ของเหนือจุดที่มองอยู่สูงขึ้น เบราว์เซอร์มีสิทธิ์เลื่อนหน้าตาม — เห็นเป็น
+   * "หน้าไถลลงมาเอง" (ปิด overflow-anchor ไปแล้วอีกทาง ดู index.css)
+   *
+   * แต่ต้องเลิกย้ำทันทีที่คนดูขยับเอง ไม่งั้นเรากระชากหน้ากลับใส่หน้าเขาระหว่างที่เขาเลื่อนอยู่
+   *
+   * `window.scrollTo` อย่างเดียวไม่พอ — Lenis คุมตำแหน่งจริงและจะดึงกลับที่เดิมในเฟรมถัดไป
+   */
+  const forceTop = () => {
+    const put = () => {
+      window.scrollTo(0, 0)
+      lenisRef.current?.scrollTo(0, { immediate: true })
+    }
+    put()
+    const timers = [250, 700, 1500].map((ms) => setTimeout(put, ms))
+    const stop = () => {
+      for (const t of timers) clearTimeout(t)
+      for (const ev of MOVE_EVENTS) window.removeEventListener(ev, stop)
+    }
+    for (const ev of MOVE_EVENTS) window.addEventListener(ev, stop, { passive: true })
+    return stop
+  }
+
   const finishSplash = () => {
     setShowSplash(false)
     setIntroDone()
+    forceTop()
   }
 
   useEffect(() => {
+    /**
+     * ปิด scroll restoration ของเบราว์เซอร์
+     *
+     * เดิมไม่ต้องปิดเพราะตอนสปแลชขึ้น หน้ายังสั้น (ฉากยังไม่ mount, scrollHeight = ความสูงจอ)
+     * เบราว์เซอร์จึงคืนตำแหน่งเก่าไม่ได้แล้วยอมแพ้ไปเอง พอย้ายให้ฉาก mount ทันทีเพื่อให้
+     * แถบโหลดมีอะไรให้วัด หน้าก็สูงเต็ม (4680px) ตั้งแต่วินาทีแรก — reload ทีไรเบราว์เซอร์
+     * เลื่อนกลับไปตำแหน่งเดิมทุกที เห็นเป็น "สปแลชจบแล้วหน้าเลื่อนลงเอง"
+     *
+     * เรื่องนี้ต้องเป็น manual อยู่แล้วสำหรับหน้าที่เล่าเรื่องตามตำแหน่ง scroll:
+     * เปิดมากลางเรื่องคือเปิดมาเจอฉากที่ยังไม่ได้เล่า
+     */
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
     window.scrollTo(0, 0)
 
     // `smooth` / `resetNativeScroll` from the Vue version are not Lenis 1.x options.
     const lenis = new Lenis({ duration: 1, smoothWheel: true })
-    let frame = requestAnimationFrame(function raf(time) {
-      lenis.raf(time)
-      frame = requestAnimationFrame(raf)
-    })
+    lenisRef.current = lenis
+    lenisBox.l = lenis
+
+    // สูตรผูก Lenis กับ GSAP: Lenis เดินด้วย ticker ของ gsap (นาฬิกาเดียวกับทุก tween)
+    // แล้วแจ้ง ScrollTrigger ทุกครั้งที่ตำแหน่งเลื่อนขยับ — ไม่ต้องมี rAF loop ของตัวเอง
+    lenis.on('scroll', ScrollTrigger.update)
+    const raf = (time: number) => lenis.raf(time * 1000) // ticker ให้วินาที Lenis กินมิลลิวินาที
+    gsap.ticker.add(raf)
+    /**
+     * lag smoothing: เปิดไว้แต่ตั้งเพดานสูง
+     *
+     * ปิดสนิท (0) ตามที่ Lenis แนะนำ แปลว่าเฟรมที่ตกไป 400ms จะถูกจ่ายคืนทีเดียว —
+     * ทวีนกระโดดข้ามไปข้างหน้าแทนที่จะเล่น เห็นชัดมากตอนสปแลชเล่นพร้อมกับที่ฉาก 3D
+     * กำลัง mount (วัดจากภาพไล่เฟรม: ตัว E ประกอบเสร็จตั้งแต่วินาทีที่ 0.7 ทั้งที่ไทม์ไลน์
+     * ตรงนั้นอยู่ที่ 1.3 วินาที)
+     *
+     * 700ms คือเพดานที่สูงพอจะไม่ไปยุ่งกับ Lenis ในการใช้งานปกติ (เฟรมตกระดับนั้น
+     * ไม่เกิดตอน scroll อยู่แล้ว) แต่ยังกันการกระโดดก้อนใหญ่ตอนโหลดฉาก
+     */
+    gsap.ticker.lagSmoothing(700, 33)
 
     return () => {
-      cancelAnimationFrame(frame)
+      gsap.ticker.remove(raf)
+      lenisRef.current = null
+      lenisBox.l = null
       lenis.destroy()
     }
   }, [])
@@ -71,20 +325,95 @@ export function App() {
           The mascot gets the wordmark instead. The eye's whole point is that it
           opens onto the hero's own scene, and the mascot page has no such scene
           to open onto. */}
-      {showSplash &&
-        !landedOn.startsWith('/joespresso') &&
-        (landedOn === '/mascot' ? (
+      {/* /new-hero เป็นหน้าเปล่าไว้ทดลอง — สปแลชของเว็บบังของที่กำลังจูนอยู่เปล่า ๆ */}
+      {showSplash && !isIntroLab && !isNewHero && !isRigExport && !isFavLab && !isBlocks && !isFastwork && !isAbout && !isJoeDesk && !isRoom &&
+        (landedOn === '/2026' ? (
+          /* /2026 มีอินโทรของตัวเอง (เศษโค้ด -> สนาม ASCII -> เวิร์ดมาร์ก)
+             หน้าอื่นยังใช้สปแลชเดิม — คนละภาษาภาพกัน ไม่ควรบังคับให้เหมือน */
+          <IntroSequence onDone={finishSplash} ready={sceneReady} onOpenStart={startIntro} />
+        ) : landedOn3D ? (
+          /* ฉาก 3D ของ joespresso ไม่มี "ตา" ให้เปิดออก และการ์ด hero ก็ยังโหลด three อยู่
+             ตอนนั้น — ใช้สปแลชตัวอักษรคั่นแทน (port จาก branch 2026) */
+          <JoeLettersSplash
+            onDone={finishSplash}
+            ready={isV3 ? newHeroReady : sceneReady}
+            // เปิดรูเมื่อไหร่ อินโทรของฉากนั้นเริ่มเมื่อนั้น — คนละฉากคนละตัวปล่อย
+            onOpenStart={isV3 ? releaseIntro : startIntro}
+          />
+        ) : landedOn === '/mascot' ? (
           <JoeSplash onDone={finishSplash} />
         ) : (
           <SplashScreen onEyeOpen={setEyeOpen} onDone={finishSplash} />
         ))}
 
-      {/* /joespresso = ฉาก 3D เต็มจอ มี layout/nav ของตัวเอง — ไม่ใช้ shell ของเว็บ */}
-      {isJoespresso ? (
+      {isIntroLab ? (
+        <IntroSandbox />
+      ) : isRigExport ? (
+        <Suspense fallback={null}>
+          <RigExportPage />
+        </Suspense>
+      ) : isFavLab ? (
+        <Suspense fallback={null}>
+          <FaviconLab />
+        </Suspense>
+      ) : isBlocks ? (
+        <Suspense fallback={null}>
+          <BubbleBlocks />
+        </Suspense>
+      ) : isFastwork ? (
+        <Suspense fallback={null}>
+          <FastworkProfile />
+        </Suspense>
+      ) : isAbout ? (
+        <Suspense fallback={null}>
+          <AboutMePage />
+        </Suspense>
+      ) : isJoeDesk ? (
+        <Suspense fallback={null}>
+          <JoeDeskPage />
+        </Suspense>
+      ) : isRoom ? (
+        <Suspense fallback={null}>
+          <RoomPage />
+        </Suspense>
+      ) : isV3 ? (
+        <Portfolio2026FinalPage />
+      ) : isGlass ? (
+        <GlassCardsPage />
+      ) : isWhatIDoLab ? (
+        <WhatIDoLabPage />
+      ) : isHand ? (
+        <HandCompose />
+      ) : isTextStory ? (
+        <TextStoryPage />
+      ) : isCompact ? (
+        <CompactPage />
+      ) : isCubes ? (
+        <Suspense fallback={null}>
+          <GlassCubesPage />
+        </Suspense>
+      ) : isBalloons ? (
+        <Suspense fallback={null}>
+          <BalloonSkyPage />
+        </Suspense>
+      ) : isGallery ? (
+        <GalleryPage />
+      ) : isMeasure ? (
+        <Suspense fallback={null}>
+          <MeasurePage />
+        </Suspense>
+      ) : isNewHero ? (
+        <NewHeroPage />
+      ) : isV2 ? (
+        <Portfolio2026Page />
+      ) : /* /joespresso = ฉาก 3D เต็มจอ มี layout/nav ของตัวเอง — ไม่ใช้ shell ของเว็บ */
+      isJoespresso ? (
         <Suspense fallback={null}>
           <Routes>
             <Route path="/joespresso" element={<JoespressoPage />} />
             <Route path="/joespresso/toolbar" element={<ToolbarWorkspace />} />
+            {/* ฉาก 3 ทดลอง — โลกตารางหมากรุก (คอมพ์ 12601:287) */}
+            <Route path="/joespresso/checker" element={<CheckerScene />} />
           </Routes>
         </Suspense>
       ) : (
@@ -100,6 +429,11 @@ export function App() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/mascot" element={<MascotPage />} />
+              {/* เครื่องมือ dev: หน้าดูคอมโพเนนต์เดี่ยว ๆ ก่อนตัดสินใจเอาไปต่อกับงานจริง
+                  กั้นด้วย DEV — build production ไม่มี route นี้เลย */}
+              {import.meta.env.DEV && (
+                <Route path="/sandbox/driftwall" element={<DriftWallSandbox />} />
+              )}
               <Route path="*" element={<NotPortedPage />} />
             </Routes>
             <Footer />

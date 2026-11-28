@@ -1,0 +1,215 @@
+import { Suspense, useEffect, useMemo, useRef } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import * as THREE from 'three'
+import { CURSOR_TIP, Cursor } from '@/newhero/Cursor'
+import { HeroLights } from '@/newhero/heroLights'
+import { introTime } from '@/newhero/intro'
+import { useTuner } from '@/newhero/tuner'
+import { driveHeroPointer } from '@/sections/hero/Headline3D'
+import { WarmShaders } from '@/lib/WarmShaders'
+import { heroCursor } from './heroCursor'
+import { cursorHand, cursorLead, cursorRoot, cursorShow, cursorTip, cursorWake } from './morph'
+import { cursorPress } from './press'
+import { cursorPose } from './stops'
+
+/**
+ * ชั้นของเคอร์เซอร์นำสายตา — ลูกศร "ตัวจริง" ตัวเดียวทั้งหน้า ลอยเหนือทุก section
+ *
+ * นี่คือลูกศรที่เห็นมุมซ้ายล่างของจอแรกด้วย ไม่ใช่ตัวสำรองที่โผล่มาตอนเลื่อน: ฉาก hero
+ * วาง group เปล่าไว้เป็นหมุด (ดู CursorAnchor ใน NewHeroScene) แล้วชั้นนี้เกาะหมุดนั้น
+ * ตั้งแต่เฟรมแรก — ตำแหน่ง ขนาดที่เห็นบนจอ และทิศหันในสเปซกล้อง พอเลื่อนพ้นจุดจอดแรก
+ * มันก็ออกเดินทางไปตามเส้นทางของ stops ผู้ชมเห็นของชิ้นเดิมเคลื่อนออกจากฉากไปทั้งหน้า
+ *
+ * ทำไมต้องเป็นแคนวาสของตัวเอง: ของในฉากของจอหนึ่งออกไปโผล่ในอีกจอไม่ได้เลย ต่อให้
+ * ขยับไปตำแหน่งเดียวกันก็เป็นของสองชิ้นที่หน้าตาเหมือนกัน ไม่ใช่ตัวเดิมที่เดินทางต่อ
+ *
+ * กล้องเป็นออร์โธกราฟิกที่ r3f ตั้งกรอบให้เท่าขนาดแคนวาสพอดี = 1 หน่วยฉากเท่ากับ 1 พิกเซล
+ * ตำแหน่งจึงเป็นพิกเซลบนจอตรง ๆ ไม่ต้องฉายกลับจากพิกัดโลก
+ *
+ * วาดแบบ "ตามสั่ง" (frameloop demand) แล้วสั่งวาดเมื่อเลื่อนจอ/ขยับเมาส์/เปลี่ยนขนาด —
+ * หน้านี้มีแคนวาสอื่นที่วาดทุกเฟรมอยู่แล้วสองตัว ตัวนี้จึงต้องไม่กินลูปวาดเพิ่มเวลาอยู่นิ่ง
+ *
+ * ชั้นนี้ไม่รับเมาส์ (`pointer-events: none`) — มันเป็นตัวนำสายตา ไม่ใช่ของที่กดได้ และต้อง
+ * ไม่บังปุ่มอะไรของหน้าเลย
+ */
+
+/** สูงกว่าเนื้อหาแต่ต่ำกว่าแผงจูนของ dev (ซึ่งใช้ z สูงกว่านี้) */
+const Z = 55
+const RAD = Math.PI / 180
+
+/** ที่พักค่าระดับโมดูล — ฉายปลายนิ้วลงจอทุกเฟรม ห้ามจองอ็อบเจกต์ใหม่ในลูปวาด */
+const _tip = new THREE.Vector3()
+const _leadQ = new THREE.Quaternion()
+const _leadE = new THREE.Euler()
+
+export function CursorGuideLayer() {
+  return (
+    <div className="pointer-events-none fixed inset-0" style={{ zIndex: Z }} aria-hidden>
+      <Canvas
+        /* แคนวาสซ้อนทับทั้งจอ — r3f ตั้ง pointer-events: auto ให้กล่องของมันเอง จะกินเมาส์ของฉากข้างใต้ (หัวตัวละคร hero เลยไม่หันตามเคอร์เซอร์) */
+        style={{ pointerEvents: 'none' }}
+        orthographic
+        camera={{ position: [0, 0, 100], zoom: 1, near: 0.1, far: 400 }}
+        frameloop="demand"
+        dpr={[1, 1.25]}
+        gl={{ alpha: true, antialias: true }}
+      >
+        {/* ลูกศรซ่อนอยู่จนถึงคิวของอินโทร — ไม่อุ่นไว้ env map กับเชดเดอร์จะไปคอมไพล์ตอนมันโผล่ = ค้าง ~100ms ท้ายท่าคลี่บาน */}
+        <WarmShaders />
+        {/* รูปทรงของเคอร์เซอร์มาจากไฟล์โมเดล — โหลดอยู่ก็ยังไม่มีอะไรให้โชว์ ปล่อยว่างไว้ */}
+        <Suspense fallback={null}>
+          <Rig />
+        </Suspense>
+      </Canvas>
+    </div>
+  )
+}
+
+function Rig() {
+  const g = useRef<THREE.Group>(null)
+  const lights = useRef<THREE.Group>(null)
+  const arrow = useRef<THREE.Group>(null)
+  const hand = useRef<THREE.Group>(null)
+  const show = useRef<THREE.Group>(null)
+  const { size, invalidate } = useThree()
+  const t = useTuner()
+
+  /**
+   * ท่าคลิกตอนเข้าฉาก — ปั้นใหม่จากค่าแผงจูนชุดเดียวกับที่ฉาก hero ใช้
+   *
+   * `introTime()` เป็นนาฬิกาของ intro ทั้งหน้า ไม่ใช่ clock ของแคนวาสไหน จึงอ่านข้ามแคนวาส
+   * ได้ตรง ๆ และท่านี้ตรงจังหวะกับของอื่นในฉากเหมือนตอนลูกศรยังอยู่ในฉาก
+   */
+  const clickAt = t.enDelay + t.enDur + t.inPropAt + t.inClickAt
+  const pressAt = useMemo(
+    () => () => {
+      /* ค่ามากสุดของสองช่อง: ท่ากดตอนเข้าฉาก (นาฬิกา) กับท่ากดที่ section สั่ง (ระยะเลื่อน) */
+      if (t.intro < 0.5) return cursorPress.v
+      const u = (introTime() - clickAt + 0.14) / 0.28
+      const intro = u <= 0 || u >= 1 ? 0 : Math.sin(u * Math.PI)
+      return Math.max(intro, cursorPress.v)
+    },
+    [t.intro, clickAt],
+  )
+
+  /** สั่งวาดเมื่อมีอะไรที่เปลี่ยนตำแหน่งเคอร์เซอร์ได้ */
+  useEffect(() => {
+    const kick = () => invalidate()
+    /* ช่องให้ section ที่เล่นท่าด้วยนาฬิกาปลุกชั้นนี้ด้วย — ไม่งั้นท่านั้นค้างเป็นภาพนิ่ง */
+    cursorWake.fn = kick
+    window.addEventListener('scroll', kick, { passive: true })
+    window.addEventListener('resize', kick)
+    window.addEventListener('pointermove', kick, { passive: true })
+    kick()
+    return () => {
+      cursorWake.fn = () => {}
+      window.removeEventListener('scroll', kick)
+      window.removeEventListener('resize', kick)
+      window.removeEventListener('pointermove', kick)
+    }
+  }, [invalidate])
+
+  /**
+   * ท่าเข้าฉากกับท่าคลิกวิ่งด้วยนาฬิกา ไม่ใช่การเลื่อนจอ — ช่วงนั้นต้องวาดทุกเฟรม
+   *
+   * frameloop เป็น demand ถ้าไม่สั่งวาด ท่าเข้าฉากจะค้างเป็นภาพนิ่งจนผู้ใช้ขยับเมาส์
+   */
+  useFrame(() => {
+    if (t.intro > 0.5 && introTime() < clickAt + 0.6) invalidate()
+    const root = g.current
+    if (!root) return
+    const p = cursorPose()
+    /* section ที่พาเคอร์เซอร์เองทั้งท่า (ดู cursorLead) ทับเส้นทางของจุดจอดตามน้ำหนัก */
+    const lw = cursorLead.w
+    const ok = p.ok || lw > 0
+    root.visible = ok
+    cursorTip.ok = ok
+    if (!ok) return
+    /**
+     * สลับรูปทรงด้วยการซ่อน/โชว์ ไม่ใช่เปลี่ยน prop
+     *
+     * ธงมาจาก store ธรรมดาที่อ่านทุกเฟรม ไม่ใช่ state ของ React — ถ้าให้ `kind` เปลี่ยน
+     * ตามธงนั้นต้อง re-render และปั้น geometry ใหม่กลางท่า ปั้นไว้ทั้งสองอันตั้งแต่ต้น
+     * แล้วสลับกันโชว์ถูกกว่าและไม่มีเฟรมสะดุด
+     */
+    /* ย่อ/โชว์บนกลุ่มลูก ไม่ใช่ที่ราก — รากต้องอยู่ขนาดเต็มไว้ให้ `cursorTip` คิดปลายได้ตรง */
+    if (show.current) {
+      const k = cursorShow.v
+      show.current.visible = k > 0.01
+      show.current.scale.setScalar(k)
+    }
+    const asHand = t.cuHand > 0.5 || cursorHand.v > 0.5
+    if (arrow.current) arrow.current.visible = !asHand
+    if (hand.current) hand.current.visible = asHand
+    // พิกัดจอ (0,0 = ซ้ายบน) -> พิกัดกล้องออร์โธที่กลางจอเป็นศูนย์
+    const px = lw > 0 ? p.x + (cursorLead.x - p.x) * lw : p.x
+    const py = lw > 0 ? p.y + (cursorLead.y - p.y) * lw : p.y
+    root.position.set(px - size.width / 2, size.height / 2 - py, 0)
+    cursorRoot.x = px
+    cursorRoot.y = py
+    root.quaternion.copy(p.q)
+    root.scale.setScalar(p.size)
+    if (lw > 0) {
+      /* ควงรอบแกนตั้งก่อน แล้วเอียงรอบแกนลึก — ท่าถูกดูดเข้าพอร์ทัลหมุนรอบตัวเองโดยปลายยังชี้ทางเดิม */
+      _leadQ.setFromEuler(_leadE.set(0, cursorLead.spin, cursorLead.tilt, 'ZYX'))
+      root.quaternion.slerp(_leadQ, lw)
+      root.scale.setScalar(p.size + (cursorLead.size - p.size) * lw)
+    }
+    /**
+     * ชุดไฟหมุนกลับด้วยผกผันของทิศกล้องฉาก hero
+     *
+     * ทิศหันของลูกศรที่รับมาอยู่ในสเปซกล้อง ถ้าปล่อยไฟไว้ในสเปซโลกของชั้นนี้ แสงจะตกคนละ
+     * ด้านกับในฉากเดิม (แผงไฟ Environment หมุนตามไม่ได้ แต่มันนุ่มและกระจาย เลยไม่เห็นต่าง)
+     */
+    if (lights.current) lights.current.quaternion.copy(heroCursor.camQ).invert()
+    /**
+     * ช่วงที่กวาดผ่านหัวเรื่อง — ยิงตำแหน่งตัวเองเข้าไปแทนเมาส์ ตัวอักษรจึงถูกดูดตาม
+     *
+     * ทำเฉพาะช่วงที่ธงเปิด ไม่ยิงตลอดเวลา ไม่งั้นแม่เหล็กของหัวเรื่องจะไม่ตอบสนองเมาส์จริง
+     * ของผู้ใช้อีกเลย
+     */
+    if (p.drive) driveHeroPointer(p.x, p.y)
+    /**
+     * ปลายที่ใช้ชี้ เป็นพิกเซลบนจอ — ฉายจากพิกัดท้องถิ่นของก้อนผ่านท่าจริงของเฟรมนี้
+     *
+     * คิดเองจากจุดกลางไม่ได้: ปลายอยู่คนละที่ในแต่ละรูปทรง และหมุนไปตามมุมเอียงของจุดจอด
+     * (กล้องเป็นออร์โธ 1 หน่วย = 1 พิกเซล จึงแปลงกลับเป็นพิกเซลได้ตรง ๆ)
+     */
+    const local = asHand ? CURSOR_TIP.hand : CURSOR_TIP.arrow
+    _tip.set(local[0], local[1], 0)
+    root.localToWorld(_tip)
+    cursorTip.x = _tip.x + size.width / 2
+    cursorTip.y = size.height / 2 - _tip.y
+  })
+
+  if (t.cu < 0.5) return null
+  return (
+    <>
+      {/* ไฟชุดเดียวกับฉาก hero — ลูกศรออกมาอยู่นอกแคนวาสนั้นแล้ว แต่ต้องรับแสงเหมือนเดิม */}
+      <group ref={lights}>
+        <HeroLights shadows={false} />
+      </group>
+      <group ref={g} visible={false}>
+        {/* ลูกศรตัวเดิมของฉากจอแรก — props ชุดเดียวกัน อ่านจากแผงจูนตัวเดียวกัน
+            ขนาดคิดเป็นพิกเซลเพราะกล้องเป็นออร์โธ 1 หน่วย = 1 พิกเซล */}
+        <group ref={show}>
+        <group ref={arrow}>
+          <Cursor
+            kind="arrow"
+            pressAt={pressAt}
+            aim={t.cuAim}
+            aimMax={t.cuAimMax * RAD}
+            aimEase={t.cuAimEase}
+            depth={t.cuDepth}
+            outline={t.cuOutline}
+          />
+        </group>
+        {/* มือชี้ — ไม่เล็งเมาส์ (มือที่หมุนตามเมาส์อ่านเป็นมือหลุดข้อ) */}
+        <group ref={hand} visible={false}>
+          <Cursor kind="hand" pressAt={pressAt} depth={t.cuDepth} outline={t.cuOutline} />
+        </group>
+        </group>
+      </group>
+    </>
+  )
+}

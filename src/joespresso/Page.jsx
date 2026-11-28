@@ -3,7 +3,12 @@ import { Leva } from 'leva'
 import { Scene } from './App'
 import { Logo } from './Logo'
 import { GithubIcon, InstagramIcon, LinkedinIcon } from './Icons'
-import { scrollState } from './scroll'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { BEATS, resetBeats, updateBeats } from './scroll'
+
+gsap.registerPlugin(ScrollTrigger)
+import { introState } from './intro'
 import './page.css'
 
 /**
@@ -25,6 +30,54 @@ const SOCIAL = [
   { name: 'LinkedIn', Icon: LinkedinIcon, href: '#' },
   { name: 'Instagram', Icon: InstagramIcon, href: '#' },
 ]
+
+/** หัวข้อของ section 2 — คำโผล่ทีละคำ ส่วนแผงด้านล่างค่อยคลี่ตามทีหลัง */
+const WHAT_TITLE = ['What', 'I do']
+
+/**
+ * สองแผงของ "What I do"
+ *
+ * ทุกอย่างในนี้ตรวจสอบได้จากตัวโปรเจกต์เอง ไม่ได้แต่งขึ้น:
+ * tags ของ Develop มาจาก dependencies จริงใน package.json ส่วน Design อ้างจากวิธีทำงานของ repo นี้
+ * (ไฟล์ Figma ชื่อ Joespresso + mascot ที่ปั้นด้วยโค้ดใน src/sections/mascot ไม่ได้ import โมเดลมา)
+ * ถ้ามีข้อความจริงของตัวเองแล้วแก้ที่ตารางนี้ที่เดียว — จำนวนแผง/แท็กคิดตามเอง
+ */
+const WHAT = [
+  {
+    id: 'design',
+    kicker: 'UI/UX',
+    title: 'Design',
+    // ไอคอนเป็นไฟล์ที่ export จาก Figma โดยตรง ไม่ได้วาด path เอง
+    icon: '/icons/pointer.svg',
+    tone: '#fd5000',
+    desc: 'Transforming abstract idea into high-fidelity wireframe.',
+    tags: ['User Research', 'User-centered Design', 'Wireframe', 'Prototype', 'User Testing'],
+  },
+  {
+    id: 'develop',
+    kicker: 'Front-end',
+    title: 'Develop',
+    icon: '/icons/prompt.svg',
+    tone: '#a996eb',
+    desc: 'React and TypeScript on Vite, with the 3D work in react-three-fiber.',
+    tags: ['React', 'TypeScript', 'Three.js', 'R3F', 'Vite', 'Motion'],
+  },
+]
+
+/** จำนวนคำของหัวข้อ — ใช้เป็นตัวหารของจังหวะทยอยโผล่ */
+const WHAT_WORDS = WHAT_TITLE.join(' ').split(' ').length
+
+/**
+ * ตัดข้อความเป็นคำ ๆ แล้วติดหมายเลขลำดับไว้ให้ CSS
+ * start = ลำดับของคำแรกในชุดนี้ (นับต่อกันทั้ง section ไม่ใช่เริ่มใหม่ทุกบรรทัด)
+ */
+function Words({ text, start }) {
+  return text.split(' ').map((w, i) => (
+    <span className="jp-word" key={`${start + i}-${w}`} style={{ '--i': start + i }}>
+      {w}
+    </span>
+  ))
+}
 
 export default function Page() {
   const socialRef = useRef(null)
@@ -74,20 +127,64 @@ export default function Page() {
     }
   }, [])
 
-  // scroll → progress 0..1: การ์ดขยายเต็มจอ + กล้องหมุนไป focus mascot
+  /**
+   * เปิดฉากหลังสปแลชส่งไม้ต่อ — กรอบการ์ดคลี่ออก แล้วแถบเมนูโผล่ขึ้นมาจากใต้การ์ด
+   *
+   * ขับด้วยนาฬิกาของ intro ไม่ใช่ timer ของตัวเอง: สปแลชกับฉากเดินด้วยเวลาเดียวกันอยู่แล้ว
+   * (startIntro ถูกเรียกตอนรูเริ่มเปิด) ถ้าตั้งเวลาแยกจะเลื่อนหลุดกันทันทีที่เฟรมตก
+   *
+   * ค่าออกมาเป็น CSS variable ตัวเดียว (--jp-open) ให้ CSS เอาไปกระจายเอง — ไม่ต้อง re-render
+   * React ทุกเฟรมตลอดช่วงเปิดฉาก
+   */
   useEffect(() => {
-    const onScroll = () => {
-      const range = document.documentElement.scrollHeight - window.innerHeight
-      const p = range > 0 ? Math.min(1, Math.max(0, window.scrollY / range)) : 0
-      scrollState.p = p
-      document.documentElement.style.setProperty('--sp', p.toFixed(4))
+    const s = document.documentElement.style
+    const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v)
+    let frame = 0
+    const tick = () => {
+      // เริ่มนับหลังสปแลชถอดออก (ซูมยาว 1.4 วิ) แล้วคลี่ต่ออีก 1.1 วิ
+      const k = clamp01((introState.t - 1.35) / 1.1)
+      // ease-out: ออกตัวเร็วแล้วคลายเข้าที่ — ตรงข้ามกับการซูมที่เร่งขึ้นเรื่อย ๆ ก่อนหน้า
+      s.setProperty('--jp-open', String(1 - Math.pow(1 - k, 3)))
+      frame = requestAnimationFrame(tick)
     }
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
+    tick()
     return () => {
-      window.removeEventListener('scroll', onScroll)
-      scrollState.p = 0
-      document.documentElement.style.removeProperty('--sp')
+      cancelAnimationFrame(frame)
+      s.removeProperty('--jp-open')
+    }
+  }, [])
+
+  // scroll → บีต: ลำดับและความยาวของเรื่องอยู่ในตาราง BEATS ที่ scroll.js
+  // ScrollTrigger เป็นคนวัดตำแหน่ง (progress 0..1 ตลอดราง .jp-scroll) แทน listener มือ —
+  // ได้ refresh ตอน resize/rotate ฟรี และซิงก์กับ Lenis ผ่าน ticker เดียวกัน (ดู App.tsx)
+  // ปลายทางยังเป็น updateBeats เหมือนเดิม: DOM อ่านตัวแปร --b-* / Canvas อ่าน scrollState.b
+  useEffect(() => {
+    const s = document.documentElement.style
+    const write = (raw) => {
+      for (const [k, v] of updateBeats(raw)) s.setProperty(k, v)
+    }
+    // รางถูกหดสั้นลง (520vh) ให้ไปถึง section ถัดไปเร็วขึ้น — แลกกับล้อหนึ่งคลิกกินเรื่องเยอะขึ้น
+    // จึงไม่เขียนบีตตรง ๆ แต่ scrub ผ่าน tween: ค่าบีตวิ่งตามตำแหน่งจริงแบบหน่วง 0.6 วิ
+    // ภาพเลยไหลถึงที่เดียวกันอย่างนุ่มแทนที่จะกระโดดเป็นขั้นตามจังหวะล้อ
+    const proxy = { raw: 0 }
+    const tween = gsap.to(proxy, {
+      raw: 1,
+      ease: 'none',
+      onUpdate: () => write(proxy.raw),
+    })
+    const st = ScrollTrigger.create({
+      trigger: '.jp-scroll',
+      start: 'top top',
+      end: 'bottom bottom',
+      animation: tween,
+      scrub: 0.6,
+    })
+    write(st.progress) // ค่าเฟรมแรก — เข้าหน้ามาแบบมี #hash ก็ได้ตำแหน่งถูกทันที
+    return () => {
+      st.kill()
+      tween.kill()
+      resetBeats()
+      for (const [name] of BEATS) s.removeProperty(`--b-${name}`)
     }
   }, [])
 
@@ -98,7 +195,23 @@ export default function Page() {
         {/* data-lenis-prevent: Lenis (smooth scroll ของทั้งเว็บ) ดัก wheel ไว้หมด
             ถ้าไม่กันไว้ ล้อเมาส์บนแผงจะไปเลื่อนหน้าแทนที่จะเลื่อนในแผง */}
         <div className="jp-leva" data-lenis-prevent>
-          <Leva collapsed hidden={!DEBUG_UI} titleBar={{ title: 'debug', position: { x: 0, y: 64 } }} />
+          {/* ไม่ตั้ง position ให้ titleBar — leva แปลงค่านั้นเป็น transform: translate3d() ซึ่งดัน
+              ตัวแผงหลุดออกนอกกล่อง scroll ที่ครอบไว้ (แผงหายไปเลย) ตำแหน่งจัดที่ .jp-leva ใน CSS แทน */}
+          {/* กว้างขึ้นจาก default 280 — ชื่อ control ภาษาไทยยาวกว่าช่อง label เดิม (~120px) แล้วถูกตัดหาย
+              rootWidth - controlWidth = ที่เหลือของ label จึงต้องขยาย root มากกว่าที่ขยาย control */}
+          <Leva
+            collapsed
+            hidden={!DEBUG_UI}
+            titleBar={{ title: 'debug' }}
+            theme={{
+              sizes: {
+                rootWidth: '460px',
+                controlWidth: '175px',
+                // ช่องตัวเลข default แคบไป ค่าติดลบทศนิยมสองตำแหน่ง (-0.05) ถูกตัดเหลือ "-0.0"
+                numberInputMinWidth: '64px',
+              },
+            }}
+          />
         </div>
         <header className="jp-nav">
           <a className="jp-nav-logo" href="/" aria-label="Joe — home">
@@ -129,6 +242,66 @@ export default function Page() {
               ))}
             </ul>
             <p className="jp-based">Based in Bangkok, Thailand</p>
+
+            {/* ฉาก 2 — ขับด้วยตัวแปร --b-* ล้วน ๆ ไม่มี state ฝั่ง React (ไม่งั้น re-render ทุกเฟรมที่ scroll)
+                สีที่คลุมเฟรมไม่ได้อยู่ตรงนี้แล้ว — หมอกกับพื้นหลังในฉาก 3D เป็นคนกลืนภาพเอง
+                (ดู SceneFill ใน App.jsx) เหลือแค่บรรทัดส่งต่อที่ลอยขึ้นมาทีหลัง */}
+            <section className="jp-next" aria-label="Next">
+              <h2 className="jp-next-title">I turn coffee into works</h2>
+            </section>
+
+            {/* ฉาก 2 — "What I do" ในครึ่งขวาที่กล้องเว้นไว้ ขับด้วยบีต about ตัวเดียว
+                หัวข้อขึ้นทีละคำ แล้วแผงค่อยคลี่ตาม; ทำใน CSS ล้วนเพราะบีตมาเป็นตัวแปร CSS อยู่แล้ว
+                (ให้ React มายุ่งจะ re-render ทุกเฟรมที่สกรอลล์)
+
+                กางแผงเป็น hover ล้วน ๆ ไม่มี state — จอสัมผัสไม่มี hover จึงเปิดด้วย :focus-within
+                ผ่านปุ่มข้างใน ซึ่งได้ keyboard เข้ามาฟรีด้วย (moncy ต้องเขียน JS toggle class เอง) */}
+            <section
+              className="jp-what"
+              id="about"
+              aria-label="What I do"
+              style={{ '--n': WHAT_WORDS }}
+            >
+              <h2 className="jp-what-title">
+                <Words text={WHAT_TITLE[0]} start={0} />
+                <span className="jp-what-break" />
+                <Words text={WHAT_TITLE[1]} start={WHAT_TITLE[0].split(' ').length} />
+              </h2>
+
+              <div className="jp-what-stack">
+                {WHAT.map((card, i) => (
+                  <article className="jp-what-card" key={card.id} style={{ '--c': i, '--tone': card.tone }}>
+                    <header className="jp-what-head">
+                      <span className="jp-what-icon" aria-hidden="true">
+                        <img src={card.icon} alt="" />
+                      </span>
+                      <span className="jp-what-name">
+                        <span className="jp-what-kicker">{card.kicker}</span>
+                        <h3>{card.title}</h3>
+                      </span>
+                    </header>
+                    {/* ตัวเนื้อยุบด้วย grid-template-rows 0fr -> 1fr (ไม่ใช่ max-height ที่ต้องเดาความสูง)
+                        ใบที่ไม่ได้ดูอยู่จึงเหลือแค่แถวหัว แล้วใบถัดไปเลื่อนขึ้นมาซ้อนพอดี */}
+                    <div className="jp-what-body">
+                      <div className="jp-what-body-in">
+                        <p className="jp-what-desc">{card.desc}</p>
+                        <ul className="jp-what-tags">
+                          {card.tags.map((t) => (
+                            <li key={t}>{t}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                    {/* ปุ่มจริง ไม่ใช่ div — เป็นตัวรับ focus ที่ยกการ์ดขึ้นมาบนคีย์บอร์ดกับจอสัมผัส */}
+                    <button
+                      className="jp-what-pick"
+                      type="button"
+                      aria-label={`${card.kicker} ${card.title} — skillset and tools`}
+                    />
+                  </article>
+                ))}
+              </div>
+            </section>
           </div>
         </main>
       </div>

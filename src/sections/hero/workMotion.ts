@@ -1,0 +1,369 @@
+import { BEAT, at } from '@/sections/skystory/beats'
+
+/**
+ * เครื่องแก้วเป็นโต๊ะทำงาน — ต่อจาก "Here is what I do" (ดู ./WorkStory ./BubbleTraveler ./BenchScreen)
+ *
+ * ไฟล์นี้คือคณิตล้วนที่สองแคนวาสต้องเห็นตรงกัน: ตัวเครื่องแก้ว (ออร์โธ ใน BubbleTraveler) กับของบนจอเครื่อง
+ * (เพอร์สเปกทีฟ ใน WorkStory — วาดอยู่ *ใต้* แก้ว จึงเห็นเป็นของในจอ) วางตามท่าเดียวกัน (benchPose)
+ * ทางเดินของเคอร์เซอร์ และกรอบเลือก · ทุกค่าคิดจากระยะเลื่อน เลื่อนกลับก็ถอยกลับ
+ */
+
+export const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x)
+export const smooth = (x: number) => {
+  const u = clamp01(x)
+  return u * u * (3 - 2 * u)
+}
+export const inOut = (x: number) => {
+  const u = clamp01(x)
+  return u < 0.5 ? 4 * u ** 3 : 1 - (-2 * u + 2) ** 3 / 2
+}
+export const outCubic = (x: number) => 1 - (1 - clamp01(x)) ** 3
+/** เลยเป้านิดแล้วกลับ — ของที่เด้งเกิด */
+export const outBack = (x: number, k = 1.9) => {
+  const u = clamp01(x) - 1
+  return 1 + (k + 1) * u ** 3 + k * u ** 2
+}
+export const lerp = (a: number, b: number, k: number) => a + (b - a) * k
+
+/** มุมกล้องของสองแคนวาส (องศา) — แคนวาสออร์โธใส่เพอร์สเปกทีฟเองด้วยระยะโฟกัสเดียวกัน ภาพจึงทาบกันพอดี */
+export const FOV = 30
+export const TAN = Math.tan(((FOV / 2) * Math.PI) / 180)
+/** ระยะกล้อง (px) ที่ทำให้ระนาบ z 0 เป็น 1 หน่วย = 1 px */
+export const camDist = (H: number) => H / 2 / TAN
+
+/** ความคืบหน้าของแต่ละบท (0..1 ยังไม่ผ่านการเกลี่ย) */
+export type WorkBeats = {
+  sv2: number
+  morph: number
+  lift: number
+  bench: number
+  wire: number
+  research: number
+  /** บท Research จริง (island แท่นบนจอเครื่อง — ./ResearchPlatform) — คนละอันกับ research ที่เป็นช่วงข้อความหลุดลอย */
+  study: number
+  /** บทพื้นกระเบื้อง (./GroundStage) */
+  ground: number
+  /** island ค้างบนฟอง ข้อความใหญ่พื้นหลังเผยทีละคำ (./WorkStory) */
+  tell: number
+  design: number
+  code: number
+  works: number
+  ship: number
+}
+
+export function workBeats(sv2: number): WorkBeats {
+  return {
+    sv2,
+    morph: at(sv2, BEAT.morph),
+    lift: at(sv2, BEAT.lift),
+    bench: at(sv2, BEAT.bench),
+    /* บท wire (ตัวอักษรกลายเป็นกรอบลงจอ) ปิดแล้ว — ข้อความลอยพ้นจอไปก่อนเครื่องมา ไม่ได้เล่าต่อ */
+    wire: 0,
+    research: at(sv2, BEAT.research),
+    study: at(sv2, BEAT.study),
+    ground: at(sv2, BEAT.ground),
+    tell: at(sv2, BEAT.tell),
+    design: at(sv2, BEAT.design),
+    code: at(sv2, BEAT.code),
+    works: at(sv2, BEAT.works),
+    ship: at(sv2, BEAT.ship),
+  }
+}
+
+/**
+ * ตำแหน่งเคอร์เซอร์พิมพ์ในฟองคำพูดบนจอ (px y ลง) — ฟองเขียนทุกเฟรมที่มันวาด
+ * เคอร์เซอร์ของหน้าโผล่ออกมาจากจุดนี้ (มันอาศัยอยู่ในฟอง แล้วออกมาจากตรงนั้น)
+ */
+export const caretSpot = { x: 0, y: 0, ok: false }
+
+/**
+ * ฟองหัวเรื่องในร่างเครื่อง — hw hh r = ครึ่งกว้าง/สูง/รัศมีมุม px บนจอ ณ ขนาดตั้งต้น (ยังไม่ขยายเป็นโต๊ะทำงาน)
+ * k = คลี่เป็นเครื่องแค่ไหน · tilt = หงายแค่ไหน (0..1) · bench = ตั้งหน้าตรงเป็นโต๊ะทำงานแค่ไหน — ฟองเขียนทุกเฟรมที่มันวาด
+ */
+export const deviceSpot = { hw: 0, hh: 0, r: 0, k: 0, tilt: 0, bench: 0 }
+/**
+ * ท่าจริงของเครื่องเฟรมนี้ (เมทริกซ์ 4×4 ก่อนใส่เพอร์สเปกทีฟ — พิกัดโลก px กลางจอ แกน y ขึ้น หน่วยท้องถิ่น = viewBox ของฟอง)
+ * ของบนจอในแคนวาสเพอร์สเปกทีฟ (./BenchScreen) วางด้วยเมทริกซ์นี้ตรง ๆ จึงติดเครื่องทุกท่า (ซูม เอียง เลื่อน เอน ควง)
+ */
+export const deviceMat = { e: new Float32Array(16), ok: false }
+/**
+ * ท่าของพื้นกระเบื้อง (บท ground) — เมทริกซ์ 4×4 พิกัดโลก px ก่อนเพอร์สเปกทีฟ แบบเดียวกับ deviceMat
+ * = ท่าฟองหงายก่อนลงจอด เลื่อนลงใต้ผิวฟอง: ระนาบ xy ของพื้นคือระนาบหน้าฟอง หน่วยท้องถิ่น = viewBox ของฟอง
+ * ฟองเขียนทุกเฟรม (./BubbleTraveler) · พื้นอ่านไปวาดในแคนวาสเพอร์สเปกทีฟ (./GroundStage)
+ */
+/** k = กว้างของฟองในหน่วยท้องถิ่น — ขนาดกระเบื้อง/หมุดคิดจากนี้ */
+export const groundMat = { e: new Float32Array(16), ok: false, k: 300 }
+/** ทรงเครื่องในหน่วย viewBox ของฟอง (ครึ่งกว้าง · ครึ่งสูง · รัศมีมุม) — สัดส่วนจอมือถือ */
+export const DEVICE = { hw: 88, hh: 172, r: 36 }
+
+/** จอตั้ง (มือถือ) — เครื่องอยู่กลางล่าง หัวเรื่องอยู่บน */
+export const isTall = (W: number, H: number) => W / Math.max(1, H) < 0.85
+
+/**
+ * ท่าของเครื่องเป็นโต๊ะทำงาน (ใช้ร่วมกันสองแคนวาส): x y = กลางเครื่องห่างกลางจอ (px · y ลง) · k = ขยายจากขนาดตั้งต้น
+ * flat = ตั้งหน้าตรงแล้วแค่ไหน (มุมหงายคูณ 1 − flat) · spin = ควงรอบแกนตั้ง (บทส่งของ)
+ */
+export type Bench = { x: number; y: number; k: number; flat: number; spin: number; rx: number; ry: number; target: number }
+const BENCH: Bench = { x: 0, y: 0, k: 1, flat: 0, spin: 0, rx: 0, ry: 0, target: 1 }
+export function benchPose(b: WorkBeats, W: number, H: number): Bench {
+  const e = inOut(b.bench)
+  const tall = isTall(W, H)
+  const base = deviceSpot.hh > 0 ? deviceSpot.hh : H * 0.3
+  /* จอนอน: สูง 74% ของจอ ชิดขวา · จอตั้ง: สูง 56% ต่ำกว่ากลางนิด */
+  const target = tall ? H * 0.28 : H * 0.37
+  BENCH.target = target
+  BENCH.k = lerp(1, target / base, e)
+  /* อยู่กลางจอเต็มตัว — คำใหญ่ของแต่ละบท (Research / Design / Code) เป็นพื้นหลังข้างหลัง (./WorkStory) */
+  BENCH.x = 0
+  BENCH.y = lerp(0, tall ? H * 0.04 : H * 0.03, e)
+  /* Research กับ Design เล่าในมุมหงายหลังลงจอด */
+  /* บทโค้ด: เครื่องค่อย ๆ ตั้งจากมุมหงายขึ้นเป็นหน้าตรง = แอปที่ขัดเกลาเสร็จแล้ว ค้างหน้าตรงไปจนจบ */
+  BENCH.flat = inOut((b.code - 0.04) / 0.4)
+  BENCH.spin = Math.PI * 2 * inOut((b.ship - 0.15) / 0.5)
+  BENCH.rx = 0
+  BENCH.ry = 0
+  return BENCH
+}
+
+/** บท Code เป็นโหมดมืด 0..1 — พื้นหลัง (./WorkStory) แก้วเครื่อง (./BubbleTraveler) การ์ด (./BenchScreen) ใช้ค่าเดียวกัน */
+export const codeDark = (b: WorkBeats) => smooth(b.code / 0.1) * (1 - smooth((b.code - 0.93) / 0.07))
+
+/** กรอบจอของเครื่องบนจอ (px) ณ ท่าโต๊ะทำงาน — ใช้ซ้ำ */
+const SCREEN = { cx: 0, cy: 0, hw: 0, hh: 0 }
+export function screenRect(b: WorkBeats, W: number, H: number) {
+  const p = benchPose(b, W, H)
+  SCREEN.cx = W / 2 + p.x
+  SCREEN.cy = H / 2 + p.y
+  SCREEN.hw = (deviceSpot.hw > 0 ? deviceSpot.hw : W * 0.12) * p.k
+  SCREEN.hh = (deviceSpot.hh > 0 ? deviceSpot.hh : H * 0.3) * p.k
+  return SCREEN
+}
+
+/** บทค้นคว้าแบ่งช่วง (รอบแท่นฟอง — ./BenchTokens): การ์ดเข้า · จุดข้อมูลติดทีละจุด · ออก */
+export function researchPhase(r: number) {
+  return {
+    notes: clamp01(r / 0.24),
+    emerge: clamp01((r - 0.14) / 0.16),
+    select: clamp01((r - 0.3) / 0.28),
+    gather: clamp01((r - 0.6) / 0.26),
+    merge: clamp01((r - 0.84) / 0.16),
+  }
+}
+
+/**
+ * หัวเรื่อง "Here is what I do" ตอนเครื่องเป็นโต๊ะทำงาน: กลางก้อนข้อความห่างกลางจอ (px · y ลง)
+ * จอนอนอยู่ซ้าย (เครื่องอยู่ขวา) · จอตั้งอยู่บนสุด — ป้ายขั้นตอน (DOM ใน ./WorkStory) วางใต้จุดนี้
+ */
+const HEAD = { x: 0, y: 0 }
+export function headPose(W: number, H: number) {
+  const tall = isTall(W, H)
+  HEAD.x = tall ? 0 : -W * 0.24
+  HEAD.y = tall ? -H * 0.29 : -H * 0.12
+  return HEAD
+}
+
+/** ผังจอเครื่องในหน่วยผัง (สูง 820) — ของบนจอทุกชิ้นวางด้วยหน่วยนี้ คูณเข้าขนาดจอบนจอเฟรมนั้น */
+export const LAYOUT_H = 820
+/**
+ * wireframe ของหน้าแอป: ตัวอักษรของ "Here is what I do" กลายเป็นกรอบเหล่านี้ทีละตัว แล้วลอยเข้าไปประกอบในจอเครื่อง
+ * ลำดับ = ลำดับตัวอักษร · [กลาง x, กลาง y, กว้าง, สูง, รัศมี] — การ์ดสามใบกับของในการ์ดตรงกับวิดเจ็ตจริง (./BenchScreen)
+ * บทออกแบบวิดเจ็ตจริงลงทับกรอบของมัน กรอบที่เหลือ (แถบหัว เส้นข้อความ) หดหาย
+ */
+export const WF: readonly (readonly [number, number, number, number, number])[] = [
+  [-81, 236, 150, 150, 34],
+  [-93, 244, 66, 76, 17],
+  [0, 16, 312, 232, 38],
+  [86, 64, 76, 88, 18],
+  [-86, -16, 94, 22, 11],
+  [-50, -56, 152, 22, 11],
+  [0, -246, 312, 236, 38],
+  [-38, -280, 28, 28, 8],
+  [6, -238, 28, 28, 8],
+  [-40, 362, 200, 20, 10],
+  [96, 290, 104, 16, 8],
+  [86, 258, 84, 16, 8],
+  [96, 196, 104, 44, 14],
+]
+/** ช่วงที่ตัวอักษรตัวที่ n กลายเป็นกรอบแล้วบินลงจอ (0..1) ในบท wire — ไล่จากตัวแรก */
+export const wfK = (wire: number, n: number) => inOut(clamp01((wire - (n / WF.length) * 0.45) / 0.55))
+/** หัวแถบ wireframe (ช่องค้นหาของแอป) — แว่นขยายไปลงหัวแถบ caret กะพริบท้ายแถบ (เคอร์เซอร์ของหน้าโผล่จากตรงนี้) */
+export const WF_HEAD = 9
+
+/**
+ * กรอบเครื่องบนจอเฟรมนี้ (px · y ลง · กลาง + ครึ่งกว้าง/สูง + รัศมีมุม) — ฟองเขียนทุกเฟรม (./BubbleTraveler)
+ * คำใหญ่ของบท (./WorkStory) เจาะตัวทึบตรงกรอบนี้ ตรงที่เครื่องบังจึงเหลือแต่เส้นขอบ
+ */
+export const devScreen = { cx: 0, cy: 0, hw: 0, hh: 0, r: 0, ok: false }
+/**
+ * เรียกทันทีหลังเครื่องได้ท่าใหม่ในเฟรมนั้น (BubbleTraveler) — ผู้ที่ต้องตามกรอบเครื่องเป๊ะ (รูของคำใหญ่ใน WorkStory)
+ * ไม่ต้องรอรอบ rAF ของตัวเอง ซึ่งอาจมาก่อน/หลังกันหนึ่งเฟรม (รูเลยเหลื่อมกับเครื่อง เห็นเป็นแถบดำกระพริบตอนเครื่องขยาย)
+ */
+export const devHook: { fn: null | (() => void) } = { fn: null }
+/**
+ * ปลายบท Code: เครื่องลอยเข้าหากล้องเบา ๆ แล้ว "ชน" คำ Code ตอน CODE_HIT — คำแตกเป็น ASCII เป็นคลื่นจากจุดชน (WorkStory)
+ * วิดเจ็ตกระจายออกแรงตอนชน (BenchScreen) · เครื่องลอยเริ่มก่อนชน HIT_FLY
+ */
+export const CODE_HIT = 0.62
+export const HIT_FLY = 0.14
+/**
+ * ช่วงเล่มงาน (My Works) หลังวิดเจ็ตฟ้าเต็มจอ — นับเป็นหน่วยสกรอลล์ (sv2) ข้ามท้าย Code เข้าต้น Ship
+ * 0 ≈ ฟ้าเต็มจอ · คลี่ 0.04–0.38 · ซูม 0.24–0.54 · ระเบิด WORKS_BOOM (BenchScreen) · คำพื้นหลัง My Works (WorkStory)
+ */
+/**
+ * ผังคำพื้นหลัง "My Works" บนจอ (WorkStory วัดจาก DOM — px) · ตัวอักษร 3D ที่บินจากป้ายในวิดเจ็ต (BenchScreen)
+ * ลงจอดตรงตำแหน่ง/ขนาดนี้แล้วส่งต่อให้คำ DOM · left = ขอบซ้ายคำ · cy = กลางบรรทัด · ox = ระยะจากซ้ายของตัวอักษร (ไม่นับช่องว่าง)
+ */
+export const worksWordLayout = { ok: false, left: 0, cy: 0, font: 0, ox: [] as number[] }
+/** ช่วงตัวอักษรบิน (worksPost): เริ่ม · ยาว · ส่งต่อให้คำ DOM (เริ่ม · ยาว) — หลังวิดเจ็ตฟ้าจางหมด */
+export const WORKS_FLY = [-0.2, 0.3] as const
+export const WORKS_HAND = [0.24, 0.08] as const
+export const WORKS_TEXT = 'Selected Work'
+/** ฟอนต์คำใหญ่ของเรื่อง (Research/Design/Code/Selected Work) — คำ DOM กับตัวอักษร 3D ที่บินมาต้องใช้ชุดเดียวกัน */
+export const STORY_FONT = "'Open Runde', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif"
+/** ระเบิดของเล่มงาน (worksPost): เริ่ม · ยาว — เล่มกระเด็น (BenchScreen) + แสงพุ่ง/พื้นเหลือง (WorkStory) */
+export const WORKS_BOOM = [0.52, 0.36] as const
+/**
+ * เคอร์เซอร์ + ตัวละครโผล่จากแสงตรงสันหนังสือ (worksPost): เริ่ม · ยาว — แสงเรืองขึ้นก่อนหน้านี้ (BenchScreen WORKS_GLOW)
+ * แล้วลอยโค้งไปค้างจุดห้อย (WORKS_HANG — สัดส่วนจอ: มือที่จับหางเคอร์เซอร์) ก่อนไทล์ระเบิด
+ */
+export const WORKS_EMERGE = [0.3, 0.3] as const
+export const WORKS_GLOW = [0.16, 0.2, 0.52, 0.22] as const
+export const WORKS_HANG = [0.78, 0.38] as const
+/** worksPost แบบหน่วงแล้ว (BenchScreen ตั้งทุกเฟรม) — คำ DOM ใช้ค่าเดียวกัน ส่งต่อตรงจังหวะตัวอักษร 3D */
+export const worksPostSm = { v: -9 }
+/**
+ * section My Works ค้าง: ช่องวางไทล์งานบนจอ (แบบภาพประกอบ Essential coding apps — ไทล์ใหญ่ล้นขอบจอ กระจายรอบ ๆ
+ * เว้นกลางให้ตัวละคร) — กลางไทล์ x, y (สัดส่วนจอ) · กว้าง (สัดส่วนด้านสั้นจอ) · เอียง (องศา) · ช่อง 0 = ไทล์ที่ตัวละครห้อยดึง
+ */
+export const TILE_SLOTS: readonly (readonly [number, number, number, number])[] = [
+  /* แถวทแยงขึ้นขวา ใหญ่ขึ้นทีละใบ (แบบภาพ ref ปกรายงาน) — ใบท้ายล้นขอบขวา */
+  [0.1, 0.72, 0.09, 0],
+  [0.2, 0.66, 0.115, 0],
+  [0.315, 0.59, 0.14, 0],
+  [0.445, 0.51, 0.165, 0],
+  [0.59, 0.43, 0.19, 0],
+  [0.755, 0.34, 0.22, 0],
+  [0.935, 0.24, 0.25, 0],
+]
+/** สัดส่วนไทล์งาน (กว้าง : สูง) — ตามปก showcase หน้า Fastwork (258 × 322) */
+export const TILE_ASPECT = 322 / 258
+/** กล่องไทล์ช่อง i บนจอ (px) — ใช้ทั้งวางไทล์ 3D และปุ่มกด DOM */
+export function slotRect(i: number, vw: number, vh: number) {
+  const [x, y, w, r] = TILE_SLOTS[i]
+  const ww = w * Math.min(vw, vh)
+  return { cx: x * vw, cy: y * vh, w: ww, h: ww * TILE_ASPECT, rot: r }
+}
+/** สถานะโต้ตอบของ section My Works — DOM (WorkStory) ตั้ง hover/open · 3D (BenchScreen) วาดตาม */
+/**
+ * สถานะ UI ของ section Selected Work ที่ BenchScreen (3D) เขียน แล้ว WorkStory (DOM) อ่าน
+ *   rects = กล่องบนจอของการ์ดแต่ละใบ + จุดวางชื่องาน (lx, ly — มุมซ้ายล่างด้านในการ์ด) · lk = สเกลชื่อ (px ต่อหน่วยการ์ด)
+ *   dark = ความเข้มของพื้นดำ (0..1) — คำใหญ่ DOM จางตาม
+ */
+export const worksUI = {
+  hover: -1,
+  open: -1,
+  hold: 0,
+  dark: 0,
+  /** ฟ้าเย็นของ FallSky — ตอนนี้ไม่ใช้ (0) */
+  dusk: 0,
+  rects: [] as { x0: number; y0: number; x1: number; y1: number; lx?: number; ly?: number; rx?: number; lk?: number; a?: number }[],
+}
+export const worksPost = (b: { code: number; works: number }) => (b.code - 0.86) * BEAT.code[1] + b.works * BEAT.works[1]
+/** ช่วงค้างของ section My Works (worksPost): เริ่มค้าง (ไทล์ลงที่ครบ) · เริ่มออก · จบ (= ต้น Ship) */
+/* ออกให้จบก่อนด่านหนังสติ๊กโผล่ (SlingGate SHOW 2.45) */
+export const WORKS_HOLD = [0.9, 2.05, 2.42] as const
+
+/**
+ * ตำแหน่งบล็อกในแท่งแก้วของ island ในพิกัดผังจอเครื่อง (หน่วยผัง · 4 ก้อน × xyz) — ฟองเขียนทุกเฟรม (./BubbleTraveler)
+ * บล็อกบินจากจุดนี้ไปเป็นกระเบื้องของ widget (./BenchScreen) ตั้งแต่ฟองลงจอดบนหัวเครื่อง
+ */
+export const barLayout = { e: new Float32Array(12), ok: false }
+
+/**
+ * ด่านหนังสติ๊กท้าย Selected Work (WorkStory SlingGate เขียน · ตัวละคร SlingRider อ่าน)
+ *   vis = ด่านโผล่แค่ไหน · px, py = เปลยางบนจอ (px) · pull = ง้างแค่ไหน (0..1) · launch = พุ่งแล้วแค่ไหน (0..1)
+ */
+export const sling = { vis: 0, px: 0, py: 0, pull: 0, launch: 0 }
+
+/**
+ * เรื่องหลังบท Code (Selected Work) — เลือกได้สี่แบบ:
+ *   crash  เครื่องพุ่งชนคำ Code ทะลุ → วิดเจ็ตฟ้าขยายเป็นฟ้า → โฟลเดอร์แจกการ์ด (flip paper)
+ *   grass  มือตัวละครจับเครื่อง → ฉากหมุนออกเป็นมุมเสยบนพื้นหญ้า (./GrassStage · ./HoldHand)
+ *   map    เครื่องล้มลงนอนบนพื้นเมืองดินปั้น ลาก/กดลูกศรเดินดูเมือง เจอป้ายผลงานกระจายรอบเมือง (./MapStage)
+ *   planet โลกผุดออกจากจอเครื่อง ลอยไปมุมขวาล่าง มีรถวิ่งบนผิวโลก · ปกผลงานใหญ่มุมซ้ายบน เลื่อนแล้วเปลี่ยนงานทีละชิ้น (./PlanetStage)
+ *   ascii  อักขระของคำ Code ที่สลาย พุ่งกลับเข้าจอไปเรียงเป็นปกผลงาน (ASCII สีตามภาพ) แล้วคมชัดเป็นภาพจริง (./AsciiWorks)
+ *   switcher เครื่องเปิดตัวสลับแอปแบบ iOS — เครื่องหดเป็นการ์ด การ์ดผลงานเรียงซ้อนทางซ้าย ปัดย้อนทีละใบ แล้วเปิดกลับ (./SwitcherStage)
+ *   fold   เครื่องเป็นจอพับหีบเพลง — แผงจอคลี่ออกจากหลังเครื่องทีละบาน แต่ละบาน = งานหนึ่งชิ้น แล้วพับกลับ (./FoldStage)
+ *   sticker หน้าจอที่เสร็จลอกออกเป็นสติกเกอร์ ไปแปะฝาโน้ตบุ๊กของ Joe ที่เต็มไปด้วยสติกเกอร์งานเก่า แล้วบินกลับ (./StickerStage)
+ *   rolodex ต้นเรื่องเดียวกับถนน (หน้าโฮม → ดันเข้าไอคอน favicon) แล้วไอคอนระเบิดเป็นสำรับ rolodex ของงาน (./RolodexStage · คลิป Ecommpay)
+ *   road   จอเครื่องเป็นหน้าโฮม → ดันเข้าไอคอนแอป (favicon) → ไอคอนหงายเป็นหลังคา → โฉบลงถนน ป้ายผลงานริมทาง (./RoadStage · GIF ref)
+ */
+export type PostCode = 'crash' | 'grass' | 'planet' | 'map' | 'road' | 'ascii' | 'desk' | 'switcher' | 'fold' | 'sticker' | 'rolodex'
+export const POST_CODE = 'rolodex' as PostCode
+export const GRASS_STORY = POST_CODE === 'grass'
+export const PLANET_STORY = POST_CODE === 'planet'
+export const MAP_STORY = POST_CODE === 'map'
+export const ROAD_STORY = POST_CODE === 'road'
+export const ASCII_STORY = POST_CODE === 'ascii'
+export const DESK_STORY = POST_CODE === 'desk'
+export const SWITCHER_STORY = POST_CODE === 'switcher'
+export const FOLD_STORY = POST_CODE === 'fold'
+export const STICKER_STORY = POST_CODE === 'sticker'
+export const ROLO_STORY = POST_CODE === 'rolodex'
+/** เครื่องไม่พุ่งชนคำ Code (ไม่มีแรงกระแทก วิดเจ็ตไม่กระจาย ฟ้าไม่ขยาย ไม่มีโฟลเดอร์/การ์ดของเรื่องเดิม) */
+export const NO_CRASH = POST_CODE !== 'crash'
+/**
+ * ทางออกบท Code แบบ pay.ethena.fi (เรื่อง rolodex): หลังเครื่องพุ่งชนคำ ฉาก Code ทั้งจอหดลงเป็นไอคอนแอปกลางจอ
+ * (ดู iconOut ใน ./RolodexStage และการ์ด/คำประกบไอคอนใน ./WorkStory)
+ */
+export const ICON_OUT = ROLO_STORY
+/** เครื่องพุ่งชนคำ Code (แรงกระแทก แสงวาบ วิดเจ็ตกระจาย) — เรื่อง rolodex ชนแล้วต่อด้วยฉากหดเป็นไอคอน (ICON_OUT) */
+export const CRASH_HIT = POST_CODE === 'crash' || ROLO_STORY
+/**
+ * เรื่องโลก (planet) — บท Code: โลกผุดจากจอเครื่องแล้วลอยไปที่ [เริ่ม, ยาว]
+ * worksPost: ปกผลงานโผล่ [เริ่ม, ยาว] · ไล่ผลงานทีละชิ้น [เริ่ม, จบ] · ออก [เริ่ม, ยาว]: ปกจาง โลกหดกลับเข้าจอเครื่องตรงจังหวะเครื่องกลับมา (ต้นบท Ship)
+ */
+export const PLANET_EMERGE = [0.6, 0.27] as const
+export const PLANET_COVER_IN = [-0.05, 0.3] as const
+export const PLANET_SCROLL = [0.3, 2.1] as const
+export const PLANET_OUT = [2.42, 0.47] as const
+/**
+ * ท่าของเรื่องโลก ณ ความคืบหน้าตอนนี้ — ใช้ร่วมกัน (BubbleTraveler ขยับเครื่อง/โลก · PlanetStage การ์ดผลงาน)
+ *   bulge 0→1  โลก (ลูกโลกจิ๋วของพอร์ทัล hero — newhero/Globe) ดันออกจากจอเครื่อง
+ *   fly   0→1  โลกลอยจากจอเครื่องไปมุมขวาล่าง ขยายใหญ่ล้นขอบ · รถวิ่งบนถนนรอบโลก
+ *   move  0→1  เครื่องเลื่อนไปซ้าย ตั้งตรง ขยายเป็น "การ์ดหน้าสุด" ของกองผลงาน (จอเครื่อง = ปกผลงาน)
+ *   ออก        ย้อนทุกอย่างกลับเข้าเครื่อง เครื่องกลับกลางจอ ต่อบท Ship
+ */
+export function planetPhase(b: { code: number; works: number }) {
+  const post = worksPost(b)
+  const back = smooth((post - PLANET_OUT[0]) / PLANET_OUT[1])
+  return {
+    post,
+    bulge: smooth((b.code - PLANET_EMERGE[0]) / 0.14) * (1 - back),
+    fly: smooth((b.code - (PLANET_EMERGE[0] + 0.1)) / 0.2) * (1 - back),
+    move: smooth((b.code - (PLANET_EMERGE[0] + 0.14)) / 0.2) * (1 - back),
+  }
+}
+/**
+ * ท่าเฟรมนี้ (BubbleTraveler เขียนทุกเฟรม): ค่าความคืบหน้า + ที่วางโลกเป็นพิกัดฉาก (px · กลางจอ = 0 · y ขึ้น) และรัศมี (px)
+ */
+export const planetLive = { bulge: 0, fly: 0, move: 0, post: 0, x: 0, y: 0, z: 0, r: 0 }
+/** บท Code (b.code): มือยื่นขึ้นมาจับ [เริ่ม, ยาว] · ฉากเปิดออกจากจอ + หมุนเป็นมุมเสย [เริ่ม, ยาว] */
+export const HAND_IN = [0.42, 0.22] as const
+export const GRASS_OPEN = [0.68, 0.24] as const
+/**
+ * ส่งต่อเข้าฉากหญ้าแบบ "ตัดต่อเนื่องที่มือถือ" (match cut) [จังหวะตัด, ช่วงหรี่ก่อนตัด] (บท Code):
+ *   ก่อนตัด: ฉาก Code (ดำม่วง ASCII คำ Code) หรี่ดำรอบเครื่อง เหลือแค่เครื่อง + มือจับ (WorkStory)
+ *   ตัด: ฉากหญ้าโผล่ทึบทันที (ไม่จางซ้อน) — เฟรมแรกเป็นม่านดำ + มือถือในมือตัวละครทับกรอบจอเครื่องเดิมเป๊ะ (กลาง ขนาด ตั้งตรง — เลนส์เลื่อน)
+ *   จอมือถือเป็น UI ชุดเดียวกับจอเครื่อง → ภาพก่อน/หลังตัดเหมือนกัน
+ *   หลังตัด: กล้องหมุนออกรอบมือถือ ม่านเปิด ฉากหญ้าสว่างขึ้น · มือแบบ Frame 1 (HoldHand) ตามมือถือแล้วจางเป็นมือจริงของตัวละคร
+ */
+export const CUT = [0.665, 0.065] as const
+/**
+ * กรอบจอมือถือบนจอ (px) ในฉากหญ้า — GrassStage เขียนทุกเฟรม · HoldHand ใช้แทน devScreen เมื่อตัดเข้าฉากหญ้าแล้ว
+ *   roll = มุมเอียงของจอบนจอ (เรเดียน) · hand = มือแบบ Frame 1 ยังแสดงแค่ไหน (1 → 0 ตอนสลับเป็นมือตัวละคร)
+ */
+export const grassPhone = { cx: 0, cy: 0, hw: 0, hh: 0, tx: 0, ty: 0, r: 0, roll: 0, hand: 1, ok: false }
+/** worksPost: แถวการ์ดไหล (ตัวละครไถจอ) [เริ่ม, จบ] · ท้ายบทเงยขึ้นฟ้าแล้วจาง [เริ่ม, ยาว] — จบก่อน SlingGate SHOW 2.45 */
+export const GRASS_SCROLL = [0.15, 2.0] as const
+export const GRASS_OUT = [2.06, 0.36] as const

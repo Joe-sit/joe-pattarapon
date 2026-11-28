@@ -1,0 +1,137 @@
+/* ── อินโทรของ /2026 ───────────────────────────────────────────────────────
+   ลำดับเฟรมและเหตุผลของแต่ละองก์อยู่ที่หัวไฟล์ IntroSequence.tsx — ที่นี่มีแต่รูปลักษณ์ */
+
+.intro-root {
+  /* ทุกตัวอักษรในอินโทรเป็น mono: ต้นทางคือหน้าจอโค้ด ไม่ใช่งานพิมพ์ */
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/**
+ * องก์แรก (f001-f053) — ทุกชิ้นอยู่บน "วงโคจรเดียวกัน" ตั้งแต่เฟรมแรก
+ *
+ * เคยทำผิดเป็นสองท่อนแยกกัน: เศษโค้ดหดเข้ากลางแล้วหาย จากนั้นวงแหวนโผล่มาเฉย ๆ
+ * ในคลิปไม่มีรอยต่อแบบนั้น — ไล่ f001→f005 ทีละเฟรมแล้ววัดตำแหน่งของชิ้นเดิมได้ว่า
+ * ทุกชิ้นกวาดเป็นวงตามเข็มรอบกลางจอตั้งแต่เฟรมแรก ชิ้นใหญ่แค่อยู่วงนอกจนล้นเฟรม
+ * "วงแหวน" ที่เห็นทีหลังคือวงโคจรเดิมนั่นเอง พอรัศมีของทุกชิ้นหดมาเท่ากันมันจึงอ่านเป็นวง
+ *
+ * รัศมีอยู่ในตัวแปร --r ต่อชิ้น เพื่อให้ย่อวงได้โดยที่ตัวอักษรไม่ถูกย่อตาม — ในคลิปขนาด
+ * ตัวอักษรคงที่ มีแต่วงที่แคบเข้า ถ้าใช้ scale ตัวอักษรจะเล็กลงด้วยซึ่งผิด
+ */
+.intro-orbit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  will-change: transform;
+}
+
+.intro-orbit-slot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  --r: 0px;
+  white-space: nowrap;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+/* ตัวอักษรตั้งตรงเสมอ — ตัวนี้รับการหมุนสวนทางกับวงโคจร (ดูไทม์ไลน์ใน IntroSequence) */
+.intro-orbit-ch {
+  display: inline-block;
+  padding: 0 2px;
+}
+
+/**
+ * ไทล์กลางจอตอนวงยุบ (f047-f053) — ในคลิปเป็น "บล็อกไล่เฉดฟ้า" กับอักขระที่อยู่ข้าง ๆ
+ * ไม่ใช่ตัวอักษรบนพื้นทึบ และตัวอักษรเปลี่ยนไปเรื่อย (1 → 2 → %) ก่อนหยุดที่ %
+ */
+.intro-pct {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  color: #2a313a;
+  font-size: 26px;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  will-change: transform, opacity;
+}
+
+.intro-pct i {
+  display: block;
+  width: 18px;
+  height: 26px;
+  background: linear-gradient(150deg, #8fd0f5, #1f6fb2);
+}
+
+/* ── แผงดีบัก (dev เท่านั้น) ───────────────────────────────────────────────
+   วางทับมุมล่างซ้าย ไม่แตะเลย์เอาต์ของอินโทร และรับคลิกเองเพราะฉากด้านหลัง
+   ตั้งใจให้คลิกที่ไหนก็ข้ามอินโทร */
+.intro-debug {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 320px;
+  padding: 10px;
+  border: 1px solid #2a3340;
+  border-radius: 6px;
+  background: rgba(6, 9, 14, 0.92);
+  color: #cfd6e0;
+  font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.intro-debug-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.intro-debug button {
+  padding: 2px 7px;
+  border: 1px solid #2a3340;
+  border-radius: 4px;
+  background: #121821;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.intro-debug button:hover {
+  border-color: #3d4a5c;
+  background: #1b2430;
+}
+
+.intro-debug-clock {
+  margin-left: auto;
+  color: #7f8b9b;
+}
+
+.intro-debug-hold {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.intro-debug-scrub {
+  width: 100%;
+  cursor: pointer;
+}
+
+.intro-debug-vals {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px 8px;
+  color: #7f8b9b;
+}
+
+.intro-debug-vals span span {
+  float: right;
+  color: #e5956f;
+}
